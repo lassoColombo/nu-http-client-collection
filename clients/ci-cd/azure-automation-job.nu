@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs ListByAutomationAccount" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation.
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
@@ -116,7 +118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the job identified by job name.
@@ -136,6 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> record<properties: record<creationTime: string, endTime: string, exception: string, jobId: string, lastModifiedTime: string, lastStatusModifiedTime: string, parameters: record, provisioningState: string, runOn: string, runbook: record<name: string>, startTime: string, startedBy: string, status: string, statusDetails: string>> {
@@ -147,7 +150,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a job of the runbook.
@@ -168,6 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
   properties: any # shape: {parameters?: record, runOn?: string, runbook?: any}
@@ -183,7 +187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the job output identified by job name.
@@ -203,6 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> any {
@@ -214,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resume the job identified by jobName.
@@ -234,6 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> record<code: string, message: string> {
@@ -245,7 +251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the runbook content of the job identified by job name.
@@ -265,6 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> any {
@@ -276,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop the job identified by jobName.
@@ -296,6 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> record<code: string, message: string> {
@@ -307,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of jobs streams identified by job name.
@@ -327,6 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation.
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
@@ -339,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the job stream identified by job stream id.
@@ -360,6 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> record<id: string, properties: record<jobStreamId: string, streamText: string, streamType: string, summary: string, time: string, value: record>> {
@@ -371,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suspend the job identified by job name.
@@ -391,6 +401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --clientRequestId: string # Identifies this specific client request.
 ]: nothing -> record<code: string, message: string> {
@@ -402,5 +413,5 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

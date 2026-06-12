@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["bearer" "x-api-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "ofrep-evaluate-flags evaluateFlag" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "ofrep-evaluate-flags evaluateFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   context: record # Evaluation context containing information used to evaluate feature flags. The context  includes a `targetingKey` (required) along with additional properties such as  user attributes, session data, or request metadata that can be used for targeting rules.  (e.g. {targetingKey: user-123, email: user@example.com, plan: premium, country: CA}) — shape: {targetingKey: string}
 ]: any -> record {
   let input = $in
@@ -113,7 +115,7 @@ export def "ofrep-evaluate-flags evaluateFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Evaluate All Feature Flags
@@ -129,6 +131,7 @@ export def "ofrep-evaluate-flags evaluateFlagsBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flagConfigEtag: string # Optional ETag metadata provided by an event stream for change-triggered re-fetches (see ADR-0008). This is not a standard HTTP conditional request header; it is metadata for server-side cache validation and freshness checks. It should only be included when the request is directly triggered by a received change notification event.  (e.g. 550e8400-e29b-41d4-a716-446655440000)
   --flagConfigLastModified: string # Optional last-modified metadata provided by an event stream for change-triggered re-fetches (see ADR-0008). Supports Unix timestamp in seconds (recommended) or an ISO 8601 date-time string, and is transported as query metadata rather than `If-Modified-Since`. It should only be included when the request is directly triggered by a received change notification event.
   --If-None-Match: string # Optional ETag value from a previous bulk evaluation response. If provided and the  ETag matches the current flag set, the server will return a 304 Not Modified response,  indicating that flags haven't changed since the last evaluation.  (e.g. abc123xyz)
@@ -145,5 +148,5 @@ export def "ofrep-evaluate-flags evaluateFlagsBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

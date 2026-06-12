@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -173,7 +174,7 @@ def status-completer-10 [] { ["Accepted" "Completed" "Expired" "Failed" "InProgr
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "webinar-notifications-subscriptions rcwN11sListSubscriptions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -206,13 +207,14 @@ export def "webinar-notifications-subscriptions rcwN11sListSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, eventFilters: list, disabledFilters: list, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webinar/notifications/v1/subscriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webinar Subscription
@@ -228,6 +230,7 @@ export def "webinar-notifications-subscriptions rcwN11sCreateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   eventFilters: list # The list of event filters corresponding to events the user is subscribed to
   --expiresIn: int # Subscription lifetime in seconds. The maximum subscription lifetime depends upon the specified `transportType`:  | Transport type      | Maximum permitted lifetime     | | ------------------- | ------------------------------ | | `WebHook`           | 315360000 seconds (10 years)   | | `RC/APNS`, `RC/GSM` | 7776000 seconds (90 days)      | | `PubNub`            | 900 seconds (15 minutes)       | | `WebSocket`         | n/a (the parameter is ignored) |  (format: int32, e.g. 1200)
   deliveryMode: record # shape: {transportType: "WebHook", address: string, verificationToken?: string}
@@ -240,7 +243,7 @@ export def "webinar-notifications-subscriptions rcwN11sCreateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Webinar Subscription
@@ -256,13 +259,14 @@ export def "webinar-notifications-subscriptions rcwN11sGetSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/notifications/v1/subscriptions/($subscriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webinar Subscription
@@ -278,6 +282,7 @@ export def "webinar-notifications-subscriptions rcwN11sUpdateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   eventFilters: list # The list of event filters corresponding to events the user is subscribed to
   --expiresIn: int # Subscription lifetime in seconds. The maximum subscription lifetime depends upon the specified `transportType`:  | Transport type      | Maximum permitted lifetime     | | ------------------- | ------------------------------ | | `WebHook`           | 315360000 seconds (10 years)   | | `RC/APNS`, `RC/GSM` | 7776000 seconds (90 days)      | | `PubNub`            | 900 seconds (15 minutes)       | | `WebSocket`         | n/a (the parameter is ignored) |  (format: int32, e.g. 1200)
 ]: any -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
@@ -289,7 +294,7 @@ export def "webinar-notifications-subscriptions rcwN11sUpdateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Webinar Subscription
@@ -305,13 +310,14 @@ export def "webinar-notifications-subscriptions rcwN11sDeleteSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/notifications/v1/subscriptions/($subscriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renew Webinar Subscription
@@ -327,13 +333,14 @@ export def "webinar-notifications-subscriptions-renew rcwN11sRenewSubscription" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/notifications/v1/subscriptions/($subscriptionId)/renew")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Historical Webinar
@@ -349,13 +356,14 @@ export def "webinar-history-webinars rcwHistoryGetWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<title: string, description: string, settings: record<recordingEnabled: bool, autoRecord: bool, recordingSharingEnabled: bool, recordingDownloadEnabled: bool, recordingDeletionEnabled: bool, pastSessionDeletionEnabled: bool, panelistWaitingRoom: bool, panelistVideoEnabled: bool, panelistScreenSharingEnabled: bool, panelistMuteControlEnabled: bool, panelistAuthentication: string, attendeeAuthentication: string, artifactsAccessAuthentication: string, pstnEnabled: bool, password: string, qnaEnabled: bool, qnaAnonymousEnabled: bool, moderatedQnaEnabled: bool, pollsEnabled: bool, pollsAnonymousEnabled: bool, registrationEnabled: bool, postWebinarRedirectUri: string, externalLivestreamEnabled: bool>, host: record<firstName: string, lastName: string, linkedUser: record<userId: string, accountId: string, domain: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Historical Webinar Session
@@ -372,13 +380,14 @@ export def "webinar-history-webinars-sessions rcwHistoryGetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<videoBridgeId: string, recording: record<status: string, failureReason: record<errorCode: string, message: string>, duration: int, shared: bool, sharedUriExpirationTime: string, recordingSharedUri: string>, livestreams: table<livestreamId: string, serviceProvider: string, livestreamStatus: string, previousLivestreamStatus: string, livestreamStartTime: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)/sessions/($sessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Session Participants
@@ -395,6 +404,7 @@ export def "webinar-history-webinars-sessions-participants rcwHistoryListPartici
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: list # The role of the invitee/participant.
   --originalRole: list # The original role of the invitee/participant.
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
@@ -406,7 +416,7 @@ export def "webinar-history-webinars-sessions-participants rcwHistoryListPartici
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)/sessions/($sessionId)/participants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Participant Information
@@ -423,13 +433,14 @@ export def "webinar-history-webinars-sessions-participants-self rcwHistoryGetPar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, firstName: string, lastName: string, role: string, originalRole: string, linkedUser: record<userId: string, accountId: string, domain: string>, avatarToken: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)/sessions/($sessionId)/participants/self")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Session Invitees
@@ -446,6 +457,7 @@ export def "webinar-history-webinars-sessions-invitees rcwHistoryListInvitees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: list # The role of the invitee/participant.
   --originalRole: list # The original role of the invitee/participant.
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
@@ -457,7 +469,7 @@ export def "webinar-history-webinars-sessions-invitees rcwHistoryListInvitees" [
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)/sessions/($sessionId)/invitees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session Invitee
@@ -475,13 +487,14 @@ export def "webinar-history-webinars-sessions-invitees rcwHistoryGetInvitee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sendInvite: bool, joined: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/webinars/($webinarId)/sessions/($sessionId)/invitees/($inviteeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Webinar Recordings (Admin)
@@ -496,6 +509,7 @@ export def "webinar-history-company-recordings rcwHistoryAdminListRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nameFragment: string # Filter to return only webinar recordings containing particular substring within their names (e.g. All-hands)
   --creationTimeFrom: string # The beginning of the time window by 'creationTime' . (format: date-time)
   --creationTimeTo: string # The end of the time window by 'creationTime' . (format: date-time)
@@ -510,7 +524,7 @@ export def "webinar-history-company-recordings rcwHistoryAdminListRecordings" [
   let full_url = (build-url $base "/webinar/history/v1/company/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webinar Recording (Admin)
@@ -526,13 +540,14 @@ export def "webinar-history-company-recordings rcwHistoryAdminGetRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<session: record<id: string, startTime: string, endTime: string, duration: int, title: string, description: string, webinar: record<id: string, title: string, description: string, host: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/company/recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Historical Webinar Sessions across Multiple Webinars / Hosts
@@ -547,6 +562,7 @@ export def "webinar-history-company-sessions rcwHistoryListAllCompanySessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hostUserId: list # Identifier of the user who hosts a webinar (if omitted, webinars hosted by all company users will be returned) (e.g. [77777777])
   --status: list # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. [Active, Finished])
   --endTimeFrom: string # The beginning of the time window by 'endTime' . (format: date-time)
@@ -560,7 +576,7 @@ export def "webinar-history-company-sessions rcwHistoryListAllCompanySessions" [
   let full_url = (build-url $base "/webinar/history/v1/company/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Webinar Recordings
@@ -575,6 +591,7 @@ export def "webinar-history-recordings rcwHistoryListRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creationTimeFrom: string # The beginning of the time window by 'creationTime' . (format: date-time)
   --creationTimeTo: string # The end of the time window by 'creationTime' . (format: date-time)
   --status: list # The status of the recording.
@@ -587,7 +604,7 @@ export def "webinar-history-recordings rcwHistoryListRecordings" [
   let full_url = (build-url $base "/webinar/history/v1/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webinar Recording
@@ -603,13 +620,14 @@ export def "webinar-history-recordings rcwHistoryGetRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<session: record<id: string, startTime: string, endTime: string, duration: int, title: string, description: string, webinar: record<id: string, title: string, description: string, host: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/history/v1/recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webinar Recording Download Resource
@@ -625,6 +643,7 @@ export def "webinar-history-recordings-download rcwHistoryGetRecordingDownload" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recordingMediaType: string@recordingMediaType-completer # Download file media type. - Type 'Video' refers to a multiplexed audio and video file. - Type 'Audio' refers to an audio only file. - Unless specified by this query parameter, a video file is returned by default when a recording is downloaded.  (default: Video, e.g. Video)
 ]: nothing -> record<downloadUri: string, downloadContentType: string, downloadSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -633,7 +652,7 @@ export def "webinar-history-recordings-download rcwHistoryGetRecordingDownload" 
   let full_url = (build-url $base $"/webinar/history/v1/recordings/($recordingId)/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Historical Webinar Sessions across Multiple Webinars
@@ -648,6 +667,7 @@ export def "webinar-history-sessions rcwHistoryListAllSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nameFragment: string # Filter to return only webinar sessions containing particular substring within their names (e.g. All-hands)
   --status: list # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. [Active, Finished])
   --endTimeFrom: string # The beginning of the time window by 'endTime' . (format: date-time)
@@ -661,7 +681,7 @@ export def "webinar-history-sessions rcwHistoryListAllSessions" [
   let full_url = (build-url $base "/webinar/history/v1/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Registration Session Info
@@ -677,13 +697,14 @@ export def "webinar-registration-sessions rcwRegGetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, registrationStatus: string, registrationPageUri: string, brandingDescriptorUri: string, registrantCount: int, hasRealRegistrants: bool, icalendarSequence: int, settings: record<autoCloseLimit: int, suppressEmails: bool, registrationDigestEnabled: bool, preventMultipleDeviceJoins: bool, workEmailRequired: bool, viewRecording: bool, onDemandDuration: string, recordingExist: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/registration/v1/sessions/($sessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Registration Session
@@ -700,6 +721,7 @@ export def "webinar-registration-sessions rcwRegUpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   registrationStatus: string@registrationStatus-completer # Status of the registration (e.g. Open)
   --settings: record # shape: {autoCloseLimit?: int, suppressEmails?: bool, registrationDigestEnabled?: bool, preventMultipleDeviceJoins?: bool, workEmailRequired?: bool, viewRecording?: bool, onDemandDuration?: "OneMonth"|"TwoMonths"|"ThreeMonths"|"SixMonths"|"OneYear"}
 ]: any -> record<id: string, registrationStatus: string, registrationPageUri: string, brandingDescriptorUri: string, registrantCount: int, hasRealRegistrants: bool, icalendarSequence: int, settings: record<autoCloseLimit: int, suppressEmails: bool, registrationDigestEnabled: bool, preventMultipleDeviceJoins: bool, workEmailRequired: bool, viewRecording: bool, onDemandDuration: string, recordingExist: bool>> {
@@ -711,7 +733,7 @@ export def "webinar-registration-sessions rcwRegUpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Session Registrants
@@ -727,6 +749,7 @@ export def "webinar-registration-sessions-registrants rcwRegListRegistrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --pageToken: string # The token indicating the particular page of the result set to be retrieved. If omitted the first page will be returned.
   --includeQuestionnaire: oneof<nothing, bool> # Indicates if registrant's "questionnaire" should be returned (default: false)
@@ -737,7 +760,7 @@ export def "webinar-registration-sessions-registrants rcwRegListRegistrants" [
   let full_url = (build-url $base $"/webinar/registration/v1/sessions/($sessionId)/registrants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Registrant
@@ -753,6 +776,7 @@ export def "webinar-registration-sessions-registrants rcwRegCreateRegistrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --questionnaire: list # Answers on custom registration questions
 ]: any -> record<icalendarSequence: int> {
   let input = $in
@@ -763,7 +787,7 @@ export def "webinar-registration-sessions-registrants rcwRegCreateRegistrant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Registrant
@@ -780,6 +804,7 @@ export def "webinar-registration-sessions-registrants rcwRegGetRegistrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeQuestionnaire: oneof<nothing, bool> # Indicates if registrant's "questionnaire" should be returned (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -788,7 +813,7 @@ export def "webinar-registration-sessions-registrants rcwRegGetRegistrant" [
   let full_url = (build-url $base $"/webinar/registration/v1/sessions/($sessionId)/registrants/($registrantId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Registrant
@@ -805,13 +830,14 @@ export def "webinar-registration-sessions-registrants rcwRegDeleteRegistrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/registration/v1/sessions/($sessionId)/registrants/($registrantId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webinar
@@ -827,6 +853,7 @@ export def "webinar-configuration-webinars rcwConfigCreateWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --host: record # The internal IDs of RC-authenticated users. — shape: {linkedUser?: any}
 ]: any -> record<host: record<entitled: bool>> {
   let input = $in
@@ -837,7 +864,7 @@ export def "webinar-configuration-webinars rcwConfigCreateWebinar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User's Webinars
@@ -852,6 +879,7 @@ export def "webinar-configuration-webinars rcwConfigListWebinars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creationTimeFrom: string # The beginning of the time window by 'creationTime' . (format: date-time)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --pageToken: string # The token indicating the particular page of the result set to be retrieved. If omitted the first page will be returned.
@@ -862,7 +890,7 @@ export def "webinar-configuration-webinars rcwConfigListWebinars" [
   let full_url = (build-url $base "/webinar/configuration/v1/webinars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webinar
@@ -878,13 +906,14 @@ export def "webinar-configuration-webinars rcwConfigGetWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<host: record<entitled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webinar
@@ -901,6 +930,7 @@ export def "webinar-configuration-webinars rcwConfigUpdateWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Webinar title (e.g. All-Hands Webinar)
   --description: string # User-friendly description of the Webinar (e.g. Quarterly All-hands event to present recent news about our company to employees)
   --settings: record # Various settings which define behavior of this Webinar's Sessions — shape: {autoRecord?: bool, panelistWaitingRoom?: bool, panelistVideoEnabled?: bool, panelistScreenSharingEnabled?: bool, panelistMuteControlEnabled?: bool, panelistAuthentication?: "Guest"|"AuthenticatedUser"|"AuthenticatedCoworker", attendeeAuthentication?: "Guest"|"AuthenticatedUser"|"AuthenticatedCoworker", artifactsAccessAuthentication?: "Guest"|"AuthenticatedUser"|"AuthenticatedCoworker", pstnEnabled?: bool, password?: string, qnaEnabled?: bool, qnaAnonymousEnabled?: bool, registrationEnabled?: bool, postWebinarRedirectUri?: string, moderatedQnaEnabled?: bool}
@@ -913,7 +943,7 @@ export def "webinar-configuration-webinars rcwConfigUpdateWebinar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Webinar
@@ -929,13 +959,14 @@ export def "webinar-configuration-webinars rcwConfigDeleteWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webinar Session
@@ -951,6 +982,7 @@ export def "webinar-configuration-webinars-sessions rcwConfigCreateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scheduledStartTime: string # Session scheduled start time. (format: date-time)
   scheduledDuration: int # The duration of the Session in seconds. (format: int32, e.g. 1800)
   timeZone: string # IANA-compatible time zone name (see https://www.iana.org/time-zones). (e.g. America/New_York)
@@ -969,7 +1001,7 @@ export def "webinar-configuration-webinars-sessions rcwConfigCreateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Webinar Session
@@ -986,6 +1018,7 @@ export def "webinar-configuration-webinars-sessions rcwConfigUpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scheduledStartTime: string # Session scheduled start time. (format: date-time)
   scheduledDuration: int # The duration of the Session in seconds. (format: int32, e.g. 1800)
   timeZone: string # IANA-compatible time zone name (see https://www.iana.org/time-zones). (e.g. America/New_York)
@@ -1004,7 +1037,7 @@ export def "webinar-configuration-webinars-sessions rcwConfigUpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Webinar Session
@@ -1021,13 +1054,14 @@ export def "webinar-configuration-webinars-sessions rcwConfigGetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<videoBridgeId: string, videoBridgePassword: string, videoBridgePstnPassword: string, attendeeJoinUri: string, hasUnsentInvites: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)/sessions/($sessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Webinar Session
@@ -1044,13 +1078,14 @@ export def "webinar-configuration-webinars-sessions rcwConfigDeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)/sessions/($sessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Add/Delete Session Invitees
@@ -1070,6 +1105,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigUpdateInvi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addedInvitees: list # item shape: {linkedUser?: any, role: "Panelist"|"CoHost"|"Host"|"Attendee", type?: "User"|"Room", sendInvite?: bool}
   --updatedInvitees: list # item shape: {id?: string}
   --deletedInvitees: list # item shape: {id?: string}
@@ -1082,7 +1118,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigUpdateInvi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Session Invitees
@@ -1099,6 +1135,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigListInvite
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --pageToken: string # The token indicating the particular page of the result set to be retrieved. If omitted the first page will be returned.
 ]: nothing -> record<records: table<joinUri: string, phoneParticipantCode: string>, paging: record<perPage: int, pageToken: string, nextPageToken: string, previousPageToken: string>> {
@@ -1108,7 +1145,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigListInvite
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)/sessions/($sessionId)/invitees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session Invitee
@@ -1126,13 +1163,14 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigGetInvitee
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<joinUri: string, phoneParticipantCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)/sessions/($sessionId)/invitees/($inviteeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Session Invitee
@@ -1150,6 +1188,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigUpdateInvi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   role: string@role-completer # The role of the webinar session participant/invitee. See also: [Understanding Webinar Roles](https://support.ringcentral.com/webinar/getting-started/understanding-ringcentral-webinar-roles.html)  (e.g. Panelist)
   --type: string@type-completer # The type of the webinar invitee (default: User)
   --sendInvite: oneof<nothing, bool> # Indicates if invite/cancellation emails have to be sent to this invitee. For "Host" it cannot be set to false. If it is true it can't be changed back to false.  (default: true)
@@ -1162,7 +1201,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigUpdateInvi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Session Invitee
@@ -1180,13 +1219,14 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigDeleteInvi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinar/configuration/v1/webinars/($webinarId)/sessions/($sessionId)/invitees/($inviteeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Sessions across Multiple Webinars/Hosts
@@ -1201,6 +1241,7 @@ export def "webinar-configuration-company-sessions rcwConfigListAllCompanySessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
   --endTimeFrom: string # The beginning of the time window by 'endTime' (it is calculated as scheduledStartTime+scheduledDuration) (format: date-time)
   --hostUserId: list # Identifier of the user who hosts a webinar (if omitted, webinars hosted by all company users will be returned) (e.g. [77777777])
@@ -1213,7 +1254,7 @@ export def "webinar-configuration-company-sessions rcwConfigListAllCompanySessio
   let full_url = (build-url $base "/webinar/configuration/v1/company/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Sessions across Multiple Webinars
@@ -1228,6 +1269,7 @@ export def "webinar-configuration-sessions rcwConfigListAllSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nameFragment: string # Filter to return only webinar sessions containing particular substring within their names (e.g. All-hands)
   --status: string@status-completer # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
   --endTimeFrom: string # The beginning of the time window by 'endTime' (it is calculated as scheduledStartTime+scheduledDuration) (format: date-time)
@@ -1240,7 +1282,7 @@ export def "webinar-configuration-sessions rcwConfigListAllSessions" [
   let full_url = (build-url $base "/webinar/configuration/v1/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Recording Content
@@ -1257,6 +1299,7 @@ export def "restapi-v10-account-recording-content readCallRecordingContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
@@ -1267,7 +1310,7 @@ export def "restapi-v10-account-recording-content readCallRecordingContent" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/recording/($recordingId)/content" $qp)
   let accept_val = ($accept | default "audio/mpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Account Greeting Media Content
@@ -1284,6 +1327,7 @@ export def "restapi-v10-account-greeting-content readAccountGreetingContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
 ]: nothing -> any {
@@ -1293,7 +1337,7 @@ export def "restapi-v10-account-greeting-content readAccountGreetingContent" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/greeting/($greetingId)/content" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Extension Greeting Media Content
@@ -1311,6 +1355,7 @@ export def "restapi-v10-account-extension-greeting-content readGreetingContent" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
 ]: nothing -> any {
@@ -1320,7 +1365,7 @@ export def "restapi-v10-account-extension-greeting-content readGreetingContent" 
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/greeting/($greetingId)/content" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Scaled Profile Image
@@ -1338,6 +1383,7 @@ export def "restapi-v10-account-extension-profile-image readScaledProfileImage" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
 ]: nothing -> any {
@@ -1347,7 +1393,7 @@ export def "restapi-v10-account-extension-profile-image readScaledProfileImage" 
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/profile-image/($scaleSize)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message Attachment Content
@@ -1366,6 +1412,7 @@ export def "restapi-v10-account-extension-message-store-content readMessageConte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
@@ -1376,7 +1423,7 @@ export def "restapi-v10-account-extension-message-store-content readMessageConte
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store/($messageId)/content/($attachmentId)" $qp)
   let accept_val = ($accept | default "audio/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IVR Prompt Content
@@ -1393,6 +1440,7 @@ export def "restapi-v10-account-ivr-prompts-content readIVRPromptContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentDisposition: string@contentDisposition-completer # Whether the content is expected to be displayed in the browser, or downloaded and saved locally
   --contentDispositionFilename: string # The default filename of the file to be downloaded
 ]: nothing -> any {
@@ -1402,7 +1450,7 @@ export def "restapi-v10-account-ivr-prompts-content readIVRPromptContent" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-prompts/($promptId)/content" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Bridge
@@ -1422,6 +1470,7 @@ export def "rcvideo-account-extension-bridges createBridge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Custom name of a bridge (e.g. Weekly Meeting with Joseph)
   --type: string@type-completer-1 # Type of bridge. It specifies bridge life cycle. 1) Instant - The bridge will be used for a meeting only once immediately after creation. Then it will be deleted. 2) Scheduled - The bridge will be used for scheduled one or more meetings. If the bridge is not used for a long time after the last meeting, then it will be deleted. 3) PMI - The bridge will contain Personal Meeting Identifier owned by a user. It is the default user bridge. Each user may have only one default (PMI) bridge. Such bridge will be deleted only in case the user is deleted from the system.  (default: Instant)
   --pins: record # shape: {pstn?: record, web?: string}
@@ -1436,7 +1485,7 @@ export def "rcvideo-account-extension-bridges createBridge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User's Default Bridge
@@ -1453,13 +1502,14 @@ export def "rcvideo-account-extension-bridges-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, type: string, host: record<accountId: string, extensionId: string>, pins: record<pstn: record<host: string, participant: string>, web: string, aliases: list<string>>, security: record<passwordProtected: bool, password: record<plainText: string, pstn: string, joinQuery: string>, noGuests: bool, sameAccount: bool, e2ee: bool>, preferences: record<join: record<audioMuted: bool, videoMuted: bool, waitingRoomRequired: string, pstn: record>, playTones: string, musicOnHold: bool, joinBeforeHost: bool, screenSharing: bool, recordingsMode: string, transcriptionsMode: string, recordings: record<everyoneCanControl: record, autoShared: record>, allowEveryoneTranscribeMeetings: bool>, discovery: record<web: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rcvideo/v2/account/($accountId)/extension/($extensionId)/bridges/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Bridge by PSTN PIN
@@ -1475,6 +1525,7 @@ export def "rcvideo-bridges-pin-pstn get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # Phone number to find a phone group for PSTN PIN. If it is not specified, then the default phone group will be used.
   --pw: string # Bridge hash password
 ]: nothing -> record<id: string, name: string, type: string, host: record<accountId: string, extensionId: string>, pins: record<pstn: record<host: string, participant: string>, web: string, aliases: list<string>>, security: record<passwordProtected: bool, password: record<plainText: string, pstn: string, joinQuery: string>, noGuests: bool, sameAccount: bool, e2ee: bool>, preferences: record<join: record<audioMuted: bool, videoMuted: bool, waitingRoomRequired: string, pstn: record>, playTones: string, musicOnHold: bool, joinBeforeHost: bool, screenSharing: bool, recordingsMode: string, transcriptionsMode: string, recordings: record<everyoneCanControl: record, autoShared: record>, allowEveryoneTranscribeMeetings: bool>, discovery: record<web: string>> {
@@ -1484,7 +1535,7 @@ export def "rcvideo-bridges-pin-pstn get" [
   let full_url = (build-url $base $"/rcvideo/v2/bridges/pin/pstn/($pin)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Bridge by Web PIN
@@ -1500,6 +1551,7 @@ export def "rcvideo-bridges-pin-web get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pw: string # Bridge hash password
 ]: nothing -> record<id: string, name: string, type: string, host: record<accountId: string, extensionId: string>, pins: record<pstn: record<host: string, participant: string>, web: string, aliases: list<string>>, security: record<passwordProtected: bool, password: record<plainText: string, pstn: string, joinQuery: string>, noGuests: bool, sameAccount: bool, e2ee: bool>, preferences: record<join: record<audioMuted: bool, videoMuted: bool, waitingRoomRequired: string, pstn: record>, playTones: string, musicOnHold: bool, joinBeforeHost: bool, screenSharing: bool, recordingsMode: string, transcriptionsMode: string, recordings: record<everyoneCanControl: record, autoShared: record>, allowEveryoneTranscribeMeetings: bool>, discovery: record<web: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1508,7 +1560,7 @@ export def "rcvideo-bridges-pin-web get" [
   let full_url = (build-url $base $"/rcvideo/v2/bridges/pin/web/($pin)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bridge
@@ -1524,6 +1576,7 @@ export def "rcvideo-bridges get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pw: string # Bridge hash password
 ]: nothing -> record<id: string, name: string, type: string, host: record<accountId: string, extensionId: string>, pins: record<pstn: record<host: string, participant: string>, web: string, aliases: list<string>>, security: record<passwordProtected: bool, password: record<plainText: string, pstn: string, joinQuery: string>, noGuests: bool, sameAccount: bool, e2ee: bool>, preferences: record<join: record<audioMuted: bool, videoMuted: bool, waitingRoomRequired: string, pstn: record>, playTones: string, musicOnHold: bool, joinBeforeHost: bool, screenSharing: bool, recordingsMode: string, transcriptionsMode: string, recordings: record<everyoneCanControl: record, autoShared: record>, allowEveryoneTranscribeMeetings: bool>, discovery: record<web: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1532,7 +1585,7 @@ export def "rcvideo-bridges get" [
   let full_url = (build-url $base $"/rcvideo/v2/bridges/($bridgeId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Bridge
@@ -1551,6 +1604,7 @@ export def "rcvideo-bridges updateBridge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Custom name of a bridge (e.g. Weekly Meeting with Joseph)
   --pins: record # shape: {web?: string}
   --security: record # shape: {passwordProtected?: bool, password?: string, noGuests?: bool, sameAccount?: bool, e2ee?: bool}
@@ -1564,7 +1618,7 @@ export def "rcvideo-bridges updateBridge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Bridge
@@ -1580,13 +1634,14 @@ export def "rcvideo-bridges delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rcvideo/v2/bridges/($bridgeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Account Recordings
@@ -1602,6 +1657,7 @@ export def "rcvideo-account-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageToken: string # Token to get the next page
   --perPage: int # Number of records returned (format: int32)
 ]: nothing -> record<recordings: table<id: string, shortId: string, startTime: string, duration: int, displayName: string, hostInfo: record, mediaLink: string, url: string, expiresIn: string>, paging: record<currentPageToken: string, nextPageToken: string>> {
@@ -1611,7 +1667,7 @@ export def "rcvideo-account-recordings get" [
   let full_url = (build-url $base $"/rcvideo/v1/account/($accountId)/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Recordings
@@ -1628,6 +1684,7 @@ export def "rcvideo-account-extension-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageToken: string # Token to get the next page
   --perPage: int # Number of records returned (format: int32)
 ]: nothing -> record<recordings: table<id: string, shortId: string, startTime: string, duration: int, displayName: string, hostInfo: record, mediaLink: string, url: string, expiresIn: string>, paging: record<currentPageToken: string, nextPageToken: string>> {
@@ -1637,7 +1694,7 @@ export def "rcvideo-account-extension-recordings get" [
   let full_url = (build-url $base $"/rcvideo/v1/account/($accountId)/extension/($extensionId)/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Delegators
@@ -1654,13 +1711,14 @@ export def "rcvideo-accounts-extensions-delegators rcvListDelegators" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<id: string, name: string, accountId: string, extensionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rcvideo/v1/accounts/($accountId)/extensions/($extensionId)/delegators")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Video Meetings
@@ -1675,6 +1733,7 @@ export def "rcvideo-history-meetings listVideoMeetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Search text
   --pageToken: string # Token to get the next page
   --perPage: int # Number of records returned (format: int32)
@@ -1688,7 +1747,7 @@ export def "rcvideo-history-meetings listVideoMeetings" [
   let full_url = (build-url $base "/rcvideo/v1/history/meetings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Meeting
@@ -1704,13 +1763,14 @@ export def "rcvideo-history-meetings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, bridgeId: string, shortId: string, startTime: string, duration: int, displayName: string, type: string, status: string, hostInfo: record<accountId: string, extensionId: string, displayName: string>, rights: list<string>, longSummary: string, shortSummary: string, keywords: list<string>, participants: table<type: string, id: string, accountId: string, extensionId: string, displayName: string, callerId: string, correlationId: string>, recordings: table<id: string, startTime: int, url: string, metadata: record, status: string, availabilityStatus: string, longSummary: string, shortSummary: string, keywords: list>, chatUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rcvideo/v1/history/meetings/($meetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get API Versions
@@ -1725,13 +1785,14 @@ export def "restapi readAPIVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, apiVersions: table<uri: string, versionString: string, releaseDate: string, uriString: string>, serverVersion: string, serverRevision: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restapi")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth 2.0 Token Endpoint
@@ -1746,6 +1807,7 @@ export def "restapi-oauth-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-assertion-type: string@client-assertion-type-completer # Client assertion type for the `client_secret_jwt` or `private_key_jwt` client authentication types, as defined by [RFC-7523](https://datatracker.ietf.org/doc/html/rfc7523#section-2.2). This parameter is mandatory if the client authentication is required and a client decided to use one of these authentication types
   --client-assertion: string # Client assertion (JWT) for the `client_secret_jwt` or `private_key_jwt` client authentication types, as defined by [RFC-7523](https://datatracker.ietf.org/doc/html/rfc7523#section-2.2). This parameter is mandatory if the client authentication is required and a client decided to use one of these authentication types
   grant_type: string@grant-type-completer # Grant type
@@ -1763,7 +1825,7 @@ export def "restapi-oauth-token post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # OAuth 2.0 Authorization Endpoint
@@ -1779,6 +1841,7 @@ export def "restapi-oauth-authorize authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # The registered identifier of a client application (e.g. AZwEVwGEcfGet2PCouA7K6)
   --response-type: string@response-type-completer # Determines authorization flow type. The only supported value is `code` which corresponds to OAuth 2.0 "Authorization Code Flow"
   --redirect-uri: string # This is the URI where the Authorization Server redirects the User Agent to at the end of the authorization flow. The value of this parameter must exactly match one of the URIs registered for this client application. This parameter is required if there are more than one redirect URIs registered for the app.  (format: uri)
@@ -1801,7 +1864,7 @@ export def "restapi-oauth-authorize authorize" [
   let full_url = (build-url $base "/restapi/oauth/authorize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth 2.0 Authorization Endpoint (POST)
@@ -1817,6 +1880,7 @@ export def "restapi-oauth-authorize authorize2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   response_type: string@response-type-completer # Determines authorization flow type. The only supported value is `code` which corresponds to OAuth 2.0 "Authorization Code Flow"
   --redirect-uri: string # This is the URI where the Authorization Server redirects the User Agent to at the end of the authorization flow. The value of this parameter must exactly match one of the URIs registered for this client application. This parameter is required if there are more than one redirect URIs registered for the app.  (format: uri)
   client_id: string # The registered identifier of a client application (e.g. AZwEVwGEcfGet2PCouA7K6)
@@ -1841,7 +1905,7 @@ export def "restapi-oauth-authorize authorize2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # OAuth 2.0 Token Revocation Endpoint
@@ -1856,6 +1920,7 @@ export def "restapi-oauth-revoke revokeToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Access or refresh token to be revoked (along with the entire OAuth session)
   --body-token: string # Access or refresh token to be revoked (along with the entire OAuth session)
   --client-assertion-type: string@client-assertion-type-completer # Client assertion type for the `client_secret_jwt` or `private_key_jwt` client authentication types, as defined by [RFC-7523](https://datatracker.ietf.org/doc/html/rfc7523#section-2.2). This parameter is mandatory if the client authentication is required and a client decided to use one of these authentication types
@@ -1870,7 +1935,7 @@ export def "restapi-oauth-revoke revokeToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Account Info
@@ -1886,13 +1951,14 @@ export def "restapi-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, externalAccountId: string, mainNumber: string, status: string, statusInfo: record<reason: string, comment: string, till: string>, companyName: string, companyAddress: record<street: string, street2: string, city: string, state: string, zip: string, country: string>, serviceInfo: record<package: record<id: string, version: string>, brand: record<id: string, name: string>, contractedCountry: record<isoCode: string, callingCode: string>, uBrand: record<id: string, name: string>, servicePlan: record<id: string, name: string, edition: string, freemiumProductType: string>>, contactInfo: record<id: string, extensionNumber: string>, opportunityId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v2/accounts/($accountId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Phone to Inventory
@@ -1909,6 +1975,7 @@ export def "restapi-accounts-device-inventory addDeviceToInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3 # Device type. Use `OtherPhone` to indicate BYOD (customer provided) device
   quantity: int # Quantity of devices (total quantity should not exceed 50) (format: int32)
   --site: record # shape: {id?: string}
@@ -1921,7 +1988,7 @@ export def "restapi-accounts-device-inventory addDeviceToInventory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Device from Inventory
@@ -1938,6 +2005,7 @@ export def "restapi-accounts-device-inventory delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # List of internal identifiers of the devices that should be deleted — item shape: {deviceId?: string}
 ]: any -> record<records: table<bulkItemSuccessful: bool, deviceId: string, bulkItemErrors: list>> {
   let input = $in
@@ -1948,7 +2016,7 @@ export def "restapi-accounts-device-inventory delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send/Resend Welcome Email
@@ -1964,6 +2032,7 @@ export def "restapi-accounts-send-welcome-email sendWelcomeEmailV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # format: email, e.g. user@email.com
 ]: any -> any {
   let input = $in
@@ -1974,7 +2043,7 @@ export def "restapi-accounts-send-welcome-email sendWelcomeEmailV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Account Phone Numbers
@@ -1990,6 +2059,7 @@ export def "restapi-accounts-phone-numbers listAccountPhoneNumbersV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --type: list # Types of phone numbers to be returned
@@ -2006,7 +2076,7 @@ export def "restapi-accounts-phone-numbers listAccountPhoneNumbersV2" [
   let full_url = (build-url $base $"/restapi/v2/accounts/($accountId)/phone-numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Numbers from Inventory
@@ -2023,6 +2093,7 @@ export def "restapi-accounts-phone-numbers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # List of phone numbers or phone IDs to be deleted — item shape: {id?: string, phoneNumber?: string}
 ]: any -> record<records: table<bulkItemSuccessful: bool, bulkItemErrors: list, id: string, phoneNumber: string>> {
   let input = $in
@@ -2033,7 +2104,7 @@ export def "restapi-accounts-phone-numbers delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign Phone Number
@@ -2051,6 +2122,7 @@ export def "restapi-accounts-phone-numbers assignPhoneNumberV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # Type of phone number (nullable)
   usageType: string@usageType-completer # Target usage type of phone number (only listed values are supported)
   --extension: record # shape: {id: string}
@@ -2064,7 +2136,7 @@ export def "restapi-accounts-phone-numbers assignPhoneNumberV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace Phone Number
@@ -2081,6 +2153,7 @@ export def "restapi-accounts-phone-numbers-replace replacePhoneNumberV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetPhoneNumberId: string # Internal unique identifier of a phone number (e.g. 1162820004)
 ]: any -> record<id: string, phoneNumber: string, type: string, tollType: string, usageType: string, byocNumber: bool, status: string, extension: record<id: string, extensionNumber: string>> {
   let input = $in
@@ -2091,7 +2164,7 @@ export def "restapi-accounts-phone-numbers-replace replacePhoneNumberV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Numbers to Inventory
@@ -2108,6 +2181,7 @@ export def "restapi-accounts-phone-numbers-bulk-add addNumbersToInventoryV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # List of account phone numbers — item shape: {phoneNumber: string, usageType: "Inventory"|"InventoryPartnerBusinessMobileNumber"|"PartnerBusinessMobileNumber"}
 ]: any -> record<records: table<bulkItemSuccessful: bool, bulkItemErrors: list, id: string, phoneNumber: string>> {
   let input = $in
@@ -2118,7 +2192,7 @@ export def "restapi-accounts-phone-numbers-bulk-add addNumbersToInventoryV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Add Numbers Task Results
@@ -2135,13 +2209,14 @@ export def "restapi-accounts-phone-numbers-bulk-add get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v2/accounts/($accountId)/phone-numbers/bulk-add/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove phone line
@@ -2158,6 +2233,7 @@ export def "restapi-accounts-devices removeLineJWSPublic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keepAssetsInInventory: oneof<nothing, bool> # The flag that controls what to do with the number and device:  - if the value of `keepAssetsInInventory` is `true`, the given device is moved to unassigned devices and the number is moved to the number inventory; - if the value of `keepAssetsInInventory` is `false`, the given device and number is removed from the account; - if the parameter `keepAssetsInInventory` is not set (empty body) or the value of the parameter is empty, default value `true` is set.  (default: true)
 ]: any -> record<id: string, type: string, name: string, serial: string> {
   let input = $in
@@ -2168,7 +2244,7 @@ export def "restapi-accounts-devices removeLineJWSPublic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add BYOD Devices
@@ -2185,6 +2261,7 @@ export def "restapi-accounts-devices-bulk-add bulkAddDevicesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # item shape: {costCenterId?: string, extension: record, type: "OtherPhone"|"WebRTC", emergency: any, phoneInfo: any}
 ]: any -> record<results: list<any>> {
   let input = $in
@@ -2195,7 +2272,7 @@ export def "restapi-accounts-devices-bulk-add bulkAddDevicesV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send/Resend Activation Email
@@ -2211,13 +2288,14 @@ export def "restapi-accounts-send-activation-email sendActivationEmailV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v2/accounts/($accountId)/send-activation-email")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Multiple User Extensions
@@ -2234,6 +2312,7 @@ export def "restapi-accounts-batch-provisioning-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # item shape: {extensionNumber?: string, status: "Enabled", contact: any, costCenter?: record, roles?: list, devices?: list, sendWelcomeEmail?: bool}
 ]: any -> record<results: list<any>> {
   let input = $in
@@ -2244,7 +2323,7 @@ export def "restapi-accounts-batch-provisioning-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete User Extensions
@@ -2261,6 +2340,7 @@ export def "restapi-accounts-extensions bulkDeleteUsersV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keepAssetsInInventory: oneof<nothing, bool> # Indicates that the freed users' assets (phone numbers and devices) should be moved to account inventory rather than deleted. If set to `true`, the phone numbers and devices assigned to deleted extensions will be kept in the account's inventory. If set to `false`, these assets will be deleted from the account and returned to either the partner's phone numbers or RingCentral's phone number pool  (default: true)
   records: list # item shape: {id: string}
 ]: any -> record<records: table<id: string, bulkItemSuccessful: bool, bulkItemErrors: list>> {
@@ -2272,7 +2352,7 @@ export def "restapi-accounts-extensions bulkDeleteUsersV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Swap Devices
@@ -2290,6 +2370,7 @@ export def "restapi-accounts-extensions-devices-replace replaceDevicesJWSPublic"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetDeviceId: string # Internal identifier of a target device, to which the current one will be swapped (e.g. 8459879873)
 ]: any -> any {
   let input = $in
@@ -2300,7 +2381,7 @@ export def "restapi-accounts-extensions-devices-replace replaceDevicesJWSPublic"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Account Info
@@ -2316,13 +2397,14 @@ export def "restapi-v10-account readAccountInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, uri: string, bsid: string, mainNumber: string, operator: record<uri: string, id: int, extensionNumber: string, partnerId: string>, partnerId: string, serviceInfo: record<uri: string, billingPlan: record<id: string, name: string, durationUnit: string, duration: int, type: string, includedPhoneLines: int>, brand: record<id: string, name: string, homeCountry: record>, servicePlan: record<id: string, name: string, edition: string, freemiumProductType: string>, targetServicePlan: record<id: string, name: string, edition: string, freemiumProductType: string>, contractedCountry: record<isoCode: string, callingCode: string>, uBrand: record<id: string, name: string>>, setupWizardState: string, signupInfo: record<tosAccepted: bool, signupState: list<string>, verificationReason: string, marketingAccepted: bool, creationTime: string>, status: string, statusInfo: record<reason: string, comment: string, till: string>, regionalSettings: record<homeCountry: record<isoCode: string, callingCode: string>, timezone: record<id: string, uri: string, name: string, description: string, bias: string>, language: record<id: string, localeCode: string, name: string>, greetingLanguage: record<id: string, localeCode: string, name: string>, formattingLocale: record<id: string, localeCode: string, name: string>, timeFormat: string, currency: record<id: int, code: string, name: string, symbol: string, minorSymbol: string>>, federated: bool, outboundCallPrefix: int, cfid: string, limits: record<freeSoftPhoneLinesPerExtension: int, meetingSize: int, cloudRecordingStorage: int, maxMonitoredExtensionsPerUser: int, maxExtensionNumberLength: int, siteCodeLength: int, shortExtensionNumberLength: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Business Hours
@@ -2338,13 +2420,14 @@ export def "restapi-v10-account-business-hours readCompanyBusinessHours" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/business-hours")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Company Business Hours
@@ -2361,6 +2444,7 @@ export def "restapi-v10-account-business-hours updateCompanyBusinessHours" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --schedule: record # Schedule when an answering rule is applied — shape: {weeklyRanges?: record}
 ]: any -> record<uri: string, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>>> {
   let input = $in
@@ -2371,7 +2455,7 @@ export def "restapi-v10-account-business-hours updateCompanyBusinessHours" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Device
@@ -2388,6 +2472,7 @@ export def "restapi-v10-account-device readDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --syncEmergencyAddress: oneof<nothing, bool> # Specifies if an emergency address should be synchronized or not (default: false)
 ]: nothing -> record<id: string, uri: string, sku: string, type: string, name: string, serial: string, status: string, computerName: string, model: record<id: string, name: string, addons: list<record>, deviceClass: string, features: list<string>, lineCount: int>, extension: record<id: int, uri: string, extensionNumber: string, partnerId: string>, emergency: record<address: record<country: string, countryId: string, countryIsoCode: string, countryName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, city: string, street: string, street2: string, zip: string, customerName: string>, location: record<id: string, name: string, addressFormatId: string>, outOfCountry: bool, addressStatus: string, visibility: string, syncStatus: string, addressEditableStatus: string>, emergencyServiceAddress: record<street: string, street2: string, city: string, zip: string, customerName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, outOfCountry: bool, syncStatus: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, lineProvisioningStatus: string, taxId: string>, phoneLines: table<id: string, lineType: string, phoneInfo: record, emergencyAddress: record>, shipping: record<status: string, carrier: string, trackingNumber: string, method: record<id: string, name: string>, address: record<customerName: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, street: string, street2: string, city: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, zip: string, taxId: string>>, boxBillingId: int, useAsCommonPhone: bool, hotDeskDevice: bool, inCompanyNet: bool, site: record<id: string, name: string>, lastLocationReportTime: string, linePooling: string, billingStatement: record<currency: string, charges: list<record>, fees: list<record>, totalCharged: float, totalCharges: float, totalFees: float, subtotal: float, totalFreeServiceCredit: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2396,7 +2481,7 @@ export def "restapi-v10-account-device readDevice" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/device/($deviceId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Device
@@ -2417,6 +2502,7 @@ export def "restapi-v10-account-device updateDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prestatement: oneof<nothing, bool>
   --emergencyServiceAddress: record # Address for emergency cases. The same emergency address is assigned to all numbers of a single device. If the emergency address is also specified in `emergency` resource, then this value is ignored — shape: {street?: string, street2?: string, city?: string, zip?: string, customerName?: string, state?: string, stateId?: string, country?: string, countryId?: string}
   --emergency: record # Device emergency settings — shape: {address?: record, location?: record, outOfCountry?: bool, addressStatus?: "Valid"|"Invalid"|"Provisioning", visibility?: "Private"|"Public", syncStatus?: "Verified"|"Updated"|"Deleted"|"NotRequired"|"Unsupported"|"Failed", addressEditableStatus?: "MainDevice"|"AnyDevice"}
@@ -2434,7 +2520,7 @@ export def "restapi-v10-account-device updateDevice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Device SIP Info
@@ -2451,13 +2537,14 @@ export def "restapi-v10-account-device-sip-info readDeviceSipInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<domain: string, outboundProxies: table<region: string, proxy: string, proxyTLS: string>, userName: string, password: string, authorizationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/device/($deviceId)/sip-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Device Emergency Info
@@ -2478,6 +2565,7 @@ export def "restapi-v10-account-device-emergency updateDeviceEmergency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emergencyServiceAddress: record # Address for emergency cases. The same emergency address is assigned to all numbers of a single device. If the emergency address is also specified in `emergency` resource, then this value is ignored — shape: {street?: string, street2?: string, city?: string, zip?: string, customerName?: string, state?: string, stateId?: string, country?: string, countryId?: string}
   --emergency: record # Device emergency settings — shape: {address?: record, location?: record, outOfCountry?: bool, addressStatus?: "Valid"|"Invalid"|"Provisioning", visibility?: "Private"|"Public", syncStatus?: "Verified"|"Updated"|"Deleted"|"NotRequired"|"Unsupported"|"Failed", addressEditableStatus?: "MainDevice"|"AnyDevice"}
   --extension: record # Information on extension that the device is assigned to — shape: {id?: string}
@@ -2493,7 +2581,7 @@ export def "restapi-v10-account-device-emergency updateDeviceEmergency" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Custom Field List
@@ -2509,13 +2597,14 @@ export def "restapi-v10-account-custom-fields listCustomFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<id: string, category: string, displayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/custom-fields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Custom Field
@@ -2531,6 +2620,7 @@ export def "restapi-v10-account-custom-fields createCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # Object category to attach custom fields
   --displayName: string # Custom field display name
 ]: any -> record<id: string, category: string, displayName: string> {
@@ -2542,7 +2632,7 @@ export def "restapi-v10-account-custom-fields createCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Custom Field
@@ -2559,6 +2649,7 @@ export def "restapi-v10-account-custom-fields updateCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --displayName: string # Custom field display name
 ]: any -> record<id: string, category: string, displayName: string> {
   let input = $in
@@ -2569,7 +2660,7 @@ export def "restapi-v10-account-custom-fields updateCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Custom Field
@@ -2586,13 +2677,14 @@ export def "restapi-v10-account-custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/custom-fields/($fieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Recording Settings
@@ -2608,13 +2700,14 @@ export def "restapi-v10-account-call-recording readCallRecordingSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<onDemand: record<enabled: bool, retentionPeriod: int>, automatic: record<enabled: bool, outboundCallTones: bool, outboundCallAnnouncement: bool, allowMute: bool, extensionCount: int, retentionPeriod: int, maxNumberLimit: int>, greetings: table<type: string, mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-recording")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Recording Settings
@@ -2633,6 +2726,7 @@ export def "restapi-v10-account-call-recording updateCallRecordingSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --onDemand: record # shape: {enabled?: bool, retentionPeriod?: int}
   --automatic: record # shape: {enabled?: bool, outboundCallTones?: bool, outboundCallAnnouncement?: bool, allowMute?: bool, extensionCount?: int, retentionPeriod?: int, maxNumberLimit?: int}
   --greetings: list # Collection of Greeting Info — item shape: {type?: "StartRecording"|"StopRecording"|"AutomaticRecording", mode?: "Default"|"Custom"}
@@ -2645,7 +2739,7 @@ export def "restapi-v10-account-call-recording updateCallRecordingSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Recording Custom Greeting List
@@ -2661,6 +2755,7 @@ export def "restapi-v10-account-call-recording-custom-greetings listCallRecordin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-5
 ]: nothing -> record<records: table<type: string, custom: record, language: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2669,7 +2764,7 @@ export def "restapi-v10-account-call-recording-custom-greetings listCallRecordin
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-recording/custom-greetings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Call Recording Custom Greeting List
@@ -2685,13 +2780,14 @@ export def "restapi-v10-account-call-recording-custom-greetings delete-by-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-recording/custom-greetings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Call Recording Custom Greeting
@@ -2708,13 +2804,14 @@ export def "restapi-v10-account-call-recording-custom-greetings delete-by-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-recording/custom-greetings/($greetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Recording Extension List
@@ -2733,6 +2830,7 @@ export def "restapi-v10-account-call-recording-bulk-assign updateCallRecordingEx
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addedExtensions: list # item shape: {id?: string, uri?: string, extensionNumber?: string, type?: string, callDirection?: "Outbound"|"Inbound"|"All"}
   --updatedExtensions: list # item shape: {id?: string, uri?: string, extensionNumber?: string, type?: string, callDirection?: "Outbound"|"Inbound"|"All"}
   --removedExtensions: list # item shape: {id?: string, uri?: string, extensionNumber?: string, type?: string, callDirection?: "Outbound"|"Inbound"|"All"}
@@ -2745,7 +2843,7 @@ export def "restapi-v10-account-call-recording-bulk-assign updateCallRecordingEx
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Recording Extension List
@@ -2761,13 +2859,14 @@ export def "restapi-v10-account-call-recording-extensions listCallRecordingExten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, extensionNumber: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-recording/extensions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Make CallOut
@@ -2785,6 +2884,7 @@ export def "restapi-v10-account-telephony-call-out createCallOutCallSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: record # Instance id of the caller. It corresponds to the 1st leg of the CallOut call. — shape: {deviceId?: string}
   --body-to: record # Phone number of the called party. This number corresponds to the 2nd leg of a CallOut call — shape: {phoneNumber?: string, extensionNumber?: string}
   --countryId: int # Optional. Dialing plan country data. If not specified, then extension home country is applied by default. (format: int64)
@@ -2797,7 +2897,7 @@ export def "restapi-v10-account-telephony-call-out createCallOutCallSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start Conference Call Session
@@ -2813,13 +2913,14 @@ export def "restapi-v10-account-telephony-conference createConferenceCallSession
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<session: record<id: string, origin: record<type: string>, voiceCallToken: string, parties: list<record>, creationTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/conference")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Session Status
@@ -2836,6 +2937,7 @@ export def "restapi-v10-account-telephony-sessions readCallSessionStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timestamp: string # The date and time of a call session latest change
   --timeout: string # The time frame of awaiting for a status change before sending the resulting one in response
 ]: nothing -> record<id: string, origin: record<type: string>, voiceCallToken: string, parties: table<id: string, status: record, muted: bool, standAlone: bool, park: record, from: record, to: record, owner: record, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: list>, creationTime: string> {
@@ -2845,7 +2947,7 @@ export def "restapi-v10-account-telephony-sessions readCallSessionStatus" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Drop Call Session
@@ -2862,13 +2964,14 @@ export def "restapi-v10-account-telephony-sessions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bring-In Call Party
@@ -2885,6 +2988,7 @@ export def "restapi-v10-account-telephony-sessions-parties-bring-in createCallPa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sessionId: string # Internal identifier of a call session
   partyId: string # Internal identifier of a party that should be added to the call session
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
@@ -2896,7 +3000,7 @@ export def "restapi-v10-account-telephony-sessions-parties-bring-in createCallPa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Party Status
@@ -2914,13 +3018,14 @@ export def "restapi-v10-account-telephony-sessions-parties readCallPartyStatus" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Call Party
@@ -2938,13 +3043,14 @@ export def "restapi-v10-account-telephony-sessions-parties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Party
@@ -2963,6 +3069,7 @@ export def "restapi-v10-account-telephony-sessions-parties updateCallParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --party: record # Party update data — shape: {muted?: bool, standAlone?: bool}
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let input = $in
@@ -2973,7 +3080,7 @@ export def "restapi-v10-account-telephony-sessions-parties updateCallParty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Un-hold Call Party
@@ -2991,13 +3098,14 @@ export def "restapi-v10-account-telephony-sessions-parties-unhold unholdCallPart
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)/unhold")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call Park
@@ -3015,13 +3123,14 @@ export def "restapi-v10-account-telephony-sessions-parties-park callParkParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)/park")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call Flip on Party
@@ -3039,6 +3148,7 @@ export def "restapi-v10-account-telephony-sessions-parties-flip callFlipParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callFlipId: string # Call flip id
 ]: any -> any {
   let input = $in
@@ -3049,7 +3159,7 @@ export def "restapi-v10-account-telephony-sessions-parties-flip callFlipParty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reply with Text
@@ -3068,6 +3178,7 @@ export def "restapi-v10-account-telephony-sessions-parties-reply replyParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replyWithText: string # Text to reply
   --replyWithPattern: record # shape: {pattern?: "WillCallYouBack"|"CallMeBack"|"OnMyWay"|"OnTheOtherLine"|"WillCallYouBackLater"|"CallMeBackLater"|"InAMeeting"|"OnTheOtherLineNoCall", time?: int, timeUnit?: "Minute"|"Hour"|"Day"}
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string> {
@@ -3079,7 +3190,7 @@ export def "restapi-v10-account-telephony-sessions-parties-reply replyParty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bridge Call Party
@@ -3097,6 +3208,7 @@ export def "restapi-v10-account-telephony-sessions-parties-bridge bridgeCallPart
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-telephonySessionId: string # Internal identifier of a call session to be connected to (bridged)
   --body-partyId: string # Internal identifier of a call party to be connected to (bridged)
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
@@ -3108,7 +3220,7 @@ export def "restapi-v10-account-telephony-sessions-parties-bridge bridgeCallPart
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Ignore Call in Queue
@@ -3126,6 +3238,7 @@ export def "restapi-v10-account-telephony-sessions-parties-ignore ignoreCallInQu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   deviceId: string # Internal device identifier (e.g. 400020454008)
 ]: any -> any {
   let input = $in
@@ -3136,7 +3249,7 @@ export def "restapi-v10-account-telephony-sessions-parties-ignore ignoreCallInQu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Supervise Call Party
@@ -3154,6 +3267,7 @@ export def "restapi-v10-account-telephony-sessions-parties-supervise superviseCa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mode: string@mode-completer # Supervising mode (e.g. Listen)
   supervisorDeviceId: string # Internal identifier of a supervisor's device (e.g. 191888004)
   agentExtensionId: string # Mailbox ID of a user that will be monitored (e.g. 400378008008)
@@ -3168,7 +3282,7 @@ export def "restapi-v10-account-telephony-sessions-parties-supervise superviseCa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reject Call Party
@@ -3186,13 +3300,14 @@ export def "restapi-v10-account-telephony-sessions-parties-reject rejectParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)/reject")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Recording
@@ -3210,13 +3325,14 @@ export def "restapi-v10-account-telephony-sessions-parties-recordings startCallR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/telephony/sessions/($telephonySessionId)/parties/($partyId)/recordings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause/Resume Recording
@@ -3235,6 +3351,7 @@ export def "restapi-v10-account-telephony-sessions-parties-recordings pauseResum
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brandId: string # Identifies a brand of a logged-in user or a brand of a sign-up session (default: ~)
   --active: oneof<nothing, bool> # Recording status
 ]: any -> record<id: string, active: bool> {
@@ -3247,7 +3364,7 @@ export def "restapi-v10-account-telephony-sessions-parties-recordings pauseResum
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Answer Call Party
@@ -3265,6 +3382,7 @@ export def "restapi-v10-account-telephony-sessions-parties-answer answerCallPart
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deviceId: string # Device ID that is used to answer to incoming call. (e.g. 400018633008)
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let input = $in
@@ -3275,7 +3393,7 @@ export def "restapi-v10-account-telephony-sessions-parties-answer answerCallPart
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer Call Party
@@ -3293,6 +3411,7 @@ export def "restapi-v10-account-telephony-sessions-parties-transfer transferCall
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # Phone number
   --voicemail: string # Voicemail owner extension identifier
   --parkOrbit: string # Park orbit identifier
@@ -3306,7 +3425,7 @@ export def "restapi-v10-account-telephony-sessions-parties-transfer transferCall
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hold Call Party
@@ -3324,6 +3443,7 @@ export def "restapi-v10-account-telephony-sessions-parties-hold holdCallParty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --proto: string@proto-completer # Protocol for hold mode initiation (default: Auto)
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let input = $in
@@ -3334,7 +3454,7 @@ export def "restapi-v10-account-telephony-sessions-parties-hold holdCallParty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pickup Call
@@ -3352,6 +3472,7 @@ export def "restapi-v10-account-telephony-sessions-parties-pickup pickupCallPart
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   deviceId: string # Device identifier that is used to pick up the parked call. (e.g. 400018633008)
 ]: any -> record<id: string, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>, muted: bool, standAlone: bool, park: record<id: string>, from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, owner: record<accountId: string, extensionId: string>, direction: string, conferenceRole: string, ringOutRole: string, ringMeRole: string, recordings: table<id: string, active: bool>> {
   let input = $in
@@ -3362,7 +3483,7 @@ export def "restapi-v10-account-telephony-sessions-parties-pickup pickupCallPart
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Forward Call Party
@@ -3380,6 +3501,7 @@ export def "restapi-v10-account-telephony-sessions-parties-forward forwardCallPa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # Phone number
   --voicemail: string # Voicemail owner extension identifier
   --extensionNumber: string # Extension short number
@@ -3392,7 +3514,7 @@ export def "restapi-v10-account-telephony-sessions-parties-forward forwardCallPa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Supervise Call Session
@@ -3409,6 +3531,7 @@ export def "restapi-v10-account-telephony-sessions-supervise superviseCallSessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mode: string@mode-completer # Supervising mode (e.g. Listen)
   supervisorDeviceId: string # Internal identifier of a supervisor's device which will be used for call session monitoring (e.g. 191888004)
   --agentExtensionId: string # Extension identifier of the user that will be monitored (e.g. 400378008008)
@@ -3423,7 +3546,7 @@ export def "restapi-v10-account-telephony-sessions-supervise superviseCallSessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Account Service Info
@@ -3439,13 +3562,14 @@ export def "restapi-v10-account-service-info readAccountServiceInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, servicePlanName: string, brand: record<id: string, name: string, homeCountry: record<isoCode: string, callingCode: string>>, contractedCountry: record<isoCode: string, callingCode: string>, servicePlan: record<id: string, name: string, edition: string, freemiumProductType: string>, targetServicePlan: record<id: string, name: string, edition: string, freemiumProductType: string>, billingPlan: record<id: string, name: string, durationUnit: string, duration: int, type: string, includedPhoneLines: int>, serviceFeatures: table<featureName: string, enabled: bool>, limits: record<freeSoftPhoneLinesPerExtension: int, meetingSize: int, cloudRecordingStorage: int, maxMonitoredExtensionsPerUser: int, maxExtensionNumberLength: int, siteCodeLength: int, shortExtensionNumberLength: int>, package: record<version: string, id: string>, uBrand: record<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/service-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Company Message Template
@@ -3463,6 +3587,7 @@ export def "restapi-v10-account-message-store-templates createCompanyMessageTemp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # Name of a template
   --body-body: record # Text message template information — shape: {text: string}
   --site: record # Specifies a site that message template is associated with. Supported only if the Sites feature is enabled.  The default is `main-site` value. — shape: {id?: string, name?: string}
@@ -3475,7 +3600,7 @@ export def "restapi-v10-account-message-store-templates createCompanyMessageTemp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Company Message Templates
@@ -3491,6 +3616,7 @@ export def "restapi-v10-account-message-store-templates listCompanyMessageTempla
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteIds: list # Site ID(s) to filter company message templates, associated with particular sites By default the value is all - templates with all sites will be returned
 ]: nothing -> record<records: table<id: string, displayName: string, body: record, scope: string, site: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3499,7 +3625,7 @@ export def "restapi-v10-account-message-store-templates listCompanyMessageTempla
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Company Message Template
@@ -3518,6 +3644,7 @@ export def "restapi-v10-account-message-store-templates updateCompanyMessageTemp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # Name of a template
   --body-body: record # Text message template information — shape: {text: string}
   --site: record # Specifies a site that message template is associated with. Supported only if the Sites feature is enabled.  The default is `main-site` value. — shape: {id?: string, name?: string}
@@ -3530,7 +3657,7 @@ export def "restapi-v10-account-message-store-templates updateCompanyMessageTemp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Company Message Template
@@ -3547,13 +3674,14 @@ export def "restapi-v10-account-message-store-templates readCompanyMessageTempla
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, displayName: string, body: record<text: string>, scope: string, site: record<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Company Message Template
@@ -3570,13 +3698,14 @@ export def "restapi-v10-account-message-store-templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Company Call Records
@@ -3593,6 +3722,7 @@ export def "restapi-v10-account-call-log readCompanyCallLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extensionNumber: string # Short extension number of a user. If specified, returns call log for this particular extension only. Cannot be combined with `phoneNumber` filter  (e.g. 101)
   --phoneNumber: string # Phone number of a caller/callee in e.164 format without a '+' sign. If specified, all incoming/outgoing calls from/to this phone number are returned.  (e.g. 12053320032)
   --direction: list # The direction of call records to be included in the result. If omitted, both inbound and outbound calls are returned. Multiple values are supported
@@ -3613,7 +3743,7 @@ export def "restapi-v10-account-call-log readCompanyCallLog" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Call Record(s)
@@ -3630,6 +3760,7 @@ export def "restapi-v10-account-call-log readCompanyCallRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
 ]: nothing -> record<extension: record<id: int, uri: string>, telephonySessionId: string, sipUuidInfo: string, transferTarget: record<telephonySessionId: string>, transferee: record<telephonySessionId: string>, partyId: string, transport: string, from: record<dialerPhoneNumber: string>, to: record<dialedPhoneNumber: string>, type: string, direction: string, message: record<id: string, type: string, uri: string>, delegate: record<id: string, name: string>, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record<id: string, uri: string, type: string, contentUri: string>, shortRecording: bool, billing: record<costIncluded: float, costPurchased: float>, internalType: string, id: string, uri: string, sessionId: string, deleted: bool, legs: table<extension: record, telephonySessionId: string, sipUuidInfo: string, transferTarget: record, transferee: record, partyId: string, transport: string, from: record, to: record, type: string, direction: string, message: record, delegate: record, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record, shortRecording: bool, billing: record, internalType: string, legType: string, master: bool>, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3638,7 +3769,7 @@ export def "restapi-v10-account-call-log readCompanyCallRecord" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-log/($callRecordId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sync Company Call Log
@@ -3655,6 +3786,7 @@ export def "restapi-v10-account-call-log-sync syncAccountCallLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --syncType: string # Type of call log synchronization request
   --syncToken: string # Value of syncToken property of last sync request response. Mandatory parameter for 'ISync' sync type
   --dateFrom: string # The start datetime for resulting records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is the current moment (format: date-time)
@@ -3671,7 +3803,7 @@ export def "restapi-v10-account-call-log-sync syncAccountCallLog" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-log-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Company Active Calls
@@ -3687,6 +3819,7 @@ export def "restapi-v10-account-active-calls listCompanyActiveCalls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direction: list # The direction of call records to be included in the result. If omitted, both inbound and outbound calls are returned. Multiple values are supported
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
   --type: list # The type of call records to be included in the result. If omitted, all call types are returned. Multiple values are supported
@@ -3701,7 +3834,7 @@ export def "restapi-v10-account-active-calls listCompanyActiveCalls" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/active-calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Multiple Extensions
@@ -3718,6 +3851,7 @@ export def "restapi-v10-account-extension-bulk-update extensionBulkUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # item shape: {id?: string, status?: "Disabled"|"Enabled"|"NotActivated"|"Frozen", statusInfo?: record, reason?: string, comment?: string, extensionNumber?: string, contact?: record, regionalSettings?: record, setupWizardState?: "NotStarted"|"Incomplete"|"Completed", partnerId?: string, ivrPin?: string, password?: string, callQueueInfo?: record, transition?: record, costCenter?: record, customFields?: list, hidden?: bool, site?: record, type?: "User"|"FaxUser"|"VirtualUser"|"DigitalUser"|"Department"|"Announcement"|"Voicemail"|"SharedLinesGroup"|"PagingOnly"|"IvrMenu"|"ApplicationExtension"|"ParkLocation"|"DelegatedLinesGroup", references?: list}
 ]: any -> record<uri: string, id: string, status: string, creationTime: string, lastModifiedTime: string, result: record<affectedItems: list<record>, errors: list<record>>> {
   let input = $in
@@ -3728,7 +3862,7 @@ export def "restapi-v10-account-extension-bulk-update extensionBulkUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Extension Update Task Status
@@ -3745,13 +3879,14 @@ export def "restapi-v10-account-extension-bulk-update-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, status: string, creationTime: string, lastModifiedTime: string, result: record<affectedItems: list<record>, errors: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension-bulk-update/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Templates
@@ -3767,6 +3902,7 @@ export def "restapi-v10-account-templates listUserTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-6 # Type of template
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed. Default value is '1'  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items). If not specified, the value is '100' by default (format: int32, default: 100)
@@ -3777,7 +3913,7 @@ export def "restapi-v10-account-templates listUserTemplates" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Template
@@ -3794,13 +3930,14 @@ export def "restapi-v10-account-templates readUserTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List A2P SMS Statuses
@@ -3816,6 +3953,7 @@ export def "restapi-v10-account-a2p-sms-statuses aggregateA2PSMSStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --batchId: string # Internal identifier of a message batch to filter the response (e.g. 55577)
   --direction: string@direction-completer # Direction of a message to filter the message list result. By default, there is no filter applied - both Inbound and Outbound messages are returned  (e.g. Inbound)
   --dateFrom: string # The end of the time range to filter the results in ISO 8601 format including timezone. Default is the 'dateTo' minus 24 hours (format: date-time, e.g. 2020-11-09T16:07:52.597Z)
@@ -3828,7 +3966,7 @@ export def "restapi-v10-account-a2p-sms-statuses aggregateA2PSMSStatuses" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List A2P SMS Messages
@@ -3844,6 +3982,7 @@ export def "restapi-v10-account-a2p-sms-messages listA2PSMS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --batchId: string # Internal identifier of a message batch to filter the response (e.g. 55577)
   --direction: string@direction-completer # Direction of a message to filter the message list result. By default, there is no filter applied - both Inbound and Outbound messages are returned  (e.g. Inbound)
   --dateFrom: string # The end of the time range to filter the results in ISO 8601 format including timezone. Default is the 'dateTo' minus 24 hours (format: date-time, e.g. 2020-11-09T16:07:52.597Z)
@@ -3859,7 +3998,7 @@ export def "restapi-v10-account-a2p-sms-messages listA2PSMS" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get A2P SMS
@@ -3876,13 +4015,14 @@ export def "restapi-v10-account-a2p-sms-messages readA2PSMS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, from: string, to: list<string>, text: string, creationTime: string, lastModifiedTime: string, messageStatus: string, segmentCount: int, cost: float, batchId: string, direction: string, errorCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/messages/($messageId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Opted Out Numbers
@@ -3898,6 +4038,7 @@ export def "restapi-v10-account-a2p-sms-opt-outs readA2PSMSOptOuts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --qp-from: string # The sender's phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format for filtering messages. The asterisk value "*" means any number in `from` field  (e.g. 15551234455)
   --qp-to: string # The receiver's phone number (`to` field) in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format for filtering messages  (e.g. 15551237755)
@@ -3911,7 +4052,7 @@ export def "restapi-v10-account-a2p-sms-opt-outs readA2PSMSOptOuts" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/opt-outs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Opt-In/Out Numbers
@@ -3927,6 +4068,7 @@ export def "restapi-v10-account-a2p-sms-opt-outs-bulk-assign addA2PSMSOptOuts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # The phone number of a sender which the recipients should be opted out from or opted in to (e.g. +15551234455)
   --optOuts: list # The list of phone numbers to be opted out (e.g. [+15551237755, +15551237756])
   --optIns: list # The list of phone numbers to be opted in (e.g. [+15551237799, +15551237798])
@@ -3939,7 +4081,7 @@ export def "restapi-v10-account-a2p-sms-opt-outs-bulk-assign addA2PSMSOptOuts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send A2P SMS
@@ -3956,6 +4098,7 @@ export def "restapi-v10-account-a2p-sms-batches createA2PSMS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # Sender's phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format. (e.g. +15551234567)
   --text: string # Text to send to `messages.to` phone numbers. Can be overridden on a per-message basis (e.g. Hello, World!)
   messages: list # Individual messages — item shape: {to: list, text?: string}
@@ -3968,7 +4111,7 @@ export def "restapi-v10-account-a2p-sms-batches createA2PSMS" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List A2P SMS Batches
@@ -3984,6 +4127,7 @@ export def "restapi-v10-account-a2p-sms-batches listA2PBatches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # The end of the time range to filter the results in ISO 8601 format including timezone. Default is the 'dateTo' minus 24 hours (format: date-time, e.g. 2020-11-09T16:07:52.597Z)
   --dateTo: string # The end of the time range to filter the results in ISO 8601 format including timezone. Default is the current time (format: date-time, e.g. 2020-11-25T16:07:52.597Z)
   --qp-from: string # Phone number in E.164 format from which the messages are going to be sent (e.g. 15551234455)
@@ -3997,7 +4141,7 @@ export def "restapi-v10-account-a2p-sms-batches listA2PBatches" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/batches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get A2P SMS Batch
@@ -4014,13 +4158,14 @@ export def "restapi-v10-account-a2p-sms-batches readA2PBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, from: string, batchSize: int, processedCount: int, lastModifiedTime: string, status: string, creationTime: string, rejected: table<index: int, to: list, errorCode: string, description: string>, cost: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/a2p-sms/batches/($batchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Company Call Handling Rules
@@ -4036,6 +4181,7 @@ export def "restapi-v10-account-answering-rule listCompanyAnsweringRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, enabled: bool, type: string, name: string, calledNumbers: list, extension: record>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
@@ -4045,7 +4191,7 @@ export def "restapi-v10-account-answering-rule listCompanyAnsweringRules" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/answering-rule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Company Call Handling Rule
@@ -4066,6 +4212,7 @@ export def "restapi-v10-account-answering-rule createCompanyAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of an answering rule specified by user. Max number of symbols is 30. The default value is 'My Rule N' where 'N' is the first free number
   --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true` (default: true)
   --type: string@type-completer-7 # Type of an answering rule, the default value is 'Custom' = ['BusinessHours', 'AfterHours', 'Custom']
@@ -4084,7 +4231,7 @@ export def "restapi-v10-account-answering-rule createCompanyAnsweringRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Company Call Handling Rule
@@ -4101,13 +4248,14 @@ export def "restapi-v10-account-answering-rule readCompanyAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, enabled: bool, type: string, name: string, callers: table<callerId: string, name: string>, calledNumbers: table<id: string, phoneNumber: string>, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>, ranges: list<record>, ref: string>, callHandlingAction: string, extension: record<id: string>, greetings: table<type: string, preset: record, custom: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/answering-rule/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Company Call Handling Rule
@@ -4129,6 +4277,7 @@ export def "restapi-v10-account-answering-rule updateCompanyAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Specifies if a rule is active or inactive. The default value is `true` (default: true)
   --name: string # Name of an answering rule specified by user. Max number of symbols is 30. The default value is 'My Rule N' where 'N' is the first free number
   --callers: list # Answering rule will be applied when calls are received from the specified caller(s) — item shape: {callerId?: string, name?: string}
@@ -4147,7 +4296,7 @@ export def "restapi-v10-account-answering-rule updateCompanyAnsweringRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Company Call Handling Rule
@@ -4164,13 +4313,14 @@ export def "restapi-v10-account-answering-rule delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/answering-rule/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List IVR Prompts
@@ -4186,13 +4336,14 @@ export def "restapi-v10-account-ivr-prompts listIvrPrompts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, contentType: string, contentUri: string, filename: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-prompts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create IVR Prompts
@@ -4208,6 +4359,7 @@ export def "restapi-v10-account-ivr-prompts createIVRPrompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   attachment: string # Audio file that will be used as a prompt. Attachment cannot be empty, only audio files are supported (format: binary)
   --name: string # Description of file contents.
 ]: any -> record<uri: string, id: string, contentType: string, contentUri: string, filename: string> {
@@ -4219,7 +4371,7 @@ export def "restapi-v10-account-ivr-prompts createIVRPrompt" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get IVR Prompt
@@ -4236,13 +4388,14 @@ export def "restapi-v10-account-ivr-prompts readIVRPrompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, contentType: string, contentUri: string, filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-prompts/($promptId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update IVR Prompt
@@ -4259,6 +4412,7 @@ export def "restapi-v10-account-ivr-prompts updateIVRPrompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string # Name of a file to be uploaded as a prompt
 ]: any -> record<uri: string, id: string, contentType: string, contentUri: string, filename: string> {
   let input = $in
@@ -4269,7 +4423,7 @@ export def "restapi-v10-account-ivr-prompts updateIVRPrompt" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete IVR Prompt
@@ -4286,13 +4440,14 @@ export def "restapi-v10-account-ivr-prompts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-prompts/($promptId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Multiple User Contacts
@@ -4309,6 +4464,7 @@ export def "restapi-v10-account-address-book-bulk-upload addressBookBulkUpload" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # item shape: {extensionId: string, contacts: list}
 ]: any -> record<id: string, uri: string, status: string, creationTime: string, lastModifiedTime: string, results: record<affectedItems: list<record>, errors: list<record>>> {
   let input = $in
@@ -4319,7 +4475,7 @@ export def "restapi-v10-account-address-book-bulk-upload addressBookBulkUpload" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Contacts Upload Task
@@ -4336,13 +4492,14 @@ export def "restapi-v10-account-address-book-bulk-upload-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, status: string, creationTime: string, lastModifiedTime: string, results: record<affectedItems: list<record>, errors: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/address-book-bulk-upload/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Call Queues
@@ -4358,6 +4515,7 @@ export def "restapi-v10-account-call-queues listCallQueues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
   --memberExtensionId: string # Internal identifier of an extension that is a member of every group within the result
@@ -4368,7 +4526,7 @@ export def "restapi-v10-account-call-queues listCallQueues" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-queues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Queue
@@ -4385,13 +4543,14 @@ export def "restapi-v10-account-call-queues readCallQueueInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, extensionNumber: string, name: string, status: string, subType: string, serviceLevelSettings: record<slaGoal: int, slaThresholdSeconds: int, includeAbandonedCalls: bool, abandonedThresholdSeconds: int>, editableMemberStatus: bool, alertTimer: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-queues/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Queue
@@ -4409,6 +4568,7 @@ export def "restapi-v10-account-call-queues updateCallQueueInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uri: string # Link to a call queue (format: uri)
   --id: string # Internal identifier of a call queue
   --extensionNumber: string # Extension number of a call queue
@@ -4427,7 +4587,7 @@ export def "restapi-v10-account-call-queues updateCallQueueInfo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Queue Presence
@@ -4444,13 +4604,14 @@ export def "restapi-v10-account-call-queues-presence readCallQueuePresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<member: record, acceptQueueCalls: bool, acceptCurrentQueueCalls: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-queues/($groupId)/presence")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Queue Presence
@@ -4468,6 +4629,7 @@ export def "restapi-v10-account-call-queues-presence updateCallQueuePresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {member?: record, acceptCurrentQueueCalls?: bool}
 ]: any -> record<records: table<member: record, acceptQueueCalls: bool, acceptCurrentQueueCalls: bool>> {
   let input = $in
@@ -4478,7 +4640,7 @@ export def "restapi-v10-account-call-queues-presence updateCallQueuePresence" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign Multiple Call Queue Members
@@ -4495,6 +4657,7 @@ export def "restapi-v10-account-call-queues-bulk-assign assignMultipleCallQueueM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addedExtensionIds: list
   --removedExtensionIds: list
 ]: any -> any {
@@ -4506,7 +4669,7 @@ export def "restapi-v10-account-call-queues-bulk-assign assignMultipleCallQueueM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Call Queue Members
@@ -4523,6 +4686,7 @@ export def "restapi-v10-account-call-queues-members listCallQueueMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<uri: string, id: int, extensionNumber: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -4532,7 +4696,7 @@ export def "restapi-v10-account-call-queues-members listCallQueueMembers" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-queues/($groupId)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Emergency Locations
@@ -4548,6 +4712,7 @@ export def "restapi-v10-account-emergency-locations listEmergencyLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries containing the specified substring in 'address' and 'name' fields. The character range is 0-64; not case-sensitive. If empty then the filter is ignored
   --addressStatus: string@addressStatus-completer
@@ -4563,7 +4728,7 @@ export def "restapi-v10-account-emergency-locations listEmergencyLocations" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Emergency Location
@@ -4580,6 +4745,7 @@ export def "restapi-v10-account-emergency-locations createEmergencyLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an emergency response location
   --address: any
   --name: string # Emergency response location name
@@ -4598,7 +4764,7 @@ export def "restapi-v10-account-emergency-locations createEmergencyLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Emergency Location
@@ -4615,6 +4781,7 @@ export def "restapi-v10-account-emergency-locations readEmergencyLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --syncEmergencyAddress: oneof<nothing, bool>
 ]: nothing -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4623,7 +4790,7 @@ export def "restapi-v10-account-emergency-locations readEmergencyLocation" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-locations/($locationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Emergency Location
@@ -4641,6 +4808,7 @@ export def "restapi-v10-account-emergency-locations updateEmergencyLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an emergency response location
   --address: any
   --name: string # Emergency response location name
@@ -4659,7 +4827,7 @@ export def "restapi-v10-account-emergency-locations updateEmergencyLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Emergency Location
@@ -4676,6 +4844,7 @@ export def "restapi-v10-account-emergency-locations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --validateOnly: oneof<nothing, bool> # Flag indicating that validation of emergency location(s) is required before deletion
   --newLocationId: string # Internal identifier of an emergency response location that should be used instead of a deleted one.
 ]: nothing -> any {
@@ -4685,7 +4854,7 @@ export def "restapi-v10-account-emergency-locations delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-locations/($locationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Meeting Settings
@@ -4703,13 +4872,14 @@ export def "restapi-v10-account-meeting-locked-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scheduleMeeting: record<startHostVideo: bool, startParticipantVideo: bool, audioOptions: bool, allowJoinBeforeHost: bool, requirePasswordForSchedulingNewMeetings: bool, requirePasswordForInstantMeetings: bool, requirePasswordForPmiMeetings: bool, enforceLogin: bool>, recording: record<localRecording: bool, cloudRecording: bool, autoRecording: bool, cloudRecordingDownload: bool, hostDeleteCloudRecording: bool, accountUserAccessRecording: bool, autoDeleteCmr: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/meeting/locked-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Account-level Meeting Info
@@ -4728,13 +4898,14 @@ export def "restapi-v10-account-meeting readAccountMeeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record<startUri: string, joinUri: string>, schedule: record<startTime: string, durationInMinutes: int, timeZone: record<uri: string, id: string, name: string, description: string>>, host: record<uri: string, id: string>, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, recurrence: record<frequency: string, interval: int, weeklyByDays: list<string>, monthlyByDay: int, monthlyByWeek: string, monthlyByWeekDay: string, count: int, until: string>, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: table<id: string, startTime: string, durationInMinutes: int, status: string>, enableWaitingRoom: bool, globalDialInCountries: list<string>, alternativeHosts: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/meeting/($meetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Department Member List
@@ -4753,6 +4924,7 @@ export def "restapi-v10-account-department-members listDepartmentMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<id: int, uri: string, name: string, extensionNumber: string, partnerId: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -4762,7 +4934,7 @@ export def "restapi-v10-account-department-members listDepartmentMembers" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/department/($departmentId)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign Multiple Department Members
@@ -4781,6 +4953,7 @@ export def "restapi-v10-account-department-bulk-assign assignMultipleDepartmentM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --items: list # item shape: {departmentId?: string, addedExtensionIds?: list, removedExtensionIds?: list}
 ]: any -> any {
   let input = $in
@@ -4791,7 +4964,7 @@ export def "restapi-v10-account-department-bulk-assign assignMultipleDepartmentM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Presence Status List
@@ -4807,6 +4980,7 @@ export def "restapi-v10-account-presence readAccountPresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailedTelephonyState: oneof<nothing, bool> # Whether to return detailed telephony state
   --sipData: oneof<nothing, bool> # Whether to return SIP data
   --page: int # Page number for account presence information (format: int32)
@@ -4818,7 +4992,7 @@ export def "restapi-v10-account-presence readAccountPresence" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/presence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Company Call Recordings
@@ -4834,6 +5008,7 @@ export def "restapi-v10-account-call-recordings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   records: list # Call recordings ID(s) to delete
 ]: any -> any {
   let input = $in
@@ -4844,7 +5019,7 @@ export def "restapi-v10-account-call-recordings delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Company Assigned Roles
@@ -4860,6 +5035,7 @@ export def "restapi-v10-account-assigned-role listAssignedRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showHidden: oneof<nothing, bool> # Specifies if hidden roles are shown or not
 ]: nothing -> record<uri: string, records: table<uri: string, extensionId: string, roles: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4868,7 +5044,7 @@ export def "restapi-v10-account-assigned-role listAssignedRoles" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/assigned-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Account Meeting Recordings
@@ -4886,6 +5062,7 @@ export def "restapi-v10-account-meeting-recordings listAccountMeetingRecordings"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --meetingId: string # Internal identifier of a meeting. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified
   --meetingStartTimeFrom: string # Recordings of meetings started after the time specified will be returned. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified  (format: date-time)
   --meetingStartTimeTo: string # Recordings of meetings started before the time specified will be returned. The default value is current time. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified  (format: date-time)
@@ -4898,7 +5075,7 @@ export def "restapi-v10-account-meeting-recordings listAccountMeetingRecordings"
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/meeting-recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Forward All Company Calls
@@ -4914,13 +5091,14 @@ export def "restapi-v10-account-forward-all-calls get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, ranges: table<from: string, to: string>, callHandlingAction: string, extension: record<id: string, name: string, extensionNumber: string>, reason: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/forward-all-calls")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Forward All Company Calls
@@ -4936,6 +5114,7 @@ export def "restapi-v10-account-forward-all-calls updateForwardAllCompanyCalls" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Indicates whether the *Forward All Company Calls* feature is enabled or disabled for an account
 ]: any -> record<enabled: bool, ranges: table<from: string, to: string>, callHandlingAction: string, extension: record<id: string, name: string, extensionNumber: string>, reason: record<code: string, message: string>> {
   let input = $in
@@ -4946,7 +5125,7 @@ export def "restapi-v10-account-forward-all-calls updateForwardAllCompanyCalls" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Call Monitoring Groups
@@ -4962,6 +5141,7 @@ export def "restapi-v10-account-call-monitoring-groups listCallMonitoringGroups"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
   --memberExtensionId: string # Internal identifier of an extension that is a member of every group within the result
@@ -4972,7 +5152,7 @@ export def "restapi-v10-account-call-monitoring-groups listCallMonitoringGroups"
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-monitoring-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Call Monitoring Group
@@ -4988,6 +5168,7 @@ export def "restapi-v10-account-call-monitoring-groups createCallMonitoringGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of a group
 ]: any -> record<uri: string, id: string, name: string> {
   let input = $in
@@ -4998,7 +5179,7 @@ export def "restapi-v10-account-call-monitoring-groups createCallMonitoringGroup
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Call Monitoring Group
@@ -5015,6 +5196,7 @@ export def "restapi-v10-account-call-monitoring-groups updateCallMonitoringGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of a group
 ]: any -> record<uri: string, id: string, name: string> {
   let input = $in
@@ -5025,7 +5207,7 @@ export def "restapi-v10-account-call-monitoring-groups updateCallMonitoringGroup
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Call Monitoring Group
@@ -5042,13 +5224,14 @@ export def "restapi-v10-account-call-monitoring-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-monitoring-groups/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Monitoring Group List
@@ -5068,6 +5251,7 @@ export def "restapi-v10-account-call-monitoring-groups-bulk-assign updateCallMon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addedExtensions: list # item shape: {id?: string, permissions?: list}
   --updatedExtensions: list # item shape: {id?: string, permissions?: list}
   --removedExtensions: list # item shape: {id?: string, permissions?: list}
@@ -5080,7 +5264,7 @@ export def "restapi-v10-account-call-monitoring-groups-bulk-assign updateCallMon
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Call Monitoring Group Members
@@ -5097,6 +5281,7 @@ export def "restapi-v10-account-call-monitoring-groups-members listCallMonitorin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, extensionNumber: string, permissions: list>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -5106,7 +5291,7 @@ export def "restapi-v10-account-call-monitoring-groups-members listCallMonitorin
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/call-monitoring-groups/($groupId)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Account Business Address
@@ -5122,13 +5307,14 @@ export def "restapi-v10-account-business-address readAccountBusinessAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, businessAddress: record<country: string, state: string, city: string, street: string, zip: string>, company: string, email: string, mainSiteName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/business-address")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Company Business Address
@@ -5145,6 +5331,7 @@ export def "restapi-v10-account-business-address updateAccountBusinessAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company: string # Company business name
   --email: string # Company business email address (format: email)
   --businessAddress: record # Company business address — shape: {country?: string, state?: string, city?: string, street?: string, zip?: string}
@@ -5158,7 +5345,7 @@ export def "restapi-v10-account-business-address updateAccountBusinessAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search Audit Trail Data
@@ -5174,6 +5361,7 @@ export def "restapi-v10-account-audit-trail-search auditTrailSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventTimeFrom: string # The beginning of the time range to return records in ISO 8601 format in UTC timezone, default is "eventTimeFrom"-24 hours  (format: date-time)
   --eventTimeTo: string # The end of the time range to return records in ISO 8601 format in UTC timezone, default is the current time (format: date-time)
   --initiatorIds: list # List of extension IDs of change initiators.
@@ -5193,7 +5381,7 @@ export def "restapi-v10-account-audit-trail-search auditTrailSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get IVR Menu list
@@ -5209,13 +5397,14 @@ export def "restapi-v10-account-ivr-menus readIVRMenuList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, name: string, extensionNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-menus")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create IVR Menu
@@ -5234,6 +5423,7 @@ export def "restapi-v10-account-ivr-menus createIVRMenu" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an IVR Menu extension
   --uri: string # Link to an IVR Menu extension resource (format: uri)
   --name: string # First name of an IVR Menu user
@@ -5250,7 +5440,7 @@ export def "restapi-v10-account-ivr-menus createIVRMenu" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get IVR Menu
@@ -5267,13 +5457,14 @@ export def "restapi-v10-account-ivr-menus readIVRMenu" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, name: string, extensionNumber: string, site: record<id: string, name: string>, prompt: record<mode: string, audio: record<uri: string, id: string>, text: string, language: record<uri: string, id: string, name: string, localeCode: string>>, actions: table<input: string, action: string, extension: record, phoneNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/ivr-menus/($ivrMenuId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update IVR Menu
@@ -5293,6 +5484,7 @@ export def "restapi-v10-account-ivr-menus updateIVRMenu" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an IVR Menu extension
   --uri: string # Link to an IVR Menu extension resource (format: uri)
   --name: string # First name of an IVR Menu user
@@ -5309,7 +5501,7 @@ export def "restapi-v10-account-ivr-menus updateIVRMenu" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Message Store Report
@@ -5325,6 +5517,7 @@ export def "restapi-v10-account-message-store-report createMessageStoreReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateTo: string # The end of the time range to collect message records in ISO 8601 format including timezone. Default is the current time  (format: date-time)
   --dateFrom: string # The beginning of the time range to collect call log records in ISO 8601 format including timezone. Default is the current time minus 24 hours  (format: date-time)
   --messageTypes: list # Types of messages to be collected. If not specified, all messages without message type filtering will be returned. Multiple values are accepted (e.g. [Fax, VoiceMail])
@@ -5337,7 +5530,7 @@ export def "restapi-v10-account-message-store-report createMessageStoreReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Message Store Report Task
@@ -5354,13 +5547,14 @@ export def "restapi-v10-account-message-store-report readMessageStoreReportTask"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, status: string, accountId: string, extensionId: string, dateTo: string, dateFrom: string, startTime: string, finishTime: string, messageTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-report/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message Store Report Archive
@@ -5377,13 +5571,14 @@ export def "restapi-v10-account-message-store-report-archive readMessageStoreRep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<size: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-report/($taskId)/archive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Directory Entries
@@ -5399,6 +5594,7 @@ export def "restapi-v10-account-directory-entries listDirectoryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showFederated: oneof<nothing, bool> # If `true` then contacts of all accounts in federation are returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case (default: true)
   --type: string@type-completer-8 # Type of an extension. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
   --typeGroup: string@typeGroup-completer # Type of extension group
@@ -5415,7 +5611,7 @@ export def "restapi-v10-account-directory-entries listDirectoryEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Corporate Directory Entry
@@ -5432,13 +5628,14 @@ export def "restapi-v10-account-directory-entries readDirectoryEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, status: string, account: record<companyName: string, federatedName: string, id: string, mainNumber: record<formattedPhoneNumber: string, phoneNumber: string, type: string, label: string, usageType: string, hidden: bool, primary: bool>>, department: string, email: string, extensionNumber: string, firstName: string, lastName: string, name: string, jobTitle: string, phoneNumbers: table<formattedPhoneNumber: string, phoneNumber: string, type: string, label: string, usageType: string, hidden: bool, primary: bool>, profileImage: record<etag: string, uri: string>, site: record<id: string, name: string, code: string>, hidden: bool, role: record<id: string, name: string, domain: string, displayName: string>, callQueues: table<id: string, name: string>, customFields: table<id: string, name: string, value: string>, groups: table<id: string, name: string>, costCenter: record<id: string, code: string, name: string>, integration: record<id: string, typeId: string, type: string, displayName: string, routingType: string, outboundEdgeId: string>, subType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/directory/entries/($entryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Company Directory Entries
@@ -5455,6 +5652,7 @@ export def "restapi-v10-account-directory-entries-search searchDirectoryEntries"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # A list of Account IDs (e.g. 400131426008)
   --department: string # A list of department names (e.g. North office)
   --siteId: string # A list of Site IDs (e.g. 872781797006)
@@ -5485,7 +5683,7 @@ export def "restapi-v10-account-directory-entries-search searchDirectoryEntries"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Account Federation
@@ -5501,6 +5699,7 @@ export def "restapi-v10-account-directory-federation readDirectoryFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --types: string@types-completer # Filter by federation types. Default is Regular
   --RCExtensionId: string # RingCentral extension id
 ]: nothing -> record<accounts: table<companyName: string, conflictCount: int, federatedName: string, id: string, linkCreationTime: string, mainNumber: record>, creationTime: string, displayName: string, id: string, lastModifiedTime: string, type: string> {
@@ -5512,7 +5711,7 @@ export def "restapi-v10-account-directory-federation readDirectoryFederation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Paging Group Users
@@ -5529,6 +5728,7 @@ export def "restapi-v10-account-paging-only-groups-users listPagingGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, extensionNumber: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -5538,7 +5738,7 @@ export def "restapi-v10-account-paging-only-groups-users listPagingGroupUsers" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/paging-only-groups/($pagingOnlyGroupId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign Paging Group Users and Devices
@@ -5555,6 +5755,7 @@ export def "restapi-v10-account-paging-only-groups-bulk-assign assignMultiplePag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addedUserIds: list # List of users that will be allowed to page a group specified
   --removedUserIds: list # List of users that will be disallowed to page a group specified
   --addedDeviceIds: list # List of account devices that will be assigned to a paging group specified
@@ -5568,7 +5769,7 @@ export def "restapi-v10-account-paging-only-groups-bulk-assign assignMultiplePag
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Paging Group Devices
@@ -5585,6 +5786,7 @@ export def "restapi-v10-account-paging-only-groups-devices listPagingGroupDevice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items)  (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -5594,7 +5796,7 @@ export def "restapi-v10-account-paging-only-groups-devices listPagingGroupDevice
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/paging-only-groups/($pagingOnlyGroupId)/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Sites
@@ -5610,13 +5812,14 @@ export def "restapi-v10-account-sites listSites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, name: string, extensionNumber: string, callerIdName: string, email: string, businessAddress: record, regionalSettings: record, operator: record, code: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/sites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Site
@@ -5635,6 +5838,7 @@ export def "restapi-v10-account-sites createSite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Extension user first name
   --extensionNumber: string # Extension number
   --callerIdName: string # Custom name of a caller. Max number of characters is 15 (only alphabetical symbols, numbers and commas are supported)
@@ -5652,7 +5856,7 @@ export def "restapi-v10-account-sites createSite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Site
@@ -5669,13 +5873,14 @@ export def "restapi-v10-account-sites readSite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, name: string, extensionNumber: string, callerIdName: string, email: string, businessAddress: record<country: string, state: string, city: string, street: string, zip: string>, regionalSettings: record<homeCountry: record<isoCode: string, callingCode: string>, timezone: record<id: string, uri: string, name: string, description: string, bias: string>, language: record<id: string, localeCode: string, name: string>, greetingLanguage: record<id: string, localeCode: string, name: string>, formattingLocale: record<id: string, localeCode: string, name: string>, timeFormat: string>, operator: record<id: string, uri: string, extensionNumber: string, name: string>, code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/sites/($siteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Site
@@ -5695,6 +5900,7 @@ export def "restapi-v10-account-sites updateSite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Extension user first name
   --extensionNumber: string # Extension number
   --callerIdName: string # Custom name of a caller. Max number of characters is 15 (only alphabetical symbols, numbers and commas are supported)
@@ -5711,7 +5917,7 @@ export def "restapi-v10-account-sites updateSite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Site
@@ -5728,13 +5934,14 @@ export def "restapi-v10-account-sites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/sites/($siteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit Sites
@@ -5751,6 +5958,7 @@ export def "restapi-v10-account-sites-bulk-assign assignMultipleSites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --removedExtensionIds: list # List of removed extensions
   --addedExtensionIds: list # List of added extensions
 ]: any -> any {
@@ -5762,7 +5970,7 @@ export def "restapi-v10-account-sites-bulk-assign assignMultipleSites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Site Members
@@ -5779,13 +5987,14 @@ export def "restapi-v10-account-sites-members listSiteMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: int, uri: string, extensionNumber: string, type: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/sites/($siteId)/members")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Site IVR Settings
@@ -5802,13 +6011,14 @@ export def "restapi-v10-account-sites-ivr readSiteIvrSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<topMenu: record<id: string, uri: string, name: string>, actions: table<input: string, action: string, extension: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/sites/($siteId)/ivr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Site IVR Settings
@@ -5827,6 +6037,7 @@ export def "restapi-v10-account-sites-ivr updateSiteIvrSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --topMenu: record # Top IVR Menu extension — shape: {id?: string}
   --actions: list # item shape: {input?: "Star"|"Hash"|"NoInput"|"0", action?: "Repeat"|"ReturnToRoot"|"ReturnToPrevious"|"ReturnToTopLevelMenu"|"Connect"|"ConnectToOperator"|"Disconnect"|"DoNothing", extension?: record}
 ]: any -> record<topMenu: record<id: string, uri: string, name: string>, actions: table<input: string, action: string, extension: record>> {
@@ -5838,7 +6049,7 @@ export def "restapi-v10-account-sites-ivr updateSiteIvrSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Recording
@@ -5855,13 +6066,14 @@ export def "restapi-v10-account-recording readCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, contentUri: string, contentType: string, duration: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/recording/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message Store Configuration
@@ -5877,13 +6089,14 @@ export def "restapi-v10-account-message-store-configuration readMessageStoreConf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<retentionPeriod: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/message-store-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Message Store Configuration
@@ -5899,6 +6112,7 @@ export def "restapi-v10-account-message-store-configuration updateMessageStoreCo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --retentionPeriod: int # Retention policy setting, specifying how long to keep messages; the supported value range is 7-90 days. Currently, the retention period is supported for `Fax` and `Voicemail` messages only. SMS messages are stored with no time limits  (format: int32)
 ]: any -> record<retentionPeriod: int> {
   let input = $in
@@ -5909,7 +6123,7 @@ export def "restapi-v10-account-message-store-configuration updateMessageStoreCo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Company Greeting
@@ -5925,6 +6139,7 @@ export def "restapi-v10-account-greeting createCompanyGreeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-9 # Type of greeting, specifying the case when the greeting is played.
   --answeringRuleId: string # Internal identifier of an answering rule
   --languageId: string # Internal identifier of a language. See Get Language List
@@ -5938,7 +6153,7 @@ export def "restapi-v10-account-greeting createCompanyGreeting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Company User Roles
@@ -5954,6 +6169,7 @@ export def "restapi-v10-account-user-role listUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom: oneof<nothing, bool> # Specifies whether to return custom roles or predefined roles only. If not specified, all roles are returned
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
@@ -5964,7 +6180,7 @@ export def "restapi-v10-account-user-role listUserRoles" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/user-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Custom Role
@@ -5981,6 +6197,7 @@ export def "restapi-v10-account-user-role createCustomRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a role
   --displayName: string # Dispayed name of a role (e.g. Super Admin)
   --description: string # Role description (e.g. Primary company administrator role)
@@ -5999,7 +6216,7 @@ export def "restapi-v10-account-user-role createCustomRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Default User Role
@@ -6015,13 +6232,14 @@ export def "restapi-v10-account-user-role-default readDefaultRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, displayName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/user-role/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Default User Role
@@ -6037,6 +6255,7 @@ export def "restapi-v10-account-user-role-default updateDefaultUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a user role to be set as default
 ]: any -> record<uri: string, id: string, displayName: string> {
   let input = $in
@@ -6047,7 +6266,7 @@ export def "restapi-v10-account-user-role-default updateDefaultUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Role
@@ -6064,6 +6283,7 @@ export def "restapi-v10-account-user-role readUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --advancedPermissions: oneof<nothing, bool> # Specifies whether to return advanced permissions capabilities within `permissionsCapabilities` resource. The default value is false.
 ]: nothing -> record<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: table<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6072,7 +6292,7 @@ export def "restapi-v10-account-user-role readUserRole" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/user-role/($roleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Role
@@ -6090,6 +6310,7 @@ export def "restapi-v10-account-user-role updateUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a role
   --displayName: string # Dispayed name of a role (e.g. Super Admin)
   --description: string # Role description (e.g. Primary company administrator role)
@@ -6108,7 +6329,7 @@ export def "restapi-v10-account-user-role updateUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Custom Role
@@ -6125,6 +6346,7 @@ export def "restapi-v10-account-user-role delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --validateOnly: oneof<nothing, bool> # Specifies that role should be validated prior to deletion, whether it can be deleted or not
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6133,7 +6355,7 @@ export def "restapi-v10-account-user-role delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/user-role/($roleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign Multiple User Roles
@@ -6150,6 +6372,7 @@ export def "restapi-v10-account-user-role-bulk-assign assignMultipleUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteRestricted: oneof<nothing, bool> # e.g. true
   --siteCompatible: oneof<nothing, bool>
   --uri: string # format: uri
@@ -6164,7 +6387,7 @@ export def "restapi-v10-account-user-role-bulk-assign assignMultipleUserRoles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Extensions
@@ -6180,6 +6403,7 @@ export def "restapi-v10-account-extension listExtensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extensionNumber: string # Extension short number to filter records
   --email: string # Extension email address. Multiple values are accepted  (e.g. alice.smith@example.com&email=bob.johnson@example.com)
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
@@ -6193,7 +6417,7 @@ export def "restapi-v10-account-extension listExtensions" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Extension
@@ -6216,6 +6440,7 @@ export def "restapi-v10-account-extension createExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contact: record # Contact Information — shape: {firstName?: string, lastName?: string, company?: string, jobTitle?: string, email?: string, businessPhone?: string, mobilePhone?: string, businessAddress?: record, emailAsLoginName?: bool, pronouncedName?: record, department?: string}
   --extensionNumber: string # Extension short number
   --costCenter: record # Cost center information. Applicable if Cost Center feature is enabled. The default is `root` cost center value — shape: {id?: string, name?: string}
@@ -6240,7 +6465,7 @@ export def "restapi-v10-account-extension createExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Extension
@@ -6257,13 +6482,14 @@ export def "restapi-v10-account-extension readExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, uri: string, account: record<id: string, uri: string>, contact: record<firstName: string, lastName: string, name: string, company: string, jobTitle: string, email: string, businessPhone: string, mobilePhone: string, businessAddress: record<country: string, state: string, city: string, street: string, zip: string>, emailAsLoginName: bool, pronouncedName: record<type: string, text: string, prompt: record>, department: string>, costCenter: record<id: string, name: string>, customFields: table<id: string, value: string, displayName: string>, departments: table<id: string, uri: string, extensionNumber: string>, extensionNumber: string, extensionNumbers: list<string>, name: string, partnerId: string, permissions: record<admin: record<enabled: bool>, internationalCalling: record<enabled: bool>>, profileImage: record<uri: string, etag: string, lastModified: string, contentType: string, scales: list<record>>, references: table<ref: string, type: string, refAccId: string>, roles: table<uri: string, id: string, autoAssigned: bool, displayName: string, siteCompatible: bool, siteRestricted: bool>, regionalSettings: record<homeCountry: record<isoCode: string, callingCode: string>, timezone: record<id: string, uri: string, name: string, description: string, bias: string>, language: record<id: string, localeCode: string, name: string>, greetingLanguage: record<id: string, localeCode: string, name: string>, formattingLocale: record<id: string, localeCode: string, name: string>, timeFormat: string>, serviceFeatures: table<enabled: bool, featureName: string, reason: string>, setupWizardState: string, status: string, statusInfo: record<comment: string, reason: string, till: string>, type: string, subType: string, callQueueInfo: record<slaGoal: int, slaThresholdSeconds: int, includeAbandonedCalls: bool, abandonedThresholdSeconds: int>, hidden: bool, site: record<id: string, uri: string, name: string, code: string>, assignedCountry: record<id: string, uri: string, isoCode: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Extension
@@ -6288,6 +6514,7 @@ export def "restapi-v10-account-extension updateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-5
   --statusInfo: record # Status information (reason, comment). Returned for 'Disabled' status only — shape: {comment?: string, reason?: "SuspendedVoluntarily"|"SuspendedInvoluntarily"|"CancelledVoluntarily"|"CancelledInvoluntarily", till?: string}
   --extensionNumber: string # Extension number available
@@ -6313,7 +6540,7 @@ export def "restapi-v10-account-extension updateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Extension
@@ -6332,6 +6559,7 @@ export def "restapi-v10-account-extension delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --savePhoneLines: oneof<nothing, bool> # default: false
   --savePhoneNumbers: oneof<nothing, bool> # default: true
 ]: nothing -> any {
@@ -6341,7 +6569,7 @@ export def "restapi-v10-account-extension delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Business Hours
@@ -6358,13 +6586,14 @@ export def "restapi-v10-account-extension-business-hours readUserBusinessHours" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/business-hours")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Business Hours
@@ -6382,6 +6611,7 @@ export def "restapi-v10-account-extension-business-hours updateUserBusinessHours
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   schedule: record # Schedule when an answering rule is applied — shape: {weeklyRanges?: record}
 ]: any -> record<uri: string, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>>> {
   let input = $in
@@ -6392,7 +6622,7 @@ export def "restapi-v10-account-extension-business-hours updateUserBusinessHours
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Video Configuration
@@ -6409,13 +6639,14 @@ export def "restapi-v10-account-extension-video-configuration readUserVideoConfi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<provider: string, userLicenseType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/video-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Favorite Contacts
@@ -6432,13 +6663,14 @@ export def "restapi-v10-account-extension-favorite listFavoriteContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: int, extensionId: string, accountId: string, contactId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/favorite")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Favorite Contact List
@@ -6456,6 +6688,7 @@ export def "restapi-v10-account-extension-favorite updateFavoriteContactList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {id?: int, extensionId?: string, accountId?: string, contactId?: string}
 ]: any -> record<uri: string, records: table<id: int, extensionId: string, accountId: string, contactId: string>> {
   let input = $in
@@ -6466,7 +6699,7 @@ export def "restapi-v10-account-extension-favorite updateFavoriteContactList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Extension Devices
@@ -6483,6 +6716,7 @@ export def "restapi-v10-account-extension-device listExtensionDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --linePooling: string@linePooling-completer # Pooling type of device - Host - a device with standalone paid phone line which can be linked to a soft client instance - Guest - a device with a linked phone line - None - a device without a phone line or with specific line (free, BLA, etc.)
@@ -6496,7 +6730,7 @@ export def "restapi-v10-account-extension-device listExtensionDevices" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/device" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Extension Grants
@@ -6513,6 +6747,7 @@ export def "restapi-v10-account-extension-grant listExtensionGrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extensionType: string@extensionType-completer-2 # Type of extension to be returned. Multiple values are supported. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
@@ -6523,7 +6758,7 @@ export def "restapi-v10-account-extension-grant listExtensionGrants" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/grant" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Conferencing Settings
@@ -6540,6 +6775,7 @@ export def "restapi-v10-account-extension-conferencing readConferencingSettings"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryId: string # Internal identifier of a country. If not specified, the response is returned for the brand country
 ]: nothing -> record<uri: string, allowJoinBeforeHost: bool, hostCode: string, mode: string, participantCode: string, phoneNumber: string, supportUri: string, tapToJoinUri: string, phoneNumbers: table<country: record, default: bool, hasGreeting: bool, location: string, phoneNumber: string, premium: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6548,7 +6784,7 @@ export def "restapi-v10-account-extension-conferencing readConferencingSettings"
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/conferencing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Conferencing Settings
@@ -6566,6 +6802,7 @@ export def "restapi-v10-account-extension-conferencing updateConferencingSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumbers: list # Multiple dial-in phone numbers to connect to audio conference service, relevant for user's brand. Each number is given with the country and location information, in order to let the user choose the less expensive way to connect to a conference. The first number in the list is the primary conference number, that is default and domestic — item shape: {phoneNumber?: string, default?: bool}
   --allowJoinBeforeHost: oneof<nothing, bool> # Determines if host user allows conference participants to join before the host
 ]: any -> record<uri: string, allowJoinBeforeHost: bool, hostCode: string, mode: string, participantCode: string, phoneNumber: string, supportUri: string, tapToJoinUri: string, phoneNumbers: table<country: record, default: bool, hasGreeting: bool, location: string, phoneNumber: string, premium: bool>> {
@@ -6577,7 +6814,7 @@ export def "restapi-v10-account-extension-conferencing updateConferencingSetting
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload User Meeting Profile Image
@@ -6596,6 +6833,7 @@ export def "restapi-v10-account-extension-meeting-configuration-profile-image cr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   profilePic: string # Profile image file size cannot exceed 2Mb. Supported formats are: JPG/JPEG, GIF and PNG (format: binary)
 ]: any -> any {
   let input = $in
@@ -6606,7 +6844,7 @@ export def "restapi-v10-account-extension-meeting-configuration-profile-image cr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Agent’s Call Queue Presence
@@ -6623,6 +6861,7 @@ export def "restapi-v10-account-extension-call-queue-presence readExtensionCallQ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --editableMemberStatus: oneof<nothing, bool> # Filtering by the flag 'Allow members to change their Queue Status'. If 'true' only queues where user can change his availability status are returned
 ]: nothing -> record<records: table<callQueue: record, acceptCalls: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6631,7 +6870,7 @@ export def "restapi-v10-account-extension-call-queue-presence readExtensionCallQ
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/call-queue-presence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Queue Presence
@@ -6649,6 +6888,7 @@ export def "restapi-v10-account-extension-call-queue-presence updateExtensionCal
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {callQueue?: record, acceptCalls?: bool}
 ]: any -> record<records: table<callQueue: record, acceptCalls: bool>> {
   let input = $in
@@ -6659,7 +6899,7 @@ export def "restapi-v10-account-extension-call-queue-presence updateExtensionCal
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create User Message Template
@@ -6678,6 +6918,7 @@ export def "restapi-v10-account-extension-message-store-templates createUserMess
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # Name of a template
   --body-body: record # Text message template information — shape: {text: string}
   --site: record # Specifies a site that message template is associated with. Supported only if the Sites feature is enabled.  The default is `main-site` value. — shape: {id?: string, name?: string}
@@ -6690,7 +6931,7 @@ export def "restapi-v10-account-extension-message-store-templates createUserMess
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User Message Templates
@@ -6707,6 +6948,7 @@ export def "restapi-v10-account-extension-message-store-templates listUserMessag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteIds: list # Site ID(s) to filter user message templates, associated with particular sites. By default the value is all - templates with all sites will be returned
   --scope: string@scope-completer-1 # Message templates scope. By default the value is all - both Personal and Company templates will be returned
 ]: nothing -> record<records: table<id: string, displayName: string, body: record, scope: string, site: record>> {
@@ -6716,7 +6958,7 @@ export def "restapi-v10-account-extension-message-store-templates listUserMessag
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store-templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Message Template
@@ -6736,6 +6978,7 @@ export def "restapi-v10-account-extension-message-store-templates updateUserMess
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # Name of a template
   --body-body: record # Text message template information — shape: {text: string}
   --site: record # Specifies a site that message template is associated with. Supported only if the Sites feature is enabled.  The default is `main-site` value. — shape: {id?: string, name?: string}
@@ -6748,7 +6991,7 @@ export def "restapi-v10-account-extension-message-store-templates updateUserMess
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Message Template
@@ -6766,13 +7009,14 @@ export def "restapi-v10-account-extension-message-store-templates readUserMessag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, displayName: string, body: record<text: string>, scope: string, site: record<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store-templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete User Message Template
@@ -6790,13 +7034,14 @@ export def "restapi-v10-account-extension-message-store-templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store-templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sync Messages
@@ -6813,6 +7058,7 @@ export def "restapi-v10-account-extension-message-sync syncMessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: int # Conversation identifier for the resulting messages. Meaningful for SMS and Pager messages only.  (format: int64)
   --dateFrom: string # The start date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is dateTo minus 24 hours  (format: date-time)
   --dateTo: string # The end date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is current time  (format: date-time)
@@ -6830,7 +7076,7 @@ export def "restapi-v10-account-extension-message-sync syncMessages" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Profile Image
@@ -6847,6 +7093,7 @@ export def "restapi-v10-account-extension-profile-image readUserProfileImageLega
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6854,7 +7101,7 @@ export def "restapi-v10-account-extension-profile-image readUserProfileImageLega
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/profile-image")
   let accept_val = ($accept | default "image/png")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Profile Image
@@ -6871,6 +7118,7 @@ export def "restapi-v10-account-extension-profile-image updateUserProfileImage" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --image: string # format: binary
 ]: any -> any {
   let input = $in
@@ -6881,7 +7129,7 @@ export def "restapi-v10-account-extension-profile-image updateUserProfileImage" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Upload User Profile Image
@@ -6898,6 +7146,7 @@ export def "restapi-v10-account-extension-profile-image createUserProfileImage" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   image: string # format: binary
 ]: any -> any {
   let input = $in
@@ -6908,7 +7157,7 @@ export def "restapi-v10-account-extension-profile-image createUserProfileImage" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete User Profile Image
@@ -6925,13 +7174,14 @@ export def "restapi-v10-account-extension-profile-image delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/profile-image")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Call Records
@@ -6949,6 +7199,7 @@ export def "restapi-v10-account-extension-call-log readUserCallLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extensionNumber: string # Short extension number of a user. If specified, returns call log for this particular extension only. Cannot be combined with `phoneNumber` filter  (e.g. 101)
   --phoneNumber: string # Phone number of a caller/callee in e.164 format without a '+' sign. If specified, all incoming/outgoing calls from/to this phone number are returned.  (e.g. 12053320032)
   --showBlocked: oneof<nothing, bool> # Indicates then calls from/to blocked numbers are returned (default: true)
@@ -6972,7 +7223,7 @@ export def "restapi-v10-account-extension-call-log readUserCallLog" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/call-log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete User Call Records
@@ -6989,6 +7240,7 @@ export def "restapi-v10-account-extension-call-log delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateTo: string # The time boundary to delete all older records in ISO 8601 format including timezone, for example *2016-03-10T18:07:52.534Z*. The default value is current time  (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6997,7 +7249,7 @@ export def "restapi-v10-account-extension-call-log delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/call-log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Call Record(s)
@@ -7015,6 +7267,7 @@ export def "restapi-v10-account-extension-call-log readUserCallRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
 ]: nothing -> record<extension: record<id: int, uri: string>, telephonySessionId: string, sipUuidInfo: string, transferTarget: record<telephonySessionId: string>, transferee: record<telephonySessionId: string>, partyId: string, transport: string, from: record<dialerPhoneNumber: string>, to: record<dialedPhoneNumber: string>, type: string, direction: string, message: record<id: string, type: string, uri: string>, delegate: record<id: string, name: string>, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record<id: string, uri: string, type: string, contentUri: string>, shortRecording: bool, billing: record<costIncluded: float, costPurchased: float>, internalType: string, id: string, uri: string, sessionId: string, deleted: bool, legs: table<extension: record, telephonySessionId: string, sipUuidInfo: string, transferTarget: record, transferee: record, partyId: string, transport: string, from: record, to: record, type: string, direction: string, message: record, delegate: record, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record, shortRecording: bool, billing: record, internalType: string, legType: string, master: bool>, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7023,7 +7276,7 @@ export def "restapi-v10-account-extension-call-log readUserCallRecord" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/call-log/($callRecordId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sync User Call Log
@@ -7041,6 +7294,7 @@ export def "restapi-v10-account-extension-call-log-sync syncUserCallLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --syncType: string # Type of call log synchronization request
   --syncToken: string # A `syncToken` value from the previous sync response (for `ISync` mode only, mandatory)
   --dateFrom: string # The start datetime for resulting records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is the current moment  (format: date-time)
@@ -7057,7 +7311,7 @@ export def "restapi-v10-account-extension-call-log-sync syncUserCallLog" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/call-log-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Assignable Roles
@@ -7074,6 +7328,7 @@ export def "restapi-v10-account-extension-assignable-roles listOfAvailableForAss
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
@@ -7083,7 +7338,7 @@ export def "restapi-v10-account-extension-assignable-roles listOfAvailableForAss
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/assignable-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Active Calls
@@ -7100,6 +7355,7 @@ export def "restapi-v10-account-extension-active-calls listExtensionActiveCalls"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direction: list # The direction of call records to be included in the result. If omitted, both inbound and outbound calls are returned. Multiple values are supported
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
   --type: list # The type of call records to be included in the result. If omitted, all call types are returned. Multiple values are supported
@@ -7114,7 +7370,7 @@ export def "restapi-v10-account-extension-active-calls listExtensionActiveCalls"
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/active-calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Extension Caller ID
@@ -7131,13 +7387,14 @@ export def "restapi-v10-account-extension-caller-id readExtensionCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, byDevice: table<device: record, callerId: record>, byFeature: table<feature: string, callerId: record>, extensionNameForOutboundCalls: bool, extensionNumberForInternalCalls: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/caller-id")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Extension Caller ID
@@ -7156,6 +7413,7 @@ export def "restapi-v10-account-extension-caller-id updateExtensionCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uri: string # Canonical URL of a caller ID resource (format: uri)
   --byDevice: list # item shape: {device?: record, callerId?: record}
   --byFeature: list # item shape: {feature?: "RingOut"|"RingMe"|"CallFlip"|"FaxNumber"|"AdditionalSoftphone"|"Alternate"|"CommonPhone"|"MobileApp"|"Delegated", callerId?: record}
@@ -7170,7 +7428,7 @@ export def "restapi-v10-account-extension-caller-id updateExtensionCallerId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Call Handling Rules
@@ -7187,6 +7445,7 @@ export def "restapi-v10-account-extension-answering-rule listAnsweringRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-13 # Filters custom call handling rules of the extension
   --view: string@view-completer # default: Simple
   --enabledOnly: oneof<nothing, bool> # If true, then only active call handling rules are returned (default: false)
@@ -7199,7 +7458,7 @@ export def "restapi-v10-account-extension-answering-rule listAnsweringRules" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/answering-rule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Call Handling Rule
@@ -7226,6 +7485,7 @@ export def "restapi-v10-account-extension-answering-rule createAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true`
   type: string # Type of an answering rule. The 'Custom' value should be specified
   name: string # Name of an answering rule specified by user
@@ -7250,7 +7510,7 @@ export def "restapi-v10-account-extension-answering-rule createAnsweringRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Call Handling Rule
@@ -7268,6 +7528,7 @@ export def "restapi-v10-account-extension-answering-rule readAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showInactiveNumbers: oneof<nothing, bool> # Indicates whether inactive numbers should be returned or not (default: false)
 ]: nothing -> record<uri: string, id: string, type: string, name: string, enabled: bool, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>, ranges: list<record>, ref: string>, calledNumbers: table<phoneNumber: string>, callers: table<callerId: string, name: string>, callHandlingAction: string, forwarding: record<notifyMySoftPhones: bool, notifyAdminSoftPhones: bool, softPhonesRingCount: int, softPhonesAlwaysRing: bool, ringingMode: string, rules: list<record>, softPhonesPositionTop: bool, mobileTimeout: bool>, unconditionalForwarding: record<phoneNumber: string, action: string>, queue: record<transferMode: string, transfer: list<record>, noAnswerAction: string, fixedOrderAgents: list<record>, holdAudioInterruptionMode: string, holdAudioInterruptionPeriod: int, holdTimeExpirationAction: string, agentTimeout: int, wrapUpTime: int, holdTime: int, maxCallers: int, maxCallersAction: string, unconditionalForwarding: list<record>>, transfer: record<extension: record<id: string, uri: string>>, voicemail: record<enabled: bool, recipient: record<uri: string, id: string>>, greetings: table<type: string, preset: record, custom: record>, screening: string, sharedLines: record<timeout: int>, missedCall: record<actionType: string, extension: record<id: string, externalNumber: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7276,7 +7537,7 @@ export def "restapi-v10-account-extension-answering-rule readAnsweringRule" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/answering-rule/($ruleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Handling Rule
@@ -7304,6 +7565,7 @@ export def "restapi-v10-account-extension-answering-rule updateAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Identifier of an answering rule
   --forwarding: record # Forwarding parameters. Returned if 'ForwardCalls' is specified in 'callHandlingAction'. These settings determine the forwarding numbers to which the call will be forwarded — shape: {notifyMySoftPhones?: bool, notifyAdminSoftPhones?: bool, softPhonesRingCount?: int, softPhonesAlwaysRing?: bool, ringingMode?: "Sequentially"|"Simultaneously", rules?: list, mobileTimeout?: bool}
   --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true`
@@ -7330,7 +7592,7 @@ export def "restapi-v10-account-extension-answering-rule updateAnsweringRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Call Handling Rule
@@ -7348,13 +7610,14 @@ export def "restapi-v10-account-extension-answering-rule delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/answering-rule/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Internal Text Message
@@ -7373,6 +7636,7 @@ export def "restapi-v10-account-extension-company-pager createInternalTextMessag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: record # Sender of a pager message. — shape: {extensionId?: string, extensionNumber?: string}
   --replyOn: int # Internal identifier of a message this message replies to (format: int32)
   text: string # Text of a pager message. Max length is 1024 symbols (2-byte UTF-16 encoded). If a character is encoded in 4 bytes in UTF-16 it is treated as 2 characters, thus restricting the maximum message length to 512 symbols  (e.g. hello world)
@@ -7386,7 +7650,7 @@ export def "restapi-v10-account-extension-company-pager createInternalTextMessag
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Authorization Profile
@@ -7403,6 +7667,7 @@ export def "restapi-v10-account-extension-authz-profile readAuthorizationProfile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetExtensionId: string
 ]: nothing -> record<uri: string, permissions: table<permission: record, effectiveRole: record, scopes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7411,7 +7676,7 @@ export def "restapi-v10-account-extension-authz-profile readAuthorizationProfile
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/authz-profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check User Permission
@@ -7428,6 +7693,7 @@ export def "restapi-v10-account-extension-authz-profile-check checkUserPermissio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permissionId: string
   --targetExtensionId: string
 ]: nothing -> record<uri: string, successful: bool, details: record<permission: record<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>, effectiveRole: record<uri: string, id: string>, scopes: list<string>>> {
@@ -7437,7 +7703,7 @@ export def "restapi-v10-account-extension-authz-profile-check checkUserPermissio
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/authz-profile/check" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Call Queues
@@ -7455,6 +7721,7 @@ export def "restapi-v10-account-extension-call-queues updateUserCallQueues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # List of queues where an extension is an agent — item shape: {id?: string, name?: string}
 ]: any -> record<records: table<id: string, name: string>> {
   let input = $in
@@ -7465,7 +7732,7 @@ export def "restapi-v10-account-extension-call-queues updateUserCallQueues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User Emergency Locations
@@ -7482,6 +7749,7 @@ export def "restapi-v10-account-extension-emergency-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries by the specified substring (search by chassis ID, switch name or address) The characters range is 0-64 (if empty the filter is ignored)
   --domesticCountryId: string
@@ -7496,7 +7764,7 @@ export def "restapi-v10-account-extension-emergency-locations list" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/emergency-locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create User Emergency Location
@@ -7513,6 +7781,7 @@ export def "restapi-v10-account-extension-emergency-locations createExtensionEme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of a new personal emergency response location
   --addressFormatId: string # Address format ID
   --trusted: oneof<nothing, bool> # If 'true' address validation for non-us addresses is skipped
@@ -7526,7 +7795,7 @@ export def "restapi-v10-account-extension-emergency-locations createExtensionEme
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update User Emergency Location
@@ -7545,6 +7814,7 @@ export def "restapi-v10-account-extension-emergency-locations updateExtensionEme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an emergency response location
   --address: any
   --name: string # Emergency response location name
@@ -7563,7 +7833,7 @@ export def "restapi-v10-account-extension-emergency-locations updateExtensionEme
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete User Emergency Location
@@ -7581,6 +7851,7 @@ export def "restapi-v10-account-extension-emergency-locations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --validateOnly: oneof<nothing, bool> # Flag indicating that only validation of Emergency Response Locations to be deleted is required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7589,7 +7860,7 @@ export def "restapi-v10-account-extension-emergency-locations delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/emergency-locations/($locationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Emergency Location
@@ -7607,13 +7878,14 @@ export def "restapi-v10-account-extension-emergency-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/emergency-locations/($locationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Forwarding Numbers
@@ -7630,6 +7902,7 @@ export def "restapi-v10-account-extension-forwarding-number listForwardingNumber
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, phoneNumber: string, label: string, features: list, flipNumber: string, device: record, type: string, extension: record>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -7639,7 +7912,7 @@ export def "restapi-v10-account-extension-forwarding-number listForwardingNumber
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/forwarding-number" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Forwarding Number
@@ -7657,6 +7930,7 @@ export def "restapi-v10-account-extension-forwarding-number createForwardingNumb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flipNumber: int # Number assigned to the call flip phone number, corresponds to the shortcut dial number (format: int32)
   --phoneNumber: string # Forwarding/Call flip phone number
   --label: string # Forwarding/Call flip number title
@@ -7671,7 +7945,7 @@ export def "restapi-v10-account-extension-forwarding-number createForwardingNumb
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Forwarding Numbers
@@ -7689,6 +7963,7 @@ export def "restapi-v10-account-extension-forwarding-number delete-by-accountId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # List of forwarding number IDs — item shape: {forwardingNumberId?: string}
 ]: any -> any {
   let input = $in
@@ -7699,7 +7974,7 @@ export def "restapi-v10-account-extension-forwarding-number delete-by-accountId-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Forwarding Number
@@ -7717,13 +7992,14 @@ export def "restapi-v10-account-extension-forwarding-number readForwardingNumber
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, phoneNumber: string, label: string, features: list<string>, flipNumber: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/forwarding-number/($forwardingNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Forwarding Number
@@ -7741,6 +8017,7 @@ export def "restapi-v10-account-extension-forwarding-number updateForwardingNumb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # Forwarding/Call flip phone number
   --label: string # Forwarding/Call flip number title
   --flipNumber: string # Number assigned to the call flip phone number, corresponds to the shortcut dial number
@@ -7754,7 +8031,7 @@ export def "restapi-v10-account-extension-forwarding-number updateForwardingNumb
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Forwarding Number
@@ -7772,13 +8049,14 @@ export def "restapi-v10-account-extension-forwarding-number delete-by-accountId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/forwarding-number/($forwardingNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Scheduled Meetings
@@ -7797,13 +8075,14 @@ export def "restapi-v10-account-extension-meeting listMeetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record, schedule: record, host: record, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list, recurrence: record, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: list, enableWaitingRoom: bool, globalDialInCountries: list, alternativeHosts: string>, paging: record<page: int, totalPages: int, perPage: int, totalElements: int, pageStart: int, pageEnd: int>, navigation: record<nextPage: record<uri: string>, previousPage: record<uri: string>, firstPage: record<uri: string>, lastPage: record<uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Meeting
@@ -7825,6 +8104,7 @@ export def "restapi-v10-account-extension-meeting createMeeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string # Custom topic of a meeting
   --meetingType: string@meetingType-completer
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
@@ -7851,7 +8131,7 @@ export def "restapi-v10-account-extension-meeting createMeeting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Meeting User Settings
@@ -7870,13 +8150,14 @@ export def "restapi-v10-account-extension-meeting-user-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<recording: record<localRecording: bool, cloudRecording: bool, recordSpeakerView: bool, recordGalleryView: bool, recordAudioFile: bool, saveChatText: bool, showTimestamp: bool, autoRecording: string, autoDeleteCmr: string, autoDeleteCmrDays: int>, scheduleMeeting: record<enforceLogin: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, allowJoinBeforeHost: bool, usePmiForScheduledMeetings: bool, usePmiForInstantMeetings: bool, requirePasswordForSchedulingNewMeetings: bool, requirePasswordForScheduledMeetings: bool, defaultPasswordForScheduledMeetings: string, requirePasswordForInstantMeetings: bool, requirePasswordForPmiMeetings: string, pmiPassword: string, pstnPasswordProtected: bool, muteParticipantsOnEntry: bool>, telephony: record<thirdPartyAudio: bool, audioConferenceInfo: bool, globalDialCountries: list<record>>, inMeetings: record<enableWaitingRoom: bool, breakoutRoom: bool, chat: bool, polling: bool, annotation: bool, virtualBackground: bool, screenSharing: bool, requestPermissionToUnmute: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/user-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Meeting Info
@@ -7896,13 +8177,14 @@ export def "restapi-v10-account-extension-meeting readMeeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record<startUri: string, joinUri: string>, schedule: record<startTime: string, durationInMinutes: int, timeZone: record<uri: string, id: string, name: string, description: string>>, host: record<uri: string, id: string>, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, recurrence: record<frequency: string, interval: int, weeklyByDays: list<string>, monthlyByDay: int, monthlyByWeek: string, monthlyByWeekDay: string, count: int, until: string>, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: table<id: string, startTime: string, durationInMinutes: int, status: string>, enableWaitingRoom: bool, globalDialInCountries: list<string>, alternativeHosts: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/($meetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Meeting
@@ -7925,6 +8207,7 @@ export def "restapi-v10-account-extension-meeting updateMeeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string # Custom topic of a meeting
   --meetingType: string@meetingType-completer
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
@@ -7951,7 +8234,7 @@ export def "restapi-v10-account-extension-meeting updateMeeting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Meeting
@@ -7971,6 +8254,7 @@ export def "restapi-v10-account-extension-meeting delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrenceId: string # Internal identifier of a recurrent meeting occurrence
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7979,7 +8263,7 @@ export def "restapi-v10-account-extension-meeting delete" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/($meetingId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Meeting
@@ -8002,6 +8286,7 @@ export def "restapi-v10-account-extension-meeting patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string # Custom topic of a meeting
   --meetingType: string@meetingType-completer
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
@@ -8028,7 +8313,7 @@ export def "restapi-v10-account-extension-meeting patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # End Meeting
@@ -8048,13 +8333,14 @@ export def "restapi-v10-account-extension-meeting-end endMeeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/($meetingId)/end")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Meeting Invitation
@@ -8074,13 +8360,14 @@ export def "restapi-v10-account-extension-meeting-invitation readMeetingInvitati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invitation: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/($meetingId)/invitation")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Meeting Service Info
@@ -8099,13 +8386,14 @@ export def "restapi-v10-account-extension-meeting-service-info readMeetingServic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, supportUri: string, intlDialInNumbersUri: string, externalUserInfo: record<uri: string, userId: string, accountId: string, userType: int, userToken: string, hostKey: string, personalMeetingId: string, personalLink: string, personalLinkName: string, usePmiForInstantMeetings: bool>, dialInNumbers: table<phoneNumber: string, formattedNumber: string, location: string, country: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting/service-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Meeting Service Info
@@ -8125,6 +8413,7 @@ export def "restapi-v10-account-extension-meeting-service-info updateMeetingServ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --externalUserInfo: record # shape: {uri?: string, userId?: string, accountId?: string, userType?: int, userToken?: string, hostKey?: string, personalMeetingId?: string, personalLink?: string, personalLinkName?: string, usePmiForInstantMeetings?: bool}
 ]: any -> record<uri: string, supportUri: string, intlDialInNumbersUri: string, externalUserInfo: record<uri: string, userId: string, accountId: string, userType: int, userToken: string, hostKey: string, personalMeetingId: string, personalLink: string, personalLinkName: string, usePmiForInstantMeetings: bool>, dialInNumbers: table<phoneNumber: string, formattedNumber: string, location: string, country: record>> {
   let input = $in
@@ -8135,7 +8424,7 @@ export def "restapi-v10-account-extension-meeting-service-info updateMeetingServ
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Presence Status
@@ -8152,6 +8441,7 @@ export def "restapi-v10-account-extension-presence readUserPresenceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailedTelephonyState: oneof<nothing, bool> # Specifies whether to return a detailed telephony state or not
   --sipData: oneof<nothing, bool> # Specifies whether to return SIP data or not
 ]: nothing -> record<uri: string, allowSeeMyPresence: bool, callerIdVisibility: string, dndStatus: string, extension: record<id: int, uri: string, extensionNumber: string>, message: string, pickUpCallsOnHold: bool, presenceStatus: string, ringOnMonitoredCall: bool, telephonyStatus: string, userStatus: string, meetingStatus: string, activeCalls: table<id: string, direction: string, queueCall: bool, from: string, fromName: string, to: string, toName: string, startTime: string, telephonyStatus: string, sipData: record, sessionId: string, telephonySessionId: string, onBehalfOf: string, partyId: string, terminationType: string, callInfo: record>> {
@@ -8161,7 +8451,7 @@ export def "restapi-v10-account-extension-presence readUserPresenceStatus" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/presence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Presence Status
@@ -8178,6 +8468,7 @@ export def "restapi-v10-account-extension-presence updateUserPresenceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userStatus: string@userStatus-completer
   --dndStatus: string@dndStatus-completer
   --message: string
@@ -8194,7 +8485,7 @@ export def "restapi-v10-account-extension-presence updateUserPresenceStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Fax Message
@@ -8212,6 +8503,7 @@ export def "restapi-v10-account-extension-fax createFaxMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   attachment: string # File to upload (format: binary)
   --faxResolution: string@faxResolution-completer # Fax only. Resolution of a fax message. 'High' for black and white image scanned at 200 dpi, 'Low' for black and white image scanned at 100 dpi
   --body-to: list # Recipient's phone number(s) — item shape: {phoneNumber?: string, name?: string}
@@ -8228,7 +8520,7 @@ export def "restapi-v10-account-extension-fax createFaxMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Make RingOut Call
@@ -8249,6 +8541,7 @@ export def "restapi-v10-account-extension-ring-out createRingOutCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: record # Phone number of a caller. This number corresponds to the 1st leg of a RingOut call. This number can be one of the user's configured forwarding numbers or an arbitrary number — shape: {phoneNumber?: string, forwardingNumberId?: string}
   --body-to: record # Phone number of a called party. This number corresponds to the 2nd leg of a RingOut call — shape: {phoneNumber?: string}
   --callerId: record # Phone number which will be displayed to the called party — shape: {phoneNumber?: string}
@@ -8263,7 +8556,7 @@ export def "restapi-v10-account-extension-ring-out createRingOutCall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get RingOut Call Status
@@ -8281,13 +8574,14 @@ export def "restapi-v10-account-extension-ring-out readRingOutCallStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, status: record<callStatus: string, callerStatus: string, calleeStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/ring-out/($ringoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel RingOut Call
@@ -8305,13 +8599,14 @@ export def "restapi-v10-account-extension-ring-out delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/ring-out/($ringoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Administered Sites
@@ -8328,13 +8623,14 @@ export def "restapi-v10-account-extension-administered-sites listAdministeredSit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, email: string, code: string, name: string, extensionNumber: string, callerIdName: string, operator: record, regionalSettings: record, businessAddress: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/administered-sites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Administered Sites
@@ -8352,6 +8648,7 @@ export def "restapi-v10-account-extension-administered-sites updateUserAdministe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {uri?: string, id: string, email?: string, code?: string, name?: string, extensionNumber?: string, callerIdName?: string, operator?: record, regionalSettings?: record, businessAddress?: record}
 ]: any -> record<uri: string, records: table<uri: string, id: string, email: string, code: string, name: string, extensionNumber: string, callerIdName: string, operator: record, regionalSettings: record, businessAddress: record>> {
   let input = $in
@@ -8362,7 +8659,7 @@ export def "restapi-v10-account-extension-administered-sites updateUserAdministe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Contacts
@@ -8379,6 +8676,7 @@ export def "restapi-v10-account-extension-address-book-contact listContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startsWith: string # If specified, only contacts which 'First name' or 'Last name' start with the mentioned substring will be returned. Case-insensitive
   --sortBy: list # Sorts results by the specified property
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
@@ -8391,7 +8689,7 @@ export def "restapi-v10-account-extension-address-book-contact listContacts" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/address-book/contact" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create User Contact
@@ -8411,6 +8709,7 @@ export def "restapi-v10-account-extension-address-book-contact createContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dialingPlan: string # Country code value complying with the [ISO 3166-1 alpha-2](https://ru.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. The default value is home country of the current extension
   --firstName: string # First name of a contact (e.g. Charlie)
   --lastName: string # Last name of a contact (e.g. Williams)
@@ -8450,7 +8749,7 @@ export def "restapi-v10-account-extension-address-book-contact createContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Contact(s)
@@ -8468,13 +8767,14 @@ export def "restapi-v10-account-extension-address-book-contact readContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, availability: string, email: string, id: int, notes: string, company: string, firstName: string, lastName: string, jobTitle: string, birthday: string, webPage: string, middleName: string, nickName: string, email2: string, email3: string, homePhone: string, homePhone2: string, businessPhone: string, businessPhone2: string, mobilePhone: string, businessFax: string, companyPhone: string, assistantPhone: string, carPhone: string, otherPhone: string, otherFax: string, callbackPhone: string, businessAddress: record<street: string, city: string, country: string, state: string, zip: string>, homeAddress: record<street: string, city: string, country: string, state: string, zip: string>, otherAddress: record<street: string, city: string, country: string, state: string, zip: string>, ringtoneIndex: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/address-book/contact/($contactId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Contact(s)
@@ -8495,6 +8795,7 @@ export def "restapi-v10-account-extension-address-book-contact updateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dialingPlan: string # Country code value complying with the [ISO 3166-1 alpha-2](https://ru.wikipedia.org/wiki/ISO_3166-1_alpha-2) format.  The default value is home country of the current extension
   --firstName: string # First name of a contact (e.g. Charlie)
   --lastName: string # Last name of a contact (e.g. Williams)
@@ -8534,7 +8835,7 @@ export def "restapi-v10-account-extension-address-book-contact updateContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Contact Attributes
@@ -8555,6 +8856,7 @@ export def "restapi-v10-account-extension-address-book-contact patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dialingPlan: string # Country code value complying with the [ISO 3166-1 alpha-2](https://ru.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. The default value is home country of the current extension
   --firstName: string # First name of a contact (e.g. Charlie)
   --lastName: string # Last name of a contact (e.g. Williams)
@@ -8594,7 +8896,7 @@ export def "restapi-v10-account-extension-address-book-contact patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete User Contact(s)
@@ -8612,13 +8914,14 @@ export def "restapi-v10-account-extension-address-book-contact delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/address-book/contact/($contactId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Assisted Users
@@ -8637,13 +8940,14 @@ export def "restapi-v10-account-extension-meetings-configuration-assisted readAs
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meetings-configuration/assisted")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Assistants
@@ -8662,13 +8966,14 @@ export def "restapi-v10-account-extension-meetings-configuration-assistants read
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meetings-configuration/assistants")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send SMS
@@ -8688,6 +8993,7 @@ export def "restapi-v10-account-extension-sms createSMSMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: record # Message sender information. The `phoneNumber` value should be one the account phone numbers allowed to send the current type of messages — shape: {phoneNumber: string}
   --body-to: list # Message receiver(s) information. The `phoneNumber` value is required — item shape: {phoneNumber: string}
   text: string # Text of a message. Max length is 1000 symbols (2-byte UTF-16 encoded). If a character is encoded in 4 bytes in UTF-16 it is treated as 2 characters, thus restricting the maximum message length to 500 symbols
@@ -8701,7 +9007,7 @@ export def "restapi-v10-account-extension-sms createSMSMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User Assigned Roles
@@ -8718,6 +9024,7 @@ export def "restapi-v10-account-extension-assigned-role listUserAssignedRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showHidden: oneof<nothing, bool> # Specifies if hidden roles are shown or not
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, autoAssigned: bool, displayName: string, siteCompatible: bool, siteRestricted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8726,7 +9033,7 @@ export def "restapi-v10-account-extension-assigned-role listUserAssignedRoles" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/assigned-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Assigned Roles
@@ -8744,6 +9051,7 @@ export def "restapi-v10-account-extension-assigned-role updateUserAssignedRoles"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uri: string # format: uri
   --records: list # item shape: {id?: string, autoAssigned?: bool, displayName?: string, siteCompatible?: bool, siteRestricted?: bool}
 ]: any -> record<uri: string, records: table<uri: string, id: string, autoAssigned: bool, displayName: string, siteCompatible: bool, siteRestricted: bool>> {
@@ -8755,7 +9063,7 @@ export def "restapi-v10-account-extension-assigned-role updateUserAssignedRoles"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign Default Role
@@ -8772,13 +9080,14 @@ export def "restapi-v10-account-extension-assigned-role-default assignDefaultRol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, autoAssigned: bool, displayName: string, siteCompatible: bool, siteRestricted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/assigned-role/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Meeting Recordings
@@ -8797,6 +9106,7 @@ export def "restapi-v10-account-extension-meeting-recordings listUserMeetingReco
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --meetingId: string # Internal identifier of a meeting. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified
   --meetingStartTimeFrom: string # Recordings of meetings started after the time specified will be returned. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified (format: date-time)
   --meetingStartTimeTo: string # Recordings of meetings started before the time specified will be returned. The default value is current time. Either `meetingId` or `meetingStartTime`/`meetingEndTime` can be specified (format: date-time)
@@ -8809,7 +9119,7 @@ export def "restapi-v10-account-extension-meeting-recordings listUserMeetingReco
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/meeting-recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Notification Settings
@@ -8826,13 +9136,14 @@ export def "restapi-v10-account-extension-notification-settings readNotification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, emailRecipients: table<extensionId: string, fullName: string, extensionNumber: string, status: string, emailAddresses: list, permission: string>, emailAddresses: list<string>, includeManagers: bool, smsEmailAddresses: list<string>, advancedMode: bool, voicemails: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>, includeAttachment: bool, includeTranscription: bool, markAsRead: bool>, inboundFaxes: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>, includeAttachment: bool, markAsRead: bool>, outboundFaxes: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>, inboundTexts: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>, missedCalls: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/notification-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Notification Settings
@@ -8854,6 +9165,7 @@ export def "restapi-v10-account-extension-notification-settings updateNotificati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emailAddresses: list # List of notification recipient email addresses. Should not be empty if 'includeManagers' parameter is set to false
   --smsEmailAddresses: list # List of notification recipient email addresses
   --advancedMode: oneof<nothing, bool> # Specifies notifications settings mode. If `true` then advanced mode is on, it allows using different emails and/or phone numbers for each notification type. If `false` then basic mode is on. Advanced mode settings are returned in both modes, if specified once, but if basic mode is switched on, they are not applied
@@ -8872,7 +9184,7 @@ export def "restapi-v10-account-extension-notification-settings updateNotificati
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send MMS
@@ -8892,6 +9204,7 @@ export def "restapi-v10-account-extension-mms createMMS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: record # Message sender information. The `phoneNumber` value should be one the account phone numbers allowed to send the current type of messages — shape: {phoneNumber: string}
   --body-to: list # Message receiver(s) information. The `phoneNumber` value is required — item shape: {phoneNumber: string}
   --text: string # Text of a message. Max length is 1000 symbols (2-byte UTF-16 encoded). If a character is encoded in 4 bytes in UTF-16 it is treated as 2 characters, thus restricting the maximum message length to 500 symbols
@@ -8906,7 +9219,7 @@ export def "restapi-v10-account-extension-mms createMMS" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get User Features
@@ -8923,6 +9236,7 @@ export def "restapi-v10-account-extension-features readExtensionFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --availableOnly: oneof<nothing, bool> # Allows to filter features by availability for an extension  (default: false)
   --featureId: list # Internal identifier(s) of the feature(s)
 ]: nothing -> record<records: table<id: string, available: bool, params: list, reason: record>> {
@@ -8932,7 +9246,7 @@ export def "restapi-v10-account-extension-features readExtensionFeatures" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/features" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Messages
@@ -8949,6 +9263,7 @@ export def "restapi-v10-account-extension-message-store listMessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --availability: list # Specifies the availability status for resulting messages. Multiple values are accepted
   --conversationId: string # Specifies a conversation identifier for the resulting messages
   --dateFrom: string # Start date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is dateTo minus 24 hours  (format: date-time)
@@ -8967,7 +9282,7 @@ export def "restapi-v10-account-extension-message-store listMessages" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Conversation
@@ -8984,6 +9299,7 @@ export def "restapi-v10-account-extension-message-store delete-by-accountId-exte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: list
   --dateTo: string # Messages received earlier then the date specified will be deleted. The default value is current date/time  (format: date-time)
   --type: string@type-completer-16 # Type of messages to be deleted (default: All)
@@ -8994,7 +9310,7 @@ export def "restapi-v10-account-extension-message-store delete-by-accountId-exte
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message(s)
@@ -9012,6 +9328,7 @@ export def "restapi-v10-account-extension-message-store readMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
 ]: nothing -> record<id: int, uri: string, extensionId: string, attachments: table<id: int, uri: string, type: string, contentType: string, vmDuration: int, fileName: string, size: int, height: int, width: int>, availability: string, conversationId: int, conversation: record<id: string, uri: string>, creationTime: string, deliveryErrorCode: string, direction: string, faxPageCount: int, faxResolution: string, from: record<extensionNumber: string, extensionId: string, location: string, name: string, phoneNumber: string>, lastModifiedTime: string, messageStatus: string, pgToDepartment: bool, priority: string, readStatus: string, smsDeliveryTime: string, smsSendingAttemptsCount: int, subject: string, to: table<extensionNumber: string, extensionId: string, location: string, target: bool, messageStatus: string, faxErrorCode: string, name: string, phoneNumber: string, recipientId: string>, type: string, vmTranscriptionStatus: string, coverIndex: int, coverPageText: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9019,7 +9336,7 @@ export def "restapi-v10-account-extension-message-store readMessage" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/message-store/($messageId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Message(s)
@@ -9037,6 +9354,7 @@ export def "restapi-v10-account-extension-message-store updateMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   readStatus: string@readStatus-completer # Message read status
 ]: any -> record<id: int, uri: string, extensionId: string, attachments: table<id: int, uri: string, type: string, contentType: string, vmDuration: int, fileName: string, size: int, height: int, width: int>, availability: string, conversationId: int, conversation: record<id: string, uri: string>, creationTime: string, deliveryErrorCode: string, direction: string, faxPageCount: int, faxResolution: string, from: record<extensionNumber: string, extensionId: string, location: string, name: string, phoneNumber: string>, lastModifiedTime: string, messageStatus: string, pgToDepartment: bool, priority: string, readStatus: string, smsDeliveryTime: string, smsSendingAttemptsCount: int, subject: string, to: table<extensionNumber: string, extensionId: string, location: string, target: bool, messageStatus: string, faxErrorCode: string, name: string, phoneNumber: string, recipientId: string>, type: string, vmTranscriptionStatus: string, coverIndex: int, coverPageText: string> {
@@ -9048,7 +9366,7 @@ export def "restapi-v10-account-extension-message-store updateMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patch Message(s)
@@ -9066,6 +9384,7 @@ export def "restapi-v10-account-extension-message-store patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --readStatus: string@readStatus-completer # Message read status
   --availability: string@availability-completer # Message availability status. Message in 'Deleted' state is still preserved with all its attachments and can be restored. 'Purged' means that all attachments are already deleted and the message itself is about to be physically deleted shortly
@@ -9078,7 +9397,7 @@ export def "restapi-v10-account-extension-message-store patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Message
@@ -9096,6 +9415,7 @@ export def "restapi-v10-account-extension-message-store delete-by-accountId-exte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --purge: oneof<nothing, bool> # If the value is `true`, then the message is purged immediately with all the attachments  (default: false)
   --body: record
 ]: any -> any {
@@ -9107,7 +9427,7 @@ export def "restapi-v10-account-extension-message-store delete-by-accountId-exte
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Custom User Greeting
@@ -9124,6 +9444,7 @@ export def "restapi-v10-account-extension-greeting createCustomUserGreeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apply: oneof<nothing, bool> # Specifies whether to apply an answering rule or not. If set to true then `answeringRule` parameter is mandatory. If set to false, then the answering rule is not applied even if specified  (default: true)
   type: string@type-completer-17 # Type of greeting, specifying the case when the greeting is played.
   answeringRuleId: string # Internal identifier of an answering rule
@@ -9138,7 +9459,7 @@ export def "restapi-v10-account-extension-greeting createCustomUserGreeting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Custom Greeting
@@ -9156,13 +9477,14 @@ export def "restapi-v10-account-extension-greeting readCustomGreeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, type: string, contentType: string, contentUri: string, answeringRule: record<uri: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/greeting/($greetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Unified Presence
@@ -9179,13 +9501,14 @@ export def "restapi-v10-account-extension-unified-presence readUnifiedPresence" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, glip: record<status: string, visibility: string, availability: string>, telephony: record<status: string, visibility: string, availability: string>, meeting: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/unified-presence")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Unified Presence
@@ -9204,6 +9527,7 @@ export def "restapi-v10-account-extension-unified-presence updateUnifiedPresence
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --glip: record # shape: {visibility?: "Visible"|"Invisible", availability?: "Available"|"DND"}
   --telephony: record # shape: {availability?: "TakeAllCalls"|"DoNotAcceptAnyCalls"|"DoNotAcceptQueueCalls"}
 ]: any -> record<status: string, glip: record<status: string, visibility: string, availability: string>, telephony: record<status: string, visibility: string, availability: string>, meeting: record<status: string>> {
@@ -9215,7 +9539,7 @@ export def "restapi-v10-account-extension-unified-presence updateUnifiedPresence
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Caller Blocking Settings
@@ -9232,13 +9556,14 @@ export def "restapi-v10-account-extension-caller-blocking readCallerBlockingSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<mode: string, noCallerId: string, payPhones: string, greetings: table<type: string, preset: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/caller-blocking")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Caller Blocking Settings
@@ -9256,6 +9581,7 @@ export def "restapi-v10-account-extension-caller-blocking updateCallerBlockingSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer-1 # Call blocking options: either specific or all calls and faxes
   --noCallerId: string@noCallerId-completer # Determines how to handle calls with no caller ID in 'Specific' mode
   --payPhones: string@payPhones-completer # Blocking settings for pay phones
@@ -9269,7 +9595,7 @@ export def "restapi-v10-account-extension-caller-blocking updateCallerBlockingSe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Blocked/Allowed Phone Numbers
@@ -9286,6 +9612,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers listBloc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --status: string@status-completer-6 # default: Blocked
@@ -9296,7 +9623,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers listBloc
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/caller-blocking/phone-numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Blocked/Allowed Number
@@ -9313,6 +9640,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers createBl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # A blocked/allowed phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format
   --label: string # Custom name of a blocked/allowed phone number
   --status: string@status-completer-6 # Status of a phone number (default: Blocked)
@@ -9325,7 +9653,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers createBl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Blocked/Allowed Number
@@ -9343,13 +9671,14 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers readBloc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, phoneNumber: string, label: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/caller-blocking/phone-numbers/($blockedNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Blocked/Allowed Number
@@ -9367,6 +9696,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers updateBl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phoneNumber: string # A blocked/allowed phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format
   --label: string # Custom name of a blocked/allowed phone number
   --status: string@status-completer-6 # Status of a phone number (default: Blocked)
@@ -9379,7 +9709,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers updateBl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Blocked/Allowed Number
@@ -9397,13 +9727,14 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers delete" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/caller-blocking/phone-numbers/($blockedNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Address Book Synchronization
@@ -9420,6 +9751,7 @@ export def "restapi-v10-account-extension-address-book-sync syncAddressBook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --syncType: string@syncType-completer # Type of synchronization
   --syncToken: string # Value of syncToken property of the last sync request response
   --perPage: int # Number of records per page to be returned. Max number of records is 250, which is also the default. For 'FSync' - if the number of records exceeds the parameter value (either specified or default), all of the pages can be retrieved in several requests. For 'ISync' - if the number of records exceeds page size, then the number of incoming changes to this number is limited  (format: int32)
@@ -9431,7 +9763,7 @@ export def "restapi-v10-account-extension-address-book-sync syncAddressBook" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/address-book-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Extension Phone Number List
@@ -9448,6 +9780,7 @@ export def "restapi-v10-account-extension-phone-number listExtensionPhoneNumbers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-7 # Status of a phone number
   --usageType: list # Usage type of phone number
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed. Default value is '1'  (format: int32, default: 1)
@@ -9459,7 +9792,7 @@ export def "restapi-v10-account-extension-phone-number listExtensionPhoneNumbers
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($extensionId)/phone-number" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Queue Overflow Settings
@@ -9476,13 +9809,14 @@ export def "restapi-v10-account-extension-overflow-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, items: table<uri: string, id: string, extensionNumber: string, name: string, status: string, subType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/extension/($callQueueId)/overflow-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call Queue Overflow Settings
@@ -9500,6 +9834,7 @@ export def "restapi-v10-account-extension-overflow-settings updateCallQueueOverf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Call queue overflow status
   --items: list # item shape: {id?: string}
 ]: any -> record<enabled: bool, items: table<uri: string, id: string, extensionNumber: string, name: string, status: string, subType: string>> {
@@ -9511,7 +9846,7 @@ export def "restapi-v10-account-extension-overflow-settings updateCallQueueOverf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Emergency Map Configuration Task
@@ -9528,13 +9863,14 @@ export def "restapi-v10-account-emergency-address-auto-update-tasks readAutomati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, creationTime: string, lastModifiedTime: string, type: string, result: record<records: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Users
@@ -9550,6 +9886,7 @@ export def "restapi-v10-account-emergency-address-auto-update-users listAutomati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Extension type. Multiple values are supported
   --searchString: string # Filters entries containing the specified substring in user name, extension or department. The characters range is 0-64; not case-sensitive. If empty then the filter is ignored
   --department: list # Department name to filter the users. The value range is 0-64; not case-sensitive. If not specified then the parameter is ignored. Multiple values are supported
@@ -9565,7 +9902,7 @@ export def "restapi-v10-account-emergency-address-auto-update-users listAutomati
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Automatic Location Updates for Users
@@ -9581,6 +9918,7 @@ export def "restapi-v10-account-emergency-address-auto-update-users-bulk-assign 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabledUserIds: list
   --disabledUserIds: list
 ]: any -> any {
@@ -9592,7 +9930,7 @@ export def "restapi-v10-account-emergency-address-auto-update-users-bulk-assign 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Multiple Wireless Points
@@ -9609,6 +9947,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {bssid: string, name: string, site?: record, emergencyAddress?: any, emergencyLocation?: record}
 ]: any -> record<task: record<id: string, status: string, creationTime: string, lastModifiedTime: string>> {
   let input = $in
@@ -9619,7 +9958,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Network Map
@@ -9635,6 +9974,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks listNetwo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries by the specified substring (search by chassis ID, switch name or address) The characters range is 0-64 (if empty the filter is ignored)
   --orderBy: string # Comma-separated list of fields to order results prefixed by '+' sign (ascending order) or '-' sign (descending order). The default sorting is by `name`
@@ -9647,7 +9987,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks listNetwo
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Network
@@ -9666,6 +10006,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks createNet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --site: record # Site data. If multi-site feature is turned on for the account, then ID of a site must be specified. In order to assign a wireless point to the main site (company) site ID should be set to `main-site` — shape: {id?: string, uri?: string, name?: string, code?: string}
   publicIpRanges: list # item shape: {id?: string, startIp?: string, endIp?: string, matched?: bool}
@@ -9679,7 +10020,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks createNet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Network
@@ -9696,13 +10037,14 @@ export def "restapi-v10-account-emergency-address-auto-update-networks readNetwo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, name: string, site: record<id: string, uri: string, name: string, code: string>, publicIpRanges: table<id: string, startIp: string, endIp: string, matched: bool>, privateIpRanges: table<id: string, startIp: string, endIp: string, name: string, emergencyAddress: any, emergencyLocationId: string, matched: bool, emergencyLocation: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/networks/($networkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Network
@@ -9722,6 +10064,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks updateNet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a network (e.g. 2874044)
   name: string
   --site: record # Site data. If multi-site feature is turned on for the account, then ID of a site must be specified. In order to assign a wireless point to the main site (company) site ID should be set to `main-site` — shape: {id?: string, uri?: string, name?: string, code?: string}
@@ -9736,7 +10079,7 @@ export def "restapi-v10-account-emergency-address-auto-update-networks updateNet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Network
@@ -9753,13 +10096,14 @@ export def "restapi-v10-account-emergency-address-auto-update-networks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/networks/($networkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate Multiple Switches
@@ -9776,6 +10120,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-vali
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {uri?: string, id?: string, chassisId?: string, port?: string, name?: string, site?: record, emergencyAddress?: any, emergencyLocation?: record}
 ]: any -> record<records: table<id: string, chassisId: string, port: string, status: string, errors: list>> {
   let input = $in
@@ -9786,7 +10131,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-vali
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Account Switches
@@ -9802,6 +10147,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches listAccou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries by the specified substring (search by chassis ID, switch name or address) The characters range is 0-64 (if empty the filter is ignored)
   --orderBy: string # Comma-separated list of fields to order results prefixed by '+' sign (ascending order) or '-' sign (descending order). The default sorting is by `name`
@@ -9814,7 +10160,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches listAccou
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/switches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Switch
@@ -9832,6 +10178,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches createSwi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   chassisId: string # Unique identifier of a network switch. The supported formats are: XX:XX:XX:XX:XX:XX (symbols 0-9 and A-F) for MAC address and X.X.X.X for IP address (symbols 0-255)
   --port: string # Switch entity extension for better diversity. Should be used together with chassisId.
   --name: string # Name of a network switch
@@ -9847,7 +10194,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches createSwi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Switch
@@ -9864,13 +10211,14 @@ export def "restapi-v10-account-emergency-address-auto-update-switches readSwitc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, chassisId: string, port: string, name: string, site: record<id: string, name: string>, emergencyAddress: record<syncStatus: string>, emergencyLocation: record<id: string, name: string, addressFormatId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/switches/($switchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Switch
@@ -9888,6 +10236,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches updateSwi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a switch
   --chassisId: string # Unique identifier of a network switch. The supported formats are: XX:XX:XX:XX:XX:XX (symbols 0-9 and A-F) for MAC address and X.X.X.X for IP address (symbols 0-255)
   --port: string # Switch entity extension for better diversity. Should be used together with chassisId.
@@ -9903,7 +10252,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches updateSwi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Switch
@@ -9920,13 +10269,14 @@ export def "restapi-v10-account-emergency-address-auto-update-switches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/switches/($switchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate Multiple Wireless Points
@@ -9943,6 +10293,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {uri?: string, id?: string, bssid: string, name: string, site?: record, emergencyAddress: any, emergencyLocation?: record, emergencyLocationId?: string}
 ]: any -> record<records: table<id: string, bssid: string, status: string, errors: list>> {
   let input = $in
@@ -9953,7 +10304,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Wireless Points
@@ -9969,6 +10320,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points li
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries by the specified substring (search by chassis ID, switch name or address) The characters range is 0-64 (if empty the filter is ignored)
   --orderBy: string # Comma-separated list of fields to order results prefixed by '+' sign (ascending order) or '-' sign (descending order).The default sorting is by `name`
@@ -9981,7 +10333,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points li
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/wireless-points" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Wireless Point
@@ -9999,6 +10351,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points cr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   bssid: string # Unique 48-bit identifier of wireless access point that follows MAC address conventions.  Mask: XX:XX:XX:XX:XX:XX, where X can be a symbol in the range of 0-9 or A-F
   name: string # Wireless access point name
   --site: record # shape: {id?: string, name?: string}
@@ -10013,7 +10366,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points cr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Wireless Point
@@ -10030,13 +10383,14 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, bssid: string, name: string, site: record<id: string, name: string>, emergencyAddress: record<syncStatus: string>, emergencyLocation: record<id: string, name: string, addressFormatId: string>, emergencyLocationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/wireless-points/($pointId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Wireless Point
@@ -10054,6 +10408,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points up
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of a wireless point
   --bssid: string # Unique 48-bit identifier of wireless access point that follows MAC address conventions. Mask: XX:XX:XX:XX:XX:XX, where X can be a symbol in the range of 0-9 or A-F
   --name: string # Name of a wireless access point
@@ -10068,7 +10423,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points up
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Wireless Point
@@ -10085,13 +10440,14 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/wireless-points/($pointId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Devices
@@ -10107,6 +10463,7 @@ export def "restapi-v10-account-emergency-address-auto-update-devices listDevice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --featureEnabled: oneof<nothing, bool> # Filters entries by their status of Automatic Location Updates feature
   --modelId: string # Internal identifier of a device model for filtering. Multiple values are supported
@@ -10122,7 +10479,7 @@ export def "restapi-v10-account-emergency-address-auto-update-devices listDevice
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/emergency-address-auto-update/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Automatic Location Updates Feature
@@ -10138,6 +10495,7 @@ export def "restapi-v10-account-emergency-address-auto-update-devices-bulk-assig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabledDeviceIds: list
   --disabledDeviceIds: list
 ]: any -> any {
@@ -10149,7 +10507,7 @@ export def "restapi-v10-account-emergency-address-auto-update-devices-bulk-assig
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Multiple Switches
@@ -10166,6 +10524,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-crea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {chassisId: string, port?: string, name?: string, site?: record, emergencyAddress?: any, emergencyLocation?: record}
 ]: any -> record<task: table<id: string, status: string, creationTime: string, lastModifiedTime: string>> {
   let input = $in
@@ -10176,7 +10535,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-crea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Multiple Wireless Points
@@ -10193,6 +10552,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {id?: string, bssid?: string, name?: string, site?: record, emergencyAddress?: any}
 ]: any -> record<task: record<id: string, status: string, creationTime: string, lastModifiedTime: string>> {
   let input = $in
@@ -10203,7 +10563,7 @@ export def "restapi-v10-account-emergency-address-auto-update-wireless-points-bu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Multiple Switches
@@ -10220,6 +10580,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-upda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --records: list # item shape: {id?: string, chassisId?: string, port?: string, name?: string, site?: record, emergencyAddress?: any}
 ]: any -> record<task: record<id: string, status: string, creationTime: string, lastModifiedTime: string>> {
   let input = $in
@@ -10230,7 +10591,7 @@ export def "restapi-v10-account-emergency-address-auto-update-switches-bulk-upda
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Company Phone Numbers
@@ -10246,6 +10607,7 @@ export def "restapi-v10-account-phone-number listAccountPhoneNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
   --usageType: list # Usage type of phone number
@@ -10258,7 +10620,7 @@ export def "restapi-v10-account-phone-number listAccountPhoneNumbers" [
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/phone-number" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Phone Number
@@ -10275,13 +10637,14 @@ export def "restapi-v10-account-phone-number readAccountPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: int, country: record<id: string, uri: string, name: string>, extension: record<id: int, uri: string, name: string, extensionNumber: string, partnerId: string>, label: string, location: string, paymentType: string, phoneNumber: string, status: string, type: string, usageType: string, temporaryNumber: record<id: string, phoneNumber: string>, contactCenterProvider: record<id: string, name: string>, vanityPattern: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/account/($accountId)/phone-number/($phoneNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Subscriptions
@@ -10296,13 +10659,14 @@ export def "restapi-v10-subscription listSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, eventFilters: list, disabledFilters: list, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restapi/v1.0/subscription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Subscription
@@ -10317,6 +10681,7 @@ export def "restapi-v10-subscription createSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   eventFilters: list # The list of event filters corresponding to events the user is subscribed to
   --expiresIn: int # Subscription lifetime in seconds. The maximum subscription lifetime depends upon the specified `transportType`:  | Transport type      | Maximum permitted lifetime     | | ------------------- | ------------------------------ | | `WebHook`           | 315360000 seconds (10 years)   | | `RC/APNS`, `RC/GSM` | 7776000 seconds (90 days)      | | `PubNub`            | 900 seconds (15 minutes)       | | `WebSocket`         | n/a (the parameter is ignored) |  (format: int32, e.g. 1200)
   deliveryMode: any # Notification delivery transport information
@@ -10329,7 +10694,7 @@ export def "restapi-v10-subscription createSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Subscription
@@ -10345,13 +10710,14 @@ export def "restapi-v10-subscription readSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/subscription/($subscriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Subscription
@@ -10367,6 +10733,7 @@ export def "restapi-v10-subscription updateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   eventFilters: list # The list of event filters corresponding to events the user is subscribed to
   --expiresIn: int # Subscription lifetime in seconds. The maximum subscription lifetime depends upon the specified `transportType`:  | Transport type      | Maximum permitted lifetime     | | ------------------- | ------------------------------ | | `WebHook`           | 315360000 seconds (10 years)   | | `RC/APNS`, `RC/GSM` | 7776000 seconds (90 days)      | | `PubNub`            | 900 seconds (15 minutes)       | | `WebSocket`         | n/a (the parameter is ignored) |  (format: int32, e.g. 1200)
 ]: any -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
@@ -10378,7 +10745,7 @@ export def "restapi-v10-subscription updateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Subscription
@@ -10394,13 +10761,14 @@ export def "restapi-v10-subscription delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/subscription/($subscriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renew Subscription
@@ -10416,13 +10784,14 @@ export def "restapi-v10-subscription-renew renewSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, eventFilters: list<string>, disabledFilters: table<filter: string, reason: string, message: string>, expirationTime: string, expiresIn: int, status: string, creationTime: string, deliveryMode: any, blacklistedData: record<blacklistedAt: string, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/subscription/($subscriptionId)/renew")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Parse Phone Number(s)
@@ -10437,6 +10806,7 @@ export def "restapi-v10-number-parser-parse parsePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --homeCountry: string # ISO 3166 alpha2 code of the home country to be used if it is impossible to determine country from the number itself. By default, this parameter is preset to the current user's home country or brand country if the user is undefined  (e.g. US)
   --nationalAsPriority: oneof<nothing, bool> # The default value is `false`. If `true`, the numbers that are closer to the home country are given higher priority  (default: false)
   --originalStrings: list # The list of phone numbers passed as an array of strings (not more than 64 items). The maximum size of each string is 64 characters
@@ -10450,7 +10820,7 @@ export def "restapi-v10-number-parser-parse parsePhoneNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Contracted Countries
@@ -10466,13 +10836,14 @@ export def "restapi-v10-dictionary-brand-contracted-country listContractedCountr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/brand/($brandId)/contracted-country")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Domestic Countries
@@ -10489,6 +10860,7 @@ export def "restapi-v10-dictionary-brand-contracted-country listDomesticCountrie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<emergencyCalling: bool, isoCode: string, name: string, numberSelling: bool, loginAllowed: bool, signupAllowed: bool, freeSoftphoneLine: bool, localDialing: bool>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -10498,7 +10870,7 @@ export def "restapi-v10-dictionary-brand-contracted-country listDomesticCountrie
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/brand/($brandId)/contracted-country/($contractedCountryId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List States
@@ -10513,6 +10885,7 @@ export def "restapi-v10-dictionary-state listStates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allCountries: oneof<nothing, bool> # If set to `true` then states of all countries are returned and `countryId` is ignored, even if specified. If the value is empty then the parameter is ignored
   --countryId: int # Internal identifier of a country (format: int64)
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
@@ -10525,7 +10898,7 @@ export def "restapi-v10-dictionary-state listStates" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/state" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get State
@@ -10541,13 +10914,14 @@ export def "restapi-v10-dictionary-state readState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, country: record<id: string, uri: string>, isoCode: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/state/($stateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Locations
@@ -10562,6 +10936,7 @@ export def "restapi-v10-dictionary-location listLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderBy: string@orderBy-completer-2 # Sorts results by the property specified (default: City)
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
@@ -10574,7 +10949,7 @@ export def "restapi-v10-dictionary-location listLocations" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/location" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Permissions
@@ -10589,6 +10964,7 @@ export def "restapi-v10-dictionary-permission listPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --assignable: oneof<nothing, bool> # Specifies whether to return only assignable permissions
@@ -10600,7 +10976,7 @@ export def "restapi-v10-dictionary-permission listPermissions" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/permission" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Permission
@@ -10616,13 +10992,14 @@ export def "restapi-v10-dictionary-permission readPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, displayName: string, description: string, assignable: bool, readOnly: bool, siteCompatible: string, category: record<uri: string, id: string>, includedPermissions: table<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/permission/($permissionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Languages
@@ -10637,13 +11014,14 @@ export def "restapi-v10-dictionary-language listLanguages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, greeting: bool, formattingLocale: bool, localeCode: string, isoCode: string, name: string, ui: bool, timeFormat: string, dateFormat: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restapi/v1.0/dictionary/language")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Language
@@ -10659,13 +11037,14 @@ export def "restapi-v10-dictionary-language readLanguage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, greeting: bool, formattingLocale: bool, localeCode: string, isoCode: string, name: string, ui: bool, timeFormat: string, dateFormat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/language/($languageId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Permission Categories
@@ -10680,6 +11059,7 @@ export def "restapi-v10-dictionary-permission-category listPermissionCategories"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --servicePlanId: string # Internal identifier of a service plan
@@ -10690,7 +11070,7 @@ export def "restapi-v10-dictionary-permission-category listPermissionCategories"
   let full_url = (build-url $base "/restapi/v1.0/dictionary/permission-category" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Permission Category
@@ -10706,13 +11086,14 @@ export def "restapi-v10-dictionary-permission-category readPermissionCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, displayName: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/permission-category/($permissionCategoryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Standard Greetings
@@ -10727,6 +11108,7 @@ export def "restapi-v10-dictionary-greeting listStandardGreetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --type: string@type-completer-18 # Type of greeting, specifying the case when the greeting is played
@@ -10738,7 +11120,7 @@ export def "restapi-v10-dictionary-greeting listStandardGreetings" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/greeting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Standard Greeting
@@ -10754,13 +11136,14 @@ export def "restapi-v10-dictionary-greeting readStandardGreeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, name: string, usageType: string, text: string, contentUri: string, type: string, category: string, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/greeting/($greetingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Timezones
@@ -10775,6 +11158,7 @@ export def "restapi-v10-dictionary-timezone listTimezones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed. Default value is '1'  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items). If not specified, the value is '100' by default (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, name: string, description: string, bias: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -10784,7 +11168,7 @@ export def "restapi-v10-dictionary-timezone listTimezones" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/timezone" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Timezone
@@ -10800,13 +11184,14 @@ export def "restapi-v10-dictionary-timezone readTimezone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uri: string, name: string, description: string, bias: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/timezone/($timezoneId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Fax Cover Pages
@@ -10821,6 +11206,7 @@ export def "restapi-v10-dictionary-fax-cover-page listFaxCoverPages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<id: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -10830,7 +11216,7 @@ export def "restapi-v10-dictionary-fax-cover-page listFaxCoverPages" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/fax-cover-page" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Standard User Roles
@@ -10845,6 +11231,7 @@ export def "restapi-v10-dictionary-user-role listStandardUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --servicePlanId: string # Internal identifier of a service plan.
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
@@ -10856,7 +11243,7 @@ export def "restapi-v10-dictionary-user-role listStandardUserRole" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/user-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Standard User Role
@@ -10872,13 +11259,14 @@ export def "restapi-v10-dictionary-user-role readStandardUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: table<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/user-role/($roleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Countries
@@ -10893,6 +11281,7 @@ export def "restapi-v10-dictionary-country listCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loginAllowed: oneof<nothing, bool> # Specifies whether the logging-in with the phone numbers of this country is enabled or not
   --signupAllowed: oneof<nothing, bool> # Indicates whether a signup/billing is allowed for a country. If not specified all countries are returned (according to other specified filters if any)
   --numberSelling: oneof<nothing, bool> # Specifies if RingCentral sells phone numbers of this country
@@ -10906,7 +11295,7 @@ export def "restapi-v10-dictionary-country listCountries" [
   let full_url = (build-url $base "/restapi/v1.0/dictionary/country" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Country
@@ -10922,13 +11311,14 @@ export def "restapi-v10-dictionary-country readCountry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emergencyCalling: bool, isoCode: string, name: string, numberSelling: bool, loginAllowed: bool, signupAllowed: bool, freeSoftphoneLine: bool, localDialing: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/v1.0/dictionary/country/($countryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register Device
@@ -10945,6 +11335,7 @@ export def "restapi-v10-client-info-sip-provision createSIPRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --device: record # Device information — shape: {id?: string, appExternalId?: string, computerName?: string, serial?: string}
   --sipInfo: list # SIP settings for device — item shape: {transport?: "UDP"|"TCP"|"TLS"|"WSS"}
   --softPhoneLineReassignment: string@softPhoneLineReassignment-completer # Supported for Softphone clients only. If 'SoftphoneLineReassignment' feature is enabled the reassignment process can be initialized, however if there is no DL for the given user's device then SPR-131 error code will be returned.  (default: None)
@@ -10957,7 +11348,7 @@ export def "restapi-v10-client-info-sip-provision createSIPRegistration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Version Info
@@ -10973,13 +11364,14 @@ export def "restapi readAPIVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, versionString: string, releaseDate: string, uriString: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/restapi/($apiVersion)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Async Task Status
@@ -10995,13 +11387,14 @@ export def "ai-status-jobs caiJobStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<jobId: string, creationTime: string, completionTime: string, expirationTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ai/status/v1/jobs/($jobId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Conversational Summarization
@@ -11017,6 +11410,7 @@ export def "ai-text-async-summarize caiSummarize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   summaryType: string@summaryType-completer # Type of summary to be computed (e.g. AbstractiveShort)
   utterances: list # item shape: {speakerId: string, text: string, start: float, end: float}
@@ -11030,7 +11424,7 @@ export def "ai-text-async-summarize caiSummarize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Smart Punctuation
@@ -11045,6 +11439,7 @@ export def "ai-text-async-punctuate caiPunctuate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   texts: list
 ]: any -> record<jobId: string> {
@@ -11057,7 +11452,7 @@ export def "ai-text-async-punctuate caiPunctuate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Enrolled Speakers
@@ -11072,6 +11467,7 @@ export def "ai-audio-enrollments caiEnrollmentsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --partial: oneof<nothing, bool> # Indicates if partially enrolled speakers should be returned
   --perPage: int # Number of enrollments to be returned per page (format: int32)
   --page: int # Page number to be returned (format: int32)
@@ -11082,7 +11478,7 @@ export def "ai-audio-enrollments caiEnrollmentsList" [
   let full_url = (build-url $base "/ai/audio/v1/enrollments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Speaker Enrollment
@@ -11097,6 +11493,7 @@ export def "ai-audio-enrollments caiEnrollmentsCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   encoding: string@encoding-completer # The encoding of the original audio (e.g. Wav)
   --languageCode: string # Language spoken in the audio file. (e.g. en-US)
   content: string # Base64-encoded audio file data. (e.g. base64EncodedAudioInput)
@@ -11110,7 +11507,7 @@ export def "ai-audio-enrollments caiEnrollmentsCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Speaker Enrollment Status
@@ -11126,13 +11523,14 @@ export def "ai-audio-enrollments caiEnrollmentsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enrollmentQuality: string, enrollmentComplete: bool, speakerId: string, totalEnrollDuration: float, totalSpeechDuration: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ai/audio/v1/enrollments/($speakerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Speaker Enrollment
@@ -11148,13 +11546,14 @@ export def "ai-audio-enrollments caiEnrollmentsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ai/audio/v1/enrollments/($speakerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Speaker Enrollment
@@ -11170,6 +11569,7 @@ export def "ai-audio-enrollments caiEnrollmentsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   encoding: string@encoding-completer # The encoding of the original audio (e.g. Wav)
   --languageCode: string # Language spoken in the audio file. (e.g. en-US)
   content: string # Base64-encoded audio file data. (e.g. base64EncodedAudioInput)
@@ -11182,7 +11582,7 @@ export def "ai-audio-enrollments caiEnrollmentsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Speech to Text Conversion
@@ -11198,6 +11598,7 @@ export def "ai-audio-async-speech-to-text caiSpeechToText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   --enablePunctuation: oneof<nothing, bool> # Enables Smart Punctuation API.
   --enableSpeakerDiarization: oneof<nothing, bool> # Tags each word corresponding to the speaker. (default: false)
@@ -11213,7 +11614,7 @@ export def "ai-audio-async-speech-to-text caiSpeechToText" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Speaker Diarization
@@ -11228,6 +11629,7 @@ export def "ai-audio-async-speaker-diarize caiSpeakerDiarize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   --separateSpeakerPerChannel: oneof<nothing, bool> # Set to True if the input audio is multi-channel and each channel has a separate speaker. (e.g. false)
   --speakerCount: int # Number of speakers in the file, omit parameter if unknown (format: int32, e.g. 2)
@@ -11243,7 +11645,7 @@ export def "ai-audio-async-speaker-diarize caiSpeakerDiarize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Speaker Identification
@@ -11258,6 +11660,7 @@ export def "ai-audio-async-speaker-identify caiSpeakerIdentify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   speakerIds: list # Set of enrolled speakers to be identified from the media. (e.g. [speakerId1, speakerId2])
   --enableVoiceActivityDetection: oneof<nothing, bool> # Apply voice activity detection.
@@ -11271,7 +11674,7 @@ export def "ai-audio-async-speaker-identify caiSpeakerIdentify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Interaction Analytics
@@ -11287,6 +11690,7 @@ export def "ai-insights-async-analyze-interaction caiAnalyzeInteraction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   --insights: list
   --speechContexts: list # Indicates the words/phrases that will be used for boosting the transcript. This can help to boost accuracy for cases like Person Names, Company names etc. — item shape: {phrases: list}
@@ -11300,7 +11704,7 @@ export def "ai-insights-async-analyze-interaction caiAnalyzeInteraction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List All Contents
@@ -11315,6 +11719,7 @@ export def "cx-social-messaging-contents socMsgListContents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --intervention: list # Filter based on the specified intervention identifiers. (e.g. [7f946431b6eebffafae642cc, re946431b6eebffafae642cc])
   --identity: list # Filter based on the specified identity identifiers. (e.g. [7f946431b6eebffafae642cc, re946431b6eebffafae642cc])
   --identityGroup: list # Filter based on the specified identity group identifiers. (e.g. [7f946431b6eebffafae642cc, re946431b6eebffafae642cc])
@@ -11332,7 +11737,7 @@ export def "cx-social-messaging-contents socMsgListContents" [
   let full_url = (build-url $base "/cx/social-messaging/v1/contents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Content
@@ -11348,6 +11753,7 @@ export def "cx-social-messaging-contents socMsgCreateContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorIdentityId: string # Identity identifier of the author of content.  Not mandatory on creation, by default it uses the token's user first identity on channel.  (e.g. 541014e17aa58d8ccf000023)
   --body-body: string # The content's body.  On creation this field is mandatory except for WhatsApp content using templates.  The following are the max length restrictions for the different channels supported. Channel and max length   * Apple Messages For Business (max length 10000)   * Email (max length 262144)   * RingCX Digital Messaging (max length 1024)   * Facebook (max length 8000)   * GoogleBusinessMessages (max length 3000)   * Google My Business (max length 4000)   * Instagram (max length 950)   * Instagram Messaging (max length 1000)   * LinkedIn (max length 3000)   * Messenger (max length 2000)   * Twitter (max length 280)   * Viber (max length 7000)   * WhatsApp (max length 3800)   * Youtube (max length 8000)  (e.g. Body of the content)
   --inReplyToContentId: string # The content identifier to which this content is a reply to.  On creation, if omitted, a new discussion will be created. If the channel does not support to initiate discussion this parameter is mandatory.  (e.g. 123414e17asdd8ccf000023)
@@ -11372,7 +11778,7 @@ export def "cx-social-messaging-contents socMsgCreateContent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Content
@@ -11388,13 +11794,14 @@ export def "cx-social-messaging-contents socMsgGetContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cx/social-messaging/v1/contents/($contentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List All Identities
@@ -11409,6 +11816,7 @@ export def "cx-social-messaging-identities socMsgListIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceId: string # Filter based on the specified sourceId.
   --identityGroupIds: list # Filter based on the specified identityGroupIds (separated by commas).
   --userId: string # Filter based on the specified userId.
@@ -11423,7 +11831,7 @@ export def "cx-social-messaging-identities socMsgListIdentities" [
   let full_url = (build-url $base "/cx/social-messaging/v1/identities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Identity
@@ -11439,13 +11847,14 @@ export def "cx-social-messaging-identities socMsgGetIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cx/social-messaging/v1/identities/($identityId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Schemas
@@ -11460,6 +11869,7 @@ export def "scim-schemas scimListSchemas2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<Resources: table<id: string, name: string, description: string, attributes: list, meta: record>, itemsPerPage: int, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11467,7 +11877,7 @@ export def "scim-schemas scimListSchemas2" [
   let full_url = (build-url $base "/scim/v2/Schemas")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Schema
@@ -11483,6 +11893,7 @@ export def "scim-schemas scimGetSchema2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<id: string, name: string, description: string, attributes: table<name: string, type: string, subAttributes: list, multiValued: bool, description: string, required: bool, canonicalValues: list, caseExact: bool, mutability: string, returned: string, uniqueness: string, referenceTypes: list>, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11490,7 +11901,7 @@ export def "scim-schemas scimGetSchema2" [
   let full_url = (build-url $base $"/scim/v2/Schemas/($uri)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search/List Users
@@ -11505,6 +11916,7 @@ export def "scim-users scimSearchViaGet2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --filter: string # Only support 'userName' or 'email' filter expressions for now
   --startIndex: int # Start index (1-based) (format: int32, default: 1)
@@ -11516,7 +11928,7 @@ export def "scim-users scimSearchViaGet2" [
   let full_url = (build-url $base "/scim/v2/Users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create User
@@ -11537,6 +11949,7 @@ export def "scim-users scimCreateUser2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --active: oneof<nothing, bool> # User status (default: false)
   --addresses: list # item shape: {country?: string, locality?: string, postalCode?: string, region?: string, streetAddress?: string, type: "work"}
@@ -11559,7 +11972,7 @@ export def "scim-users scimCreateUser2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search/List Users
@@ -11574,6 +11987,7 @@ export def "scim-users-search scimSearchViaPost2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --count: int # Page size (format: int32)
   --filter: string # Only support 'userName' or 'email' filter expressions for now
@@ -11588,7 +12002,7 @@ export def "scim-users-search scimSearchViaPost2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User
@@ -11604,6 +12018,7 @@ export def "scim-users scimGetUser2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<active: bool, addresses: table<country: string, locality: string, postalCode: string, region: string, streetAddress: string, type: string>, emails: table<type: string, value: string>, externalId: string, id: string, name: record<familyName: string, givenName: string>, phoneNumbers: table<type: string, value: string>, photos: table<type: string, value: string>, schemas: list<string>, title: string, urn_ietf_params_scim_schemas_extension_enterprise_2_0_User: record<department: string>, userName: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11611,7 +12026,7 @@ export def "scim-users scimGetUser2" [
   let full_url = (build-url $base $"/scim/v2/Users/($scimUserId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update/Replace User
@@ -11633,6 +12048,7 @@ export def "scim-users scimUpdateUser2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --active: oneof<nothing, bool> # User status (default: false)
   --addresses: list # item shape: {country?: string, locality?: string, postalCode?: string, region?: string, streetAddress?: string, type: "work"}
@@ -11655,7 +12071,7 @@ export def "scim-users scimUpdateUser2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete User
@@ -11671,13 +12087,14 @@ export def "scim-users scimDeleteUser2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/scim/v2/Users/($scimUserId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update/Patch User
@@ -11694,6 +12111,7 @@ export def "scim-users scimPatchUser2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   Operations: list # Patch operations list — item shape: {op: "add"|"replace"|"remove", path?: string, value?: string}
   schemas: list
@@ -11706,7 +12124,7 @@ export def "scim-users scimPatchUser2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Provider Config
@@ -11721,6 +12139,7 @@ export def "scim-service-provider-config scimGetProviderConfig2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<authenticationSchemes: table<description: string, documentationUri: string, name: string, specUri: string, primary: bool>, bulk: record<maxOperations: int, maxPayloadSize: int, supported: bool>, changePassword: record<supported: bool>, etag: record<supported: bool>, filter: record<maxResults: int, supported: bool>, patch: record<supported: bool>, schemas: list<string>, sort: record<supported: bool>, xmlDataFormat: record<supported: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11728,7 +12147,7 @@ export def "scim-service-provider-config scimGetProviderConfig2" [
   let full_url = (build-url $base "/scim/v2/ServiceProviderConfig")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Resource Types
@@ -11743,6 +12162,7 @@ export def "scim-resource-types scimListResourceTypes2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<Resources: table<id: string, name: string, endpoint: string, description: string, schema: string, schemaExtensions: list, meta: record>, itemsPerPage: int, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11750,7 +12170,7 @@ export def "scim-resource-types scimListResourceTypes2" [
   let full_url = (build-url $base "/scim/v2/ResourceTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Resource Type
@@ -11766,6 +12186,7 @@ export def "scim-resource-types scimGetResourceType2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
 ]: nothing -> record<id: string, name: string, endpoint: string, description: string, schema: string, schemaExtensions: table<schema: string, required: bool>, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11773,7 +12194,7 @@ export def "scim-resource-types scimGetResourceType2" [
   let full_url = (build-url $base $"/scim/v2/ResourceTypes/($type)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Calls Aggregation Data
@@ -11792,6 +12213,7 @@ export def "analytics-calls-accounts-aggregation-fetch analyticsCallsAggregation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The current page number (positive numbers only) (format: int32)
   --perPage: int # Number of records displayed on a page (positive numbers only, max value of 200) (format: int32)
   grouping: any # This field specifies the dimensions by which the response should be grouped and specific keys to narrow the response. See also [Call Aggregate reports](https://developers.ringcentral.com/guide/analytics/aggregate) or [Call Timeline reports](https://developers.ringcentral.com/guide/analytics/timeline) pages in the developer guide for more information
@@ -11808,7 +12230,7 @@ export def "analytics-calls-accounts-aggregation-fetch analyticsCallsAggregation
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Calls Timeline Data
@@ -11827,6 +12249,7 @@ export def "analytics-calls-accounts-timeline-fetch analyticsCallsTimelineFetch"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --interval: string@interval-completer # Aggregation interval
   --page: int # The current page number (positive numbers only) (format: int32)
   --perPage: int # Number of records displayed on a page (positive numbers only, max value of 20) (format: int32)
@@ -11844,7 +12267,7 @@ export def "analytics-calls-accounts-timeline-fetch analyticsCallsTimelineFetch"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Task
@@ -11860,13 +12283,14 @@ export def "team-messaging-tasks readTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, creationTime: string, lastModifiedTime: string, type: string, creator: record<id: string>, chatIds: list<string>, status: string, subject: string, assignees: table<id: string, status: string>, completenessCondition: string, completenessPercentage: int, startDate: string, dueDate: string, color: string, section: string, description: string, recurrence: record<schedule: string, endingCondition: string, endingAfter: int, endingOn: string>, attachments: table<id: string, type: string, name: string, contentUri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Task
@@ -11882,13 +12306,14 @@ export def "team-messaging-tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Task
@@ -11907,6 +12332,7 @@ export def "team-messaging-tasks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subject: string # Task name/subject. Max allowed length is 250 characters.
   --assignees: list # item shape: {id?: string}
   --completenessCondition: string@completenessCondition-completer
@@ -11926,7 +12352,7 @@ export def "team-messaging-tasks patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete Task
@@ -11943,6 +12369,7 @@ export def "team-messaging-tasks-complete completeTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-8 # Completeness status
   --assignees: list # item shape: {id?: string}
   --completenessPercentage: int # format: int32
@@ -11955,7 +12382,7 @@ export def "team-messaging-tasks-complete completeTaskNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User Events
@@ -11970,6 +12397,7 @@ export def "team-messaging-events readGlipEventsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --recordCount: int # Number of groups to be fetched by one request. The maximum value is 250, by default - 30. (format: int32, default: 30)
   --pageToken: string # Token of a page to be returned
@@ -11980,7 +12408,7 @@ export def "team-messaging-events readGlipEventsNew" [
   let full_url = (build-url $base "/team-messaging/v1/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Event
@@ -11996,6 +12424,7 @@ export def "team-messaging-events createEventNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an event
   --creatorId: string # Internal identifier of a person created an event
   title: string # Event title
@@ -12015,7 +12444,7 @@ export def "team-messaging-events createEventNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Event
@@ -12031,6 +12460,7 @@ export def "team-messaging-events readEventNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
 ]: nothing -> record<id: string, creatorId: string, title: string, startTime: string, endTime: string, allDay: bool, recurrence: record<schedule: string, endingCondition: string, endingAfter: int, endingOn: string>, color: string, location: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12038,7 +12468,7 @@ export def "team-messaging-events readEventNew" [
   let full_url = (build-url $base $"/team-messaging/v1/events/($eventId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Event
@@ -12055,6 +12485,7 @@ export def "team-messaging-events updateEventNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an event
   --creatorId: string # Internal identifier of a person created an event
   title: string # Event title
@@ -12074,7 +12505,7 @@ export def "team-messaging-events updateEventNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Event
@@ -12090,13 +12521,14 @@ export def "team-messaging-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/events/($eventId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Recent Chats
@@ -12111,6 +12543,7 @@ export def "team-messaging-recent-chats listRecentChatsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Type of chats to be fetched. By default, all chat types are returned
   --recordCount: int # Max number of chats to be fetched by one request (Not more than 250). (format: int32, default: 30)
 ]: nothing -> record<records: table<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string, members: list>> {
@@ -12120,7 +12553,7 @@ export def "team-messaging-recent-chats listRecentChatsNew" [
   let full_url = (build-url $base "/team-messaging/v1/recent/chats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload File
@@ -12135,6 +12568,7 @@ export def "team-messaging-files createGlipFileNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupId: int # Internal identifier of a group to which the post with attachment will be added to (format: int64)
   --name: string # Name of a file attached
   --body-body: string # The file (binary or multipart/form-data) to upload (format: binary)
@@ -12148,7 +12582,7 @@ export def "team-messaging-files createGlipFileNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Chats
@@ -12163,6 +12597,7 @@ export def "team-messaging-chats listGlipChatsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Type of chats to be fetched. By default, all type of chats will be fetched
   --recordCount: int # Number of chats to be fetched by one request. The maximum value is 250, by default - 30. (format: int32, default: 30)
   --pageToken: string # Pagination token.
@@ -12173,7 +12608,7 @@ export def "team-messaging-chats listGlipChatsNew" [
   let full_url = (build-url $base "/team-messaging/v1/chats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Chat
@@ -12189,13 +12624,14 @@ export def "team-messaging-chats readGlipChatNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string, members: table<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Chat from Favorites
@@ -12211,13 +12647,14 @@ export def "team-messaging-chats-unfavorite unfavoriteGlipChatNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/unfavorite")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Chat Tasks
@@ -12233,6 +12670,7 @@ export def "team-messaging-chats-tasks listChatTasksNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creationTimeTo: string # The end datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone, e.g. 2019-03-10T18:23:45Z  (default: now)
   --creationTimeFrom: string # The start datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone, e.g. 2016-02-23T00:00:00
   --creatorId: list # Internal identifier of a task creator
@@ -12249,7 +12687,7 @@ export def "team-messaging-chats-tasks listChatTasksNew" [
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Task
@@ -12268,6 +12706,7 @@ export def "team-messaging-chats-tasks createTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subject: string # Task name/subject. Max allowed length is 250 characters
   assignees: list # item shape: {id?: string}
   --completenessCondition: string@completenessCondition-completer # default: Simple
@@ -12287,7 +12726,7 @@ export def "team-messaging-chats-tasks createTaskNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Posts
@@ -12303,6 +12742,7 @@ export def "team-messaging-chats-posts readGlipPostsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recordCount: int # Max number of posts to be fetched by one request (not more than 250) (format: int32, default: 30)
   --pageToken: string # Pagination token.
 ]: nothing -> record<records: table<id: string, groupId: string, type: string, text: string, creatorId: string, addedPersonIds: list, creationTime: string, lastModifiedTime: string, attachments: list, mentions: list, activity: string, title: string, iconUri: string, iconEmoji: string>, navigation: record<prevPageToken: string, nextPageToken: string>> {
@@ -12312,7 +12752,7 @@ export def "team-messaging-chats-posts readGlipPostsNew" [
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/posts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Post
@@ -12329,6 +12769,7 @@ export def "team-messaging-chats-posts createGlipPostNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Text of a post. Maximum length is 10000 symbols. Mentions can be added in .md format `![:Type](id)`
   --attachments: list # Identifier(s) of attachments. Maximum number of attachments is 25 — item shape: {id?: string, type?: "File"|"Note"|"Event"|"Card"}
 ]: any -> record<id: string, groupId: string, type: string, text: string, creatorId: string, addedPersonIds: list<string>, creationTime: string, lastModifiedTime: string, attachments: table<id: string, type: string, fallback: string, intro: string, author: record, title: string, text: string, imageUri: string, thumbnailUri: string, fields: list, footnote: record, creatorId: string, startTime: string, endTime: string, allDay: bool, recurrence: record, color: string, location: string, description: string>, mentions: table<id: string, type: string, name: string>, activity: string, title: string, iconUri: string, iconEmoji: string> {
@@ -12340,7 +12781,7 @@ export def "team-messaging-chats-posts createGlipPostNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Post
@@ -12357,13 +12798,14 @@ export def "team-messaging-chats-posts readGlipPostNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, groupId: string, type: string, text: string, creatorId: string, addedPersonIds: list<string>, creationTime: string, lastModifiedTime: string, attachments: table<id: string, type: string, fallback: string, intro: string, author: record, title: string, text: string, imageUri: string, thumbnailUri: string, fields: list, footnote: record, creatorId: string, startTime: string, endTime: string, allDay: bool, recurrence: record, color: string, location: string, description: string>, mentions: table<id: string, type: string, name: string>, activity: string, title: string, iconUri: string, iconEmoji: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/posts/($postId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Post
@@ -12380,13 +12822,14 @@ export def "team-messaging-chats-posts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/posts/($postId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Post
@@ -12403,6 +12846,7 @@ export def "team-messaging-chats-posts patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Post text.
 ]: any -> record<id: string, groupId: string, type: string, text: string, creatorId: string, addedPersonIds: list<string>, creationTime: string, lastModifiedTime: string, attachments: table<id: string, type: string, fallback: string, intro: string, author: record, title: string, text: string, imageUri: string, thumbnailUri: string, fields: list, footnote: record, creatorId: string, startTime: string, endTime: string, allDay: bool, recurrence: record, color: string, location: string, description: string>, mentions: table<id: string, type: string, name: string>, activity: string, title: string, iconUri: string, iconEmoji: string> {
   let input = $in
@@ -12413,7 +12857,7 @@ export def "team-messaging-chats-posts patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Chat to Favorites
@@ -12429,13 +12873,14 @@ export def "team-messaging-chats-favorite favoriteGlipChatNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/favorite")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Adaptive Card
@@ -12454,6 +12899,7 @@ export def "team-messaging-chats-adaptive-cards createGlipAdaptiveCardNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-19 # Type of attachment. This field is mandatory and filled on server side - will be ignored if set in request body
   version: string # Version. This field is mandatory and filled on server side - will be ignored if set in request body
   --body-body: list # List of adaptive cards with the detailed information — item shape: {type?: "Container", items?: list}
@@ -12474,7 +12920,7 @@ export def "team-messaging-chats-adaptive-cards createGlipAdaptiveCardNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Notes
@@ -12490,6 +12936,7 @@ export def "team-messaging-chats-notes listChatNotesNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creationTimeTo: string # The end datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone, e.g. 2019-03-10T18:23:45. The default value is Now.
   --creationTimeFrom: string # The start datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone
   --creatorId: string # Internal identifier of the user that created the note. Multiple values are supported
@@ -12503,7 +12950,7 @@ export def "team-messaging-chats-notes listChatNotesNew" [
   let full_url = (build-url $base $"/team-messaging/v1/chats/($chatId)/notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Note
@@ -12519,6 +12966,7 @@ export def "team-messaging-chats-notes createChatNoteNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # Title of a note. Max allowed length is 250 characters
   --body-body: string # Contents of a note; HTML markup text. Max allowed length is 1048576 characters (1 Mb).
 ]: any -> record<id: string, title: string, chatIds: list<string>, preview: string, creator: record<id: string>, lastModifiedBy: record<id: string>, lockedBy: record<id: string>, status: string, creationTime: string, lastModifiedTime: string, type: string> {
@@ -12530,7 +12978,7 @@ export def "team-messaging-chats-notes createChatNoteNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Adaptive Card
@@ -12546,13 +12994,14 @@ export def "team-messaging-adaptive-cards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, creationTime: string, lastModifiedTime: string, _schema: string, type: string, version: string, creator: record<id: string>, chatIds: list<string>, body: table<type: string, items: list>, actions: table<type: string, title: string, card: record, url: string>, selectAction: record<type: string>, fallbackText: string, backgroundImage: any, minHeight: string, speak: string, lang: string, verticalContentAlignment: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/adaptive-cards/($cardId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Adaptive Card
@@ -12571,6 +13020,7 @@ export def "team-messaging-adaptive-cards updateGlipAdaptiveCardNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-19 # Type of attachment. This field is mandatory and filled on server side - will be ignored if set in request body
   version: string # Version. This field is mandatory and filled on server side - will be ignored if set in request body
   --body-body: list # List of adaptive cards with the detailed information — item shape: {type?: "Container", items?: list}
@@ -12591,7 +13041,7 @@ export def "team-messaging-adaptive-cards updateGlipAdaptiveCardNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Adaptive Card
@@ -12607,13 +13057,14 @@ export def "team-messaging-adaptive-cards delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/adaptive-cards/($cardId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Webhooks
@@ -12628,6 +13079,7 @@ export def "team-messaging-webhooks listGlipWebhooksNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
 ]: nothing -> record<records: table<id: string, creatorId: string, groupIds: list, creationTime: string, lastModifiedTime: string, uri: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12635,7 +13087,7 @@ export def "team-messaging-webhooks listGlipWebhooksNew" [
   let full_url = (build-url $base "/team-messaging/v1/webhooks")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webhook
@@ -12651,6 +13103,7 @@ export def "team-messaging-webhooks readGlipWebhookNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
 ]: nothing -> record<records: table<id: string, creatorId: string, groupIds: list, creationTime: string, lastModifiedTime: string, uri: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12658,7 +13111,7 @@ export def "team-messaging-webhooks readGlipWebhookNew" [
   let full_url = (build-url $base $"/team-messaging/v1/webhooks/($webhookId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Webhook
@@ -12674,13 +13127,14 @@ export def "team-messaging-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate Webhook
@@ -12696,13 +13150,14 @@ export def "team-messaging-webhooks-activate activateGlipWebhookNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/webhooks/($webhookId)/activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suspend Webhook
@@ -12718,13 +13173,14 @@ export def "team-messaging-webhooks-suspend suspendGlipWebhookNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/webhooks/($webhookId)/suspend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Info
@@ -12740,6 +13196,7 @@ export def "team-messaging-companies readTMCompanyInfoNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
 ]: nothing -> record<id: string, name: string, domain: string, creationTime: string, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12747,7 +13204,7 @@ export def "team-messaging-companies readTMCompanyInfoNew" [
   let full_url = (build-url $base $"/team-messaging/v1/companies/($companyId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Person
@@ -12763,13 +13220,14 @@ export def "team-messaging-persons readGlipPersonNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, firstName: string, lastName: string, email: string, avatar: string, companyId: string, creationTime: string, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/persons/($personId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Conversations
@@ -12784,6 +13242,7 @@ export def "team-messaging-conversations listGlipConversationsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recordCount: int # Number of conversations to be fetched by one request. The maximum value is 250, by default - 30 (format: int32, default: 30)
   --pageToken: string # Pagination token.
 ]: nothing -> record<records: table<id: string, type: string, creationTime: string, lastModifiedTime: string, members: list>, navigation: record<prevPageToken: string, nextPageToken: string>> {
@@ -12793,7 +13252,7 @@ export def "team-messaging-conversations listGlipConversationsNew" [
   let full_url = (build-url $base "/team-messaging/v1/conversations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/Open Conversation
@@ -12809,6 +13268,7 @@ export def "team-messaging-conversations createGlipConversationNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # Identifier(s) of chat member(s). The maximum supported number of IDs is 15. User's own ID is optional. If `members` section is omitted then "Personal" chat will be returned — item shape: {id?: string, email?: string}
 ]: any -> record<id: string, type: string, creationTime: string, lastModifiedTime: string, members: table<id: string>> {
   let input = $in
@@ -12819,7 +13279,7 @@ export def "team-messaging-conversations createGlipConversationNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Conversation
@@ -12835,13 +13295,14 @@ export def "team-messaging-conversations readGlipConversationNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, creationTime: string, lastModifiedTime: string, members: table<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/conversations/($chatId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Group Events
@@ -12857,13 +13318,14 @@ export def "team-messaging-groups-events listGroupEventsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, creatorId: string, title: string, startTime: string, endTime: string, allDay: bool, recurrence: record<schedule: string, endingCondition: string, endingAfter: int, endingOn: string>, color: string, location: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/groups/($groupId)/events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Event by Group ID
@@ -12880,6 +13342,7 @@ export def "team-messaging-groups-events createEventByGroupIdNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Internal identifier of an event
   --creatorId: string # Internal identifier of a person created an event
   title: string # Event title
@@ -12899,7 +13362,7 @@ export def "team-messaging-groups-events createEventByGroupIdNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Webhooks in Group
@@ -12915,13 +13378,14 @@ export def "team-messaging-groups-webhooks listGlipGroupWebhooksNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<records: table<id: string, creatorId: string, groupIds: list, creationTime: string, lastModifiedTime: string, uri: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/groups/($groupId)/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webhook in Group
@@ -12937,13 +13401,14 @@ export def "team-messaging-groups-webhooks createGlipGroupWebhookNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, creatorId: string, groupIds: list<string>, creationTime: string, lastModifiedTime: string, uri: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/groups/($groupId)/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Data Export Tasks
@@ -12958,6 +13423,7 @@ export def "team-messaging-data-export listDataExportTasksNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-10 # Status of the task(s) to be returned. Multiple values are supported
   --page: int # Page number to be retrieved; value range is > 0 (format: int32, default: 1)
   --perPage: int # Number of records to be returned per page; value range is 1 - 250 (format: int32, default: 30)
@@ -12968,7 +13434,7 @@ export def "team-messaging-data-export listDataExportTasksNew" [
   let full_url = (build-url $base "/team-messaging/v1/data-export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Data Export Task
@@ -12984,6 +13450,7 @@ export def "team-messaging-data-export createDataExportTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeFrom: string # Starting time for data collection. The default value is `timeTo` minus 24 hours. Max allowed time frame between `timeFrom` and `timeTo` is 6 months (format: date-time)
   --timeTo: string # Ending time for data collection. The default value is current time. Max allowed time frame between `timeFrom` and `timeTo` is 6 months (format: date-time)
   --contacts: list # List of contacts which data is collected. The following data will be exported: posts, tasks, events, etc. posted by the user(s); posts addressing the user(s) via direct and @Mentions; tasks assigned to the listed user(s). The list of 30 users per request is supported. — item shape: {id?: string, email?: string}
@@ -12997,7 +13464,7 @@ export def "team-messaging-data-export createDataExportTaskNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Data Export Task
@@ -13013,13 +13480,14 @@ export def "team-messaging-data-export readDataExportTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, id: string, creationTime: string, lastModifiedTime: string, status: string, creator: record<id: string, firstName: string, lastName: string>, specific: record<timeFrom: string, timeTo: string, contacts: list<record>, chatIds: list<string>>, datasets: table<id: string, uri: string, size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/data-export/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Everyone Chat
@@ -13034,13 +13502,14 @@ export def "team-messaging-everyone readGlipEveryoneNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, name: string, description: string, creationTime: string, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/team-messaging/v1/everyone")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Everyone Chat
@@ -13055,6 +13524,7 @@ export def "team-messaging-everyone patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Everyone chat name. Maximum number of characters supported is 250
   --description: string # Everyone chat description. Maximum number of characters supported is 1000
 ]: any -> record<id: string, type: string, name: string, description: string, creationTime: string, lastModifiedTime: string> {
@@ -13066,7 +13536,7 @@ export def "team-messaging-everyone patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Teams
@@ -13081,6 +13551,7 @@ export def "team-messaging-teams listGlipTeamsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recordCount: int # Number of teams to be fetched by one request. The maximum value is 250, by default - 30 (format: int32, default: 30)
   --pageToken: string # Pagination token.
 ]: nothing -> record<records: table<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string>, navigation: record<prevPageToken: string, nextPageToken: string>> {
@@ -13090,7 +13561,7 @@ export def "team-messaging-teams listGlipTeamsNew" [
   let full_url = (build-url $base "/team-messaging/v1/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Team
@@ -13106,6 +13577,7 @@ export def "team-messaging-teams createGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Team access level.
   name: string # Team name.
   --description: string # Team description.
@@ -13119,7 +13591,7 @@ export def "team-messaging-teams createGlipTeamNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Team
@@ -13135,13 +13607,14 @@ export def "team-messaging-teams readGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Team
@@ -13157,13 +13630,14 @@ export def "team-messaging-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Team
@@ -13179,6 +13653,7 @@ export def "team-messaging-teams patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Team access level
   --name: string # Team name. Maximum number of characters supported is 250
   --description: string # Team description. Maximum number of characters supported is 1000
@@ -13191,7 +13666,7 @@ export def "team-messaging-teams patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Team Members
@@ -13208,6 +13683,7 @@ export def "team-messaging-teams-remove removeGlipTeamMembersNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # Identifier(s) of chat members. — item shape: {id?: string}
 ]: any -> any {
   let input = $in
@@ -13218,7 +13694,7 @@ export def "team-messaging-teams-remove removeGlipTeamMembersNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Join Team
@@ -13234,13 +13710,14 @@ export def "team-messaging-teams-join joinGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)/join")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Team
@@ -13256,13 +13733,14 @@ export def "team-messaging-teams-archive archiveGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)/archive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unarchive Team
@@ -13278,13 +13756,14 @@ export def "team-messaging-teams-unarchive unarchiveGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)/unarchive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Leave Team
@@ -13300,13 +13779,14 @@ export def "team-messaging-teams-leave leaveGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/teams/($chatId)/leave")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Team Members
@@ -13323,6 +13803,7 @@ export def "team-messaging-teams-add addGlipTeamMembersNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # Identifier(s) of chat member(s) — item shape: {id?: string, email?: string}
 ]: any -> any {
   let input = $in
@@ -13333,7 +13814,7 @@ export def "team-messaging-teams-add addGlipTeamMembersNew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Note
@@ -13349,13 +13830,14 @@ export def "team-messaging-notes readUserNoteNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, title: string, chatIds: list<string>, preview: string, creator: record<id: string>, lastModifiedBy: record<id: string>, lockedBy: record<id: string>, status: string, creationTime: string, lastModifiedTime: string, type: string, body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/notes/($noteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Note
@@ -13371,13 +13853,14 @@ export def "team-messaging-notes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/notes/($noteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Note
@@ -13393,6 +13876,7 @@ export def "team-messaging-notes patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --releaseLock: oneof<nothing, bool> # If true then note lock (if any) will be released upon request (default: false)
   title: string # Title of a note. Max allowed length is 250 characters
   --body-body: string # Contents of a note; HTML markup text. Max allowed length is 1048576 characters (1 Mb).
@@ -13406,7 +13890,7 @@ export def "team-messaging-notes patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lock Note
@@ -13422,13 +13906,14 @@ export def "team-messaging-notes-lock lockNoteNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/notes/($noteId)/lock")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Publish Note
@@ -13444,13 +13929,14 @@ export def "team-messaging-notes-publish publishNoteNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, title: string, chatIds: list<string>, preview: string, creator: record<id: string>, lastModifiedBy: record<id: string>, lockedBy: record<id: string>, status: string, creationTime: string, lastModifiedTime: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/notes/($noteId)/publish")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock Note
@@ -13466,13 +13952,14 @@ export def "team-messaging-notes-unlock unlockNoteNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/team-messaging/v1/notes/($noteId)/unlock")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Favorite Chats
@@ -13487,6 +13974,7 @@ export def "team-messaging-favorites listFavoriteChatsNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recordCount: int # Max number of chats to be fetched by one request (Not more than 250). (format: int32, default: 30)
 ]: nothing -> record<records: table<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string, members: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13495,5 +13983,5 @@ export def "team-messaging-favorites listFavoriteChatsNew" [
   let full_url = (build-url $base "/team-messaging/v1/favorites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query all-films" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "query all-films" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -123,13 +125,13 @@ export def "query all-films" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allFilms(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allFilms" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allFilms" }
 }
 
 # GraphQL query: film
@@ -143,6 +145,7 @@ export def "query film" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -155,13 +158,13 @@ export def "query film" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "title episodeID openingCrawl director producers releaseDate created edited id" }
     let body = {query: ("query($id: ID, $filmID: ID) { film(id: $id, filmID: $filmID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "film" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "film" }
 }
 
 # GraphQL query: allPeople
@@ -175,6 +178,7 @@ export def "query all-people" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -189,13 +193,13 @@ export def "query all-people" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allPeople(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allPeople" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allPeople" }
 }
 
 # GraphQL query: person
@@ -209,6 +213,7 @@ export def "query person" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -221,13 +226,13 @@ export def "query person" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name birthYear eyeColor gender hairColor height mass skinColor created edited id" }
     let body = {query: ("query($id: ID, $personID: ID) { person(id: $id, personID: $personID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "person" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "person" }
 }
 
 # GraphQL query: allPlanets
@@ -241,6 +246,7 @@ export def "query all-planets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -255,13 +261,13 @@ export def "query all-planets" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allPlanets(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allPlanets" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allPlanets" }
 }
 
 # GraphQL query: planet
@@ -275,6 +281,7 @@ export def "query planet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -287,13 +294,13 @@ export def "query planet" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name diameter rotationPeriod orbitalPeriod gravity population climates terrains surfaceWater created edited id" }
     let body = {query: ("query($id: ID, $planetID: ID) { planet(id: $id, planetID: $planetID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "planet" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "planet" }
 }
 
 # GraphQL query: allSpecies
@@ -307,6 +314,7 @@ export def "query all-species" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -321,13 +329,13 @@ export def "query all-species" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allSpecies(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allSpecies" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allSpecies" }
 }
 
 # GraphQL query: species
@@ -341,6 +349,7 @@ export def "query species" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -353,13 +362,13 @@ export def "query species" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name classification designation averageHeight averageLifespan eyeColors hairColors skinColors language created edited id" }
     let body = {query: ("query($id: ID, $speciesID: ID) { species(id: $id, speciesID: $speciesID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "species" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "species" }
 }
 
 # GraphQL query: allStarships
@@ -373,6 +382,7 @@ export def "query all-starships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -387,13 +397,13 @@ export def "query all-starships" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allStarships(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allStarships" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allStarships" }
 }
 
 # GraphQL query: starship
@@ -407,6 +417,7 @@ export def "query starship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -419,13 +430,13 @@ export def "query starship" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name model starshipClass manufacturers costInCredits length crew passengers maxAtmospheringSpeed hyperdriveRating MGLT cargoCapacity consumables created edited id" }
     let body = {query: ("query($id: ID, $starshipID: ID) { starship(id: $id, starshipID: $starshipID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "starship" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "starship" }
 }
 
 # GraphQL query: allVehicles
@@ -439,6 +450,7 @@ export def "query all-vehicles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string
@@ -453,13 +465,13 @@ export def "query all-vehicles" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String, $first: Int, $before: String, $last: Int) { allVehicles(after: $after, first: $first, before: $before, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "allVehicles" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "allVehicles" }
 }
 
 # GraphQL query: vehicle
@@ -473,6 +485,7 @@ export def "query vehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string
@@ -485,13 +498,13 @@ export def "query vehicle" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name model vehicleClass manufacturers costInCredits length crew passengers maxAtmospheringSpeed cargoCapacity consumables created edited id" }
     let body = {query: ("query($id: ID, $vehicleID: ID) { vehicle(id: $id, vehicleID: $vehicleID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "vehicle" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "vehicle" }
 }
 
 # Fetches an object given its ID
@@ -505,6 +518,7 @@ export def "query node" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of an object
@@ -516,11 +530,11 @@ export def "query node" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id ... on Film { title episodeID openingCrawl director producers releaseDate created edited } ... on Species { name classification designation averageHeight averageLifespan eyeColors hairColors skinColors language created edited } ... on Planet { name diameter rotationPeriod orbitalPeriod gravity population climates terrains surfaceWater created edited }" }
     let body = {query: ("query($id: ID!) { node(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "node" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "node" }
 }

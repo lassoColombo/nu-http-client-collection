@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def engine-completer [] { ["handlebars" "mustache" "nunjucks" "twig"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "grants-calendars get-all-calendars" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "grants-calendars get-all-calendars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --metadata-pair: string # Pass a metadata key/value pair (for example, `?metadata_pair=key1:value`) to search for metadata associated with objects. See [Metadata](/docs/reference/api/#metadata) for more information.
@@ -124,7 +126,7 @@ export def "grants-calendars get-all-calendars" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/calendars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a calendar
@@ -141,6 +143,7 @@ export def "grants-calendars create-calendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --description: string # (Not supported for iCloud or EWS) A brief description of the calendar. (e.g. Junior sports league carpool drivers)
   --location: string # (Not supported for iCloud or EWS) The geographic location of the calendar, as free-form text. (e.g. London, England)
@@ -158,7 +161,7 @@ export def "grants-calendars create-calendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a calendar
@@ -175,6 +178,7 @@ export def "grants-calendars get-calendars-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -183,7 +187,7 @@ export def "grants-calendars get-calendars-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/calendars/($calendar_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a calendar
@@ -201,6 +205,7 @@ export def "grants-calendars put-calendars-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --description: string # (Not supported for iCloud or EWS) A brief description of the calendar. (e.g. Junior sports league carpool drivers)
   --hex-color: string # (Not supported for iCloud or EWS) The background color of the calendar, in hexadecimal format (for example, `#0099EE`). When empty, Nylas uses the default background color.  You can set or modify this value using a `PUT` request only. (e.g. #039BE5)
@@ -220,7 +225,7 @@ export def "grants-calendars put-calendars-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a calendar
@@ -237,13 +242,14 @@ export def "grants-calendars delete-calendars-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/calendars/($calendar_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get availability
@@ -260,6 +266,7 @@ export def "calendars-availability post-availability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --availability-rules: record # shape: {availability_method?: "collective"|"max-fairness"|"max-availability", buffer?: record, default_open_hours?: list, round_robin_group_id?: string, tentative_as_busy?: bool}
   duration_minutes: int # The duration of each time slot, in minutes. The duration must be a multiple of 5 minutes. (e.g. 30)
   end_time: int # The end of the time slot that Nylas checks availability for, in seconds using the Unix timestamp format. The time must be a multiple of 5 minutes. (e.g. 1659733200)
@@ -276,7 +283,7 @@ export def "calendars-availability post-availability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get free/busy schedule
@@ -292,6 +299,7 @@ export def "grants-calendars-free-busy post-calendars-free-busy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   start_time: int # The start of a time block, in seconds using the Unix timestamp format. Nylas uses `start_time` and `end_time` to assess the specified account's free/busy schedule. (e.g. 1690862400)
   end_time: int # The end of a time block, in seconds using the Unix timestamp format. Nylas uses `start_time` and `end_time` to assess the specified account's free/busy schedule.  For Google and EWS accounts, Nylas can query a timespan of up to 3 months from the `start_time`.  For Microsoft Graph accounts, Nylas can query a timespan of up to 62 days from the `start_time`. (e.g. 1691208000)
   emails: list # A list of email addresses to check the free/busy schedules for.
@@ -305,7 +313,7 @@ export def "grants-calendars-free-busy post-calendars-free-busy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all events
@@ -322,6 +330,7 @@ export def "grants-events get-all-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attendees: string # (Not supported for virtual calendars) Filter for events that include the specified attendees. This parameter accepts a comma-delimited list of email addresses.
   --busy: oneof<nothing, bool> # (Not supported for iCloud) Filter for events with the specified `busy` status.
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
@@ -349,7 +358,7 @@ export def "grants-events get-all-events" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an event
@@ -371,6 +380,7 @@ export def "grants-events create-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
@@ -400,7 +410,7 @@ export def "grants-events create-event" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import events
@@ -416,6 +426,7 @@ export def "grants-events-import import-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Specifies the maximum number of events Nylas returns in a single page of results. The actual number of events Nylas returns might be lower than this limit, even if other events match your query parameters. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
@@ -429,7 +440,7 @@ export def "grants-events-import import-events" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/events/import" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return an event
@@ -446,6 +457,7 @@ export def "grants-events get-events-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --tentative-as-busy: oneof<nothing, bool> # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
@@ -456,7 +468,7 @@ export def "grants-events get-events-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an event
@@ -479,6 +491,7 @@ export def "grants-events put-events-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
@@ -508,7 +521,7 @@ export def "grants-events put-events-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an event
@@ -525,6 +538,7 @@ export def "grants-events delete-events-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
 ]: nothing -> any {
@@ -534,7 +548,7 @@ export def "grants-events delete-events-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send RSVP
@@ -551,6 +565,7 @@ export def "grants-events-send-rsvp send-rsvp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --skip-nylas-email: oneof<nothing, bool> # When `true`, Nylas does not send the RSVP email to the event organizer. (default: false)
   --status: string@status-completer # A participant's RSVP status for the event. (e.g. maybe)
@@ -564,7 +579,7 @@ export def "grants-events-send-rsvp send-rsvp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all Notetakers
@@ -580,6 +595,7 @@ export def "grants-notetakers get-all-notetakers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time-start: float # Filter for Notetaker bots that have join times that start at or after a specific time, in Unix timestamp format.
   --join-time-end: float # Filter for Notetaker bots that have join times that end at or are before a specific time, in Unix timestamp format.
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
@@ -595,7 +611,7 @@ export def "grants-notetakers get-all-notetakers" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite Notetaker to meeting
@@ -612,6 +628,7 @@ export def "grants-notetakers invite-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time: int # When the Notetaker bot should join the meeting, in seconds using the Unix timestamp format. If you don't specify a time, Notetaker joins the meeting immediately.  If you provide a time that's in the past, Nylas returns an error. (e.g. 1732657774)
   meeting_link: string # A meeting invitation link that Notetaker uses to join the meeting. (e.g. https://meet.google.com/xyz-abcd-ijk)
   --meeting-settings: record # A collection of settings for the Notetaker bot. — shape: {action_items?: bool, action_items_settings?: record, audio_recording?: bool, leave_after_silence_seconds?: int, summary?: bool, summary_settings?: record, transcription?: bool, transcription_settings?: record, video_recording?: bool}
@@ -625,7 +642,7 @@ export def "grants-notetakers invite-notetaker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a Notetaker
@@ -642,13 +659,14 @@ export def "grants-notetakers get-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update scheduled Notetaker
@@ -666,6 +684,7 @@ export def "grants-notetakers update-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time: int # When Notetaker should join the meeting, in seconds using the Unix timestamp format. If empty, Notetaker joins the meeting immediately.  If you provide a time that's in the past, Nylas returns an error. (e.g. 1732657774)
   --meeting-settings: record # A collection of settings for the Notetaker bot. — shape: {action_items?: bool, action_items_settings?: record, audio_recording?: bool, leave_after_silence_seconds?: int, summary?: bool, summary_settings?: record, transcription?: bool, transcription_settings?: record, video_recording?: bool}
   --name: string # The display name for the Notetaker bot. (default: Nylas Notetaker, e.g. Nylas Notetaker)
@@ -678,7 +697,7 @@ export def "grants-notetakers update-notetaker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Notetaker
@@ -695,13 +714,14 @@ export def "grants-notetakers delete-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Notetaker history
@@ -718,13 +738,14 @@ export def "grants-notetakers-history get-notetaker-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)/history")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel scheduled Notetaker
@@ -741,13 +762,14 @@ export def "grants-notetakers-cancel cancel-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Notetaker from meeting
@@ -764,13 +786,14 @@ export def "grants-notetakers-leave post-notetaker-leave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)/leave")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Notetaker media links
@@ -787,13 +810,14 @@ export def "grants-notetakers-media get-notetaker-media" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/notetakers/($notetaker_id)/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all standalone Notetakers
@@ -808,6 +832,7 @@ export def "notetakers get-all-standalone-notetakers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time-end: float # Filter for Notetaker bots that have join times that end at or are before a specific time, in Unix timestamp format.
   --join-time-start: float # Filter for Notetaker bots that have join times that start at or after a specific time, in Unix timestamp format.
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
@@ -823,7 +848,7 @@ export def "notetakers get-all-standalone-notetakers" [
   let full_url = (build-url $base "/v3/notetakers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite standalone Notetaker to meeting
@@ -839,6 +864,7 @@ export def "notetakers invite-standalone-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time: int # When the Notetaker bot should join the meeting, in seconds using the Unix timestamp format. If you don't specify a time, Notetaker joins the meeting immediately.  If you provide a time that's in the past, Nylas returns an error. (e.g. 1732657774)
   meeting_link: string # A meeting invitation link that Notetaker uses to join the meeting. (e.g. https://meet.google.com/xyz-abcd-ijk)
   --meeting-settings: record # A collection of settings for the Notetaker bot. — shape: {action_items?: bool, action_items_settings?: record, audio_recording?: bool, leave_after_silence_seconds?: int, summary?: bool, summary_settings?: record, transcription?: bool, transcription_settings?: record, video_recording?: bool}
@@ -852,7 +878,7 @@ export def "notetakers invite-standalone-notetaker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a standalone Notetaker
@@ -868,13 +894,14 @@ export def "notetakers get-standalone-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update standalone Notetaker
@@ -891,6 +918,7 @@ export def "notetakers update-standalone-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --join-time: int # When Notetaker should join the meeting, in seconds using the Unix timestamp format. If empty, Notetaker joins the meeting immediately.  If you provide a time that's in the past, Nylas returns an error. (e.g. 1732657774)
   --meeting-settings: record # A collection of settings for the Notetaker bot. — shape: {action_items?: bool, action_items_settings?: record, audio_recording?: bool, leave_after_silence_seconds?: int, summary?: bool, summary_settings?: record, transcription?: bool, transcription_settings?: record, video_recording?: bool}
   --name: string # The display name for the Notetaker bot. (default: Nylas Notetaker, e.g. Nylas Notetaker)
@@ -903,7 +931,7 @@ export def "notetakers update-standalone-notetaker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a standalone Notetaker
@@ -919,13 +947,14 @@ export def "notetakers delete-standalone-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return standalone Notetaker history
@@ -941,13 +970,14 @@ export def "notetakers-history get-standalone-notetaker-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)/history")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel standalone Notetaker
@@ -963,13 +993,14 @@ export def "notetakers-cancel cancel-standalone-notetaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove standalone Notetaker from meeting
@@ -985,13 +1016,14 @@ export def "notetakers-leave post-standalone-notetaker-leave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)/leave")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return standalone Notetaker media links
@@ -1007,13 +1039,14 @@ export def "notetakers-media get-standalone-notetaker-media" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/notetakers/($notetaker_id)/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return room resource information
@@ -1029,6 +1062,7 @@ export def "grants-resources list-room-resources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
 ]: nothing -> any {
@@ -1038,7 +1072,7 @@ export def "grants-resources list-room-resources" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all Messages
@@ -1054,6 +1088,7 @@ export def "grants-messages get-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --any-email: string # Return messages that were sent to or received from this comma-separated list of email addresses (for example, `leyah@example.com,nyla@example.com`). Nylas returns messages that contain one of the specified email addresses in the To, From, CC, or BCC fields. You can specify up to 25 email addresses per request.
   --bcc: string # Return messages that include the specified email address in the BCC list. Because most SMTP gateways remove BCC information, Nylas usually returns messages sent from the current grant.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
   --cc: string # Return messages that include the specified email address in the CC list.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
@@ -1082,7 +1117,7 @@ export def "grants-messages get-messages" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a Message
@@ -1099,6 +1134,7 @@ export def "grants-messages get-messages-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string@fields-completer # Return the specified data for each message.   - `standard`: Returns the standard message payload.  - `include_headers`: Returns the message and its full set of headers.  - `include_basic_headers`: Returns the message with only the three RFC threading headers    (`Message-ID`, `In-Reply-To`, `References`) in the `headers` array. Use this option when you    only need to track message identity and thread relationships — payload size is significantly    smaller than `include_headers`.  - `include_tracking_options`: Returns the message and its [tracking settings](/docs/v3/email/message-tracking/).  - `raw_mime`: Returns the `grant_id`, `object`, `id`, and `raw_mime` fields for the message. (default: standard)
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
@@ -1110,7 +1146,7 @@ export def "grants-messages get-messages-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages/($message_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update message attributes
@@ -1127,6 +1163,7 @@ export def "grants-messages put-messages-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
@@ -1144,7 +1181,7 @@ export def "grants-messages put-messages-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a message
@@ -1161,6 +1198,7 @@ export def "grants-messages delete-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hard-delete: oneof<nothing, bool> # When `true`, Nylas immediately deletes the specified message instead of sending it to the user's Trash folder. This operation is irreversible.  To use this query parameter, you need to turn on "Enable hard delete" in the [Nylas Dashboard](https://dashboard-v3.nylas.com/?utm_source=docs&utm_content=docs-hard-delete) under **Customizations > API**. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
@@ -1170,7 +1208,7 @@ export def "grants-messages delete-message" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages/($message_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clean messages
@@ -1186,6 +1224,7 @@ export def "grants-messages-clean clean-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --message-id: list # An array of IDs for the messages Nylas will clean. (e.g. [18df98cadcc8534a])
@@ -1205,7 +1244,7 @@ export def "grants-messages-clean clean-messages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a Message
@@ -1230,6 +1269,7 @@ export def "grants-messages-send send-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string@fields-completer-1 # Include message headers in the send response. Headers are returned in the same `headers` array format as [Get Message](/docs/reference/api/messages/get-messages-id/) responses.  - `standard`: Returns the standard send response (no `headers` array). - `include_headers`: Returns the full set of headers on the response. - `include_basic_headers`: Returns only the three RFC threading headers (`Message-ID`,   `In-Reply-To`, `References`). Use this option when you only need to track message identity   and thread relationships — payload size is significantly smaller than `include_headers`.  Supported on **synchronous** send only. The parameter has no effect when you set the `send_at` field on the request (scheduled send is asynchronous and doesn't return headers).  For provider support details, see [Using email headers and MIME data](/docs/v3/email/headers-mime-data/#provider-support). (default: standard)
   --Idempotency-Key: string # A unique, client-generated key (max 256 characters) that lets you safely retry this send request without sending duplicate emails. Nylas caches the response (success or error) for 1 hour, scoped per grant. A retry with the same key and payload returns the cached response with the `Idempotent-Response: true` header set. See [Idempotent send requests](/docs/v3/email/idempotent-send/) for the full retry behavior and error responses. (e.g. f47ac10b-58cc-4372-a567-0e02b2c3d479)
   --attachments: list # An array of files to be sent with the message. — item shape: {content?: string, content_disposition?: string, content_id?: string, content_type?: string, filename?: string}
@@ -1261,7 +1301,7 @@ export def "grants-messages-send send-message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return scheduled messages
@@ -1277,13 +1317,14 @@ export def "grants-messages-schedules get-schedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages/schedules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a scheduled message
@@ -1300,13 +1341,14 @@ export def "grants-messages-schedules get-schedule-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a scheduled message
@@ -1323,13 +1365,14 @@ export def "grants-messages-schedules delete-a-scheduled-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/messages/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compose a message
@@ -1345,6 +1388,7 @@ export def "grants-messages-smart-compose post-smart-compose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prompt: string # The prompt that Smart Compose uses to generate a message suggestion. (e.g. Reply to John Doe about the upcoming project.)
 ]: any -> any {
   let input = $in
@@ -1355,7 +1399,7 @@ export def "grants-messages-smart-compose post-smart-compose" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Compose a reply
@@ -1372,6 +1416,7 @@ export def "grants-messages-smart-compose post-smart-compose-reply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prompt: string # The prompt that Smart Compose uses to generate a message suggestion. (e.g. Reply to John Doe about the upcoming project.)
 ]: any -> any {
   let input = $in
@@ -1382,7 +1427,7 @@ export def "grants-messages-smart-compose post-smart-compose-reply" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all threads
@@ -1398,6 +1443,7 @@ export def "grants-threads get-threads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --any-email: string # Filter for threads that contain messages sent to or received from the email addresses in the comma-separated list. You may specify a maximum of 25 email addresses per query. (e.g. mail1@example.com,mail2@example.com)
   --bcc: string # Filter for threads that contain messages BCC'd to the specified email address. Because most SMTP gateways remove BCC information from sent messages, any messages that Nylas returns are likely sent from the parent account.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
   --cc: string # Filter for threads that contain messages CC'd to the specified email address.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
@@ -1424,7 +1470,7 @@ export def "grants-threads get-threads" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a thread
@@ -1441,6 +1487,7 @@ export def "grants-threads get-threads-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-folder-id: string # (Microsoft only) When provided, Nylas returns items from the specified shared folder ID. Required when using `shared_from`. This parameter only accepts a single folder ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
@@ -1451,7 +1498,7 @@ export def "grants-threads get-threads-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/threads/($thread_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a thread
@@ -1468,6 +1515,7 @@ export def "grants-threads put-threads-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-folder-id: string # (Microsoft only) When provided, Nylas returns items from the specified shared folder ID. Required when using `shared_from`. This parameter only accepts a single folder ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
@@ -1484,7 +1532,7 @@ export def "grants-threads put-threads-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a thread
@@ -1501,6 +1549,7 @@ export def "grants-threads delete-threads-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shared-folder-id: string # (Microsoft only) When provided, Nylas returns items from the specified shared folder ID. Required when using `shared_from`. This parameter only accepts a single folder ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
@@ -1510,7 +1559,7 @@ export def "grants-threads delete-threads-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/threads/($thread_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all Drafts
@@ -1526,6 +1575,7 @@ export def "grants-drafts get-drafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --metadata-pair: string # Pass a metadata key/value pair (for example, `?metadata_pair=key1:value`) to search for metadata associated with objects. See [Metadata](/docs/reference/api/#metadata) for more information.
@@ -1546,7 +1596,7 @@ export def "grants-drafts get-drafts" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/drafts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Draft
@@ -1571,6 +1621,7 @@ export def "grants-drafts post-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bcc: list # The name/email address pairs of the recipients to be BCC'd. (e.g. [{email: brandon.carson@example.com, name: }]) — item shape: {name?: string, email: string}
   --body-body: string # The body of the draft, in HTML format. (e.g. Hi, Welcome to Nylas!)
   --cc: list # The name/email address pairs of the recipients to be CC'd. (e.g. [{email: clivescounters@example.com, name: }]) — item shape: {name?: string, email: string}
@@ -1596,7 +1647,7 @@ export def "grants-drafts post-draft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a Draft
@@ -1613,6 +1664,7 @@ export def "grants-drafts get-draft-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
 ]: nothing -> any {
@@ -1622,7 +1674,7 @@ export def "grants-drafts get-draft-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/drafts/($draft_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a draft
@@ -1645,6 +1697,7 @@ export def "grants-drafts put-drafts-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --bcc: list # The name/email address pairs of the recipients to be BCC'd. (e.g. [{email: brandon.carson@example.com, name: }]) — item shape: {name?: string, email: string}
   --body-body: string # The body of the draft, in HTML format. (e.g. Hi, Welcome to Nylas!)
@@ -1666,7 +1719,7 @@ export def "grants-drafts put-drafts-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Draft
@@ -1683,13 +1736,14 @@ export def "grants-drafts delete-drafts-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/drafts/($draft_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a Draft
@@ -1706,6 +1760,7 @@ export def "grants-drafts send-draft-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --signature-id: string # The ID of a [signature](/docs/v3/email/signatures/) to append to the message body when sending. Nylas inserts the signature after a line break at the end of the body, including after any quoted text. Only use this if the draft was created without a signature, or if you want to add one at send time. (e.g. sig_abc123)
 ]: any -> any {
@@ -1718,7 +1773,7 @@ export def "grants-drafts send-draft-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all folders
@@ -1734,6 +1789,7 @@ export def "grants-folders get-folder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
@@ -1748,7 +1804,7 @@ export def "grants-folders get-folder" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/folders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Folder
@@ -1764,6 +1820,7 @@ export def "grants-folders post-folder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   name: string # Creates a folder with the specified display name.
@@ -1780,7 +1837,7 @@ export def "grants-folders post-folder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a Folder
@@ -1797,6 +1854,7 @@ export def "grants-folders get-folders-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
@@ -1807,7 +1865,7 @@ export def "grants-folders get-folders-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/folders/($folder_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a folder
@@ -1824,6 +1882,7 @@ export def "grants-folders put-folders-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
@@ -1841,7 +1900,7 @@ export def "grants-folders put-folders-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Folder
@@ -1858,6 +1917,7 @@ export def "grants-folders delete-folders-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1866,7 +1926,7 @@ export def "grants-folders delete-folders-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/folders/($folder_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Attachment metadata
@@ -1883,6 +1943,7 @@ export def "grants-attachments get-attachments-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message-id: string # ID of the message the specified attachment belongs to.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
@@ -1893,7 +1954,7 @@ export def "grants-attachments get-attachments-id" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download an Attachment
@@ -1910,6 +1971,7 @@ export def "grants-attachments-download get-attachments-id-download" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message-id: string # ID of the message the specified attachment belongs to.
   --query-imap: oneof<nothing, bool> # (IMAP, Yahoo, and iCloud only) When `true`, Nylas downloads the attachment directly from the IMAP server instead of the Nylas database. (default: false)
 ]: nothing -> any {
@@ -1919,7 +1981,7 @@ export def "grants-attachments-download get-attachments-id-download" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/attachments/($attachment_id)/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an attachment upload session
@@ -1935,6 +1997,7 @@ export def "grants-attachment-uploads create-attachment-upload-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filename: string # The name of the file as it will appear in the email. No allowlist or sanitization is applied. (e.g. quarterly-report.pdf)
   content_type: string # The MIME type of the file (for example, `application/pdf`, `image/png`). No MIME allowlist is applied — any non-empty string is accepted and passed through to storage. (e.g. application/pdf)
   --size: int # Expected file size in bytes. Recommended — when provided, Nylas validates that the uploaded object matches this size at completion. If omitted, the size-match check is skipped and any non-zero upload is accepted. Maximum: `157286400` (150 MB). (format: int64, e.g. 5242880)
@@ -1947,7 +2010,7 @@ export def "grants-attachment-uploads create-attachment-upload-session" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete an attachment upload session
@@ -1964,13 +2027,14 @@ export def "grants-attachment-uploads-complete complete-attachment-upload-sessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, data: record<attachment_id: string, grant_id: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/attachment-uploads/($attachment_id)/complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create contact
@@ -1992,6 +2056,7 @@ export def "grants-contacts post-contact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --birthday: string # The contact's birthday in [ISO-8601 format](https://en.wikipedia.org/wiki/ISO_8601#Calendar_dates). (e.g. 1980-12-31)
   --company-name: string # The name of the company that the contact is affiliated with (for example, their workplace). (e.g. Nylas)
@@ -2020,7 +2085,7 @@ export def "grants-contacts post-contact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all contacts
@@ -2036,6 +2101,7 @@ export def "grants-contacts list-contact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 30)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
@@ -2051,7 +2117,7 @@ export def "grants-contacts list-contact" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a contact
@@ -2068,6 +2134,7 @@ export def "grants-contacts get-contact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --profile-picture: oneof<nothing, bool> # If `true` and `picture_url` is present, the response includes a Base64 binary data blob that you can use to view information as an image file (for example, a JPEG).
 ]: nothing -> any {
@@ -2077,7 +2144,7 @@ export def "grants-contacts get-contact" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/contacts/($contact_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a contact
@@ -2100,6 +2167,7 @@ export def "grants-contacts put-contact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --birthday: string # The contact's birthday in [ISO-8601 format](https://en.wikipedia.org/wiki/ISO_8601#Calendar_dates). (e.g. 1980-12-31)
   --company-name: string # The name of the company that the contact is affiliated with (for example, their workplace). (e.g. Nylas)
@@ -2128,7 +2196,7 @@ export def "grants-contacts put-contact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact
@@ -2145,13 +2213,14 @@ export def "grants-contacts delete-contact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/contacts/($contact_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all Contact Groups
@@ -2167,6 +2236,7 @@ export def "grants-contacts-groups list-contact-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
@@ -2177,7 +2247,7 @@ export def "grants-contacts-groups list-contact-groups" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/contacts/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all signatures
@@ -2193,6 +2263,7 @@ export def "grants-signatures list-signatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
@@ -2203,7 +2274,7 @@ export def "grants-signatures list-signatures" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/signatures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a signature
@@ -2219,6 +2290,7 @@ export def "grants-signatures post-signature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   name: string # A label for the signature (for example, "Work", "Personal", or "Mobile"). (e.g. Work Signature)
   --body-body: string # The HTML content of the signature. Maximum 100 KB. Images must use externally hosted URLs (base64 inline images are not supported). Nylas sanitizes the HTML on input to prevent malicious content. (e.g. <div><p><strong>Nick Barraclough</strong></p><p>Product Manager | Nylas</p><p><a href="mailto:nick@nylas.com">nick@nylas.com</a></p></div>)
@@ -2232,7 +2304,7 @@ export def "grants-signatures post-signature" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a signature
@@ -2249,6 +2321,7 @@ export def "grants-signatures get-signature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2257,7 +2330,7 @@ export def "grants-signatures get-signature" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/signatures/($signature_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a signature
@@ -2274,6 +2347,7 @@ export def "grants-signatures put-signature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --name: string # Updated label for the signature. (e.g. Updated Work Signature)
   --body-body: string # Updated HTML content for the signature. Maximum 100 KB. Images must use externally hosted URLs (base64 inline images are not supported). Nylas sanitizes the HTML on input to prevent malicious content. (e.g. <div><p><strong>Nick Barraclough</strong></p><p>Senior Product Manager | Nylas</p></div>)
@@ -2287,7 +2361,7 @@ export def "grants-signatures put-signature" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a signature
@@ -2304,13 +2378,14 @@ export def "grants-signatures delete-signature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/signatures/($signature_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all workflows
@@ -2325,6 +2400,7 @@ export def "workflows list-workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
 ]: nothing -> any {
@@ -2334,7 +2410,7 @@ export def "workflows list-workflows" [
   let full_url = (build-url $base "/v3/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a workflow
@@ -2350,6 +2426,7 @@ export def "workflows create-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (default: 0, e.g. 5)
   --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
   name: string # The name of the workflow. (e.g. New booking confirmation workflow)
@@ -2365,7 +2442,7 @@ export def "workflows create-workflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a workflow
@@ -2381,13 +2458,14 @@ export def "workflows get-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/workflows/($workflow_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a workflow
@@ -2404,6 +2482,7 @@ export def "workflows update-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (e.g. 1)
   --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (e.g. false)
   --name: string # The name of the workflow. (e.g. Updated booking confirmation workflow)
@@ -2419,7 +2498,7 @@ export def "workflows update-workflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a workflow
@@ -2435,13 +2514,14 @@ export def "workflows delete-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/workflows/($workflow_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all workflows
@@ -2457,6 +2537,7 @@ export def "grants-workflows list-grant-workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
 ]: nothing -> any {
@@ -2466,7 +2547,7 @@ export def "grants-workflows list-grant-workflows" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a workflow
@@ -2483,6 +2564,7 @@ export def "grants-workflows create-grant-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (default: 0, e.g. 5)
   --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
   name: string # The name of the workflow. (e.g. New booking confirmation workflow)
@@ -2498,7 +2580,7 @@ export def "grants-workflows create-grant-workflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a workflow
@@ -2515,13 +2597,14 @@ export def "grants-workflows get-grant-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/workflows/($workflow_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a workflow
@@ -2539,6 +2622,7 @@ export def "grants-workflows update-grant-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (e.g. 1)
   --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (e.g. false)
   --name: string # The name of the workflow. (e.g. Updated booking confirmation workflow)
@@ -2554,7 +2638,7 @@ export def "grants-workflows update-grant-workflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a workflow
@@ -2571,13 +2655,14 @@ export def "grants-workflows delete-grant-workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/workflows/($workflow_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all templates
@@ -2592,6 +2677,7 @@ export def "templates list-app-level-templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
 ]: nothing -> any {
@@ -2601,7 +2687,7 @@ export def "templates list-app-level-templates" [
   let full_url = (build-url $base "/v3/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a template
@@ -2616,6 +2702,7 @@ export def "templates create-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, your booking has been confirmed.</p>)
   --engine: string@engine-completer # The templating engine to use. (default: mustache, e.g. mustache)
   name: string # The name of the template. (e.g. Booking confirmed message)
@@ -2629,7 +2716,7 @@ export def "templates create-app-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a template
@@ -2645,13 +2732,14 @@ export def "templates get-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a template
@@ -2667,6 +2755,7 @@ export def "templates update-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, your booking has been confirmed.</p>)
   --engine: string@engine-completer # The templating engine to use. (e.g. mustache)
   --name: string # The name of the template. (e.g. Updated booking confirmed message)
@@ -2680,7 +2769,7 @@ export def "templates update-app-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a template
@@ -2696,13 +2785,14 @@ export def "templates delete-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Render template as HTML
@@ -2718,6 +2808,7 @@ export def "templates-render render-template-html" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, this shows test was {{ foo }}.</p>)
   engine: string@engine-completer # The templating engine to use. (e.g. mustache)
   --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
@@ -2731,7 +2822,7 @@ export def "templates-render render-template-html" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Render a template
@@ -2748,6 +2839,7 @@ export def "templates-render render-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}}) — shape: {additionalProperties?: string}
 ]: any -> any {
@@ -2759,7 +2851,7 @@ export def "templates-render render-app-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all templates
@@ -2775,6 +2867,7 @@ export def "grants-templates get-grant-level-templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
 ]: nothing -> any {
@@ -2784,7 +2877,7 @@ export def "grants-templates get-grant-level-templates" [
   let full_url = (build-url $base $"/v3/grants/($grant_id)/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a template
@@ -2800,6 +2893,7 @@ export def "grants-templates create-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, your booking has been confirmed.</p>)
   --engine: string@engine-completer # The templating engine to use. (default: mustache, e.g. mustache)
   name: string # The name of the template. (e.g. Booking confirmed message)
@@ -2813,7 +2907,7 @@ export def "grants-templates create-grant-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a template
@@ -2830,13 +2924,14 @@ export def "grants-templates get-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a template
@@ -2853,6 +2948,7 @@ export def "grants-templates update-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, your booking has been confirmed.</p>)
   --engine: string@engine-completer # The templating engine to use. (e.g. mustache)
   --name: string # The name of the template. (e.g. Updated booking confirmed message)
@@ -2866,7 +2962,7 @@ export def "grants-templates update-grant-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a template
@@ -2883,13 +2979,14 @@ export def "grants-templates delete-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/grants/($grant_id)/templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Render a template
@@ -2907,6 +3004,7 @@ export def "grants-templates-render render-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}}) — shape: {additionalProperties?: string}
 ]: any -> any {
@@ -2918,7 +3016,7 @@ export def "grants-templates-render render-grant-level-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Render template as HTML
@@ -2935,6 +3033,7 @@ export def "grants-templates-render render-grant-level-template-html" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, this shows test was {{ foo }}.</p>)
   engine: string@engine-completer # The templating engine to use. (e.g. mustache)
   --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
@@ -2948,7 +3047,7 @@ export def "grants-templates-render render-grant-level-template-html" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a transactional email
@@ -2973,6 +3072,7 @@ export def "domains-messages-send send-transactional-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique, client-generated key (max 256 characters) that lets you safely retry this send request without sending duplicate emails. Nylas caches the response (success or error) for 1 hour, scoped per Nylas application (not per domain -- a key collides across all verified domains under the same application). A retry with the same key and payload returns the cached response with the `Idempotent-Response: true` header set. See [Idempotent send requests](/docs/v3/email/idempotent-send/) for the full retry behavior and error responses. (e.g. f47ac10b-58cc-4372-a567-0e02b2c3d479)
   --attachments: list # An array of files to be sent with the message. — item shape: {content?: string, content_disposition?: string, content_id?: string, content_type?: string, filename?: string}
   --bcc: list # A list of people to be BCC'd on the message. — item shape: {email?: string, name?: string}
@@ -3000,5 +3100,5 @@ export def "domains-messages-send send-transactional-email" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

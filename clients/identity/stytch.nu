@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -80,7 +81,7 @@ def identity-provider-completer-1 [] { ["classlink" "cyberark" "duo" "generic" "
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "connected-apps-clients Get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -114,13 +115,14 @@ export def "connected-apps-clients Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, connected_app: record<client_id: string, client_name: string, client_description: string, status: string, full_access_allowed: bool, client_type: string, redirect_urls: list<string>, access_token_expiry_minutes: int, access_token_template_content: string, post_logout_redirect_urls: list<string>, bypass_consent_for_offline_access: bool, creation_method: string, client_secret_last_four: string, next_client_secret_last_four: string, access_token_custom_audience: string, logo_url: string, client_id_metadata_url: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/connected_apps/clients/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -136,6 +138,7 @@ export def "connected-apps-clients Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-name: string # A human-readable name for the client.
   --client-description: string # A human-readable description for the client.
   --redirect-urls: list # Array of redirect URI values for use in OAuth Authorization flows.
@@ -155,7 +158,7 @@ export def "connected-apps-clients Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -171,13 +174,14 @@ export def "connected-apps-clients Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, client_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/connected_apps/clients/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -192,6 +196,7 @@ export def "connected-apps-clients-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The `cursor` field allows you to paginate through your results. Each result array is limited to 1000 results. If your query returns more than 1000 results, you will need to paginate the responses using the `cursor`. If you receive a response that includes a non-null `next_cursor` in the `results_metadata` object, repeat the search call with the `next_cursor` value set to the `cursor` field to retrieve the next page of results. Continue to make search calls until the `next_cursor` in the response is null.
   --limit: int # The number of search results to return per page. The default limit is 100. A maximum of 1000 results can be returned by a single search request. If the total size of your result set is greater than one page size, you must paginate the response. See the `cursor` field. (format: int32)
 ]: any -> record<request_id: string, connected_apps: table<client_id: string, client_name: string, client_description: string, status: string, full_access_allowed: bool, client_type: string, redirect_urls: list, access_token_expiry_minutes: int, access_token_template_content: string, post_logout_redirect_urls: list, bypass_consent_for_offline_access: bool, creation_method: string, client_secret_last_four: string, next_client_secret_last_four: string, access_token_custom_audience: string, logo_url: string, client_id_metadata_url: string>, results_metadata: record<total: int, next_cursor: string>, status_code: int> {
@@ -203,7 +208,7 @@ export def "connected-apps-clients-search Search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -218,6 +223,7 @@ export def "connected-apps-clients Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_type: string@client-type-completer
   --client-name: string # A human-readable name for the client.
   --client-description: string # A human-readable description for the client.
@@ -238,7 +244,7 @@ export def "connected-apps-clients Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatestart
@@ -254,6 +260,7 @@ export def "connected-apps-clients-secrets-rotate-start RotateStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, connected_app: record<client_id: string, client_name: string, client_description: string, status: string, client_secret_last_four: string, full_access_allowed: bool, client_type: string, redirect_urls: list<string>, next_client_secret: string, access_token_expiry_minutes: int, access_token_template_content: string, post_logout_redirect_urls: list<string>, bypass_consent_for_offline_access: bool, next_client_secret_last_four: string, access_token_custom_audience: string, logo_url: string, client_id_metadata_url: string>, status_code: int> {
   let input = $in
@@ -263,7 +270,7 @@ export def "connected-apps-clients-secrets-rotate-start RotateStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatecancel
@@ -279,6 +286,7 @@ export def "connected-apps-clients-secrets-rotate-cancel RotateCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, connected_app: record<client_id: string, client_name: string, client_description: string, status: string, full_access_allowed: bool, client_type: string, redirect_urls: list<string>, access_token_expiry_minutes: int, access_token_template_content: string, post_logout_redirect_urls: list<string>, bypass_consent_for_offline_access: bool, creation_method: string, client_secret_last_four: string, next_client_secret_last_four: string, access_token_custom_audience: string, logo_url: string, client_id_metadata_url: string>, status_code: int> {
   let input = $in
@@ -288,7 +296,7 @@ export def "connected-apps-clients-secrets-rotate-cancel RotateCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotate
@@ -304,6 +312,7 @@ export def "connected-apps-clients-secrets-rotate Rotate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, connected_app: record<client_id: string, client_name: string, client_description: string, status: string, full_access_allowed: bool, client_type: string, redirect_urls: list<string>, access_token_expiry_minutes: int, access_token_template_content: string, post_logout_redirect_urls: list<string>, bypass_consent_for_offline_access: bool, creation_method: string, client_secret_last_four: string, next_client_secret_last_four: string, access_token_custom_audience: string, logo_url: string, client_id_metadata_url: string>, status_code: int> {
   let input = $in
@@ -313,7 +322,7 @@ export def "connected-apps-clients-secrets-rotate Rotate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update
@@ -331,6 +340,7 @@ export def "b2b-scim-connection Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -347,7 +357,7 @@ export def "b2b-scim-connection Update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -364,6 +374,7 @@ export def "b2b-scim-connection Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, connection_id: string, status_code: int> {
@@ -374,7 +385,7 @@ export def "b2b-scim-connection Delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Getgroups
@@ -391,6 +402,7 @@ export def "b2b-scim-connection GetGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int # format: int32
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
@@ -404,7 +416,7 @@ export def "b2b-scim-connection GetGroups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rotatestart
@@ -421,6 +433,7 @@ export def "b2b-scim-connection-rotate-start RotateStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --body: record
@@ -434,7 +447,7 @@ export def "b2b-scim-connection-rotate-start RotateStart" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatecomplete
@@ -451,6 +464,7 @@ export def "b2b-scim-connection-rotate-complete RotateComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --body: record
@@ -464,7 +478,7 @@ export def "b2b-scim-connection-rotate-complete RotateComplete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatecancel
@@ -481,6 +495,7 @@ export def "b2b-scim-connection-rotate-cancel RotateCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --body: record
@@ -494,7 +509,7 @@ export def "b2b-scim-connection-rotate-cancel RotateCancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -510,6 +525,7 @@ export def "b2b-scim-connection Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -525,7 +541,7 @@ export def "b2b-scim-connection Create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -541,6 +557,7 @@ export def "b2b-scim-connection Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, status_code: int, connection: record<organization_id: string, connection_id: string, status: string, display_name: string, identity_provider: string, base_url: string, bearer_token_last_four: string, scim_group_implicit_role_assignments: list<record>, next_bearer_token_last_four: string, bearer_token_expires_at: string, next_bearer_token_expires_at: string>> {
@@ -551,7 +568,7 @@ export def "b2b-scim-connection Get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create
@@ -567,6 +584,7 @@ export def "b2b-organizations Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_name: string # The name of the Organization. Must be between 1 and 128 characters in length.
   --organization-slug: string # The unique URL slug of the Organization. The slug only accepts alphanumeric characters and the following reserved characters: `-` `.` `_` `~`. Must be between 2 and 128 characters in length. Wherever an organization_id is expected in a path or request parameter, you may also use the organization_slug as a convenience.
   --organization-logo-url: string # The image URL of the Organization logo.
@@ -598,7 +616,7 @@ export def "b2b-organizations Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -614,13 +632,14 @@ export def "b2b-organizations Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -637,6 +656,7 @@ export def "b2b-organizations Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --organization-name: string # The name of the Organization. Must be between 1 and 128 characters in length.  If this field is provided and a session header is passed into the request, the Member Session must have permission to perform the `update.info.name` action on the `stytch.organization` Resource.
@@ -674,7 +694,7 @@ export def "b2b-organizations Update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -690,6 +710,7 @@ export def "b2b-organizations Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, organization_id: string, status_code: int> {
@@ -700,7 +721,7 @@ export def "b2b-organizations Delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -716,6 +737,7 @@ export def "b2b-organizations-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The `cursor` field allows you to paginate through your results. Each result array is limited to 1000 results. If your query returns more than 1000 results, you will need to paginate the responses using the `cursor`. If you receive a response that includes a non-null `next_cursor` in the `results_metadata` object, repeat the search call with the `next_cursor` value set to the `cursor` field to retrieve the next page of results. Continue to make search calls until the `next_cursor` in the response is null.
   --limit: int # The number of search results to return per page. The default limit is 100. A maximum of 1000 results can be returned by a single search request. If the total size of your result set is greater than one page size, you must paginate the response. See the `cursor` field. (format: int32)
   --body-query: record # shape: {operator: "OR"|"AND", operands: list}
@@ -728,7 +750,7 @@ export def "b2b-organizations-search Search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Metrics
@@ -744,13 +766,14 @@ export def "b2b-organizations-metrics Metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, member_count: int, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/metrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connectedapps
@@ -766,6 +789,7 @@ export def "b2b-organizations-connected-apps ConnectedApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, connected_apps: table<connected_app_id: string, name: string, description: string, client_type: string, logo_url: string>, status_code: int> {
@@ -776,7 +800,7 @@ export def "b2b-organizations-connected-apps ConnectedApps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Getconnectedapp
@@ -793,6 +817,7 @@ export def "b2b-organizations-connected-apps GetConnectedApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<connected_app_id: string, name: string, description: string, client_type: string, active_members: table<member_id: string, granted_scopes: list>, status_code: int, logo_url: string> {
@@ -803,7 +828,7 @@ export def "b2b-organizations-connected-apps GetConnectedApp" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteexternalid
@@ -819,6 +844,7 @@ export def "b2b-organizations-external-id DeleteExternalId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -829,7 +855,7 @@ export def "b2b-organizations-external-id DeleteExternalId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -846,6 +872,7 @@ export def "b2b-organizations-members Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --name: string # The name of the Member.  If this field is provided and a session header is passed into the request, the Member Session must have permission to perform the `update.info.name` action on the `stytch.member` Resource. Alternatively, if the Member Session matches the Member associated with the `member_id` passed in the request, the authorization check will also allow a Member Session that has permission to perform the `update.info.name` action on the `stytch.self` Resource.
@@ -871,7 +898,7 @@ export def "b2b-organizations-members Update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -888,6 +915,7 @@ export def "b2b-organizations-members Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, member_id: string, status_code: int> {
@@ -898,7 +926,7 @@ export def "b2b-organizations-members Delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate
@@ -915,6 +943,7 @@ export def "b2b-organizations-members-reactivate Reactivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --body: record
@@ -928,7 +957,7 @@ export def "b2b-organizations-members-reactivate Reactivate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletemfaphonenumber
@@ -945,6 +974,7 @@ export def "b2b-organizations-members-mfa-phone-numbers DeleteMFAPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -955,7 +985,7 @@ export def "b2b-organizations-members-mfa-phone-numbers DeleteMFAPhoneNumber" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletetotp
@@ -972,6 +1002,7 @@ export def "b2b-organizations-members-totp DeleteTOTP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -982,7 +1013,7 @@ export def "b2b-organizations-members-totp DeleteTOTP" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -998,6 +1029,7 @@ export def "b2b-organizations-members-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   organization_ids: list # An array of organization_ids. At least one value is required.
@@ -1015,7 +1047,7 @@ export def "b2b-organizations-members-search Search" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletepassword
@@ -1032,6 +1064,7 @@ export def "b2b-organizations-members-passwords DeletePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -1042,7 +1075,7 @@ export def "b2b-organizations-members-passwords DeletePassword" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dangerouslyget
@@ -1058,6 +1091,7 @@ export def "b2b-organizations-members-dangerously-get DangerouslyGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-deleted: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1066,7 +1100,7 @@ export def "b2b-organizations-members-dangerously-get DangerouslyGet" [
   let full_url = (build-url $base $"/v1/b2b/organizations/members/dangerously_get/($member_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Oidcproviders
@@ -1083,6 +1117,7 @@ export def "b2b-organizations-members-oidc-providers OIDCProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-refresh-token: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, registrations: table<provider_subject: string, id_token: string, access_token: string, access_token_expires_in: int, scopes: list, connection_id: string, refresh_token: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1091,7 +1126,7 @@ export def "b2b-organizations-members-oidc-providers OIDCProviders" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oidc_providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlinkretiredemail
@@ -1108,6 +1143,7 @@ export def "b2b-organizations-members-unlink-retired-email UnlinkRetiredEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --email-id: string # The globally unique UUID of a Member's email.
@@ -1123,7 +1159,7 @@ export def "b2b-organizations-members-unlink-retired-email UnlinkRetiredEmail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Startemailupdate
@@ -1140,6 +1176,7 @@ export def "b2b-organizations-members-start-email-update StartEmailUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   email_address: string # The new email address for the Member.
@@ -1158,7 +1195,7 @@ export def "b2b-organizations-members-start-email-update StartEmailUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Getconnectedapps
@@ -1175,6 +1212,7 @@ export def "b2b-organizations-members-connected-apps GetConnectedApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, connected_apps: table<connected_app_id: string, name: string, description: string, client_type: string, scopes_granted: string, logo_url: string>, status_code: int> {
@@ -1185,7 +1223,7 @@ export def "b2b-organizations-members-connected-apps GetConnectedApps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteexternalid
@@ -1202,6 +1240,7 @@ export def "b2b-organizations-members-external-id DeleteExternalId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -1212,7 +1251,7 @@ export def "b2b-organizations-members-external-id DeleteExternalId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create
@@ -1228,6 +1267,7 @@ export def "b2b-organizations-members Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   email_address: string # The email address of the Member.
@@ -1251,7 +1291,7 @@ export def "b2b-organizations-members Create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -1267,6 +1307,7 @@ export def "b2b-organizations-member Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --member-id: string
   --email-address: string
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, status_code: int> {
@@ -1276,7 +1317,7 @@ export def "b2b-organizations-member Get" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Google
@@ -1293,6 +1334,7 @@ export def "b2b-organizations-members-oauth-providers-google Google" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-refresh-token: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, provider_type: string, provider_subject: string, id_token: string, scopes: list<string>, status_code: int, access_token: string, access_token_expires_in: int, refresh_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1301,7 +1343,7 @@ export def "b2b-organizations-members-oauth-providers-google Google" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oauth_providers/google" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Microsoft
@@ -1318,6 +1360,7 @@ export def "b2b-organizations-members-oauth-providers-microsoft Microsoft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-refresh-token: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, provider_type: string, provider_subject: string, access_token: string, access_token_expires_in: int, id_token: string, scopes: list<string>, status_code: int, refresh_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1326,7 +1369,7 @@ export def "b2b-organizations-members-oauth-providers-microsoft Microsoft" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oauth_providers/microsoft" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Slack
@@ -1343,13 +1386,14 @@ export def "b2b-organizations-members-oauth-providers-slack Slack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, provider_type: string, registrations: table<provider_subject: string, provider_tenant_id: string, access_token: string, scopes: list, bot_access_token: string, bot_scopes: list>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oauth_providers/slack")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hubspot
@@ -1366,6 +1410,7 @@ export def "b2b-organizations-members-oauth-providers-hubspot Hubspot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-refresh-token: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, provider_type: string, registrations: table<provider_subject: string, provider_tenant_id: string, access_token: string, access_token_expires_in: int, scopes: list, refresh_token: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1374,7 +1419,7 @@ export def "b2b-organizations-members-oauth-providers-hubspot Hubspot" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oauth_providers/hubspot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Github
@@ -1391,6 +1436,7 @@ export def "b2b-organizations-members-oauth-providers-github Github" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-refresh-token: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, provider_type: string, registrations: table<provider_subject: string, provider_tenant_ids: list, access_token: string, scopes: list>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1399,7 +1445,7 @@ export def "b2b-organizations-members-oauth-providers-github Github" [
   let full_url = (build-url $base $"/v1/b2b/organizations/($organization_id)/members/($member_id)/oauth_providers/github" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke
@@ -1417,6 +1463,7 @@ export def "b2b-organizations-members-connected-apps-revoke Revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --body: record
@@ -1430,7 +1477,7 @@ export def "b2b-organizations-members-connected-apps-revoke Revoke" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorizestart
@@ -1445,6 +1492,7 @@ export def "b2b-idp-oauth-authorize-start AuthorizeStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The ID of the Connected App client.
   redirect_uri: string # The callback URI used to redirect the user after authentication. This is the same URI provided at the start of the OAuth flow.  This field is required when using the `authorization_code` grant.
   response_type: string # The OAuth 2.0 response type. For authorization code flows this value is `code`.
@@ -1463,7 +1511,7 @@ export def "b2b-idp-oauth-authorize-start AuthorizeStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorize
@@ -1478,6 +1526,7 @@ export def "b2b-idp-oauth-authorize Authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consent-granted: oneof<nothing, bool> # Indicates whether the user granted the requested scopes.
   scopes: list # An array of scopes requested by the client.
   client_id: string # The ID of the Connected App client.
@@ -1501,7 +1550,7 @@ export def "b2b-idp-oauth-authorize Authorize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -1518,6 +1567,7 @@ export def "users Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the end user.
   --name: record # shape: {first_name?: string, middle_name?: string, last_name?: string}
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -1536,7 +1586,7 @@ export def "users Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -1552,13 +1602,14 @@ export def "users Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, emails: table<email_id: string, email: string, verified: bool>, status: string, phone_numbers: table<phone_id: string, phone_number: string, verified: bool>, webauthn_registrations: table<webauthn_registration_id: string, domain: string, user_agent: string, verified: bool, authenticator_type: string, name: string>, providers: table<provider_type: string, provider_subject: string, profile_picture_url: string, locale: string, oauth_user_registration_id: string>, totps: table<totp_id: string, verified: bool>, crypto_wallets: table<crypto_wallet_id: string, crypto_wallet_address: string, crypto_wallet_type: string, verified: bool>, biometric_registrations: table<biometric_registration_id: string, verified: bool>, is_locked: bool, roles: list<string>, status_code: int, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -1576,6 +1627,7 @@ export def "users Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: record # shape: {first_name?: string, middle_name?: string, last_name?: string}
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
   --trusted-metadata: record # The `trusted_metadata` field contains an arbitrary JSON object of application-specific data. See the [Metadata](https://stytch.com/docs/api/metadata) reference for complete field behavior details.
@@ -1591,7 +1643,7 @@ export def "users Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -1607,13 +1659,14 @@ export def "users Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -1629,6 +1682,7 @@ export def "users-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The `cursor` field allows you to paginate through your results. Each result array is limited to 1000 results. If your query returns more than 1000 results, you will need to paginate the responses using the `cursor`. If you receive a response that includes a non-null `next_cursor` in the `results_metadata` object, repeat the search call with the `next_cursor` value set to the `cursor` field to retrieve the next page of results. Continue to make search calls until the `next_cursor` in the response is null.
   --limit: int # The number of search results to return per page. The default limit is 100. A maximum of 1000 results can be returned by a single search request. If the total size of your result set is greater than one page size, you must paginate the response. See the `cursor` field. (format: int32)
   --body-query: record # shape: {operator: "OR"|"AND", operands: list}
@@ -1641,7 +1695,7 @@ export def "users-search Search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchangeprimaryfactor
@@ -1657,6 +1711,7 @@ export def "users-exchange-primary-factor ExchangePrimaryFactor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # The email address to exchange to.
   --phone-number: string # The phone number to exchange to. The phone number should be in E.164 format (i.e. +1XXXXXXXXXX).
 ]: any -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
@@ -1668,7 +1723,7 @@ export def "users-exchange-primary-factor ExchangePrimaryFactor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deleteemail
@@ -1684,13 +1739,14 @@ export def "users-emails DeleteEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/emails/($email_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletephonenumber
@@ -1706,13 +1762,14 @@ export def "users-phone-numbers DeletePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/phone_numbers/($phone_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletewebauthnregistration
@@ -1728,13 +1785,14 @@ export def "users-webauthn-registrations DeleteWebAuthnRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/webauthn_registrations/($webauthn_registration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletebiometricregistration
@@ -1750,13 +1808,14 @@ export def "users-biometric-registrations DeleteBiometricRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/biometric_registrations/($biometric_registration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletetotp
@@ -1772,13 +1831,14 @@ export def "users-totps DeleteTOTP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/totps/($totp_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletecryptowallet
@@ -1794,13 +1854,14 @@ export def "users-crypto-wallets DeleteCryptoWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/crypto_wallets/($crypto_wallet_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletepassword
@@ -1816,13 +1877,14 @@ export def "users-passwords DeletePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/passwords/($password_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteoauthregistration
@@ -1838,13 +1900,14 @@ export def "users-oauth DeleteOAuthRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/oauth/($oauth_user_registration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteexternalid
@@ -1860,13 +1923,14 @@ export def "users-external-id DeleteExternalId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($user_id)/external_id")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connectedapps
@@ -1882,13 +1946,14 @@ export def "users-connected-apps ConnectedApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, connected_apps: table<connected_app_id: string, name: string, description: string, client_type: string, scopes_granted: string, logo_url: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($user_id)/connected_apps")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke
@@ -1905,6 +1970,7 @@ export def "users-connected-apps-revoke Revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, status_code: int> {
   let input = $in
@@ -1914,7 +1980,7 @@ export def "users-connected-apps-revoke Revoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -1929,6 +1995,7 @@ export def "sessions Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
 ]: nothing -> record<request_id: string, sessions: table<session_id: string, user_id: string, authentication_factors: list, roles: list, started_at: string, last_accessed_at: string, expires_at: string, attributes: record, custom_claims: record>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1937,7 +2004,7 @@ export def "sessions Get" [
   let full_url = (build-url $base "/v1/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate
@@ -1953,6 +2020,7 @@ export def "sessions-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --session-token: string # The session token to authenticate.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now; minimum of 5 and a maximum of 527040 minutes (366 days). Note that a successful authentication will continue to extend the session this many minutes. (format: int32)
   --session-jwt: string # The JWT to authenticate. You may provide a JWT that has expired according to its `exp` claim and needs to be refreshed. If the signature is valid and the underlying session is still active then Stytch will return a new JWT.
@@ -1967,7 +2035,7 @@ export def "sessions-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke
@@ -1982,6 +2050,7 @@ export def "sessions-revoke Revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --session-id: string # The `session_id` to revoke.
   --session-token: string # The session token to revoke.
   --session-jwt: string # A JWT for the session to revoke.
@@ -1994,7 +2063,7 @@ export def "sessions-revoke Revoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Migrate
@@ -2009,6 +2078,7 @@ export def "sessions-migrate Migrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   session_token: string # The authorization token Stytch will pass in to the external userinfo endpoint.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
   --session-custom-claims: record # Add a custom claims map to the Session being authenticated. Claims are only created if a Session is initialized by providing a value in `session_duration_minutes`. Claims will be included on the Session object and in the JWT. To update a key in an existing Session, supply a new value. To delete a key, supply a null value.    Custom claims made with reserved claims ("iss", "sub", "aud", "exp", "nbf", "iat", "jti") will be ignored. Total custom claims size cannot exceed four kilobytes.
@@ -2022,7 +2092,7 @@ export def "sessions-migrate Migrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchangeaccesstoken
@@ -2037,6 +2107,7 @@ export def "sessions-exchange-access-token ExchangeAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token to exchange for a Stytch Session. Must be granted the `full_access` scope.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
   --session-custom-claims: record # Add a custom claims map to the Session being authenticated. Claims are only created if a Session is initialized by providing a value in `session_duration_minutes`. Claims will be included on the Session object and in the JWT. To update a key in an existing Session, supply a new value. To delete a key, supply a null value.    Custom claims made with reserved claims ("iss", "sub", "aud", "exp", "nbf", "iat", "jti") will be ignored. Total custom claims size cannot exceed four kilobytes.
@@ -2050,7 +2121,7 @@ export def "sessions-exchange-access-token ExchangeAccessToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Getjwks
@@ -2066,13 +2137,14 @@ export def "sessions-jwks GetJWKS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<kty: string, use: string, key_ops: list, alg: string, kid: string, x5c: list, x5tS256: string, n: string, e: string>, request_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/sessions/jwks/($project_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attest
@@ -2087,6 +2159,7 @@ export def "sessions-attest Attest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   profile_id: string # The ID of the trusted auth token profile to use for attestation.
   --body-token: string # The trusted auth token to authenticate.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
@@ -2103,7 +2176,7 @@ export def "sessions-attest Attest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -2118,6 +2191,7 @@ export def "b2b-sessions Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string
   --member-id: string
 ]: nothing -> record<request_id: string, member_sessions: table<member_session_id: string, member_id: string, started_at: string, last_accessed_at: string, expires_at: string, authentication_factors: list, organization_id: string, roles: list, organization_slug: string, custom_claims: record>, status_code: int> {
@@ -2127,7 +2201,7 @@ export def "b2b-sessions Get" [
   let full_url = (build-url $base "/v1/b2b/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate
@@ -2143,6 +2217,7 @@ export def "b2b-sessions-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --session-token: string # A secret token for a given Stytch Session.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
   --session-jwt: string # The JSON Web Token (JWT) for a given Stytch Session.
@@ -2157,7 +2232,7 @@ export def "b2b-sessions-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke
@@ -2172,6 +2247,7 @@ export def "b2b-sessions-revoke Revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --member-session-id: string # Globally unique UUID that identifies a specific Session in the Stytch API. The `member_session_id` is critical to perform operations on an Session, so be sure to preserve this value.
@@ -2189,7 +2265,7 @@ export def "b2b-sessions-revoke Revoke" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchange
@@ -2204,6 +2280,7 @@ export def "b2b-sessions-exchange Exchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   --session-token: string # The `session_token` belonging to the member that you wish to associate the email with.
   --session-jwt: string # The `session_jwt` belonging to the member that you wish to associate the email with.
@@ -2220,7 +2297,7 @@ export def "b2b-sessions-exchange Exchange" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchangeaccesstoken
@@ -2235,6 +2312,7 @@ export def "b2b-sessions-exchange-access-token ExchangeAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token to exchange for a Stytch Session. Must be granted the `full_access` scope.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
   --session-custom-claims: record # Add a custom claims map to the Session being authenticated. Claims are only created if a Session is initialized by providing a value in   `session_duration_minutes`. Claims will be included on the Session object and in the JWT. To update a key in an existing Session, supply a new value. To   delete a key, supply a null value. Custom claims made with reserved claims (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`) will be ignored.   Total custom claims size cannot exceed four kilobytes.
@@ -2248,7 +2326,7 @@ export def "b2b-sessions-exchange-access-token ExchangeAccessToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Attest
@@ -2263,6 +2341,7 @@ export def "b2b-sessions-attest Attest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   profile_id: string # The ID of the trusted auth token profile to use for attestation.
   --body-token: string # The trusted auth token to authenticate. The token must have an organization ID claim if JIT provisioning is enabled.
   --organization-id: string # The organization ID that the session should be authenticated in. Must be provided if the trusted auth token does not have an organization ID claim.
@@ -2280,7 +2359,7 @@ export def "b2b-sessions-attest Attest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Migrate
@@ -2295,6 +2374,7 @@ export def "b2b-sessions-migrate Migrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   session_token: string # The authorization token Stytch will pass in to the external userinfo endpoint.
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
@@ -2308,7 +2388,7 @@ export def "b2b-sessions-migrate Migrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Getjwks
@@ -2324,13 +2404,14 @@ export def "b2b-sessions-jwks GetJWKS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<kty: string, use: string, key_ops: list, alg: string, kid: string, x5c: list, x5tS256: string, n: string, e: string>, request_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/sessions/jwks/($project_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate
@@ -2345,6 +2426,7 @@ export def "b2b-impersonation-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   impersonation_token: string # The Member Impersonation token to authenticate. Expires in 5 minutes by default.
 ]: any -> record<request_id: string, member_id: string, organization_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, session_token: string, session_jwt: string, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, intermediate_session_token: string, member_authenticated: bool, status_code: int, member_session: record<member_session_id: string, member_id: string, started_at: string, last_accessed_at: string, expires_at: string, authentication_factors: list<record>, organization_id: string, roles: list<string>, organization_slug: string, custom_claims: record>, mfa_required: record<member_options: record<mfa_phone_number: string, totp_registration_id: string>, secondary_auth_initiated: string>> {
   let input = $in
@@ -2355,7 +2437,7 @@ export def "b2b-impersonation-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Policy
@@ -2370,13 +2452,14 @@ export def "b2b-rbac-policy Policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, status_code: int, policy: record<roles: list<record>, resources: list<record>, scopes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/b2b/rbac/policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Getorgpolicy
@@ -2392,13 +2475,14 @@ export def "b2b-rbac-organizations GetOrgPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, org_policy: record<roles: list<record>>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/rbac/organizations/($organization_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Setorgpolicy
@@ -2415,6 +2499,7 @@ export def "b2b-rbac-organizations SetOrgPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   org_policy: record # shape: {roles: list}
 ]: any -> record<request_id: string, org_policy: record<roles: list<record>>, status_code: int> {
   let input = $in
@@ -2425,7 +2510,7 @@ export def "b2b-rbac-organizations SetOrgPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recover
@@ -2440,6 +2525,7 @@ export def "b2b-recovery-codes-recover Recover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   recovery_code: string # The recovery code generated by a secondary MFA method. This code is used to authenticate in place of the secondary MFA method if that method as a backup.
@@ -2458,7 +2544,7 @@ export def "b2b-recovery-codes-recover Recover" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -2475,13 +2561,14 @@ export def "b2b-recovery-codes Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, recovery_codes: list<string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/b2b/recovery_codes/($organization_id)/($member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rotate
@@ -2496,6 +2583,7 @@ export def "b2b-recovery-codes-rotate Rotate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
 ]: any -> record<request_id: string, member_id: string, member: record<organization_id: string, member_id: string, email_address: string, status: string, name: string, sso_registrations: list<record>, is_breakglass: bool, member_password_id: string, oauth_registrations: list<record>, email_address_verified: bool, mfa_phone_number_verified: bool, is_admin: bool, totp_registration_id: string, retired_email_addresses: list<record>, is_locked: bool, mfa_enrolled: bool, mfa_phone_number: string, default_mfa_method: string, roles: list<record>, trusted_metadata: record, untrusted_metadata: record, created_at: string, updated_at: string, scim_registration: record<connection_id: string, registration_id: string, external_id: string, scim_attributes: record>, external_id: string, lock_created_at: string, lock_expires_at: string>, organization: record<organization_id: string, organization_name: string, organization_logo_url: string, organization_slug: string, sso_jit_provisioning: string, sso_jit_provisioning_allowed_connections: list<string>, sso_active_connections: list<record>, email_allowed_domains: list<string>, email_jit_provisioning: string, email_invites: string, auth_methods: string, allowed_auth_methods: list<string>, mfa_policy: string, rbac_email_implicit_role_assignments: list<record>, mfa_methods: string, allowed_mfa_methods: list<string>, oauth_tenant_jit_provisioning: string, claimed_email_domains: list<string>, first_party_connected_apps_allowed_type: string, allowed_first_party_connected_apps: list<string>, third_party_connected_apps_allowed_type: string, allowed_third_party_connected_apps: list<string>, custom_roles: list<record>, trusted_metadata: record, created_at: string, updated_at: string, organization_external_id: string, sso_default_connection_id: string, scim_active_connection: record<connection_id: string, display_name: string, bearer_token_last_four: string, bearer_token_expires_at: string>, allowed_oauth_tenants: record>, recovery_codes: list<string>, status_code: int> {
@@ -2507,7 +2595,7 @@ export def "b2b-recovery-codes-rotate Rotate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -2522,6 +2610,7 @@ export def "b2b-totp Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   --expiration-minutes: int # The expiration for the TOTP registration. If the newly created TOTP registration is not authenticated within this time frame the member will have to restart the registration flow. Defaults to 60 (1 hour) with a minimum of 5 and a maximum of 1440. (format: int32)
@@ -2537,7 +2626,7 @@ export def "b2b-totp Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -2552,6 +2641,7 @@ export def "b2b-totp-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   code: string # The code to authenticate.
@@ -2572,7 +2662,7 @@ export def "b2b-totp-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Migrate
@@ -2587,6 +2677,7 @@ export def "b2b-totp-migrate Migrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   secret: string # The TOTP secret key shared between the authenticator app and the server used to generate TOTP codes.
@@ -2600,7 +2691,7 @@ export def "b2b-totp-migrate Migrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Policy
@@ -2615,13 +2706,14 @@ export def "rbac-policy Policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, status_code: int, policy: record<roles: list<record>, resources: list<record>, scopes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rbac/policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticatestart
@@ -2637,6 +2729,7 @@ export def "crypto-wallets-authenticate-start AuthenticateStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   crypto_wallet_type: string # The type of wallet to authenticate. Currently `ethereum` and `solana` are supported. Wallets for any EVM-compatible chains (such as Polygon or BSC) are also supported and are grouped under the `ethereum` type.
   crypto_wallet_address: string # The crypto wallet address to authenticate.
   --user-id: string # The unique ID of a specific User. You may use an `external_id` here if one is set for the user.
@@ -2652,7 +2745,7 @@ export def "crypto-wallets-authenticate-start AuthenticateStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -2667,6 +2760,7 @@ export def "crypto-wallets-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   crypto_wallet_type: string # The type of wallet to authenticate. Currently `ethereum` and `solana` are supported. Wallets for any EVM-compatible chains (such as Polygon or BSC) are also supported and are grouped under the `ethereum` type.
   crypto_wallet_address: string # The crypto wallet address to authenticate.
   signature: string # The signature from the message challenge.
@@ -2684,7 +2778,7 @@ export def "crypto-wallets-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Whoami
@@ -2699,13 +2793,14 @@ export def "debug-whoami Whoami" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, project_id: string, name: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/debug/whoami")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange
@@ -2720,6 +2815,7 @@ export def "b2b-discovery-intermediate-sessions-exchange Exchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   intermediate_session_token: string # The Intermediate Session Token. This token does not necessarily belong to a specific instance of a Member, but represents a bag of factors that may be converted to a member session. The token can be used with the [OTP SMS Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-otp-sms), [TOTP Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-totp), or [Recovery Codes Recover endpoint](https://stytch.com/docs/b2b/api/recovery-codes-recover) to complete an MFA flow and log in to the Organization. The token has a default expiry of 10 minutes. It can also be used with the [Exchange Intermediate Session endpoint](https://stytch.com/docs/b2b/api/exchange-intermediate-session) to join a specific Organization that allows the factors represented by the intermediate session token; or the [Create Organization via Discovery endpoint](https://stytch.com/docs/b2b/api/create-organization-via-discovery) to create a new Organization and Member. Intermediate Session Tokens have a default expiry of 10 minutes.
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
@@ -2735,7 +2831,7 @@ export def "b2b-discovery-intermediate-sessions-exchange Exchange" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -2751,6 +2847,7 @@ export def "b2b-discovery-organizations-create Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   intermediate_session_token: string # The Intermediate Session Token. This token does not necessarily belong to a specific instance of a Member, but represents a bag of factors that may be converted to a member session. The token can be used with the [OTP SMS Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-otp-sms), [TOTP Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-totp), or [Recovery Codes Recover endpoint](https://stytch.com/docs/b2b/api/recovery-codes-recover) to complete an MFA flow and log in to the Organization. The token has a default expiry of 10 minutes. It can also be used with the [Exchange Intermediate Session endpoint](https://stytch.com/docs/b2b/api/exchange-intermediate-session) to join a specific Organization that allows the factors represented by the intermediate session token; or the [Create Organization via Discovery endpoint](https://stytch.com/docs/b2b/api/create-organization-via-discovery) to create a new Organization and Member. Intermediate Session Tokens have a default expiry of 10 minutes.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
   --session-custom-claims: record # Add a custom claims map to the Session being authenticated. Claims are only created if a Session is initialized by providing a value in   `session_duration_minutes`. Claims will be included on the Session object and in the JWT. To update a key in an existing Session, supply a new value. To   delete a key, supply a null value. Custom claims made with reserved claims (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`) will be ignored.   Total custom claims size cannot exceed four kilobytes.
@@ -2785,7 +2882,7 @@ export def "b2b-discovery-organizations-create Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List
@@ -2800,6 +2897,7 @@ export def "b2b-discovery-organizations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --intermediate-session-token: string # The Intermediate Session Token. This token does not necessarily belong to a specific instance of a Member, but represents a bag of factors that may be converted to a member session. The token can be used with the [OTP SMS Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-otp-sms), [TOTP Authenticate endpoint](https://stytch.com/docs/b2b/api/authenticate-totp), or [Recovery Codes Recover endpoint](https://stytch.com/docs/b2b/api/recovery-codes-recover) to complete an MFA flow and log in to the Organization. The token has a default expiry of 10 minutes. It can also be used with the [Exchange Intermediate Session endpoint](https://stytch.com/docs/b2b/api/exchange-intermediate-session) to join a specific Organization that allows the factors represented by the intermediate session token; or the [Create Organization via Discovery endpoint](https://stytch.com/docs/b2b/api/create-organization-via-discovery) to create a new Organization and Member. Intermediate Session Tokens have a default expiry of 10 minutes.
   --session-token: string # A secret token for a given Stytch Session.
   --session-jwt: string # The JSON Web Token (JWT) for a given Stytch Session.
@@ -2812,7 +2910,7 @@ export def "b2b-discovery-organizations List" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lookup
@@ -2828,6 +2926,7 @@ export def "fingerprint-lookup Lookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   telemetry_id: string # The telemetry ID associated with the fingerprint getting looked up.
   --external-metadata: record # shape: {external_id?: string, organization_id?: string, user_action?: string}
 ]: any -> record<request_id: string, telemetry_id: string, fingerprints: record<network_fingerprint: string, hardware_fingerprint: string, browser_fingerprint: string, visitor_fingerprint: string, visitor_id: string, browser_id: string>, verdict: record<action: string, reasons: list<string>, detected_device_type: string, is_authentic_device: bool, verdict_reason_overrides: list<record>, rule_match_type: string, rule_match_identifier: string>, external_metadata: record<external_id: string, organization_id: string, user_action: string>, created_at: string, expires_at: string, status_code: int, properties: record<network_properties: record<ip_address: string, asn: record, ip_geolocation: record, is_proxy: bool, is_vpn: bool>, browser_properties: record<user_agent: string>>, raw_signals: record> {
@@ -2839,7 +2938,7 @@ export def "fingerprint-lookup Lookup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set
@@ -2854,6 +2953,7 @@ export def "rules-set Set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer
   --visitor-id: string # The visitor ID we want to set a rule for. Only one identifier can be specified in the request.
   --browser-id: string # The browser ID we want to set a rule for. Only one identifier can be specified in the request.
@@ -2875,7 +2975,7 @@ export def "rules-set Set" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List
@@ -2890,6 +2990,7 @@ export def "rules-list List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The `cursor` field allows you to paginate through your results. Each result array is limited to 100 results. If your query returns more than 100 results, you will need to paginate the responses using the `cursor`. If you receive a response that includes a non-null `next_cursor`, repeat the request with the `next_cursor` value set to the `cursor` field to retrieve the next page of results. Continue to make requests until the `next_cursor` in the response is null.
   --limit: int # The number of results to return per page. The default limit is 10. A maximum of 100 results can be returned by a single get request. If the total size of your result set is greater than one page size, you must paginate the response. See the `cursor` field. (format: int32)
 ]: any -> record<request_id: string, next_cursor: string, rules: table<rule_type: string, action: string, created_at: string, visitor_id: string, browser_id: string, visitor_fingerprint: string, browser_fingerprint: string, hardware_fingerprint: string, network_fingerprint: string, cidr_block: string, country_code: string, asn: string, description: string, expires_at: string, last_updated_at: string>, status_code: int> {
@@ -2901,7 +3002,7 @@ export def "rules-list List" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Override
@@ -2916,6 +3017,7 @@ export def "verdict-reasons-override Override" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   verdict_reason: string # The verdict reason that you wish to override. For a list of possible reasons to override, see [Warning Flags (Verdict Reasons)](https://stytch.com/docs/docs/fraud/guides/device-fingerprinting/reference/warning-flags-verdict-reasons). You may not override the `RULE_MATCH` reason.
   override_action: string@override-action-completer
   --override-description: string # An optional description for the verdict reason override.
@@ -2928,7 +3030,7 @@ export def "verdict-reasons-override Override" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List
@@ -2943,6 +3045,7 @@ export def "verdict-reasons-list List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --overrides-only: oneof<nothing, bool> # Whether to return only verdict reasons that have overrides set. Defaults to false.
 ]: any -> record<request_id: string, verdict_reason_actions: table<verdict_reason: string, default_action: string, override_action: string, override_created_at: string, override_description: string>, status_code: int> {
   let input = $in
@@ -2953,7 +3056,7 @@ export def "verdict-reasons-list List" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Risk
@@ -2968,6 +3071,7 @@ export def "email-risk Risk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address to check.
 ]: any -> record<request_id: string, address_information: record<has_known_bounces: bool, has_valid_syntax: bool, is_suspected_role_address: bool, normalized_email: string, tumbling_character_count: int>, domain_information: record<has_mx_or_a_record: bool, is_disposable_domain: bool>, action: string, risk_score: int, status_code: int> {
   let input = $in
@@ -2978,7 +3082,7 @@ export def "email-risk Risk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorizestart
@@ -2993,6 +3097,7 @@ export def "idp-oauth-authorize-start AuthorizeStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The ID of the Connected App client.
   redirect_uri: string # The callback URI used to redirect the user after authentication. This is the same URI provided at the start of the OAuth flow.  This field is required when using the `authorization_code` grant.
   response_type: string # The OAuth 2.0 response type. For authorization code flows this value is `code`.
@@ -3010,7 +3115,7 @@ export def "idp-oauth-authorize-start AuthorizeStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorize
@@ -3025,6 +3130,7 @@ export def "idp-oauth-authorize Authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consent-granted: oneof<nothing, bool> # Indicates whether the user granted the requested scopes.
   scopes: list # An array of scopes requested by the client.
   client_id: string # The ID of the Connected App client.
@@ -3047,7 +3153,7 @@ export def "idp-oauth-authorize Authorize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3062,6 +3168,7 @@ export def "impersonation-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   impersonation_token: string # The User Impersonation token to authenticate. Expires in 5 minutes by default.
 ]: any -> record<request_id: string, user_id: string, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, session_token: string, session_jwt: string, status_code: int, session: record<session_id: string, user_id: string, authentication_factors: list<record>, roles: list<string>, started_at: string, last_accessed_at: string, expires_at: string, attributes: record<ip_address: string, user_agent: string>, custom_claims: record>> {
   let input = $in
@@ -3072,7 +3179,7 @@ export def "impersonation-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -3088,13 +3195,14 @@ export def "m2m-clients Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, m2m_client: record<client_id: string, client_name: string, client_description: string, status: string, scopes: list<string>, client_secret_last_four: string, trusted_metadata: record, next_client_secret_last_four: string>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/m2m/clients/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -3110,6 +3218,7 @@ export def "m2m-clients Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-name: string # A human-readable name for the client.
   --client-description: string # A human-readable description for the client.
   --status: string@status-completer
@@ -3124,7 +3233,7 @@ export def "m2m-clients Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete
@@ -3140,13 +3249,14 @@ export def "m2m-clients Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, client_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/m2m/clients/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -3162,6 +3272,7 @@ export def "m2m-clients-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The `cursor` field allows you to paginate through your results. Each result array is limited to 1000 results. If your query returns more than 1000 results, you will need to paginate the responses using the `cursor`. If you receive a response that includes a non-null `next_cursor` in the `results_metadata` object, repeat the search call with the `next_cursor` value set to the `cursor` field to retrieve the next page of results. Continue to make search calls until the `next_cursor` in the response is null.
   --limit: int # The number of search results to return per page. The default limit is 100. A maximum of 1000 results can be returned by a single search request. If the total size of your result set is greater than one page size, you must paginate the response. See the `cursor` field. (format: int32)
   --body-query: record # shape: {operator: "OR"|"AND", operands: list}
@@ -3174,7 +3285,7 @@ export def "m2m-clients-search Search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -3189,6 +3300,7 @@ export def "m2m-clients Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scopes: list # An array of scopes assigned to the client.
   --client-id: string # If provided, the ID of the client to create. If not provided, Stytch will generate this value for you. The `client_id` must be unique within your project.
   --client-secret: string # If provided, the stored secret of the client to create. If not provided, Stytch will generate this value for you. If provided, the `client_secret` must be at least 8 characters long and pass entropy requirements.
@@ -3204,7 +3316,7 @@ export def "m2m-clients Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatestart
@@ -3220,6 +3332,7 @@ export def "m2m-clients-secrets-rotate-start RotateStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, m2m_client: record<client_id: string, next_client_secret: string, client_name: string, client_description: string, status: string, scopes: list<string>, client_secret_last_four: string, trusted_metadata: record, next_client_secret_last_four: string>, status_code: int> {
   let input = $in
@@ -3229,7 +3342,7 @@ export def "m2m-clients-secrets-rotate-start RotateStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotatecancel
@@ -3245,6 +3358,7 @@ export def "m2m-clients-secrets-rotate-cancel RotateCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, m2m_client: record<client_id: string, client_name: string, client_description: string, status: string, scopes: list<string>, client_secret_last_four: string, trusted_metadata: record, next_client_secret_last_four: string>, status_code: int> {
   let input = $in
@@ -3254,7 +3368,7 @@ export def "m2m-clients-secrets-rotate-cancel RotateCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotate
@@ -3270,6 +3384,7 @@ export def "m2m-clients-secrets-rotate Rotate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<request_id: string, m2m_client: record<client_id: string, client_name: string, client_description: string, status: string, scopes: list<string>, client_secret_last_four: string, trusted_metadata: record, next_client_secret_last_four: string>, status_code: int> {
   let input = $in
@@ -3279,7 +3394,7 @@ export def "m2m-clients-secrets-rotate Rotate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3296,6 +3411,7 @@ export def "magic-links-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The Magic Link `token` from the `?token=` query parameter in the URL.        The redirect URL will look like `https://example.com/authenticate?stytch_token_type=magic_links&token=rM_kw42CWBhsHLF62V75jELMbvJ87njMe3tFVj7Qupu7`        In the redirect URL, the `stytch_token_type` will be `magic_link`. See [here](https://stytch.com/docs/workspace-management/redirect-urls) for more detail.
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
   --options: record # shape: {ip_match_required: bool, user_agent_match_required: bool}
@@ -3314,7 +3430,7 @@ export def "magic-links-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -3330,6 +3446,7 @@ export def "magic-links Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The unique ID of a specific User. You may use an `external_id` here if one is set for the user.
   --expiration-minutes: int # Set the expiration for the Magic Link `token` in minutes. By default, it expires in 1 hour. The minimum expiration is 5 minutes and the maximum is 7 days (10080 mins). (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -3342,7 +3459,7 @@ export def "magic-links Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -3358,6 +3475,7 @@ export def "magic-links-email-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the User to send the Magic Link to.
   --login-template-id: string # Use a custom template for login emails. By default, it will use your default email template. Templates can be added in the [Stytch dashboard](https://stytch.com/dashboard/templates) using our built-in customization options or custom HTML templates with type “Magic links - Login”.
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -3380,7 +3498,7 @@ export def "magic-links-email-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorcreate
@@ -3396,6 +3514,7 @@ export def "magic-links-email-login-or-create LoginOrCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the end user.
   --login-magic-link-url: string # The URL the end user clicks from the login Email Magic Link. This should be a URL that your app receives and parses and subsequently send an API request to authenticate the Magic Link and log in the User. If this value is not passed, the default login redirect URL that you set in your Dashboard is used. If you have not set a default login redirect URL, an error is returned.
   --signup-magic-link-url: string # The URL the end user clicks from the sign-up Email Magic Link. This should be a URL that your app receives and parses and subsequently send an API request to authenticate the Magic Link and sign-up the User. If this value is not passed, the default sign-up redirect URL that you set in your Dashboard is used. If you have not set a default sign-up redirect URL, an error is returned.
@@ -3416,7 +3535,7 @@ export def "magic-links-email-login-or-create LoginOrCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invite
@@ -3433,6 +3552,7 @@ export def "magic-links-email-invite Invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the User to send the invite Magic Link to.
   --invite-template-id: string # Use a custom template for invite emails. By default, it will use your default email template. Templates can be added in the [Stytch dashboard](https://stytch.com/dashboard/templates) using our built-in customization options or custom HTML templates with type “Magic links - Invite”.
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -3451,7 +3571,7 @@ export def "magic-links-email-invite Invite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revokeinvite
@@ -3466,6 +3586,7 @@ export def "magic-links-email-revoke-invite RevokeInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email of the user.
 ]: any -> record<request_id: string, status_code: int> {
   let input = $in
@@ -3476,7 +3597,7 @@ export def "magic-links-email-revoke-invite RevokeInvite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3491,6 +3612,7 @@ export def "b2b-magic-links-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   magic_links_token: string # The Email Magic Link token to authenticate.
   --pkce-code-verifier: string # A base64url encoded one time secret used to validate that the request starts and ends on the same device.
   --session-token: string # Reuse an existing session instead of creating a new one. If you provide a `session_token`, Stytch will update the session.       If the `session_token` and `magic_links_token` belong to different Members, the `session_token` will be ignored. This endpoint will error if       both `session_token` and `session_jwt` are provided.
@@ -3509,7 +3631,7 @@ export def "b2b-magic-links-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorsignup
@@ -3524,6 +3646,7 @@ export def "b2b-magic-links-email-login-or-signup LoginOrSignup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   email_address: string # The email address of the Member.
   --login-redirect-url: string # The URL that the Member clicks from the login Email Magic Link. This URL should be an endpoint in the backend server that   verifies the request by querying Stytch's authenticate endpoint and finishes the login. If this value is not passed, the default login   redirect URL that you set in your Dashboard is used. If you have not set a default login redirect URL, an error is returned.
@@ -3543,7 +3666,7 @@ export def "b2b-magic-links-email-login-or-signup LoginOrSignup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invite
@@ -3558,6 +3681,7 @@ export def "b2b-magic-links-email-invite Invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
@@ -3582,7 +3706,7 @@ export def "b2b-magic-links-email-invite Invite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -3597,6 +3721,7 @@ export def "b2b-magic-links-email-discovery-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member.
   --discovery-redirect-url: string # The URL that the end user clicks from the discovery Magic Link. This URL should be an endpoint in the backend server that   verifies the request by querying Stytch's discovery authenticate endpoint and continues the flow. If this value is not passed, the default   discovery redirect URL that you set in your Dashboard is used. If you have not set a default discovery redirect URL, an error is returned.
   --pkce-code-challenge: string # A base64url encoded SHA256 hash of a one time secret used to validate that the request starts and ends on the same device.
@@ -3612,7 +3737,7 @@ export def "b2b-magic-links-email-discovery-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3627,6 +3752,7 @@ export def "b2b-magic-links-discovery-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   discovery_magic_links_token: string # The Discovery Email Magic Link token to authenticate.
   --pkce-code-verifier: string # A base64url encoded one time secret used to validate that the request starts and ends on the same device.
 ]: any -> record<request_id: string, intermediate_session_token: string, email_address: string, discovered_organizations: table<member_authenticated: bool, organization: record, membership: record, primary_required: record, mfa_required: record>, status_code: int> {
@@ -3638,7 +3764,7 @@ export def "b2b-magic-links-discovery-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3653,6 +3779,7 @@ export def "b2b-oauth-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   oauth_token: string # The token to authenticate.
   --session-token: string # A secret token for a given Stytch Session.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will be created with a 60 minute duration. If you don't want   to use the Stytch session product, you can ignore the session fields in the response. (format: int32)
@@ -3671,7 +3798,7 @@ export def "b2b-oauth-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3686,6 +3813,7 @@ export def "b2b-oauth-discovery-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   discovery_oauth_token: string # The Discovery OAuth token to authenticate.
   --session-token: string
   --session-duration-minutes: int # format: int32
@@ -3701,7 +3829,7 @@ export def "b2b-oauth-discovery-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -3716,6 +3844,7 @@ export def "b2b-otps-sms-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   --mfa-phone-number: string # The phone number to send the OTP to. If the Member already has a phone number, this argument is not needed.
@@ -3732,7 +3861,7 @@ export def "b2b-otps-sms-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3747,6 +3876,7 @@ export def "b2b-otps-sms-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   member_id: string # Globally unique UUID that identifies a specific Member. The `member_id` is critical to perform operations on a Member, so be sure to preserve this value. You may use an external_id here if one is set for the member.
   code: string # The code to authenticate.
@@ -3767,7 +3897,7 @@ export def "b2b-otps-sms-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorsignup
@@ -3782,6 +3912,7 @@ export def "b2b-otps-email-login-or-signup LoginOrSignup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   email_address: string # The email address of the Member.
   --login-template-id: string # Use a custom template for login emails. By default, it will use your default email template. Templates can be added in the [Stytch dashboard](https://stytch.com/dashboard/templates) using our built-in customization options or custom HTML templates with type “OTP - Login”.
@@ -3798,7 +3929,7 @@ export def "b2b-otps-email-login-or-signup LoginOrSignup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3813,6 +3944,7 @@ export def "b2b-otps-email-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   email_address: string # The email address of the Member.
   code: string # The code to authenticate.
@@ -3832,7 +3964,7 @@ export def "b2b-otps-email-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -3847,6 +3979,7 @@ export def "b2b-otps-email-discovery-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address to start the discovery flow for.
   --login-template-id: string # Use a custom template for login emails. By default, it will use your default email template. Templates can be added in the [Stytch dashboard](https://stytch.com/dashboard/templates) using our built-in customization options or custom HTML templates with type “OTP - Login”.
   --locale: string@locale-completer
@@ -3860,7 +3993,7 @@ export def "b2b-otps-email-discovery-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3875,6 +4008,7 @@ export def "b2b-otps-email-discovery-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member.
   code: string # The code to authenticate.
 ]: any -> record<request_id: string, intermediate_session_token: string, email_address: string, discovered_organizations: table<member_authenticated: bool, organization: record, membership: record, primary_required: record, mfa_required: record>, status_code: int> {
@@ -3886,7 +4020,7 @@ export def "b2b-otps-email-discovery-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -3902,6 +4036,7 @@ export def "passwords Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the end user.
   password: string # The password for the user. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
@@ -3919,7 +4054,7 @@ export def "passwords Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -3934,6 +4069,7 @@ export def "passwords-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the end user.
   password: string # The password for the user. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -3950,7 +4086,7 @@ export def "passwords-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Strengthcheck
@@ -3965,6 +4101,7 @@ export def "passwords-strength-check StrengthCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password for the user. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --email: string # The email address of the end user.
 ]: any -> record<request_id: string, valid_password: bool, score: int, breached_password: bool, strength_policy: string, breach_detection_on_create: bool, status_code: int, feedback: record<warning: string, suggestions: list<string>, luds_requirements: record<has_lower_case: bool, has_upper_case: bool, has_digit: bool, has_symbol: bool, missing_complexity: int, missing_characters: int>>> {
@@ -3976,7 +4113,7 @@ export def "passwords-strength-check StrengthCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Migrate
@@ -3998,6 +4135,7 @@ export def "passwords-migrate Migrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the end user.
   hash: string # The password hash. For a Scrypt or PBKDF2 hash, the hash needs to be a base64 encoded string.
   hash_type: string@hash-type-completer
@@ -4024,7 +4162,7 @@ export def "passwords-migrate Migrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resetstart
@@ -4040,6 +4178,7 @@ export def "passwords-email-reset-start ResetStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email of the User that requested the password reset.
   --reset-password-redirect-url: string # The URL that the User is redirected to from the reset password magic link. This URL should display your application's reset password page.   Before rendering the reset page, extract the `token` from the query parameters. On the reset page, collect the new password and complete the flow by calling the corresponding Password Reset by Email endpoint.   If this parameter is not specified, the default Reset Password redirect URL configured in the Dashboard will be used. If you have not set a default Reset Password redirect URL, an error is returned.
   --reset-password-expiration-minutes: int # Set the expiration for the password reset, in minutes. By default, it expires in 30 minutes.   The minimum expiration is 5 minutes and the maximum is 7 days (10080 mins). (format: int32)
@@ -4057,7 +4196,7 @@ export def "passwords-email-reset-start ResetStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4074,6 +4213,7 @@ export def "passwords-email-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The Passwords `token` from the `?token=` query parameter in the URL.        In the redirect URL, the `stytch_token_type` will be `login` or `reset_password`.        See examples and read more about redirect URLs [here](https://stytch.com/docs/workspace-management/redirect-urls).
   password: string # The password for the user. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -4093,7 +4233,7 @@ export def "passwords-email-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4108,6 +4248,7 @@ export def "passwords-existing-password-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the end user.
   existing_password: string # The user's existing password.
   new_password: string # The new password for the user.
@@ -4125,7 +4266,7 @@ export def "passwords-existing-password-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4140,6 +4281,7 @@ export def "passwords-session-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password for the user. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-token: string # The `session_token` associated with a User's existing Session.
   --session-jwt: string # The `session_jwt` associated with a User's existing Session.
@@ -4155,7 +4297,7 @@ export def "passwords-session-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Strengthcheck
@@ -4170,6 +4312,7 @@ export def "b2b-passwords-strength-check StrengthCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --email-address: string # The email address of the Member.
 ]: any -> record<request_id: string, valid_password: bool, score: int, breached_password: bool, strength_policy: string, breach_detection_on_create: bool, status_code: int, luds_feedback: record<has_lower_case: bool, has_upper_case: bool, has_digit: bool, has_symbol: bool, missing_complexity: int, missing_characters: int>, zxcvbn_feedback: record<warning: string, suggestions: list<string>>> {
@@ -4181,7 +4324,7 @@ export def "b2b-passwords-strength-check StrengthCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Migrate
@@ -4202,6 +4345,7 @@ export def "b2b-passwords-migrate Migrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member.
   hash: string # The password hash. For a Scrypt or PBKDF2 hash, the hash needs to be a base64 encoded string.
   hash_type: string@hash-type-completer
@@ -4229,7 +4373,7 @@ export def "b2b-passwords-migrate Migrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -4244,6 +4388,7 @@ export def "b2b-passwords-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   email_address: string # The email address of the Member.
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
@@ -4263,7 +4408,7 @@ export def "b2b-passwords-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resetstart
@@ -4278,6 +4423,7 @@ export def "b2b-passwords-email-reset-start ResetStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   email_address: string # The email address of the Member to start the email reset process for.
   --reset-password-redirect-url: string # The URL that the Member is redirected to from the reset password magic link. This URL should display your application's reset password page.   Before rendering the reset page, extract the `token` from the query parameters. On the reset page, collect the new password and complete the flow by calling the corresponding Password Reset by Email endpoint.   If this parameter is not specified, the default Reset Password redirect URL configured in the Dashboard will be used. If you have not set a default Reset Password redirect URL, an error is returned.
@@ -4296,7 +4442,7 @@ export def "b2b-passwords-email-reset-start ResetStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4311,6 +4457,7 @@ export def "b2b-passwords-email-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password_reset_token: string # The password reset token to authenticate.
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-token: string # Reuse an existing session instead of creating a new one. If you provide a `session_token`, Stytch will update the session.       If the `session_token` and `magic_links_token` belong to different Members, the `session_token` will be ignored. This endpoint will error if       both `session_token` and `session_jwt` are provided.
@@ -4330,7 +4477,7 @@ export def "b2b-passwords-email-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Requirereset
@@ -4345,6 +4492,7 @@ export def "b2b-passwords-email-require-reset RequireReset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   email_address: string # The email address of the Member to start the email reset process for.
@@ -4361,7 +4509,7 @@ export def "b2b-passwords-email-require-reset RequireReset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4376,6 +4524,7 @@ export def "b2b-passwords-session-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string # Globally unique UUID that identifies a specific Organization. The `organization_id` is critical to perform operations on an Organization, so be sure to preserve this value. You may also use the organization_slug or organization_external_id here as a convenience.
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --session-token: string # A secret token for a given Stytch Session.
@@ -4393,7 +4542,7 @@ export def "b2b-passwords-session-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4408,6 +4557,7 @@ export def "b2b-passwords-existing-password-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member.
   existing_password: string # The Member's current password that they supplied.
   new_password: string # The Member's elected new password.
@@ -4427,7 +4577,7 @@ export def "b2b-passwords-existing-password-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -4442,6 +4592,7 @@ export def "b2b-passwords-discovery-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member.
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
 ]: any -> record<request_id: string, email_address: string, intermediate_session_token: string, discovered_organizations: table<member_authenticated: bool, organization: record, membership: record, primary_required: record, mfa_required: record>, status_code: int> {
@@ -4453,7 +4604,7 @@ export def "b2b-passwords-discovery-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resetstart
@@ -4468,6 +4619,7 @@ export def "b2b-passwords-discovery-email-reset-start ResetStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the Member to start the email reset process for.
   --reset-password-redirect-url: string # The URL that the Member is redirected to from the reset password magic link. This URL should display your application's reset password page.   Before rendering the reset page, extract the `token` from the query parameters. On the reset page, collect the new password and complete the flow by calling the corresponding Password Reset by Email endpoint.   If this parameter is not specified, the default Reset Password redirect URL configured in the Dashboard will be used. If you have not set a default Reset Password redirect URL, an error is returned.
   --discovery-redirect-url: string # The URL that the end user clicks from the discovery Magic Link. This URL should be an endpoint in the backend server that   verifies the request by querying Stytch's discovery authenticate endpoint and continues the flow. If this value is not passed, the default   discovery redirect URL that you set in your Dashboard is used. If you have not set a default discovery redirect URL, an error is returned.
@@ -4485,7 +4637,7 @@ export def "b2b-passwords-discovery-email-reset-start ResetStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset
@@ -4500,6 +4652,7 @@ export def "b2b-passwords-discovery-email-reset Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password_reset_token: string # The password reset token to authenticate.
   password: string # The password to authenticate, reset, or set for the first time. Any UTF8 character is allowed, e.g. spaces, emojis, non-English characters, etc.
   --pkce-code-verifier: string
@@ -4512,7 +4665,7 @@ export def "b2b-passwords-discovery-email-reset Reset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Attach
@@ -4527,6 +4680,7 @@ export def "oauth-attach Attach" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   provider: string # The OAuth provider's name.
   --user-id: string # The unique ID of a specific User. You may use an `external_id` here if one is set for the user.
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -4540,7 +4694,7 @@ export def "oauth-attach Attach" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -4555,6 +4709,7 @@ export def "oauth-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The OAuth `token` from the `?token=` query parameter in the URL.        The redirect URL will look like `https://example.com/authenticate?stytch_token_type=oauth&token=rM_kw42CWBhsHLF62V75jELMbvJ87njMe3tFVj7Qupu7`        In the redirect URL, the `stytch_token_type` will be `oauth`. See [here](https://stytch.com/docs/workspace-management/redirect-urls) for more detail.
   --session-token: string # Reuse an existing session instead of creating a new one. If you provide us with a `session_token`, then we'll update the session represented by this session token with this OAuth factor. If this `session_token` belongs to a different user than the OAuth token, the session_jwt will be ignored. This endpoint will error if both `session_token` and `session_jwt` are provided.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
@@ -4571,7 +4726,7 @@ export def "oauth-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -4588,6 +4743,7 @@ export def "otps-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   method_id: string # The `email_id` or `phone_id` involved in the given authentication.
   code: string # The code to authenticate.
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4606,7 +4762,7 @@ export def "otps-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -4622,6 +4778,7 @@ export def "otps-sms-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phone_number: string # The phone number to use for one-time passcodes. The phone number should be in E.164 format (i.e. +1XXXXXXXXXX). You may use +10000000000 to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4638,7 +4795,7 @@ export def "otps-sms-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorcreate
@@ -4654,6 +4811,7 @@ export def "otps-sms-login-or-create LoginOrCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phone_number: string # The phone number to use for one-time passcodes. The phone number should be in E.164 format (i.e. +1XXXXXXXXXX). You may use +10000000000 to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4668,7 +4826,7 @@ export def "otps-sms-login-or-create LoginOrCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -4684,6 +4842,7 @@ export def "otps-whatsapp-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phone_number: string # The phone number to use for one-time passcodes. The phone number should be in E.164 format (i.e. +1XXXXXXXXXX). You may use +10000000000 to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4700,7 +4859,7 @@ export def "otps-whatsapp-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorcreate
@@ -4716,6 +4875,7 @@ export def "otps-whatsapp-login-or-create LoginOrCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phone_number: string # The phone number to use for one-time passcodes. The phone number should be in E.164 format (i.e. +1XXXXXXXXXX). You may use +10000000000 to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4730,7 +4890,7 @@ export def "otps-whatsapp-login-or-create LoginOrCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send
@@ -4746,6 +4906,7 @@ export def "otps-email-send Send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the user to send the one-time passcode to. You may use sandbox@stytch.com to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4764,7 +4925,7 @@ export def "otps-email-send Send" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Loginorcreate
@@ -4780,6 +4941,7 @@ export def "otps-email-login-or-create LoginOrCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the user to send the one-time passcode to. You may use sandbox@stytch.com to test this endpoint, see [Testing](https://stytch.com/docs/home#resources_testing) for more detail.
   --expiration-minutes: int # Set the expiration for the one-time passcode, in minutes. The minimum expiration is 1 minute and the maximum is 10 minutes. The default expiration is 2 minutes. (format: int32)
   --attributes: record # shape: {ip_address?: string, user_agent?: string}
@@ -4796,7 +4958,7 @@ export def "otps-email-login-or-create LoginOrCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Metrics
@@ -4811,13 +4973,14 @@ export def "projects-metrics Metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<request_id: string, project_id: string, metrics: table<metric_type: string, count: int>, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/projects/metrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Getconnections
@@ -4833,6 +4996,7 @@ export def "b2b-sso GetConnections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, saml_connections: table<organization_id: string, connection_id: string, status: string, idp_entity_id: string, display_name: string, idp_sso_url: string, acs_url: string, audience_uri: string, signing_certificates: list, verification_certificates: list, encryption_private_keys: list, saml_connection_implicit_role_assignments: list, saml_group_implicit_role_assignments: list, alternative_audience_uri: string, identity_provider: string, nameid_format: string, alternative_acs_url: string, idp_initiated_auth_disabled: bool, allow_gateway_callback: bool, attribute_mapping: record>, oidc_connections: table<organization_id: string, connection_id: string, status: string, display_name: string, redirect_url: string, client_id: string, client_secret: string, issuer: string, authorization_url: string, token_url: string, userinfo_url: string, jwks_url: string, identity_provider: string, custom_scopes: string, attribute_mapping: record>, external_connections: table<organization_id: string, connection_id: string, external_organization_id: string, external_connection_id: string, display_name: string, status: string, external_connection_implicit_role_assignments: list, external_group_implicit_role_assignments: list>, status_code: int> {
@@ -4843,7 +5007,7 @@ export def "b2b-sso GetConnections" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteconnection
@@ -4860,6 +5024,7 @@ export def "b2b-sso-connections DeleteConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, connection_id: string, status_code: int> {
@@ -4870,7 +5035,7 @@ export def "b2b-sso-connections DeleteConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate
@@ -4885,6 +5050,7 @@ export def "b2b-sso-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sso_token: string # The token to authenticate.
   --pkce-code-verifier: string # A base64url encoded one time secret used to validate that the request starts and ends on the same device.
   --session-token: string # The `session_token` belonging to the member that you wish to associate the email with.
@@ -4903,7 +5069,7 @@ export def "b2b-sso-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Createconnection
@@ -4919,6 +5085,7 @@ export def "b2b-sso-oidc CreateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -4934,7 +5101,7 @@ export def "b2b-sso-oidc CreateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updateconnection
@@ -4951,6 +5118,7 @@ export def "b2b-sso-oidc-connections UpdateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -4975,7 +5143,7 @@ export def "b2b-sso-oidc-connections UpdateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Createconnection
@@ -4991,6 +5159,7 @@ export def "b2b-sso-saml CreateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -5006,7 +5175,7 @@ export def "b2b-sso-saml CreateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updateconnection
@@ -5025,6 +5194,7 @@ export def "b2b-sso-saml-connections UpdateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --idp-entity-id: string # A globally unique name for the IdP. This will be provided by the IdP.
@@ -5053,7 +5223,7 @@ export def "b2b-sso-saml-connections UpdateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updatebyurl
@@ -5070,6 +5240,7 @@ export def "b2b-sso-saml-connections-url UpdateByURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   metadata_url: string # A URL that points to the IdP metadata. This will be provided by the IdP.
@@ -5084,7 +5255,7 @@ export def "b2b-sso-saml-connections-url UpdateByURL" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deleteverificationcertificate
@@ -5102,6 +5273,7 @@ export def "b2b-sso-saml-connections-verification-certificates DeleteVerificatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, certificate_id: string, status_code: int> {
@@ -5112,7 +5284,7 @@ export def "b2b-sso-saml-connections-verification-certificates DeleteVerificatio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleteencryptionprivatekey
@@ -5130,6 +5302,7 @@ export def "b2b-sso-saml-connections-encryption-private-keys DeleteEncryptionPri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
 ]: nothing -> record<request_id: string, private_key_id: string, status_code: int> {
@@ -5140,7 +5313,7 @@ export def "b2b-sso-saml-connections-encryption-private-keys DeleteEncryptionPri
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Createconnection
@@ -5158,6 +5331,7 @@ export def "b2b-sso-external CreateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   external_organization_id: string # Globally unique UUID that identifies a different Organization within your Project.
@@ -5176,7 +5350,7 @@ export def "b2b-sso-external CreateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updateconnection
@@ -5195,6 +5369,7 @@ export def "b2b-sso-external-connections UpdateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Stytch-Member-Session: string # A Stytch session that can be used to run the request with the given member's permissions.
   --X-Stytch-Member-SessionJWT: string # A Stytch Session JSON Web Token (JWT) that can be used to run the request with the given member's permissions.
   --display-name: string # A human-readable display name for the connection.
@@ -5211,7 +5386,7 @@ export def "b2b-sso-external-connections UpdateConnection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create
@@ -5226,6 +5401,7 @@ export def "totps Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the TOTP registration should be tied to. You may use an `external_id` here if one is set for the user.
   --expiration-minutes: int # The expiration for the TOTP instance. If the newly created TOTP is not authenticated within this time frame the TOTP will be unusable. Defaults to 1440 (1 day) with a minimum of 5 and a maximum of 1440. (format: int32)
 ]: any -> record<request_id: string, totp_id: string, secret: string, qr_code: string, recovery_codes: list<string>, user: record<user_id: string, emails: list<record>, status: string, phone_numbers: list<record>, webauthn_registrations: list<record>, providers: list<record>, totps: list<record>, crypto_wallets: list<record>, biometric_registrations: list<record>, is_locked: bool, roles: list<string>, name: record<first_name: string, middle_name: string, last_name: string>, created_at: string, password: record<password_id: string, requires_reset: bool>, trusted_metadata: record, untrusted_metadata: record, external_id: string, lock_created_at: string, lock_expires_at: string>, user_id: string, status_code: int> {
@@ -5237,7 +5413,7 @@ export def "totps Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -5252,6 +5428,7 @@ export def "totps-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the TOTP registration should be tied to. You may use an `external_id` here if one is set for the user.
   totp_code: string # The TOTP code to authenticate. The TOTP code should consist of 6 digits.
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -5268,7 +5445,7 @@ export def "totps-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recoverycodes
@@ -5283,6 +5460,7 @@ export def "totps-recovery-codes RecoveryCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the TOTP registration should be tied to. You may use an `external_id` here if one is set for the user.
 ]: any -> record<request_id: string, user_id: string, totps: table<totp_id: string, verified: bool, recovery_codes: list>, status_code: int> {
   let input = $in
@@ -5293,7 +5471,7 @@ export def "totps-recovery-codes RecoveryCodes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recover
@@ -5308,6 +5486,7 @@ export def "totps-recover Recover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the TOTP registration should be tied to. You may use an `external_id` here if one is set for the user.
   recovery_code: string # The recovery code to authenticate.
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -5324,7 +5503,7 @@ export def "totps-recover Recover" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registerstart
@@ -5339,6 +5518,7 @@ export def "webauthn-register-start RegisterStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the Passkey or WebAuthn registration should be tied to. You may use an `external_id` here if one is set for the user.
   domain: string # The domain for Passkeys or WebAuthn. Defaults to `window.location.hostname`.
   --user-agent: string # The user agent of the client.
@@ -5357,7 +5537,7 @@ export def "webauthn-register-start RegisterStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Register
@@ -5372,6 +5552,7 @@ export def "webauthn-register Register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The `user_id` of an active user the Passkey or WebAuthn registration should be tied to. You may use an `external_id` here if one is set for the user.
   public_key_credential: string # The response of the [navigator.credentials.create()](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
   --session-token: string # The `session_token` associated with a User's existing Session.
@@ -5388,7 +5569,7 @@ export def "webauthn-register Register" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticatestart
@@ -5403,6 +5584,7 @@ export def "webauthn-authenticate-start AuthenticateStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # The domain for Passkeys or WebAuthn. Defaults to `window.location.hostname`.
   --user-id: string # The `user_id` of an active user the Passkey or WebAuthn registration should be tied to. You may use an `external_id` here if one is set for the user.
   --return-passkey-credential-options: oneof<nothing, bool> # If true, the `public_key_credential_creation_options` returned will be optimized for Passkeys with `userVerification` set to `"preferred"`.       
@@ -5416,7 +5598,7 @@ export def "webauthn-authenticate-start AuthenticateStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate
@@ -5431,6 +5613,7 @@ export def "webauthn-authenticate Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   public_key_credential: string # The response of the [navigator.credentials.create()](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
   --session-token: string # The `session_token` associated with a User's existing Session.
   --session-duration-minutes: int # Set the session lifetime to be this many minutes from now. This will start a new session if one doesn't already exist,   returning both an opaque `session_token` and `session_jwt` for this session. Remember that the `session_jwt` will have a fixed lifetime of   five minutes regardless of the underlying session duration, and will need to be refreshed over time.    This value must be a minimum of 5 and a maximum of 527040 minutes (366 days).    If a `session_token` or `session_jwt` is provided then a successful authentication will continue to extend the session this many minutes.    If the `session_duration_minutes` parameter is not specified, a Stytch session will not be created. (format: int32)
@@ -5446,7 +5629,7 @@ export def "webauthn-authenticate Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update
@@ -5462,6 +5645,7 @@ export def "webauthn Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The `name` of the WebAuthn registration or Passkey.
 ]: any -> record<request_id: string, status_code: int, webauthn_registration: record<webauthn_registration_id: string, domain: string, user_agent: string, verified: bool, authenticator_type: string, name: string>> {
   let input = $in
@@ -5472,7 +5656,7 @@ export def "webauthn Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Listcredentials
@@ -5489,11 +5673,12 @@ export def "webauthn-credentials ListCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<credentials: table<credential_id: string, webauthn_registration_id: string, type: string, public_key: string>, request_id: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/webauthn/credentials/($user_id)/($domain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

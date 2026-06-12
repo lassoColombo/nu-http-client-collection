@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "enginesjson listEngines" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "enginesjson listEngines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # The page to fetch. Defaults to 1.
   --per-page: string # The number of results per page.
 ]: nothing -> any {
@@ -109,7 +111,7 @@ export def "enginesjson listEngines" [
   let full_url = (build-url $base "/engines.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new API based engine.
@@ -125,6 +127,7 @@ export def "enginesjson createEngine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enginename: string # Engine name.
   --enginelanguage: string # Engine language (null for universal).
 ]: nothing -> any {
@@ -134,7 +137,7 @@ export def "enginesjson createEngine" [
   let full_url = (build-url $base "/engines.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves an engine by name.
@@ -151,13 +154,14 @@ export def "engines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an engine by name.
@@ -174,13 +178,14 @@ export def "engines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new document type in an engine.
@@ -197,6 +202,7 @@ export def "engines-document-typesjson createDocumentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --document-typename: string # Document type name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -205,7 +211,7 @@ export def "engines-document-typesjson createDocumentType" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all document types for an engine.
@@ -222,13 +228,14 @@ export def "engines-document-typesjson listDocumentTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a document type by id.
@@ -246,13 +253,14 @@ export def "engines-document-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a document type by id.
@@ -270,13 +278,14 @@ export def "engines-document-types delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new document in an engine.
@@ -294,6 +303,7 @@ export def "engines-document-types-documentsjson createDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documentexternal-id: string # Document external id.
   --documentfields: list # Document fields.
 ]: nothing -> any {
@@ -303,7 +313,7 @@ export def "engines-document-types-documentsjson createDocument" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all documents in an engine.
@@ -321,13 +331,14 @@ export def "engines-document-types-documentsjson listDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a document in an engine.
@@ -345,6 +356,7 @@ export def "engines-document-types-documents-create-or-updatejson createOrUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documentexternal-id: string # Document external id.
   --documentfields: list # Document fields.
 ]: nothing -> any {
@@ -354,7 +366,7 @@ export def "engines-document-types-documents-create-or-updatejson createOrUpdate
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/create_or_update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a document from the engine.
@@ -373,13 +385,14 @@ export def "engines-document-types-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/($external_id).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a document from the engine.
@@ -398,13 +411,14 @@ export def "engines-document-types-documents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/($external_id).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update fields of a document.
@@ -423,6 +437,7 @@ export def "engines-document-types-documents-update-fieldsjson updateDocumentFie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: record # Updated fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -431,7 +446,7 @@ export def "engines-document-types-documents-update-fieldsjson updateDocumentFie
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/($external_id)/update_fields.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk creation or update of documents in an engine.
@@ -449,6 +464,7 @@ export def "engines-document-types-documents-bulk-create-or-update-verbose creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # List of documents to index.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -457,7 +473,7 @@ export def "engines-document-types-documents-bulk-create-or-update-verbose creat
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_create_or_update_verbose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk creation of documents in an engine.
@@ -475,6 +491,7 @@ export def "engines-document-types-documents-bulk-create createDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # List of documents to create.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -483,7 +500,7 @@ export def "engines-document-types-documents-bulk-create createDocuments" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_create" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update of documents in an engine.
@@ -501,6 +518,7 @@ export def "engines-document-types-documents-bulk-update updateDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # List of documents to update.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -509,7 +527,7 @@ export def "engines-document-types-documents-bulk-update updateDocuments" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_update" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk delete of documents in an engine.
@@ -527,6 +545,7 @@ export def "engines-document-types-documents-bulk-destroy post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # List of deleted documents external ids.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -535,7 +554,7 @@ export def "engines-document-types-documents-bulk-destroy post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_destroy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Async bulk creation or update of documents in an engine.
@@ -553,6 +572,7 @@ export def "engines-document-types-documents-async-bulk-create-or-update asyncCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # List of documents to index.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -561,7 +581,7 @@ export def "engines-document-types-documents-async-bulk-create-or-update asyncCr
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/async_bulk_create_or_update" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check the status of document receipts issued by aync bulk indexing.
@@ -577,6 +597,7 @@ export def "document-receiptsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # List of ids of documents receipts to check.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -585,7 +606,7 @@ export def "document-receiptsjson post" [
   let full_url = (build-url $base "/document_receipts.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run a search request accross an engine.
@@ -602,6 +623,7 @@ export def "engines-searchjson search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search query text.
   --per-page: int
   --page: int
@@ -624,7 +646,7 @@ export def "engines-searchjson search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run an autocomplete search request accross an engine.
@@ -641,6 +663,7 @@ export def "engines-suggestjson suggest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search query text.
   --per-page: int
   --page: int
@@ -663,7 +686,7 @@ export def "engines-suggestjson suggest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Record a clickthrough for a particular result.
@@ -681,6 +704,7 @@ export def "engines-document-types-analytics-log-clickthroughjson logClickthroug
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The external_id or id of the document clicked by the user.
   --q: string # Search query text.
 ]: nothing -> any {
@@ -690,7 +714,7 @@ export def "engines-document-types-analytics-log-clickthroughjson logClickthroug
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/log_clickthrough.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of searches per day for an engine.
@@ -707,6 +731,7 @@ export def "engines-analytics-searchesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -716,7 +741,7 @@ export def "engines-analytics-searchesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/analytics/searches.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of searches per day for an document type.
@@ -734,6 +759,7 @@ export def "engines-document-types-analytics-searchesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -743,7 +769,7 @@ export def "engines-document-types-analytics-searchesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/searches.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve top queries and usage count over a period for an engine.
@@ -760,6 +786,7 @@ export def "engines-analytics-top-queriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
   --page: string # The page to fetch. Defaults to 1.
@@ -771,7 +798,7 @@ export def "engines-analytics-top-queriesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/analytics/top_queries.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve top queries and usage count over a period for a document type.
@@ -789,6 +816,7 @@ export def "engines-document-types-analytics-top-queriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
   --page: string # The page to fetch. Defaults to 1.
@@ -800,7 +828,7 @@ export def "engines-document-types-analytics-top-queriesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/top_queries.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve top queries with no result and usage count over a period for an engine.
@@ -817,6 +845,7 @@ export def "engines-analytics-top-no-result-queriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
   --page: string # The page to fetch. Defaults to 1.
@@ -828,7 +857,7 @@ export def "engines-analytics-top-no-result-queriesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/analytics/top_no_result_queries.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve top queries with no result and usage count over a period for a document type.
@@ -846,6 +875,7 @@ export def "engines-document-types-analytics-top-no-result-queriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
   --page: string # The page to fetch. Defaults to 1.
@@ -857,7 +887,7 @@ export def "engines-document-types-analytics-top-no-result-queriesjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/top_no_result_queries.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve number of clicks per day over a period for an engine.
@@ -874,6 +904,7 @@ export def "engines-analytics-clicksjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -883,7 +914,7 @@ export def "engines-analytics-clicksjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/analytics/clicks.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve number of clicks per day over a period for a document type.
@@ -901,6 +932,7 @@ export def "engines-document-types-analytics-clicksjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -910,7 +942,7 @@ export def "engines-document-types-analytics-clicksjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/clicks.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve number of autoselects (number of clicked results in the autocomplete) per day over a period for an engine.
@@ -927,6 +959,7 @@ export def "engines-analytics-autoselectsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -936,7 +969,7 @@ export def "engines-analytics-autoselectsjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/analytics/autoselects.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve number of autoselects (number of clicked results in the autocomplete) per day over a period for a document type.
@@ -954,6 +987,7 @@ export def "engines-document-types-analytics-autoselectsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The first day from which to capture searches. Defaults to 2 weeks.
   --end-date: string # The last date from which to capture searches. Defaults to current date.
 ]: nothing -> any {
@@ -963,5 +997,5 @@ export def "engines-document-types-analytics-autoselectsjson post" [
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/analytics/autoselects.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

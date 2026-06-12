@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search item" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "domains-search item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
   --page: string # Search page to request
@@ -119,7 +121,7 @@ export def "domains-search item" [
   let full_url = (build-url $base "/domains/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get TLD records
@@ -135,6 +137,7 @@ export def "domains-tld item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
   --page: string # Search page to request
@@ -154,7 +157,7 @@ export def "domains-tld item" [
   let full_url = (build-url $base $"/domains/tld/($zone_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Whole Dataset for TLD
@@ -169,6 +172,7 @@ export def "domains-tld-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
 ]: nothing -> any {
@@ -178,7 +182,7 @@ export def "domains-tld-download get" [
   let full_url = (build-url $base $"/domains/tld/($zone_id)/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Domains Search for TLD
@@ -193,6 +197,7 @@ export def "domains-tld-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
   --page: string # Search page to request
@@ -212,7 +217,7 @@ export def "domains-tld-search get" [
   let full_url = (build-url $base $"/domains/tld/($zone_id)/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get added domains, latest if date not specified
@@ -226,6 +231,7 @@ export def "domains-updates-added get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
   --page: string # Search page to request
@@ -237,7 +243,7 @@ export def "domains-updates-added get" [
   let full_url = (build-url $base "/domains/updates/added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download added domains, latest if date not specified
@@ -251,6 +257,7 @@ export def "domains-updates-added-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
 ]: nothing -> any {
@@ -260,7 +267,7 @@ export def "domains-updates-added-download get" [
   let full_url = (build-url $base "/domains/updates/added/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get deleted domains, latest if date not specified
@@ -274,6 +281,7 @@ export def "domains-updates-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
   --page: string # Search page to request
@@ -285,7 +293,7 @@ export def "domains-updates-deleted get" [
   let full_url = (build-url $base "/domains/updates/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download deleted domains, latest if date not specified
@@ -299,6 +307,7 @@ export def "domains-updates-deleted-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
 ]: nothing -> any {
@@ -308,7 +317,7 @@ export def "domains-updates-deleted-download get" [
   let full_url = (build-url $base "/domains/updates/deleted/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of updates
@@ -322,6 +331,7 @@ export def "domains-updates-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
 ]: nothing -> record<added: string, added_download: string, date: string, deleted: string, deleted_download: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -330,7 +340,7 @@ export def "domains-updates-list get" [
   let full_url = (build-url $base "/domains/updates/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /info/api
@@ -344,6 +354,7 @@ export def "info item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
 ]: nothing -> record<customer_email: string, customer_name: string, expires: string, item_id: string, item_name: string, license: string, license_limit: string, price_id: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -352,7 +363,7 @@ export def "info item" [
   let full_url = (build-url $base "/info/api" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns overall stagtistics
@@ -367,6 +378,7 @@ export def "info-stat collection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
 ]: nothing -> table<next_page: string, time: string, total: int, statistics: list<record>> {
@@ -376,7 +388,7 @@ export def "info-stat collection" [
   let full_url = (build-url $base "/info/stat/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistics for specific zone
@@ -392,6 +404,7 @@ export def "info-stat item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
 ]: nothing -> record<next_page: string, time: string, total: int, statistics: table<date: string, dec: int, inc: int, total: int, zone: string>> {
@@ -401,7 +414,7 @@ export def "info-stat item" [
   let full_url = (build-url $base $"/info/stat/($zone)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns overall Tld info
@@ -415,13 +428,14 @@ export def "info-tld list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: list<string>, in_bundles: list<string>, includes: list<string>, type: string, zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info/tld/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistics for specific zone
@@ -436,6 +450,7 @@ export def "info-tld get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
 ]: nothing -> record<description: list<string>, in_bundles: list<string>, includes: list<string>, type: string, zone: string> {
@@ -445,5 +460,5 @@ export def "info-tld get" [
   let full_url = (build-url $base $"/info/tld/($zone)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

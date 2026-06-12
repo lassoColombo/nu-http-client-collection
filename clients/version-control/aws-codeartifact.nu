@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def targetStatus-completer [] { ["Archived" "Deleted" "Disposed" "Published" "Un
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-external-connectiondomainrepositoryexternal-connection AssociateExternalConnection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "repository-external-connectiondomainrepositoryexternal-connection As
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository.
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository to which the external connection is added. 
@@ -129,7 +131,7 @@ export def "repository-external-connectiondomainrepositoryexternal-connection As
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Removes an existing external connection from a repository. 
@@ -144,6 +146,7 @@ export def "repository-external-connectiondomainrepositoryexternal-connection Di
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository from which to remove the external repository. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string # The name of the repository from which the external connection will be removed. 
@@ -164,7 +167,7 @@ export def "repository-external-connectiondomainrepositoryexternal-connection Di
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Copies package versions from one repository to another repository in the same domain. </p> <note> <p> You must specify <code>versions</code> or <code>versionRevisions</code>. You cannot specify both. </p> </note>
@@ -179,6 +182,7 @@ export def "package-versions-copydomainsource-repositorydestination-repositoryfo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the source and destination repositories. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --source-repository: string #  The name of the repository that contains the package versions to be copied. 
@@ -209,7 +213,7 @@ export def "package-versions-copydomainsource-repositorydestination-repositoryfo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # <p> Creates a domain. CodeArtifact <i>domains</i> make it easier to manage multiple repositories across an organization. You can use a domain to apply permissions across many repositories owned by different Amazon Web Services accounts. An asset is stored only once in a domain, even if it's in multiple repositories. </p> <p>Although you can have multiple domains, we recommend a single production domain that contains all published artifacts so that your development teams can find and share packages. You can use a second pre-production domain to test changes to the production domain configuration. </p>
@@ -225,6 +229,7 @@ export def "domaindomain CreateDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain to create. All domain names in an Amazon Web Services Region that are in the same Amazon Web Services account must be unique. The domain name is used as the prefix in DNS hostnames. Do not use sensitive information in a domain name because it is publicly discoverable. 
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -247,7 +252,7 @@ export def "domaindomain CreateDomain" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Deletes a domain. You cannot delete a domain that contains repositories. If you want to delete a domain with repositories, first delete its repositories. 
@@ -262,6 +267,7 @@ export def "domaindomain DeleteDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain to delete. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --X-Amz-Content-Sha256: string
@@ -280,7 +286,7 @@ export def "domaindomain DeleteDomain" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DomainDescription.html">DomainDescription</a> object that contains information about the requested domain. 
@@ -295,6 +301,7 @@ export def "domaindomain DescribeDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  A string that specifies the name of the requested domain. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --X-Amz-Content-Sha256: string
@@ -313,7 +320,7 @@ export def "domaindomain DescribeDomain" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Creates a repository. 
@@ -330,6 +337,7 @@ export def "repositorydomainrepository CreateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the created repository. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository to create. 
@@ -355,7 +363,7 @@ export def "repositorydomainrepository CreateRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Deletes a repository. 
@@ -370,6 +378,7 @@ export def "repositorydomainrepository DeleteRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository to delete. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository to delete. 
@@ -389,7 +398,7 @@ export def "repositorydomainrepository DeleteRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a <code>RepositoryDescription</code> object that contains detailed information about the requested repository. 
@@ -404,6 +413,7 @@ export def "repositorydomainrepository DescribeRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository to describe. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  A string that specifies the name of the requested repository. 
@@ -423,7 +433,7 @@ export def "repositorydomainrepository DescribeRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Update the properties of a repository. 
@@ -439,6 +449,7 @@ export def "repositorydomainrepository UpdateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain associated with the repository to update. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository to update. 
@@ -463,7 +474,7 @@ export def "repositorydomainrepository UpdateRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Deletes the resource policy set on a domain. 
@@ -478,6 +489,7 @@ export def "domain-permissions-policydomain DeleteDomainPermissionsPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain associated with the resource policy to be deleted. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --policy-revision: string #  The current revision of the resource policy to be deleted. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy. 
@@ -497,7 +509,7 @@ export def "domain-permissions-policydomain DeleteDomainPermissionsPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Returns the resource policy attached to the specified domain. </p> <note> <p> The policy is a resource-based policy, not an identity-based policy. For more information, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html">Identity-based policies and resource-based policies </a> in the <i>IAM User Guide</i>. </p> </note>
@@ -512,6 +524,7 @@ export def "domain-permissions-policydomain GetDomainPermissionsPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain to which the resource policy is attached. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --X-Amz-Content-Sha256: string
@@ -530,7 +543,7 @@ export def "domain-permissions-policydomain GetDomainPermissionsPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a package and all associated package versions. A deleted package cannot be restored. To delete one or more package versions, use the <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DeletePackageVersions.html">DeletePackageVersions</a> API.
@@ -545,6 +558,7 @@ export def "packagedomainrepositoryformatpackage DeletePackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the package to delete.
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string # The name of the repository that contains the package to delete.
@@ -567,7 +581,7 @@ export def "packagedomainrepositoryformatpackage DeletePackage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDescription.html">PackageDescription</a> object that contains information about the requested package.
@@ -582,6 +596,7 @@ export def "packagedomainrepositoryformatpackage DescribePackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository that contains the package.
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string # The name of the repository that contains the requested package. 
@@ -604,7 +619,7 @@ export def "packagedomainrepositoryformatpackage DescribePackage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p>Sets the package origin configuration for a package.</p> <p>The package origin configuration determines how new versions of a package can be added to a repository. You can allow or block direct publishing of new package versions, or ingestion and retaining of new package versions from an external connection or upstream source. For more information about package origin controls and configuration, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/package-origin-controls.html">Editing package origin controls</a> in the <i>CodeArtifact User Guide</i>.</p> <p> <code>PutPackageOriginConfiguration</code> can be called on a package that doesn't yet exist in the repository. When called on a package that does not exist, a package is created in the repository with no versions and the requested restrictions are set on the package. This can be used to preemptively block ingesting or retaining any versions from external connections or upstream repositories, or to block publishing any versions of the package into the repository before connecting any package managers or publishers to the repository.</p>
@@ -620,6 +635,7 @@ export def "packagedomainrepositoryformatpackage PutPackageOriginConfiguration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository that contains the package.
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string # The name of the repository that contains the package.
@@ -646,7 +662,7 @@ export def "packagedomainrepositoryformatpackage PutPackageOriginConfiguration" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Deletes one or more versions of a package. A deleted package version cannot be restored in your repository. If you want to remove a package version from your repository and be able to restore it later, set its status to <code>Archived</code>. Archived packages cannot be downloaded from a repository and don't show up with list package APIs (for example, <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html">ListPackageVersions</a>), but you can restore them using <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html">UpdatePackageVersionsStatus</a>. 
@@ -661,6 +677,7 @@ export def "package-versions-deletedomainrepositoryformatpackage DeletePackageVe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the package to delete. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the package versions to delete. 
@@ -688,7 +705,7 @@ export def "package-versions-deletedomainrepositoryformatpackage DeletePackageVe
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # <p> Deletes the resource policy that is set on a repository. After a resource policy is deleted, the permissions allowed and denied by the deleted policy are removed. The effect of deleting a resource policy might not be immediate. </p> <important> <p> Use <code>DeleteRepositoryPermissionsPolicy</code> with caution. After a policy is deleted, Amazon Web Services users, roles, and accounts lose permissions to perform the repository actions granted by the deleted policy. </p> </important>
@@ -703,6 +720,7 @@ export def "repository-permissions-policiesdomainrepository DeleteRepositoryPerm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository associated with the resource policy to be deleted. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that is associated with the resource policy to be deleted 
@@ -723,7 +741,7 @@ export def "repository-permissions-policiesdomainrepository DeleteRepositoryPerm
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html">PackageVersionDescription</a> object that contains information about the requested package version. 
@@ -738,6 +756,7 @@ export def "package-versiondomainrepositoryformatpackageversion DescribePackageV
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the package version. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the package version. 
@@ -761,7 +780,7 @@ export def "package-versiondomainrepositoryformatpackageversion DescribePackageV
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Deletes the assets in package versions and sets the package versions' status to <code>Disposed</code>. A disposed package version cannot be restored in your repository because its assets are deleted. </p> <p> To view all disposed package versions in a repository, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html">ListPackageVersions</a> and set the <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html#API_ListPackageVersions_RequestSyntax">status</a> parameter to <code>Disposed</code>. </p> <p> To view information about a disposed package version, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DescribePackageVersion.html">DescribePackageVersion</a>. </p>
@@ -776,6 +795,7 @@ export def "package-versions-disposedomainrepositoryformatpackage DisposePackage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository you want to dispose. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the package versions you want to dispose. 
@@ -804,7 +824,7 @@ export def "package-versions-disposedomainrepositoryformatpackage DisposePackage
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # <p> Generates a temporary authorization token for accessing repositories in the domain. This API requires the <code>codeartifact:GetAuthorizationToken</code> and <code>sts:GetServiceBearerToken</code> permissions. For more information about authorization tokens, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/tokens-authentication.html">CodeArtifact authentication and tokens</a>. </p> <note> <p>CodeArtifact authorization tokens are valid for a period of 12 hours when created with the <code>login</code> command. You can call <code>login</code> periodically to refresh the token. When you create an authorization token with the <code>GetAuthorizationToken</code> API, you can set a custom authorization period, up to a maximum of 12 hours, with the <code>durationSeconds</code> parameter.</p> <p>The authorization period begins after <code>login</code> or <code>GetAuthorizationToken</code> is called. If <code>login</code> or <code>GetAuthorizationToken</code> is called while assuming a role, the token lifetime is independent of the maximum session duration of the role. For example, if you call <code>sts assume-role</code> and specify a session duration of 15 minutes, then generate a CodeArtifact authorization token, the token will be valid for the full authorization period even though this is longer than the 15-minute session duration.</p> <p>See <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html">Using IAM Roles</a> for more information on controlling session duration. </p> </note>
@@ -819,6 +839,7 @@ export def "authorization-tokendomain GetAuthorizationToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that is in scope for the generated authorization token. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --duration: int # The time, in seconds, that the generated authorization token is valid. Valid values are <code>0</code> and any number between <code>900</code> (15 minutes) and <code>43200</code> (12 hours). A value of <code>0</code> will set the expiration of the authorization token to the same expiration of the user's role's temporary credentials.
@@ -838,7 +859,7 @@ export def "authorization-tokendomain GetAuthorizationToken" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns an asset (or file) that is in a package. For example, for a Maven package version, use <code>GetPackageVersionAsset</code> to download a <code>JAR</code> file, a <code>POM</code> file, or any other assets in the package version. 
@@ -853,6 +874,7 @@ export def "package-version-assetdomainrepositoryformatpackageversionasset GetPa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the package version with the requested asset. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The repository that contains the package version with the requested asset. 
@@ -878,7 +900,7 @@ export def "package-version-assetdomainrepositoryformatpackageversionasset GetPa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Gets the readme file or descriptive text for a package version. </p> <p> The returned text might contain formatting. For example, it might contain formatting for Markdown or reStructuredText. </p>
@@ -893,6 +915,7 @@ export def "package-version-readmedomainrepositoryformatpackageversion GetPackag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the package version with the requested readme file. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The repository that contains the package with the requested readme file. 
@@ -916,7 +939,7 @@ export def "package-version-readmedomainrepositoryformatpackageversion GetPackag
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Returns the endpoint of a repository for a specific package format. A repository has one endpoint for each package format: </p> <ul> <li> <p> <code>maven</code> </p> </li> <li> <p> <code>npm</code> </p> </li> <li> <p> <code>nuget</code> </p> </li> <li> <p> <code>pypi</code> </p> </li> </ul>
@@ -931,6 +954,7 @@ export def "repository-endpointdomainrepositoryformat GetRepositoryEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain that contains the repository. It does not include dashes or spaces. 
   --repository: string #  The name of the repository. 
@@ -951,7 +975,7 @@ export def "repository-endpointdomainrepositoryformat GetRepositoryEndpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns the resource policy that is set on a repository. 
@@ -966,6 +990,7 @@ export def "repository-permissions-policydomainrepository GetRepositoryPermissio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain containing the repository whose associated resource policy is to be retrieved. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository whose associated resource policy is to be retrieved. 
@@ -985,7 +1010,7 @@ export def "repository-permissions-policydomainrepository GetRepositoryPermissio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p> Sets the resource policy on a repository that specifies permissions to access it. </p> <p> When you call <code>PutRepositoryPermissionsPolicy</code>, the resource policy on the repository is ignored when evaluting permissions. This ensures that the owner of a repository cannot lock themselves out of the repository, which would prevent them from being able to update the resource policy. </p>
@@ -1000,6 +1025,7 @@ export def "repository-permissions-policydomainrepository PutRepositoryPermissio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain containing the repository to set the resource policy on. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository to set the resource policy on. 
@@ -1024,7 +1050,7 @@ export def "repository-permissions-policydomainrepository PutRepositoryPermissio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html">DomainSummary</a> objects for all domains owned by the Amazon Web Services account that makes this call. Each returned <code>DomainSummary</code> object contains information about a domain. 
@@ -1039,6 +1065,7 @@ export def "domains ListDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: string # Pagination limit
   --nextToken: string # Pagination token
   --X-Amz-Content-Sha256: string
@@ -1062,7 +1089,7 @@ export def "domains ListDomains" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_AssetSummary.html">AssetSummary</a> objects for assets in a package version. 
@@ -1077,6 +1104,7 @@ export def "package-version-assetsdomainrepositoryformatpackageversion ListPacka
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository associated with the package version assets. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the package that contains the requested package version assets. 
@@ -1104,7 +1132,7 @@ export def "package-version-assetsdomainrepositoryformatpackageversion ListPacka
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns the direct dependencies for a package version. The dependencies are returned as <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDependency.html">PackageDependency</a> objects. CodeArtifact extracts the dependencies for a package version from the metadata file for the package format (for example, the <code>package.json</code> file for npm packages and the <code>pom.xml</code> file for Maven). Any package version dependencies that are not listed in the configuration file are not returned. 
@@ -1119,6 +1147,7 @@ export def "package-version-dependenciesdomainrepositoryformatpackageversion Lis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the requested package version dependencies. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the requested package version. 
@@ -1143,7 +1172,7 @@ export def "package-version-dependenciesdomainrepositoryformatpackageversion Lis
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionSummary.html">PackageVersionSummary</a> objects for package versions in a repository that match the request parameters. Package versions of all statuses will be returned by default when calling <code>list-package-versions</code> with no <code>--status</code> parameter. 
@@ -1158,6 +1187,7 @@ export def "package-versionsdomainrepositoryformatpackage ListPackageVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the requested package versions. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the requested package versions. 
@@ -1187,7 +1217,7 @@ export def "package-versionsdomainrepositoryformatpackage ListPackageVersions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageSummary.html">PackageSummary</a> objects for packages in a repository that match the request parameters. 
@@ -1202,6 +1232,7 @@ export def "packagesdomainrepository ListPackages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the requested packages. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The name of the repository that contains the requested packages. 
@@ -1230,7 +1261,7 @@ export def "packagesdomainrepository ListPackages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html">RepositorySummary</a> objects. Each <code>RepositorySummary</code> contains information about a repository in the specified Amazon Web Services account and that matches the input parameters. 
@@ -1245,6 +1276,7 @@ export def "repositories ListRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repository-prefix: string #  A prefix used to filter returned repositories. Only repositories with names that start with <code>repositoryPrefix</code> are returned.
   --max-results: int #  The maximum number of results to return per page. 
   --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
@@ -1266,7 +1298,7 @@ export def "repositories ListRepositories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html">RepositorySummary</a> objects. Each <code>RepositorySummary</code> contains information about a repository in the specified domain and that matches the input parameters. 
@@ -1281,6 +1313,7 @@ export def "domain-repositoriesdomain ListRepositoriesInDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the returned list of repositories. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --administrator-account: string #  Filter the list of repositories to only include those that are managed by the Amazon Web Services account ID. 
@@ -1305,7 +1338,7 @@ export def "domain-repositoriesdomain ListRepositoriesInDomain" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about Amazon Web Services tags for a specified Amazon Resource Name (ARN) in CodeArtifact.
@@ -1320,6 +1353,7 @@ export def "tagsresource-arn ListTagsForResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resourceArn: string # The Amazon Resource Name (ARN) of the resource to get tags for.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -1337,7 +1371,7 @@ export def "tagsresource-arn ListTagsForResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # <p>Creates a new package version containing one or more assets (or files).</p> <p>The <code>unfinished</code> flag can be used to keep the package version in the <code>Unfinished</code> state until all of its assets have been uploaded (see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status.html#package-version-status">Package version status</a> in the <i>CodeArtifact user guide</i>). To set the package version’s status to <code>Published</code>, omit the <code>unfinished</code> flag when uploading the final asset, or set the status using <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html">UpdatePackageVersionStatus</a>. Once a package version’s status is set to <code>Published</code>, it cannot change back to <code>Unfinished</code>.</p> <note> <p>Only generic packages can be published using this API. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html">Using generic packages</a> in the <i>CodeArtifact User Guide</i>.</p> </note>
@@ -1352,6 +1386,7 @@ export def "package-version-publishdomainrepositoryformatpackageversionassetx-am
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository that contains the package version to publish.
   --domain-owner: string # The 12-digit account number of the AWS account that owns the domain. It does not include dashes or spaces.
   --repository: string # The name of the repository that the package version will be published to.
@@ -1382,7 +1417,7 @@ export def "package-version-publishdomainrepositoryformatpackageversionassetx-am
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # <p> Sets a resource policy on a domain that specifies permissions to access it. </p> <p> When you call <code>PutDomainPermissionsPolicy</code>, the resource policy on the domain is ignored when evaluting permissions. This ensures that the owner of a domain cannot lock themselves out of the domain, which would prevent them from being able to update the resource policy. </p>
@@ -1397,6 +1432,7 @@ export def "domain-permissions-policy PutDomainPermissionsPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1419,7 +1455,7 @@ export def "domain-permissions-policy PutDomainPermissionsPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds or updates tags for a resource in CodeArtifact.
@@ -1435,6 +1471,7 @@ export def "tagresource-arn TagResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resourceArn: string # The Amazon Resource Name (ARN) of the resource that you want to add or update tags for.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -1456,7 +1493,7 @@ export def "tagresource-arn TagResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes tags from a resource in CodeArtifact.
@@ -1471,6 +1508,7 @@ export def "untagresource-arn UntagResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resourceArn: string # The Amazon Resource Name (ARN) of the resource that you want to remove tags from.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -1492,7 +1530,7 @@ export def "untagresource-arn UntagResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Updates the status of one or more versions of a package. Using <code>UpdatePackageVersionsStatus</code>, you can update the status of package versions to <code>Archived</code>, <code>Published</code>, or <code>Unlisted</code>. To set the status of a package version to <code>Disposed</code>, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DisposePackageVersions.html">DisposePackageVersions</a>. 
@@ -1507,6 +1545,7 @@ export def "package-versions-update-statusdomainrepositoryformatpackage UpdatePa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string #  The name of the domain that contains the repository that contains the package versions with a status to be updated. 
   --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
   --repository: string #  The repository that contains the package versions with the status you want to update. 
@@ -1536,5 +1575,5 @@ export def "package-versions-update-statusdomainrepositoryformatpackage UpdatePa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

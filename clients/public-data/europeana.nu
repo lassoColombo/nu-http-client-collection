@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def accept-completer-2 [] { ["application/turtle" "application/x-turtle" "text/t
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "record-opensearchrss openSearch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "record-opensearchrss openSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # count (format: int32, default: 12)
   --searchTerms: string # searchTerms
@@ -114,7 +116,7 @@ export def "record-opensearchrss openSearch" [
   let full_url = (build-url $base "/record/v2/opensearch.rss" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # search for records
@@ -129,6 +131,7 @@ export def "record-searchjson searchRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --boost: string # boost
   --callback: string # callback
   --colourpalette: list # colourpalette
@@ -159,7 +162,7 @@ export def "record-searchjson searchRecords" [
   let full_url = (build-url $base "/record/v2/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # search for records post
@@ -175,6 +178,7 @@ export def "record-searchjson searchRecordsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wskey: string # wskey
   --boost: string
   --callback: string
@@ -204,7 +208,7 @@ export def "record-searchjson searchRecordsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # translate a term to different languages
@@ -219,6 +223,7 @@ export def "record-translate-queryjson translateQueryUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # callback
   --languageCodes: list # languageCodes
   --profile: string # profile
@@ -231,7 +236,7 @@ export def "record-translate-queryjson translateQueryUsingGET" [
   let full_url = (build-url $base "/record/v2/translateQuery.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get a single record in JSON format
@@ -248,6 +253,7 @@ export def "record get-by-collectionId-recordId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # callback
   --lang: string # lang
   --profile: string # profile (default: standard)
@@ -259,7 +265,7 @@ export def "record get-by-collectionId-recordId" [
   let full_url = (build-url $base $"/record/v2/($collectionId)/($recordId).json" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get single record in JSON LD format
@@ -276,6 +282,7 @@ export def "record get-by-collectionId-recordId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --callback: string # callback
   --lang: string # lang
@@ -288,7 +295,7 @@ export def "record get-by-collectionId-recordId-1" [
   let full_url = (build-url $base $"/record/v2/($collectionId)/($recordId).jsonld" $qp)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get single record in RDF format)
@@ -305,6 +312,7 @@ export def "record get-by-collectionId-recordId-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # lang
   --profile: string # profile (default: standard)
   --wskey: string # wskey
@@ -315,7 +323,7 @@ export def "record get-by-collectionId-recordId-2" [
   let full_url = (build-url $base $"/record/v2/($collectionId)/($recordId).rdf" $qp)
   let accept_val = "application/rdf+xml;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get single record in Schema.org JSON LD format
@@ -332,6 +340,7 @@ export def "record get-by-collectionId-recordId-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --callback: string # callback
   --lang: string # lang
@@ -344,7 +353,7 @@ export def "record get-by-collectionId-recordId-3" [
   let full_url = (build-url $base $"/record/v2/($collectionId)/($recordId).schema.jsonld" $qp)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get single record in turtle format)
@@ -361,6 +370,7 @@ export def "record get-by-collectionId-recordId-4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --lang: string # lang
   --profile: string # profile (default: standard)
@@ -372,5 +382,5 @@ export def "record get-by-collectionId-recordId-4" [
   let full_url = (build-url $base $"/record/v2/($collectionId)/($recordId).ttl" $qp)
   let accept_val = ($accept | default "application/x-turtle")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

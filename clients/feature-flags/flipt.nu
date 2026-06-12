@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def method-completer [] { ["METHOD_CLOUD" "METHOD_GITHUB" "METHOD_JWT" "METHOD_K
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "namespaces listNamespaces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "namespaces listNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
   --offset: int # format: int32
   --pageToken: string
@@ -117,7 +119,7 @@ export def "namespaces listNamespaces" [
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces
@@ -131,6 +133,7 @@ export def "namespaces createNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   name: string
   --description: string
@@ -143,7 +146,7 @@ export def "namespaces createNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/namespaces/{key}
@@ -158,6 +161,7 @@ export def "namespaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference: string
 ]: nothing -> record<key: string, name: string, description: string, protected: bool, createdAt: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -166,7 +170,7 @@ export def "namespaces get" [
   let full_url = (build-url $base $"/api/v1/namespaces/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/namespaces/{key}
@@ -181,6 +185,7 @@ export def "namespaces updateNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: string
   name: string
   --description: string
@@ -193,7 +198,7 @@ export def "namespaces updateNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{key}
@@ -208,6 +213,7 @@ export def "namespaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -216,7 +222,7 @@ export def "namespaces delete" [
   let full_url = (build-url $base $"/api/v1/namespaces/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags
@@ -231,6 +237,7 @@ export def "namespaces-flags listFlags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
   --offset: int # format: int32
   --pageToken: string
@@ -242,7 +249,7 @@ export def "namespaces-flags listFlags" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/flags
@@ -257,6 +264,7 @@ export def "namespaces-flags createFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   name: string
   --description: string
@@ -273,7 +281,7 @@ export def "namespaces-flags createFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts
@@ -289,6 +297,7 @@ export def "namespaces-flags-rollouts listRollouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
   --pageToken: string
   --reference: string
@@ -299,7 +308,7 @@ export def "namespaces-flags-rollouts listRollouts" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rollouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts
@@ -317,6 +326,7 @@ export def "namespaces-flags-rollouts createRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespaceKey: string
   --body-flagKey: string
   rank: int # format: int32
@@ -332,7 +342,7 @@ export def "namespaces-flags-rollouts createRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts/order
@@ -348,6 +358,7 @@ export def "namespaces-flags-rollouts-order orderRollouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-flagKey: string
   --body-namespaceKey: string
   rolloutIds: list
@@ -360,7 +371,7 @@ export def "namespaces-flags-rollouts-order orderRollouts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts/{id}
@@ -377,6 +388,7 @@ export def "namespaces-flags-rollouts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference: string
 ]: nothing -> record<id: string, namespaceKey: string, flagKey: string, type: string, rank: int, description: string, createdAt: string, updatedAt: string, segment: record<segmentKey: string, value: bool, segmentKeys: list<string>, segmentOperator: string>, threshold: record<percentage: float, value: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -385,7 +397,7 @@ export def "namespaces-flags-rollouts get" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rollouts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts/{id}
@@ -404,6 +416,7 @@ export def "namespaces-flags-rollouts updateRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   --body-namespaceKey: string
   --body-flagKey: string
@@ -419,7 +432,7 @@ export def "namespaces-flags-rollouts updateRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rollouts/{id}
@@ -436,13 +449,14 @@ export def "namespaces-flags-rollouts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rollouts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules
@@ -458,6 +472,7 @@ export def "namespaces-flags-rules listRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
   --offset: int # format: int32
   --pageToken: string
@@ -469,7 +484,7 @@ export def "namespaces-flags-rules listRules" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules
@@ -485,6 +500,7 @@ export def "namespaces-flags-rules createRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-flagKey: string
   --segmentKey: string
   rank: int # format: int32
@@ -500,7 +516,7 @@ export def "namespaces-flags-rules createRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/order
@@ -516,6 +532,7 @@ export def "namespaces-flags-rules-order orderRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-flagKey: string
   ruleIds: list
   --body-namespaceKey: string
@@ -528,7 +545,7 @@ export def "namespaces-flags-rules-order orderRules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{id}
@@ -545,6 +562,7 @@ export def "namespaces-flags-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference: string
 ]: nothing -> record<id: string, flagKey: string, segmentKey: string, distributions: table<id: string, ruleId: string, variantId: string, rollout: float, createdAt: string, updatedAt: string>, rank: int, createdAt: string, updatedAt: string, namespaceKey: string, segmentKeys: list<string>, segmentOperator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -553,7 +571,7 @@ export def "namespaces-flags-rules get" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rules/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{id}
@@ -570,6 +588,7 @@ export def "namespaces-flags-rules updateRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   --body-flagKey: string
   --segmentKey: string
@@ -585,7 +604,7 @@ export def "namespaces-flags-rules updateRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{id}
@@ -602,13 +621,14 @@ export def "namespaces-flags-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{ruleId}/distributions
@@ -625,6 +645,7 @@ export def "namespaces-flags-rules-distributions createDistribution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-flagKey: string
   --body-ruleId: string
   variantId: string
@@ -639,7 +660,7 @@ export def "namespaces-flags-rules-distributions createDistribution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{ruleId}/distributions/{id}
@@ -657,6 +678,7 @@ export def "namespaces-flags-rules-distributions updateDistribution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   --body-flagKey: string
   --body-ruleId: string
@@ -672,7 +694,7 @@ export def "namespaces-flags-rules-distributions updateDistribution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/rules/{ruleId}/distributions/{id}
@@ -690,6 +712,7 @@ export def "namespaces-flags-rules-distributions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --variantId: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -698,7 +721,7 @@ export def "namespaces-flags-rules-distributions delete" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/rules/($ruleId)/distributions/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/variants
@@ -714,6 +737,7 @@ export def "namespaces-flags-variants createVariant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-flagKey: string
   key: string
   --name: string
@@ -729,7 +753,7 @@ export def "namespaces-flags-variants createVariant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/variants/{id}
@@ -746,6 +770,7 @@ export def "namespaces-flags-variants updateVariant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   --body-flagKey: string
   key: string
@@ -762,7 +787,7 @@ export def "namespaces-flags-variants updateVariant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/flags/{flagKey}/variants/{id}
@@ -779,13 +804,14 @@ export def "namespaces-flags-variants delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($flagKey)/variants/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/flags/{key}
@@ -801,6 +827,7 @@ export def "namespaces-flags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference: string
 ]: nothing -> record<key: string, name: string, description: string, enabled: bool, createdAt: string, updatedAt: string, variants: table<id: string, flagKey: string, key: string, name: string, description: string, createdAt: string, updatedAt: string, attachment: string, namespaceKey: string>, namespaceKey: string, type: string, defaultVariant: record<id: string, flagKey: string, key: string, name: string, description: string, createdAt: string, updatedAt: string, attachment: string, namespaceKey: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -809,7 +836,7 @@ export def "namespaces-flags get" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/flags/{key}
@@ -825,6 +852,7 @@ export def "namespaces-flags updateFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: string
   name: string
   --description: string
@@ -841,7 +869,7 @@ export def "namespaces-flags updateFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/flags/{key}
@@ -857,13 +885,14 @@ export def "namespaces-flags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/flags/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/segments
@@ -878,6 +907,7 @@ export def "namespaces-segments listSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
   --offset: int # format: int32
   --pageToken: string
@@ -889,7 +919,7 @@ export def "namespaces-segments listSegments" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/segments
@@ -904,6 +934,7 @@ export def "namespaces-segments createSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   name: string
   --description: string
@@ -918,7 +949,7 @@ export def "namespaces-segments createSegment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/namespaces/{namespaceKey}/segments/{key}
@@ -934,6 +965,7 @@ export def "namespaces-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference: string
 ]: nothing -> record<key: string, name: string, description: string, createdAt: string, updatedAt: string, constraints: table<id: string, segmentKey: string, type: string, property: string, operator: string, value: string, createdAt: string, updatedAt: string, namespaceKey: string, description: string>, matchType: string, namespaceKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -942,7 +974,7 @@ export def "namespaces-segments get" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/segments/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/segments/{key}
@@ -958,6 +990,7 @@ export def "namespaces-segments updateSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: string
   name: string
   --description: string
@@ -972,7 +1005,7 @@ export def "namespaces-segments updateSegment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/segments/{key}
@@ -988,13 +1021,14 @@ export def "namespaces-segments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/segments/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/namespaces/{namespaceKey}/segments/{segmentKey}/constraints
@@ -1010,6 +1044,7 @@ export def "namespaces-segments-constraints createConstraint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-segmentKey: string
   type: string@type-completer-1 # format: enum
   property: string
@@ -1026,7 +1061,7 @@ export def "namespaces-segments-constraints createConstraint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/namespaces/{namespaceKey}/segments/{segmentKey}/constraints/{id}
@@ -1043,6 +1078,7 @@ export def "namespaces-segments-constraints updateConstraint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   --body-segmentKey: string
   type: string@type-completer-1 # format: enum
@@ -1060,7 +1096,7 @@ export def "namespaces-segments-constraints updateConstraint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/namespaces/{namespaceKey}/segments/{segmentKey}/constraints/{id}
@@ -1077,13 +1113,14 @@ export def "namespaces-segments-constraints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespaceKey)/segments/($segmentKey)/constraints/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /auth/v1/method/kubernetes/serviceaccount
@@ -1097,6 +1134,7 @@ export def "auth-method-kubernetes-serviceaccount kubernetesVerifyServiceAccount
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --serviceAccountToken: string
 ]: any -> record<clientToken: string, authentication: record<id: string, method: string, expiresAt: string, createdAt: string, updatedAt: string, metadata: record>> {
   let input = $in
@@ -1107,7 +1145,7 @@ export def "auth-method-kubernetes-serviceaccount kubernetesVerifyServiceAccount
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /auth/v1/method/oidc/{provider}/authorize
@@ -1122,6 +1160,7 @@ export def "auth-method-oidc-authorize oidcAuthorizeURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string
 ]: nothing -> record<authorizeUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1130,7 +1169,7 @@ export def "auth-method-oidc-authorize oidcAuthorizeURL" [
   let full_url = (build-url $base $"/auth/v1/method/oidc/($provider)/authorize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /auth/v1/method/oidc/{provider}/callback
@@ -1145,6 +1184,7 @@ export def "auth-method-oidc-callback oidcCallback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --state: string
 ]: nothing -> record<clientToken: string, authentication: record<id: string, method: string, expiresAt: string, createdAt: string, updatedAt: string, metadata: record>> {
@@ -1154,7 +1194,7 @@ export def "auth-method-oidc-callback oidcCallback" [
   let full_url = (build-url $base $"/auth/v1/method/oidc/($provider)/callback" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /auth/v1/method/token
@@ -1168,6 +1208,7 @@ export def "auth-method-token createMethodToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --expiresAt: string # format: date-time
@@ -1182,7 +1223,7 @@ export def "auth-method-token createMethodToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /auth/v1/self
@@ -1196,13 +1237,14 @@ export def "auth-self get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, method: string, expiresAt: string, createdAt: string, updatedAt: string, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/v1/self")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /auth/v1/self/expire
@@ -1216,6 +1258,7 @@ export def "auth-self-expire expireAuthSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiresAt: string # format: date-time
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1224,7 +1267,7 @@ export def "auth-self-expire expireAuthSelf" [
   let full_url = (build-url $base "/auth/v1/self/expire" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /auth/v1/tokens
@@ -1238,6 +1281,7 @@ export def "auth-tokens listAuthTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # format: enum
   --limit: int # format: int32
   --pageToken: string
@@ -1248,7 +1292,7 @@ export def "auth-tokens listAuthTokens" [
   let full_url = (build-url $base "/auth/v1/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /auth/v1/tokens/{id}
@@ -1263,13 +1307,14 @@ export def "auth-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, method: string, expiresAt: string, createdAt: string, updatedAt: string, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/auth/v1/tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /auth/v1/tokens/{id}
@@ -1284,13 +1329,14 @@ export def "auth-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/auth/v1/tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /evaluate/v1/batch
@@ -1305,6 +1351,7 @@ export def "evaluate-batch evaluateBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requestId: string
   requests: list # item shape: {requestId?: string, namespaceKey: string, flagKey: string, entityId: string, context: record, reference?: string}
   --reference: string
@@ -1317,7 +1364,7 @@ export def "evaluate-batch evaluateBatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /evaluate/v1/boolean
@@ -1331,6 +1378,7 @@ export def "evaluate-boolean evaluateBoolean" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requestId: string
   namespaceKey: string
   flagKey: string
@@ -1346,7 +1394,7 @@ export def "evaluate-boolean evaluateBoolean" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /evaluate/v1/variant
@@ -1360,6 +1408,7 @@ export def "evaluate-variant evaluateVariant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requestId: string
   namespaceKey: string
   flagKey: string
@@ -1375,7 +1424,7 @@ export def "evaluate-variant evaluateVariant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # OFREP provider configuration
@@ -1390,13 +1439,14 @@ export def "ofrep-configuration ofrepconfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, capabilities: record<cacheInvalidation: record<polling: record>, flagEvaluation: record<supportedTypes: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ofrep/v1/configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OFREP bulk flag evaluation
@@ -1411,6 +1461,7 @@ export def "ofrep-evaluate-flags ofrepevaluateBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: record
 ]: any -> record<flags: table<key: string, reason: string, variant: string, metadata: record, value: any>> {
   let input = $in
@@ -1421,7 +1472,7 @@ export def "ofrep-evaluate-flags ofrepevaluateBulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # OFREP single flag evaluation
@@ -1437,6 +1488,7 @@ export def "ofrep-evaluate-flags ofrepevaluateFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: string
   --context: record
 ]: any -> record<key: string, reason: string, variant: string, metadata: record, value: any> {
@@ -1448,5 +1500,5 @@ export def "ofrep-evaluate-flags ofrepevaluateFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -134,7 +135,7 @@ def dpAccessRequestsMode-completer [] { ["all" "email-domain" "none"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-groups readAccessGroup" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -168,6 +169,7 @@ export def "access-groups readAccessGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<teamPermissions: list<string>, entitlements: list<string>, isDsyncManaged: bool, name: string, createdAt: string, teamId: string, updatedAt: string, accessGroupId: string, membersCount: float, projectsCount: float, teamRoles: list<string>> {
@@ -177,7 +179,7 @@ export def "access-groups readAccessGroup" [
   let full_url = (build-url $base $"/v1/access-groups/($idOrName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an access group
@@ -194,6 +196,7 @@ export def "access-groups updateAccessGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The name of the access group (e.g. My access group)
@@ -210,7 +213,7 @@ export def "access-groups updateAccessGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an access group
@@ -226,6 +229,7 @@ export def "access-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -235,7 +239,7 @@ export def "access-groups delete" [
   let full_url = (build-url $base $"/v1/access-groups/($idOrName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List members of an access group
@@ -251,6 +255,7 @@ export def "access-groups-members listAccessGroupMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit how many access group members should be returned. (e.g. 20)
   --next: string # Continuation cursor to retrieve the next page of results.
   --search: string # Search project members by their name, username, and email.
@@ -263,7 +268,7 @@ export def "access-groups-members listAccessGroupMembers" [
   let full_url = (build-url $base $"/v1/access-groups/($idOrName)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List access groups for a team, project or member
@@ -278,6 +283,7 @@ export def "access-groups listAccessGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # Filter access groups by project. (e.g. prj_pavWOn1iLObbx3RowVvzmPrTWyTf)
   --search: string # Search for access groups by name. (e.g. example)
   --membersLimit: int # Number of members to include in the response. (e.g. 20)
@@ -293,7 +299,7 @@ export def "access-groups listAccessGroups" [
   let full_url = (build-url $base "/v1/access-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an access group
@@ -309,6 +315,7 @@ export def "access-groups createAccessGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the access group (e.g. My access group)
@@ -324,7 +331,7 @@ export def "access-groups createAccessGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List projects of an access group
@@ -340,6 +347,7 @@ export def "access-groups-projects listAccessGroupProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit how many access group projects should be returned. (e.g. 20)
   --next: string # Continuation cursor to retrieve the next page of results.
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -351,7 +359,7 @@ export def "access-groups-projects listAccessGroupProjects" [
   let full_url = (build-url $base $"/v1/access-groups/($idOrName)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an access group project
@@ -367,6 +375,7 @@ export def "access-groups-projects createAccessGroupProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: string # The ID of the project. (e.g. prj_ndlgr43fadlPyCtREAqxxdyFK)
@@ -381,7 +390,7 @@ export def "access-groups-projects createAccessGroupProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reads an access group project
@@ -398,6 +407,7 @@ export def "access-groups-projects readAccessGroupProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<teamId: string, accessGroupId: string, projectId: string, role: string, createdAt: string, updatedAt: string> {
@@ -407,7 +417,7 @@ export def "access-groups-projects readAccessGroupProject" [
   let full_url = (build-url $base $"/v1/access-groups/($accessGroupIdOrName)/projects/($projectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an access group project
@@ -424,6 +434,7 @@ export def "access-groups-projects updateAccessGroupProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   role: string@role-completer-1 # The project role that will be added to this Access Group. (e.g. ADMIN)
@@ -437,7 +448,7 @@ export def "access-groups-projects updateAccessGroupProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an access group project
@@ -454,6 +465,7 @@ export def "access-groups-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -463,7 +475,7 @@ export def "access-groups-projects delete" [
   let full_url = (build-url $base $"/v1/access-groups/($accessGroupIdOrName)/projects/($projectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Record an artifacts cache usage event
@@ -478,6 +490,7 @@ export def "artifacts-events recordEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --x-Artifact-Client-Ci: string # The continuous integration or delivery environment where this artifact is downloaded. (e.g. VERCEL)
@@ -494,7 +507,7 @@ export def "artifacts-events recordEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get status of Remote Caching for this principal
@@ -509,6 +522,7 @@ export def "artifacts-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -518,7 +532,7 @@ export def "artifacts-status status" [
   let full_url = (build-url $base "/v8/artifacts/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a cache artifact
@@ -534,6 +548,7 @@ export def "artifacts uploadArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --content-Length: float # The artifact size in bytes
@@ -555,7 +570,7 @@ export def "artifacts uploadArtifact" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Download a cache artifact
@@ -571,6 +586,7 @@ export def "artifacts downloadArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --x-Artifact-Client-Ci: string # The continuous integration or delivery environment where this artifact is downloaded. (e.g. VERCEL)
@@ -584,7 +600,7 @@ export def "artifacts downloadArtifact" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if a cache artifact exists
@@ -600,6 +616,7 @@ export def "artifacts artifactExists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -609,7 +626,7 @@ export def "artifacts artifactExists" [
   let full_url = (build-url $base $"/v8/artifacts/($hash)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query information about an artifact
@@ -624,6 +641,7 @@ export def "artifacts artifactQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   hashes: list # artifact hashes (e.g. [12HKQaOmR5t5Uy6vdcQsNIiZgHGB, 34HKQaOmR5t5Uy6vasdasdasdasd])
@@ -637,7 +655,7 @@ export def "artifacts artifactQuery" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List FOCUS billing charges
@@ -652,6 +670,7 @@ export def "billing-charges listBillingCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Inclusive start of the date range as an ISO 8601 date-time string in UTC. (e.g. 2025-01-01T00:00:00.000Z)
   --qp-to: string # Exclusive end of the date range as an ISO 8601 date-time string in UTC. (e.g. 2025-01-31T00:00:00.000Z)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -663,7 +682,7 @@ export def "billing-charges listBillingCharges" [
   let full_url = (build-url $base "/v1/billing/charges" $qp)
   let accept_val = "application/jsonl"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List FOCUS contract commitments
@@ -678,6 +697,7 @@ export def "billing-contract-commitments listContractCommitments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -687,7 +707,7 @@ export def "billing-contract-commitments listContractCommitments" [
   let full_url = (build-url $base "/v1/billing/contract-commitments" $qp)
   let accept_val = "application/jsonl"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purchase credits
@@ -703,6 +723,7 @@ export def "billing-buy buyCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # The source of the purchase request. Defaults to `api` if not specified.
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -717,7 +738,7 @@ export def "billing-buy buyCredits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stages new redirects for a project.
@@ -733,6 +754,7 @@ export def "bulk-redirects stageRedirects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: string
@@ -750,7 +772,7 @@ export def "bulk-redirects stageRedirects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets project-level redirects.
@@ -765,6 +787,7 @@ export def "bulk-redirects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --versionId: string
   --q: string
@@ -782,7 +805,7 @@ export def "bulk-redirects get" [
   let full_url = (build-url $base "/v1/bulk-redirects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete project-level redirects.
@@ -797,6 +820,7 @@ export def "bulk-redirects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -812,7 +836,7 @@ export def "bulk-redirects delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a project-level redirect.
@@ -828,6 +852,7 @@ export def "bulk-redirects editRedirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -844,7 +869,7 @@ export def "bulk-redirects editRedirect" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restore staged project-level redirects to their production version.
@@ -859,6 +884,7 @@ export def "bulk-redirects-restore restoreRedirects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -874,7 +900,7 @@ export def "bulk-redirects-restore restoreRedirects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the version history for a project's redirects.
@@ -889,6 +915,7 @@ export def "bulk-redirects-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -899,7 +926,7 @@ export def "bulk-redirects-versions get" [
   let full_url = (build-url $base "/v1/bulk-redirects/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Promote a staging version to production or restore a previous production version.
@@ -914,6 +941,7 @@ export def "bulk-redirects-versions updateVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -930,7 +958,7 @@ export def "bulk-redirects-versions updateVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all checks for a project
@@ -946,6 +974,7 @@ export def "projects-checks listProjectChecks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --blocks: string@blocks-completer
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -956,7 +985,7 @@ export def "projects-checks listProjectChecks" [
   let full_url = (build-url $base $"/v2/projects/($projectIdOrName)/checks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a check
@@ -973,6 +1002,7 @@ export def "projects-checks createProjectCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string
@@ -992,7 +1022,7 @@ export def "projects-checks createProjectCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a check
@@ -1009,6 +1039,7 @@ export def "projects-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string, name: string, ownerId: string, projectId: string, isRerequestable: bool, requires: string, source: any, blocks: string, targets: list<string>, sourceKind: string, sourceIntegrationConfigurationId: string, timeout: float, createdAt: float, updatedAt: float, deletedAt: float> {
@@ -1018,7 +1049,7 @@ export def "projects-checks get" [
   let full_url = (build-url $base $"/v2/projects/($projectIdOrName)/checks/($checkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check
@@ -1035,6 +1066,7 @@ export def "projects-checks updateProjectCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string
@@ -1053,7 +1085,7 @@ export def "projects-checks updateProjectCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a check
@@ -1070,6 +1102,7 @@ export def "projects-checks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<success: bool> {
@@ -1079,7 +1112,7 @@ export def "projects-checks delete" [
   let full_url = (build-url $base $"/v2/projects/($projectIdOrName)/checks/($checkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List runs for a check
@@ -1096,6 +1129,7 @@ export def "projects-checks-runs listCheckRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<runs: list<any>> {
@@ -1105,7 +1139,7 @@ export def "projects-checks-runs listCheckRuns" [
   let full_url = (build-url $base $"/v2/projects/($projectIdOrName)/checks/($checkId)/runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List check runs for a deployment
@@ -1121,6 +1155,7 @@ export def "deployments-check-runs listDeploymentCheckRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<runs: list<any>> {
@@ -1130,7 +1165,7 @@ export def "deployments-check-runs listDeploymentCheckRuns" [
   let full_url = (build-url $base $"/v2/deployments/($deploymentId)/check-runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a check run
@@ -1146,6 +1181,7 @@ export def "deployments-check-runs createDeploymentCheckRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   checkId: string
@@ -1159,7 +1195,7 @@ export def "deployments-check-runs createDeploymentCheckRun" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a check run
@@ -1176,6 +1212,7 @@ export def "deployments-check-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -1185,7 +1222,7 @@ export def "deployments-check-runs get" [
   let full_url = (build-url $base $"/v2/deployments/($deploymentId)/check-runs/($checkRunId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check run
@@ -1202,6 +1239,7 @@ export def "deployments-check-runs updateDeploymentCheckRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --externalId: string
@@ -1221,7 +1259,7 @@ export def "deployments-check-runs updateDeploymentCheckRun" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new Check
@@ -1239,6 +1277,7 @@ export def "deployments-checks createCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the check being created (e.g. Performance Check)
@@ -1257,7 +1296,7 @@ export def "deployments-checks createCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a list of all checks
@@ -1275,6 +1314,7 @@ export def "deployments-checks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, blocking: bool, startedAt: float, status: string, updatedAt: float>> {
@@ -1284,7 +1324,7 @@ export def "deployments-checks list" [
   let full_url = (build-url $base $"/v1/deployments/($deploymentId)/checks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single check
@@ -1303,6 +1343,7 @@ export def "deployments-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string, name: string, createdAt: float, updatedAt: float, deploymentId: string, status: string, conclusion: string, externalId: string, output: record<metrics: record<FCP: record, LCP: record, CLS: record, TBT: record, virtualExperienceScore: record>>, completedAt: float, path: string, blocking: bool, detailsUrl: string, integrationId: string, startedAt: float, rerequestable: bool> {
@@ -1312,7 +1353,7 @@ export def "deployments-checks get" [
   let full_url = (build-url $base $"/v1/deployments/($deploymentId)/checks/($checkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check
@@ -1332,6 +1373,7 @@ export def "deployments-checks updateCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The name of the check being created (e.g. Performance Check)
@@ -1351,7 +1393,7 @@ export def "deployments-checks updateCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rerequest a check
@@ -1370,6 +1412,7 @@ export def "deployments-checks-rerequest rerequestCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoUpdate: oneof<nothing, bool> # Mark the check as running
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -1380,7 +1423,7 @@ export def "deployments-checks-rerequest rerequestCheck" [
   let full_url = (build-url $base $"/v1/deployments/($deploymentId)/checks/($checkId)/rerequest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Secure Compute networks
@@ -1395,6 +1438,7 @@ export def "connect-networks listNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeHostedZones: oneof<nothing, bool> # Whether to include Hosted Zones in the response (default: true)
   --includePeeringConnections: oneof<nothing, bool> # Whether to include VPC Peering connections in the response (default: true)
   --includeProjects: oneof<nothing, bool> # Whether to include projects in the response (default: true)
@@ -1408,7 +1452,7 @@ export def "connect-networks listNetworks" [
   let full_url = (build-url $base "/v1/connect/networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Secure Compute network
@@ -1423,6 +1467,7 @@ export def "connect-networks createNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --awsAvailabilityZoneIds: list
@@ -1439,7 +1484,7 @@ export def "connect-networks createNetwork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Secure Compute network
@@ -1455,6 +1500,7 @@ export def "connect-networks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -1464,7 +1510,7 @@ export def "connect-networks delete" [
   let full_url = (build-url $base $"/v1/connect/networks/($networkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Secure Compute network
@@ -1480,6 +1526,7 @@ export def "connect-networks updateNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the Secure Compute network
@@ -1493,7 +1540,7 @@ export def "connect-networks updateNetwork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Read a Secure Compute network
@@ -1509,6 +1556,7 @@ export def "connect-networks readNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<awsAccountId: string, awsAvailabilityZoneIds: list<string>, awsRegion: string, cidr: string, createdAt: float, egressIpAddresses: list<string>, hostedZones: record<count: float>, id: string, name: string, peeringConnections: record<count: float>, projects: record<count: float, ids: list<string>>, region: string, status: string, teamId: string, vpcId: string> {
@@ -1518,7 +1566,7 @@ export def "connect-networks readNetwork" [
   let full_url = (build-url $base $"/v1/connect/networks/($networkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a connector
@@ -1533,7 +1581,8 @@ export def "connect-connectors createConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  type: string # Known types: api-key, github, oauth, salesforce, slack, snowflake.
+  --dry-run(-n) # Return the request that would be sent without executing it
+  type: string # Known types: api-key, github, linear, oauth, salesforce, slack, snowflake.
   --service: string # Service slug or URL for which the connector is used.
   --uid: string
   --name: string
@@ -1554,7 +1603,7 @@ export def "connect-connectors createConnector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Connect token
@@ -1571,6 +1620,7 @@ export def "connect-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subject: any
   --installationId: string
   --audience: list
@@ -1587,7 +1637,7 @@ export def "connect-token post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Connect authorization request
@@ -1604,6 +1654,7 @@ export def "connect-authorize createConnectorAuthorizationRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subject: any
   --installationId: string
   --audience: list
@@ -1626,7 +1677,7 @@ export def "connect-authorize createConnectorAuthorizationRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get deployment events
@@ -1642,6 +1693,7 @@ export def "deployments-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # Order of the returned events based on the timestamp. (default: forward, e.g. backward)
   --follow: float@follow-completer # When enabled, this endpoint will return live events as they happen. (e.g. 1)
@@ -1661,7 +1713,7 @@ export def "deployments-events get" [
   let full_url = (build-url $base $"/v3/deployments/($idOrUrl)/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update deployment integration action
@@ -1680,6 +1732,7 @@ export def "deployments-integrations-resources-actions update-integration-deploy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2
   --statusText: string
   --statusUrl: string # format: uri
@@ -1693,7 +1746,7 @@ export def "deployments-integrations-resources-actions update-integration-deploy
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a deployment by ID or URL
@@ -1709,6 +1762,7 @@ export def "deployments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withGitRepoInfo: string # Whether to add in gitRepo information. (e.g. true)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -1719,7 +1773,7 @@ export def "deployments get" [
   let full_url = (build-url $base $"/v13/deployments/($idOrUrl)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new deployment
@@ -1736,6 +1790,7 @@ export def "deployments createDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forceNew: string@forceNew-completer # Forces a new deployment even if there is a previous similar deployment
   --skipAutoDetectionConfirmation: string@skipAutoDetectionConfirmation-completer # Allows to skip framework detection so the API would not fail to ask for confirmation
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -1762,7 +1817,7 @@ export def "deployments createDeployment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a deployment
@@ -1778,6 +1833,7 @@ export def "deployments-cancel cancelDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<aliasAssignedAt: any, alwaysRefuseToBuild: bool, build: record<env: list<string>>, buildArtifactUrls: list<string>, builds: table<use: string, src: string, config: record>, env: list<string>, inspectorUrl: string, isInConcurrentBuildsQueue: bool, isInSystemBuildsQueue: bool, projectSettings: record<nodeVersion: string, buildCommand: string, devCommand: string, framework: string, commandForIgnoringBuildStep: string, installCommand: string, outputDirectory: string, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>>, integrations: record<status: string, startedAt: float, claimedAt: float, completedAt: float, skippedAt: float, skippedBy: string>, images: record<sizes: list<float>, qualities: list<float>, domains: list<string>, remotePatterns: list<record>, localPatterns: list<record>, minimumCacheTTL: float, formats: list<string>, dangerouslyAllowSVG: bool, contentSecurityPolicy: string, contentDispositionType: string>, alias: list<string>, aliasAssigned: bool, bootedAt: float, buildingAt: float, buildContainerFinishedAt: float, buildSkipped: bool, creator: record<uid: string, username: string, avatar: string>, initReadyAt: float, isFirstBranchDeployment: bool, lambdas: table<id: string, createdAt: float, readyState: string, entrypoint: string, readyStateAt: float, output: list>, public: bool, ready: float, status: string, team: record<id: string, name: string, slug: string, avatar: string>, userAliases: list<string>, previewCommentsEnabled: bool, ttyBuildLogs: bool, customEnvironment: any, oomReport: string, readyStateReason: string, aliasWarning: record<code: string, message: string, link: string, action: string>, id: string, createdAt: float, readyState: string, name: string, type: string, errorMessage: string, aliasError: record<code: string, message: string>, aliasFinal: string, autoAssignCustomDomains: bool, automaticAliases: list<string>, buildErrorAt: float, checksState: string, checksConclusion: string, deletedAt: float, defaultRoute: string, canceledAt: float, errorCode: string, errorLink: string, errorStep: string, passiveRegions: list<string>, gitSource: any, manualProvisioning: record<state: string, completedAt: float>, meta: record, originCacheRegion: string, nodeVersion: string, project: record<id: string, name: string, framework: string>, prebuilt: bool, readySubstate: string, regions: list<string>, softDeletedByRetention: bool, source: string, target: string, undeletedAt: float, url: string, userConfiguredDeploymentId: string, version: float, oidcTokenClaims: record<iss: string, sub: string, scope: string, aud: string, owner: string, owner_id: string, project: string, project_id: string, environment: string, custom_environment_id: string, plan: string>, projectId: string, plan: string, platform: record<source: record<name: string>, origin: record<type: string, value: string>, creator: record<name: string, avatar: string>, meta: record>, connectBuildsEnabled: bool, connectConfigurationId: string, createdIn: string, crons: table<schedule: string, path: string>, functions: record, monorepoManager: string, ownerId: string, passiveConnectConfigurationId: string, routes: list<any>, gitRepo: any, flags: any, microfrontends: any, config: record<version: float, functionType: string, functionMemoryType: string, functionTimeout: float, secureComputePrimaryRegion: string, secureComputeFallbackRegion: string, isUsingActiveCPU: bool, resourceConfig: record<buildQueue: record, elasticConcurrency: string, buildMachine: record>>, checks: record<deployment_alias: record<state: string, startedAt: float, completedAt: float>>, seatBlock: record<blockCode: string, userId: string, isVerified: bool, gitUserId: any, gitProvider: string>, attribution: record<commitMeta: record<email: string, name: string, isVerified: bool>, gitUser: record<id: any, login: string, type: string, provider: string>, vercelUser: record<id: string, username: string, teamRoles: list>>> {
@@ -1787,7 +1843,7 @@ export def "deployments-cancel cancelDeployment" [
   let full_url = (build-url $base $"/v12/deployments/($id)/cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List existing DNS records
@@ -1803,6 +1859,7 @@ export def "domains-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Maximum number of records to list from a request. (e.g. 20)
   --since: string # Get records created after this JavaScript timestamp. (e.g. 1609499532000)
   --until: string # Get records created before this JavaScript timestamp. (e.g. 1612264332000)
@@ -1815,7 +1872,7 @@ export def "domains-records get" [
   let full_url = (build-url $base $"/v5/domains/($domain)/records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a DNS record
@@ -1833,6 +1890,7 @@ export def "domains-records createRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   type: string@type-completer # The type of record, it could be one of the valid DNS records.
@@ -1853,7 +1911,7 @@ export def "domains-records createRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing DNS record
@@ -1871,6 +1929,7 @@ export def "domains-records updateRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The name of the DNS record (nullable, e.g. example-1)
@@ -1891,7 +1950,7 @@ export def "domains-records updateRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a DNS record
@@ -1908,6 +1967,7 @@ export def "domains-records removeRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -1917,7 +1977,7 @@ export def "domains-records removeRecord" [
   let full_url = (build-url $base $"/v2/domains/($domain)/records/($recordId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get supported TLDs
@@ -1932,6 +1992,7 @@ export def "registrar-tlds-supported get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1940,7 +2001,7 @@ export def "registrar-tlds-supported get" [
   let full_url = (build-url $base "/v1/registrar/tlds/supported" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get TLD
@@ -1956,6 +2017,7 @@ export def "registrar-tlds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<supportedLanguageCodes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1964,7 +2026,7 @@ export def "registrar-tlds get" [
   let full_url = (build-url $base $"/v1/registrar/tlds/($tld)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get TLD price data
@@ -1980,6 +2042,7 @@ export def "registrar-tlds-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --years: string # The number of years to get the price for. If not provided, the minimum number of years for the TLD will be used.
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<years: float, purchasePrice: any, renewalPrice: any, transferPrice: any> {
@@ -1989,7 +2052,7 @@ export def "registrar-tlds-price get" [
   let full_url = (build-url $base $"/v1/registrar/tlds/($tld)/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get availability for a domain
@@ -2005,6 +2068,7 @@ export def "registrar-domains-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<available: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2013,7 +2077,7 @@ export def "registrar-domains-availability get" [
   let full_url = (build-url $base $"/v1/registrar/domains/($domain)/availability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get price data for a domain
@@ -2029,6 +2093,7 @@ export def "registrar-domains-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --years: string # The number of years to get the price for. If not provided, the minimum number of years for the TLD will be used.
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<years: float, purchasePrice: any, renewalPrice: any, transferPrice: any> {
@@ -2038,7 +2103,7 @@ export def "registrar-domains-price get" [
   let full_url = (build-url $base $"/v1/registrar/domains/($domain)/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get availability for multiple domains
@@ -2053,6 +2118,7 @@ export def "registrar-domains-availability post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   domains: list # an array of at most 50 item(s)
 ]: any -> record<results: table<domain: string, available: bool>> {
@@ -2065,7 +2131,7 @@ export def "registrar-domains-availability post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the auth code for a domain
@@ -2081,6 +2147,7 @@ export def "registrar-domains-auth-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<authCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2089,7 +2156,7 @@ export def "registrar-domains-auth-code get" [
   let full_url = (build-url $base $"/v1/registrar/domains/($domain)/auth-code" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Buy a domain
@@ -2106,6 +2173,7 @@ export def "registrar-domains-buy buySingleDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   --autoRenew: oneof<nothing, bool> # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
   years: float # The number of years to purchase the domain for.
@@ -2122,7 +2190,7 @@ export def "registrar-domains-buy buySingleDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Buy multiple domains
@@ -2139,6 +2207,7 @@ export def "registrar-domains-buy buyDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   domains: list # item shape: {domainName: string, autoRenew: bool, years: float, expectedPrice: float, languageCode?: string}
   contactInformation: record # The contact information for the domain. Some TLDs require additional contact information. Use the [Get contact info schema](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/get-contact-info-schema) endpoint to retrieve the required fields. — shape: {firstName: string, lastName: string, email: string, phone: string, address1: string, address2?: string, city: string, state: string, zip: string, country: string, companyName?: string, fax?: string, additional?: record}
@@ -2152,7 +2221,7 @@ export def "registrar-domains-buy buyDomains" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer-in a domain
@@ -2169,6 +2238,7 @@ export def "registrar-domains-transfer transferInDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   authCode: string # The auth code for the domain. You must obtain this code from the losing registrar.
   --autoRenew: oneof<nothing, bool> # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
@@ -2185,7 +2255,7 @@ export def "registrar-domains-transfer transferInDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a domain's transfer status
@@ -2201,6 +2271,7 @@ export def "registrar-domains-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2209,7 +2280,7 @@ export def "registrar-domains-transfer get" [
   let full_url = (build-url $base $"/v1/registrar/domains/($domain)/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renew a domain
@@ -2226,6 +2297,7 @@ export def "registrar-domains-renew renewDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   years: float # The number of years to renew the domain for.
   expectedPrice: float
@@ -2240,7 +2312,7 @@ export def "registrar-domains-renew renewDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update auto-renew for a domain
@@ -2256,6 +2328,7 @@ export def "registrar-domains-auto-renew updateDomainAutoRenew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   --autoRenew: oneof<nothing, bool>
 ]: any -> any {
@@ -2268,7 +2341,7 @@ export def "registrar-domains-auto-renew updateDomainAutoRenew" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update nameservers for a domain
@@ -2284,6 +2357,7 @@ export def "registrar-domains-nameservers updateDomainNameservers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   nameservers: list
 ]: any -> any {
@@ -2296,7 +2370,7 @@ export def "registrar-domains-nameservers updateDomainNameservers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get contact info schema
@@ -2312,6 +2386,7 @@ export def "registrar-domains-contact-info-schema get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2320,7 +2395,7 @@ export def "registrar-domains-contact-info-schema get" [
   let full_url = (build-url $base $"/v1/registrar/domains/($domain)/contact-info/schema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a domain order
@@ -2336,6 +2411,7 @@ export def "registrar-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
 ]: nothing -> record<orderId: string, domains: list<any>, status: string, error: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2344,7 +2420,7 @@ export def "registrar-orders get" [
   let full_url = (build-url $base $"/v1/registrar/orders/($orderId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Domain's configuration
@@ -2360,6 +2436,7 @@ export def "domains-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdOrName: string # The project id or name that will be associated with the domain. Use this when the domain is not yet associated with a project.
   --strict: string@strict-completer # When true, the response will only include the nameservers assigned directly to the specified domain. When false and there are no nameservers assigned directly to the specified domain, the response will include the nameservers of the domain's parent zone.
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -2371,7 +2448,7 @@ export def "domains-config get" [
   let full_url = (build-url $base $"/v6/domains/($domain)/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Domain Verification Record
@@ -2387,6 +2464,7 @@ export def "domains-verification get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<txtRecord: string, verificationDomain: string> {
@@ -2396,7 +2474,7 @@ export def "domains-verification get" [
   let full_url = (build-url $base $"/v9/domains/($domain)/verification" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Claim Domain Ownership
@@ -2412,6 +2490,7 @@ export def "domains-claim claimDomainOwnership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<domain: record<expiresAt: float, verified: bool, nameservers: list<string>, intendedNameservers: list<string>, customNameservers: list<string>, creator: record<username: string, email: string, customerId: string, isDomainReseller: bool, id: string>, name: string, teamId: string, boughtAt: float, createdAt: float, id: string, renew: bool, serviceType: string, transferredAt: float, transferStartedAt: float, userId: string>> {
@@ -2421,7 +2500,7 @@ export def "domains-claim claimDomainOwnership" [
   let full_url = (build-url $base $"/v9/domains/($domain)/claim" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Information for a Single Domain
@@ -2437,6 +2516,7 @@ export def "domains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<domain: record<suffix: bool, expiresAt: float, verified: bool, nameservers: list<string>, intendedNameservers: list<string>, customNameservers: list<string>, creator: record<username: string, email: string, customerId: string, isDomainReseller: bool, id: string>, name: string, teamId: string, boughtAt: float, createdAt: float, id: string, renew: bool, serviceType: string, transferredAt: float, transferStartedAt: float, userId: string>> {
@@ -2446,7 +2526,7 @@ export def "domains get" [
   let full_url = (build-url $base $"/v5/domains/($domain)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the domains
@@ -2461,6 +2541,7 @@ export def "domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of domains to list from a request. (e.g. 20)
   --since: float # Get domains created after this JavaScript timestamp. (e.g. 1609499532000)
   --until: float # Get domains created before this JavaScript timestamp. (e.g. 1612264332000)
@@ -2473,7 +2554,7 @@ export def "domains list" [
   let full_url = (build-url $base "/v5/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an existing domain to the Vercel platform
@@ -2488,6 +2569,7 @@ export def "domains createOrTransferDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --method: string # The domain operation to perform. It can be either `add` or `move-in`. (e.g. add)
@@ -2505,7 +2587,7 @@ export def "domains createOrTransferDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update or move apex domain
@@ -2523,6 +2605,7 @@ export def "domains patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --op: string # e.g. update
@@ -2540,7 +2623,7 @@ export def "domains patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a domain by name
@@ -2556,6 +2639,7 @@ export def "domains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<uid: string> {
@@ -2565,7 +2649,7 @@ export def "domains delete" [
   let full_url = (build-url $base $"/v6/domains/($domain)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a Configurable Log Drain (deprecated)
@@ -2581,6 +2665,7 @@ export def "log-drains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<createdFrom: string, clientId: string, configurationId: string, projectsMetadata: table<id: string, name: string, framework: string, latestDeployment: string>, integrationIcon: string, integrationConfigurationUri: string, integrationWebsite: string> {
@@ -2590,7 +2675,7 @@ export def "log-drains get" [
   let full_url = (build-url $base $"/v1/log-drains/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a Configurable Log Drain (deprecated)
@@ -2606,6 +2691,7 @@ export def "log-drains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -2615,7 +2701,7 @@ export def "log-drains delete" [
   let full_url = (build-url $base $"/v1/log-drains/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a list of all the Log Drains (deprecated)
@@ -2630,6 +2716,7 @@ export def "log-drains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --projectIdOrName: string
   --includeMetadata: oneof<nothing, bool> # default: false
@@ -2642,7 +2729,7 @@ export def "log-drains list" [
   let full_url = (build-url $base "/v1/log-drains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a Configurable Log Drain (deprecated)
@@ -2657,6 +2744,7 @@ export def "log-drains createConfigurableLogDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   deliveryFormat: any@deliveryFormat-completer # The delivery log format (e.g. json)
@@ -2678,7 +2766,7 @@ export def "log-drains createConfigurableLogDrain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Drain
@@ -2698,6 +2786,7 @@ export def "drains createDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string
@@ -2719,7 +2808,7 @@ export def "drains createDrain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a list of all Drains
@@ -2734,6 +2823,7 @@ export def "drains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --includeMetadata: oneof<nothing, bool> # default: false
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -2745,7 +2835,7 @@ export def "drains list" [
   let full_url = (build-url $base "/v1/drains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a drain
@@ -2761,6 +2851,7 @@ export def "drains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -2770,7 +2861,7 @@ export def "drains delete" [
   let full_url = (build-url $base $"/v1/drains/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find a Drain by id
@@ -2786,6 +2877,7 @@ export def "drains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -2795,7 +2887,7 @@ export def "drains get" [
   let full_url = (build-url $base $"/v1/drains/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing Drain
@@ -2815,6 +2907,7 @@ export def "drains updateDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string
@@ -2837,7 +2930,7 @@ export def "drains updateDrain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate Drain delivery configuration
@@ -2853,6 +2946,7 @@ export def "drains-test testDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   schemas: record
@@ -2867,7 +2961,7 @@ export def "drains-test testDrain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invalidate by tag
@@ -2882,6 +2976,7 @@ export def "edge-cache-invalidate-by-tags invalidateByTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdOrName: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -2897,7 +2992,7 @@ export def "edge-cache-invalidate-by-tags invalidateByTags" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Dangerously delete by tag
@@ -2912,6 +3007,7 @@ export def "edge-cache-dangerously-delete-by-tags dangerouslyDeleteByTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdOrName: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -2928,7 +3024,7 @@ export def "edge-cache-dangerously-delete-by-tags dangerouslyDeleteByTags" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invalidate by source image
@@ -2943,6 +3039,7 @@ export def "edge-cache-invalidate-by-src-images invalidateBySrcImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdOrName: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -2957,7 +3054,7 @@ export def "edge-cache-invalidate-by-src-images invalidateBySrcImages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Dangerously delete by source image
@@ -2972,6 +3069,7 @@ export def "edge-cache-dangerously-delete-by-src-images dangerouslyDeleteBySrcIm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdOrName: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -2987,7 +3085,7 @@ export def "edge-cache-dangerously-delete-by-src-images dangerouslyDeleteBySrcIm
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Edge Configs
@@ -3002,6 +3100,7 @@ export def "edge-config list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> table<id: string, createdAt: float, ownerId: string, slug: string, updatedAt: float, digest: string, transfer: record<fromAccountId: string, startedAt: float, doneAt: float>, schema: record, purpose: record<type: string, projectId: string>, sizeInBytes: float, itemCount: float> {
@@ -3011,7 +3110,7 @@ export def "edge-config list" [
   let full_url = (build-url $base "/v1/edge-config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Edge Config
@@ -3026,6 +3125,7 @@ export def "edge-config createEdgeConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   slug: string
@@ -3040,7 +3140,7 @@ export def "edge-config createEdgeConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Edge Config
@@ -3056,6 +3156,7 @@ export def "edge-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string, createdAt: float, createdBy: string, ownerId: string, slug: string, updatedAt: float, digest: string, purpose: any, deletedAt: float, transfer: record<fromAccountId: string, startedAt: float, doneAt: float>, schema: record, syncedToDynamoAt: float, sizeInBytes: float, itemCount: float> {
@@ -3065,7 +3166,7 @@ export def "edge-config get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Edge Config
@@ -3081,6 +3182,7 @@ export def "edge-config updateEdgeConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   slug: string
@@ -3094,7 +3196,7 @@ export def "edge-config updateEdgeConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Edge Config
@@ -3110,6 +3212,7 @@ export def "edge-config delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -3119,7 +3222,7 @@ export def "edge-config delete" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Edge Config items
@@ -3135,6 +3238,7 @@ export def "edge-config-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> table<key: string, value: any, description: string, edgeConfigId: string, createdAt: float, updatedAt: float> {
@@ -3144,7 +3248,7 @@ export def "edge-config-items get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Edge Config items in batch
@@ -3160,6 +3264,7 @@ export def "edge-config-items patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   items: list
@@ -3173,7 +3278,7 @@ export def "edge-config-items patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Edge Config schema
@@ -3189,6 +3294,7 @@ export def "edge-config-schema get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -3198,7 +3304,7 @@ export def "edge-config-schema get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/schema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Edge Config schema
@@ -3214,6 +3320,7 @@ export def "edge-config-schema post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -3228,7 +3335,7 @@ export def "edge-config-schema post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Edge Config's schema
@@ -3244,6 +3351,7 @@ export def "edge-config-schema delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -3253,7 +3361,7 @@ export def "edge-config-schema delete" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/schema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Edge Config item
@@ -3270,6 +3378,7 @@ export def "edge-config-item get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<key: string, value: any, description: string, edgeConfigId: string, createdAt: float, updatedAt: float> {
@@ -3279,7 +3388,7 @@ export def "edge-config-item get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/item/($edgeConfigItemKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all tokens of an Edge Config
@@ -3295,6 +3404,7 @@ export def "edge-config-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<partialToken: string, label: string, id: string, edgeConfigId: string, createdAt: float, token: string> {
@@ -3304,7 +3414,7 @@ export def "edge-config-tokens get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete one or more Edge Config tokens
@@ -3320,6 +3430,7 @@ export def "edge-config-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --tokens: list
@@ -3334,7 +3445,7 @@ export def "edge-config-tokens delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Edge Config token meta data
@@ -3351,6 +3462,7 @@ export def "edge-config-token get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<partialToken: string, label: string, id: string, edgeConfigId: string, createdAt: float, token: string> {
@@ -3360,7 +3472,7 @@ export def "edge-config-token get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/token/($token)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Edge Config token
@@ -3376,6 +3488,7 @@ export def "edge-config-token createEdgeConfigToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   label: string
@@ -3389,7 +3502,7 @@ export def "edge-config-token createEdgeConfigToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Edge Config backup
@@ -3406,6 +3519,7 @@ export def "edge-config-backups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -3415,7 +3529,7 @@ export def "edge-config-backups get" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/backups/($edgeConfigBackupVersionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Edge Config backups
@@ -3431,6 +3545,7 @@ export def "edge-config-backups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --next: string
   --limit: float
   --metadata: string
@@ -3443,7 +3558,7 @@ export def "edge-config-backups list" [
   let full_url = (build-url $base $"/v1/edge-config/($edgeConfigId)/backups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or more shared environment variables
@@ -3460,6 +3575,7 @@ export def "env createSharedEnvVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   evs: list # item shape: {key: string, value: string, comment?: string}
@@ -3476,7 +3592,7 @@ export def "env createSharedEnvVariable" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all Shared Environment Variables for a team
@@ -3491,6 +3607,7 @@ export def "env listSharedEnvVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string
   --projectId: string # Filter SharedEnvVariables that belong to a project (e.g. prj_2WjyKQmM8ZnGcJsPWMrHRHrE)
   --ids: string # Filter SharedEnvVariables based on comma separated ids (e.g. env_2WjyKQmM8ZnGcJsPWMrHRHrE,env_2WjyKQmM8ZnGcJsPWMrHRCRV)
@@ -3507,7 +3624,7 @@ export def "env listSharedEnvVariable" [
   let full_url = (build-url $base "/v1/env" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates one or more shared environment variables
@@ -3522,6 +3639,7 @@ export def "env updateSharedEnvVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   updates: record # An object where each key is an environment variable ID (not the key name) and the value is the update to apply (e.g. {env_2WjyKQmM8ZnGcJsPWMrHRHrE: {key: API_URL, value: https://api.vercel.com, target: [production, preview], projectIdUpdates: {link: [prj_2WjyKQmM8ZnGcJsPWMrHRHrE]}}})
@@ -3535,7 +3653,7 @@ export def "env updateSharedEnvVariable" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete one or more Env Var
@@ -3550,6 +3668,7 @@ export def "env delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   ids: list # IDs of the Shared Environment Variables to delete (e.g. [env_abc123, env_abc124])
@@ -3563,7 +3682,7 @@ export def "env delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the decrypted value of a Shared Environment Variable by id.
@@ -3579,6 +3698,7 @@ export def "env get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<created: string, key: string, ownerId: string, id: string, createdBy: string, deletedBy: string, updatedBy: string, createdAt: float, deletedAt: float, updatedAt: float, value: string, projectId: list<string>, type: string, target: list<string>, applyToAllCustomEnvironments: bool, customEnvironmentIds: list<string>, decrypted: bool, comment: string, lastEditedByDisplayName: string> {
@@ -3588,7 +3708,7 @@ export def "env get" [
   let full_url = (build-url $base $"/v1/env/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disconnects a shared environment variable for a given project
@@ -3605,6 +3725,7 @@ export def "env-unlink unlinkSharedEnvVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string> {
@@ -3614,7 +3735,7 @@ export def "env-unlink unlinkSharedEnvVariable" [
   let full_url = (build-url $base $"/v1/env/($id)/unlink/($projectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List User Events
@@ -3629,6 +3750,7 @@ export def "events listUserEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of items which may be returned. (e.g. 20)
   --since: string # Timestamp to only include items created since then. (e.g. 2019-12-08T10:00:38.976Z)
   --until: string # Timestamp to only include items created until then. (e.g. 2019-12-09T23:00:38.976Z)
@@ -3646,7 +3768,7 @@ export def "events listUserEvents" [
   let full_url = (build-url $base "/v3/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Event Types
@@ -3661,6 +3783,7 @@ export def "events-types listEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<types: table<name: string, description: string, categories: list, deprecated: bool, replacedBy: list>, categories: table<name: string, label: string>> {
@@ -3670,7 +3793,7 @@ export def "events-types listEventTypes" [
   let full_url = (build-url $base "/v1/events/types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List flags
@@ -3686,6 +3809,7 @@ export def "projects-feature-flags-flags listFlagsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
   --limit: int # Maximum number of flags to return. (default: 25)
   --cursor: string # Pagination cursor to continue from.
@@ -3701,7 +3825,7 @@ export def "projects-feature-flags-flags listFlagsV2" [
   let full_url = (build-url $base $"/v2/projects/($projectIdOrName)/feature-flags/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List flags
@@ -3717,6 +3841,7 @@ export def "projects-feature-flags-flags listFlags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
   --withMetadata: oneof<nothing, bool> # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release. Use `GET /v1/projects/:id/feature-flags/flags/:flagIdOrSlug?withMetadata=true` for single-flag lookups that need creator metadata.
   --limit: int # Maximum number of flags to return. When not set, all flags are returned.
@@ -3732,7 +3857,7 @@ export def "projects-feature-flags-flags listFlags" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a flag
@@ -3749,6 +3874,7 @@ export def "projects-feature-flags-flags createFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   slug: string # A unique (per project) key for the flag, composed of letters, numbers, dashes, and underscores
@@ -3771,7 +3897,7 @@ export def "projects-feature-flags-flags createFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a flag
@@ -3788,6 +3914,7 @@ export def "projects-feature-flags-flags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
   --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -3799,7 +3926,7 @@ export def "projects-feature-flags-flags get" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/flags/($flagIdOrSlug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a flag
@@ -3817,6 +3944,7 @@ export def "projects-feature-flags-flags updateFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
   --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -3841,7 +3969,7 @@ export def "projects-feature-flags-flags updateFlag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a flag
@@ -3858,6 +3986,7 @@ export def "projects-feature-flags-flags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
   --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -3869,7 +3998,7 @@ export def "projects-feature-flags-flags delete" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/flags/($flagIdOrSlug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List flag versions
@@ -3886,6 +4015,7 @@ export def "projects-feature-flags-flags-versions listFlagVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # default: 20
   --cursor: string # Pagination cursor
   --environment: string # Environment to filter by
@@ -3899,7 +4029,7 @@ export def "projects-feature-flags-flags-versions listFlagVersions" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/flags/($flagIdOrSlug)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project flag settings
@@ -3915,6 +4045,7 @@ export def "projects-feature-flags-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<typeName: string, projectId: string, ownerId: string, enabled: bool, environments: list<string>, connections: table<edgeConfigId: string, edgeConfigItemKey: string>, entities: table<kind: string, label: string, attributes: list>, createdAt: float, updatedAt: float, metadata: record<activeFlagCount: float, archivedFlagCount: float, segmentCount: float, packSizeInBytes: float, packRevision: float, configUpdatedAt: float>> {
@@ -3924,7 +4055,7 @@ export def "projects-feature-flags-settings get" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project flag settings
@@ -3941,6 +4072,7 @@ export def "projects-feature-flags-settings updateFlagSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --enabled: oneof<nothing, bool>
@@ -3956,7 +4088,7 @@ export def "projects-feature-flags-settings updateFlagSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List team project flag settings
@@ -3972,6 +4104,7 @@ export def "teams-feature-flags-settings listTeamFlagSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of settings to return. (default: 20)
   --cursor: string # Pagination cursor to continue from.
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -3982,7 +4115,7 @@ export def "teams-feature-flags-settings listTeamFlagSettings" [
   let full_url = (build-url $base $"/v1/teams/($teamId)/feature-flags/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all flags for a team
@@ -3998,6 +4131,7 @@ export def "teams-feature-flags-flags listTeamFlagsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
   --limit: int # Maximum number of flags to return. (default: 25)
   --cursor: string # Pagination cursor to continue from.
@@ -4013,7 +4147,7 @@ export def "teams-feature-flags-flags listTeamFlagsV2" [
   let full_url = (build-url $base $"/v2/teams/($teamId)/feature-flags/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all flags for a team
@@ -4029,6 +4163,7 @@ export def "teams-feature-flags-flags listTeamFlags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
   --withMetadata: oneof<nothing, bool> # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release.
   --limit: int # Maximum number of flags to return. (default: 20)
@@ -4044,7 +4179,7 @@ export def "teams-feature-flags-flags listTeamFlags" [
   let full_url = (build-url $base $"/v1/teams/($teamId)/feature-flags/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a segment
@@ -4061,6 +4196,7 @@ export def "projects-feature-flags-segments createFlagSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   slug: string
@@ -4079,7 +4215,7 @@ export def "projects-feature-flags-segments createFlagSegment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List segments
@@ -4095,6 +4231,7 @@ export def "projects-feature-flags-segments listFlagSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -4105,7 +4242,7 @@ export def "projects-feature-flags-segments listFlagSegments" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a segment
@@ -4122,6 +4259,7 @@ export def "projects-feature-flags-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -4132,7 +4270,7 @@ export def "projects-feature-flags-segments get" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/segments/($segmentIdOrSlug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a segment
@@ -4149,6 +4287,7 @@ export def "projects-feature-flags-segments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -4159,7 +4298,7 @@ export def "projects-feature-flags-segments delete" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/segments/($segmentIdOrSlug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a segment
@@ -4178,6 +4317,7 @@ export def "projects-feature-flags-segments updateFlagSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -4196,7 +4336,7 @@ export def "projects-feature-flags-segments updateFlagSegment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the feature flags of a deployment
@@ -4212,6 +4352,7 @@ export def "deployments-feature-flags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<flags: list<record>, status: record<deploymentId: string, projectId: string, responseStatus: float, flagCount: float, createdAt: float>> {
@@ -4221,7 +4362,7 @@ export def "deployments-feature-flags get" [
   let full_url = (build-url $base $"/v1/deployments/($deploymentId)/feature-flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all SDK keys
@@ -4237,6 +4378,7 @@ export def "projects-feature-flags-sdk-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<data: table<hashKey: string, projectId: string, type: string, environment: string, createdBy: string, createdAt: float, updatedAt: float, label: string, deletedAt: float, partialKeyValue: string>> {
@@ -4246,7 +4388,7 @@ export def "projects-feature-flags-sdk-keys get" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/sdk-keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an SDK key
@@ -4262,6 +4404,7 @@ export def "projects-feature-flags-sdk-keys createSdkKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   sdkKeyType: string@sdkKeyType-completer
@@ -4277,7 +4420,7 @@ export def "projects-feature-flags-sdk-keys createSdkKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an SDK key
@@ -4294,6 +4437,7 @@ export def "projects-feature-flags-sdk-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -4303,7 +4447,7 @@ export def "projects-feature-flags-sdk-keys delete" [
   let full_url = (build-url $base $"/v1/projects/($projectIdOrName)/feature-flags/sdk-keys/($hashKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List git namespaces by provider
@@ -4318,6 +4462,7 @@ export def "integrations-git-namespaces gitNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --host: string # The custom Git host if using a custom Git provider, like GitHub Enterprise Server (e.g. ghes-test.now.systems)
   --provider: string@provider-completer
   --viewerMetadata: oneof<nothing, bool> # When true, includes the viewer object for each namespace.
@@ -4328,7 +4473,7 @@ export def "integrations-git-namespaces gitNamespaces" [
   let full_url = (build-url $base "/v1/integrations/git-namespaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List git repositories linked to namespace by provider
@@ -4343,6 +4488,7 @@ export def "integrations-search-repo searchRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --namespaceId: string # nullable
   --provider: string@provider-completer
@@ -4357,7 +4503,7 @@ export def "integrations-search-repo searchRepo" [
   let full_url = (build-url $base "/v1/integrations/search-repo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List integration billing plans
@@ -4374,6 +4520,7 @@ export def "integrations-integration-products-plans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrationConfigurationId: string
   --metadata: string
   --qp-source: string@source-completer
@@ -4386,7 +4533,7 @@ export def "integrations-integration-products-plans get" [
   let full_url = (build-url $base $"/v1/integrations/integration/($integrationIdOrSlug)/products/($productIdOrSlug)/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connect integration resource to project
@@ -4403,6 +4550,7 @@ export def "integrations-installations-resources-connections connectIntegrationR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: string
@@ -4418,7 +4566,7 @@ export def "integrations-installations-resources-connections connectIntegrationR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Installation
@@ -4435,6 +4583,7 @@ export def "installations update-installation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-4
   --externalId: string
   --billingPlan: record # shape: {id: string, type: "prepayment"|"subscription", name: string, description?: string, paymentMethodRequired?: bool, cost?: string, details?: list, highlightedDetails?: list, effectiveDate?: string}
@@ -4448,7 +4597,7 @@ export def "installations update-installation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Account Information
@@ -4464,13 +4613,14 @@ export def "installations-account get-account-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, url: string, contact: record<email: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Member Information
@@ -4487,13 +4637,14 @@ export def "installations-member get-member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, role: string, globalUserId: string, userEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/member/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Event
@@ -4509,6 +4660,7 @@ export def "installations-events create-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: any
 ]: any -> any {
   let input = $in
@@ -4519,7 +4671,7 @@ export def "installations-events create-event" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Integration Resources
@@ -4535,13 +4687,14 @@ export def "installations-resources get-integration-resources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<resources: table<partnerId: string, internalId: string, name: string, status: string, productId: string, protocolSettings: record, notification: record, billingPlanId: string, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Integration Resource
@@ -4558,13 +4711,14 @@ export def "installations-resources get-integration-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, internalId: string, name: string, status: string, productId: string, protocolSettings: record<experimentation: record<edgeConfigSyncingEnabled: bool, edgeConfigId: string, edgeConfigTokenId: string>>, notification: record<level: string, title: string, message: string, href: string>, billingPlanId: string, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources/($resourceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Integration Resource
@@ -4581,13 +4735,14 @@ export def "installations-resources delete-integration-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources/($resourceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import Resource
@@ -4607,6 +4762,7 @@ export def "installations-resources import-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ownership: string@ownership-completer
   productId: string
   name: string
@@ -4625,7 +4781,7 @@ export def "installations-resources import-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Resource
@@ -4643,6 +4799,7 @@ export def "installations-resources update-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ownership: string@ownership-completer
   --name: string
   --status: string@status-completer-4
@@ -4660,7 +4817,7 @@ export def "installations-resources update-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit Billing Data
@@ -4678,6 +4835,7 @@ export def "installations-billing submit-billing-data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   timestamp: string # Server time of your integration, used to determine the most recent data for race conditions & updates. Only the latest usage data for a given day, week, and month will be kept. (format: date-time)
   eod: string # End of Day, the UTC datetime for when the end of the billing/usage day is in UTC time. This tells us which day the usage data is for, and also allows for your "end of day" to be different from UTC 00:00:00. eod must be within the period dates, and cannot be older than 24h earlier from our server's current time. (format: date-time)
   period: record # Period for the billing cycle. The period end date cannot be older than 24 hours earlier than our current server's time. — shape: {start: string, end: string}
@@ -4692,7 +4850,7 @@ export def "installations-billing submit-billing-data" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit Invoice
@@ -4712,6 +4870,7 @@ export def "installations-billing-invoices submit-invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --externalId: string # Partner-provided invoice identifier. If provided, it must be unique for this installation.
   invoiceDate: string # Invoice date. Must be within the period's start and end. (format: date-time)
   --memo: string # Additional memo for the invoice.
@@ -4729,7 +4888,7 @@ export def "installations-billing-invoices submit-invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Finalize Installation
@@ -4745,13 +4904,14 @@ export def "installations-billing-finalize finalize-installation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/billing/finalize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Invoice
@@ -4768,13 +4928,14 @@ export def "installations-billing-invoices get-invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<test: bool, invoiceId: string, externalId: string, state: string, invoiceNumber: string, invoiceDate: string, period: record<start: string, end: string>, paidAt: string, refundedAt: string, memo: string, items: table<billingPlanId: string, resourceId: string, start: string, end: string, name: string, details: string, price: string, quantity: float, units: string, total: string>, discounts: table<billingPlanId: string, resourceId: string, start: string, end: string, name: string, details: string, amount: string>, total: string, refundReason: string, refundTotal: string, created: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/billing/invoices/($invoiceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoice Actions
@@ -4791,6 +4952,7 @@ export def "installations-billing-invoices-actions update-invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-1
   --reason: string # Refund reason.
   --total: string # The total amount to be refunded. Must be less than or equal to the total amount of the invoice.
@@ -4803,7 +4965,7 @@ export def "installations-billing-invoices-actions update-invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit Prepayment Balances
@@ -4820,6 +4982,7 @@ export def "installations-billing-balance submit-prepayment-balances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   timestamp: string # Server time of your integration, used to determine the most recent data for race conditions & updates. Only the latest usage data for a given day, week, and month will be kept. (format: date-time)
   balances: list # item shape: {resourceId?: string, credit?: string, nameLabel?: string, currencyValueInCents: float}
 ]: any -> any {
@@ -4831,7 +4994,7 @@ export def "installations-billing-balance submit-prepayment-balances" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprecated: true. Update Resource Secrets (Deprecated)
@@ -4852,6 +5015,7 @@ export def "installations-products-resources-secrets update-resource-secrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   secrets: list # item shape: {name: string, value: string, prefix?: string, environmentOverrides?: record}
   --partial: oneof<nothing, bool> # If true, will only update the provided secrets
 ]: any -> any {
@@ -4863,7 +5027,7 @@ export def "installations-products-resources-secrets update-resource-secrets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Resource Secrets
@@ -4881,6 +5045,7 @@ export def "installations-resources-secrets update-resource-secrets-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   secrets: list # item shape: {name: string, value: string, prefix?: string, environmentOverrides?: record}
   --partial: oneof<nothing, bool> # If true, will only overwrite the provided secrets instead of replacing all secrets.
 ]: any -> any {
@@ -4892,7 +5057,7 @@ export def "installations-resources-secrets update-resource-secrets-by-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get configurations for the authenticated user or team
@@ -4907,6 +5072,7 @@ export def "integrations-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer
   --installationType: string@installationType-completer
   --integrationIdOrSlug: string # ID of the integration
@@ -4919,7 +5085,7 @@ export def "integrations-configurations get" [
   let full_url = (build-url $base "/v1/integrations/configurations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an integration configuration
@@ -4935,6 +5101,7 @@ export def "integrations-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -4944,7 +5111,7 @@ export def "integrations-configuration get" [
   let full_url = (build-url $base $"/v1/integrations/configuration/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an integration configuration
@@ -4960,6 +5127,7 @@ export def "integrations-configuration delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -4969,7 +5137,7 @@ export def "integrations-configuration delete" [
   let full_url = (build-url $base $"/v1/integrations/configuration/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List products for integration configuration
@@ -4985,6 +5153,7 @@ export def "integrations-configuration-products get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<products: table<id: string, slug: string, name: string, protocols: record, primaryProtocol: string, metadataSchema: record>, integration: record<id: string, slug: string, name: string>, configuration: record<id: string>> {
@@ -4994,7 +5163,7 @@ export def "integrations-configuration-products get" [
   let full_url = (build-url $base $"/v1/integrations/configuration/($id)/products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SSO Token Exchange
@@ -5009,6 +5178,7 @@ export def "integrations-sso-token exchange-sso-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # The sensitive code received from Vercel
   --state: string # The state received from the initialization request
   --client-id: string # The integration client id
@@ -5025,7 +5195,7 @@ export def "integrations-sso-token exchange-sso-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a list of Integration log drains (deprecated)
@@ -5040,6 +5210,7 @@ export def "integrations-log-drains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> table<clientId: string, configurationId: string, createdAt: float, id: string, deliveryFormat: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, url: string, sources: list<string>, createdFrom: string, headers: record, environments: list<string>, branch: string, samplingRate: float, source: any> {
@@ -5049,7 +5220,7 @@ export def "integrations-log-drains get" [
   let full_url = (build-url $base "/v2/integrations/log-drains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Integration Log Drain (deprecated)
@@ -5064,6 +5235,7 @@ export def "integrations-log-drains createLogDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the log drain (e.g. My first log drain)
@@ -5084,7 +5256,7 @@ export def "integrations-log-drains createLogDrain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the Integration log drain with the provided `id` (deprecated)
@@ -5100,6 +5272,7 @@ export def "integrations-log-drains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -5109,7 +5282,7 @@ export def "integrations-log-drains delete" [
   let full_url = (build-url $base $"/v1/integrations/log-drains/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get logs for a deployment
@@ -5126,6 +5299,7 @@ export def "projects-deployments-runtime-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -5135,7 +5309,7 @@ export def "projects-deployments-runtime-logs get" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/deployments/($deploymentId)/runtime-logs" $qp)
   let accept_val = "application/stream+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or multiple experimentation items
@@ -5153,6 +5327,7 @@ export def "installations-resources-experimentation-items createInstallationsByI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {id: string, slug: string, origin: string, category?: "experiment"|"flag", name?: string, description?: string, isArchived?: bool, createdAt?: float, updatedAt?: float}
 ]: any -> any {
   let input = $in
@@ -5163,7 +5338,7 @@ export def "installations-resources-experimentation-items createInstallationsByI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patch an existing experimentation item
@@ -5181,6 +5356,7 @@ export def "installations-resources-experimentation-items updateInstallationsByI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slug: string
   origin: string
   --name: string
@@ -5198,7 +5374,7 @@ export def "installations-resources-experimentation-items updateInstallationsByI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing experimentation item
@@ -5216,13 +5392,14 @@ export def "installations-resources-experimentation-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources/($resourceId)/experimentation/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the data of a user-provided Edge Config
@@ -5239,13 +5416,14 @@ export def "installations-resources-experimentation-edge-config headInstallation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources/($resourceId)/experimentation/edge-config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the data of a user-provided Edge Config
@@ -5262,13 +5440,14 @@ export def "installations-resources-experimentation-edge-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: record, updatedAt: float, digest: string, purpose: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/installations/($integrationConfigurationId)/resources/($resourceId)/experimentation/edge-config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Push data into a user-provided Edge Config
@@ -5285,6 +5464,7 @@ export def "installations-resources-experimentation-edge-config replaceInstallat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: record
 ]: any -> record<items: record, updatedAt: float, digest: string, purpose: string> {
   let input = $in
@@ -5295,7 +5475,7 @@ export def "installations-resources-experimentation-edge-config replaceInstallat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List microfrontends groups
@@ -5310,6 +5490,7 @@ export def "microfrontends-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -5319,7 +5500,7 @@ export def "microfrontends-groups get" [
   let full_url = (build-url $base "/v1/microfrontends/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List projects in a microfrontends group
@@ -5335,6 +5516,7 @@ export def "microfrontends-groups-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<projects: table<accountId: string, analytics: record, appliedCve55182Migration: bool, speedInsights: record, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: list, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record, dataCache: record, deploymentExpiration: record, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: list, customEnvironments: list, framework: string, services: list, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: list, jobs: record, latestDeployments: list, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record, outputDirectory: string, passwordProtection: record, passport: record, protectionConfig: record, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record, rollbackDescription: record, rollingRelease: record, defaultResourceConfig: record, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list, skipGitConnectDuringLink: bool, staticIps: record, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record, lastRollbackTarget: record, lastAliasRequest: record, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record, gitComments: record, gitProviderOptions: record, paused: bool, concurrencyBucketName: string, webAnalytics: record, security: record, oidcTokenConfig: record, deploymentPolicy: record, tier: string, flatRateTier: string, usageStatus: record, features: record, v0: bool, v0Created: bool, abuse: record, internalRoutes: list, hasDeployments: bool, dismissedToasts: list, protectedSourcemaps: bool, tracing: record, avatar: string>> {
@@ -5344,7 +5526,7 @@ export def "microfrontends-groups-projects get" [
   let full_url = (build-url $base $"/v1/microfrontends/groups/($groupId)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get microfrontends config for a deployment
@@ -5360,6 +5542,7 @@ export def "microfrontends-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<config: record<_schema: string, version: string, applications: record, options: record<disableOverrides: bool, localProxyPort: float>>> {
@@ -5369,7 +5552,7 @@ export def "microfrontends-config get" [
   let full_url = (build-url $base $"/v1/microfrontends/($deploymentId)/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get microfrontends config for a project
@@ -5385,6 +5568,7 @@ export def "microfrontends-projects-production-mfe-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<config: record<_schema: string, version: string, applications: record, options: record<disableOverrides: bool, localProxyPort: float>>> {
@@ -5394,7 +5578,7 @@ export def "microfrontends-projects-production-mfe-config get" [
   let full_url = (build-url $base $"/v1/microfrontends/projects/($projectIdOrName)/production-mfe-config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a microfrontends group with applications
@@ -5411,6 +5595,7 @@ export def "microfrontends-group createMicrofrontendsGroupWithApplications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   groupName: string # The name of the microfrontends group that will be used to identify the group (e.g. MFE Group 1)
@@ -5426,7 +5611,7 @@ export def "microfrontends-group createMicrofrontendsGroupWithApplications" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists disabled Observability Plus projects
@@ -5441,6 +5626,7 @@ export def "observability-manage-configuration-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<disabledProjects: table<id: string, name: string, disabledAt: float>> {
@@ -5450,7 +5636,7 @@ export def "observability-manage-configuration-projects get" [
   let full_url = (build-url $base "/v1/observability/manage/configuration/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a disabled Observability Plus project setting
@@ -5466,6 +5652,7 @@ export def "observability-manage-configuration-projects updateObservabilityConfi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --disabled: oneof<nothing, bool> # Whether Observability Plus should be disabled for the project
@@ -5479,7 +5666,7 @@ export def "observability-manage-configuration-projects updateObservabilityConfi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List project members
@@ -5495,6 +5682,7 @@ export def "projects-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit how many project members should be returned (e.g. 20)
   --since: int # Timestamp in milliseconds to only include members added since then. (e.g. 1540095775951)
   --until: int # Timestamp in milliseconds to only include members added until then. (e.g. 1540095775951)
@@ -5508,7 +5696,7 @@ export def "projects-members get" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new member to a project.
@@ -5524,6 +5712,7 @@ export def "projects-members addProjectMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --uid: string # The ID of the team member that should be added to this project. (e.g. ndlgr43fadlPyCtREAqxxdyFK)
@@ -5540,7 +5729,7 @@ export def "projects-members addProjectMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a Project Member
@@ -5557,6 +5746,7 @@ export def "projects-members removeProjectMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string> {
@@ -5566,7 +5756,7 @@ export def "projects-members removeProjectMember" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/members/($uid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project routing rules
@@ -5582,6 +5772,7 @@ export def "projects-routes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --versionId: string
   --q: string
   --filter: string@filter-completer
@@ -5595,7 +5786,7 @@ export def "projects-routes get" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/routes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stage routing rules
@@ -5612,6 +5803,7 @@ export def "projects-routes stageRoutes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --overwrite: oneof<nothing, bool>
@@ -5626,7 +5818,7 @@ export def "projects-routes stageRoutes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a routing rule
@@ -5644,6 +5836,7 @@ export def "projects-routes addRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   route: record # shape: {name: string, description?: string, enabled?: bool, srcSyntax?: "equals"|"path-to-regexp"|"regex", route: record}
@@ -5658,7 +5851,7 @@ export def "projects-routes addRoute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete routing rules
@@ -5674,6 +5867,7 @@ export def "projects-routes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   routeIds: list # The IDs of the routes to delete
@@ -5687,7 +5881,7 @@ export def "projects-routes delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a routing rule
@@ -5705,6 +5899,7 @@ export def "projects-routes editRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --route: record # The full route object to replace the existing route with — shape: {name: string, description?: string, enabled?: bool, srcSyntax?: "equals"|"path-to-regexp"|"regex", route: record}
@@ -5719,7 +5914,7 @@ export def "projects-routes editRoute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a routing rule from natural language
@@ -5736,6 +5931,7 @@ export def "projects-routes-generate generateRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   prompt: string
@@ -5750,7 +5946,7 @@ export def "projects-routes-generate generateRoute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get routing rule version history
@@ -5766,6 +5962,7 @@ export def "projects-routes-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<versions: table<id: string, s3Key: string, lastModified: float, createdBy: string, isStaging: bool, isLive: bool, ruleCount: float, alias: string>> {
@@ -5775,7 +5972,7 @@ export def "projects-routes-versions get" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/routes/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Promote, restore, or discard a routing rule version
@@ -5791,6 +5988,7 @@ export def "projects-routes-versions updateRouteVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   id: string
@@ -5805,7 +6003,7 @@ export def "projects-routes-versions updateRouteVersions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a list of projects
@@ -5820,6 +6018,7 @@ export def "projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Query only projects updated after the given timestamp or continuation token.
   --gitForkProtection: string@gitForkProtection-completer # Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed (e.g. 1)
   --limit: string # Limit the number of projects returned
@@ -5844,7 +6043,7 @@ export def "projects list" [
   let full_url = (build-url $base "/v10/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new project
@@ -5865,6 +6064,7 @@ export def "projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --enablePreviewFeedback: oneof<nothing, bool> # Opt-in to preview toolbar on the project level (nullable)
@@ -5889,7 +6089,7 @@ export def "projects createProject" [
   --oidcTokenConfig: record # OpenID Connect JSON Web Token generation configuration. — shape: {enabled?: bool, issuerMode?: "team"|"global"}
   --enableAffectedProjectsDeployments: oneof<nothing, bool> # Opt-in to skip deployments when there are no changes to the root directory and its dependencies
   --resourceConfig: record # Specifies resource override configuration for the project — shape: {buildMachineType?: "enhanced"|"turbo"|"standard"|"elastic", fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, buildQueue?: record, enableFunctionsBeta?: bool}
-]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
+]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, traffic_sources: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5899,7 +6099,7 @@ export def "projects createProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find a project by id or name
@@ -5915,16 +6115,17 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-]: nothing -> record<integrations: table<installationId: string, resources: list>, accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
+]: nothing -> record<integrations: table<installationId: string, resources: list>, accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, traffic_sources: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "teamId" $teamId "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v9/projects/($idOrName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing project
@@ -5953,6 +6154,7 @@ export def "projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --autoExposeSystemEnvs: oneof<nothing, bool>
@@ -5999,7 +6201,7 @@ export def "projects updateProject" [
   --optionsAllowlist: record # Specify a list of paths that should not be protected by Deployment Protection to enable Cors preflight requests (nullable) — shape: {paths: list}
   --connectConfigurations: list # The list of connections from project environment to Secure Compute network (nullable) — item shape: {envId: string, connectConfigurationId: string, passive: bool, buildsEnabled: bool}
   --dismissedToasts: list # An array of objects representing a Dismissed Toast in regards to a Project. Objects are either merged with existing toasts (on key match), or added to the `dimissedToasts` array.` — item shape: {key: string, dismissedAt: float, action: "cancel"|"accept"|"delete", value: any}
-]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
+]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, traffic_sources: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6009,7 +6211,7 @@ export def "projects updateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Project
@@ -6025,6 +6227,7 @@ export def "projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -6034,7 +6237,7 @@ export def "projects delete" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a project avatar
@@ -6050,10 +6253,11 @@ export def "projects-avatar uploadProjectAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --body: record
-]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
+]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, traffic_sources: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6062,7 +6266,7 @@ export def "projects-avatar uploadProjectAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Configures Static IPs for a project
@@ -6078,6 +6282,7 @@ export def "projects-shared-connect-links updateStaticIps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --builds: oneof<nothing, bool> # Whether to use Static IPs for builds.
@@ -6092,7 +6297,7 @@ export def "projects-shared-connect-links updateStaticIps" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a custom environment for the current project.
@@ -6109,6 +6314,7 @@ export def "projects-custom-environments createCustomEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --slug: string # The slug of the custom environment to create.
@@ -6125,7 +6331,7 @@ export def "projects-custom-environments createCustomEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve custom environments
@@ -6141,6 +6347,7 @@ export def "projects-custom-environments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gitBranch: string # Fetch custom environments for a specific git branch
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -6151,7 +6358,7 @@ export def "projects-custom-environments list" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/custom-environments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a custom environment
@@ -6168,6 +6375,7 @@ export def "projects-custom-environments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string, slug: string, type: string, description: string, branchMatcher: record<type: string, pattern: string>, domains: table<name: string, apexName: string, projectId: string, redirect: string, redirectStatusCode: float, gitBranch: string, customEnvironmentId: string, updatedAt: float, createdAt: float, verified: bool, verification: list>, currentDeploymentAliases: list<string>, createdAt: float, updatedAt: float> {
@@ -6177,7 +6385,7 @@ export def "projects-custom-environments get" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/custom-environments/($environmentSlugOrId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a custom environment
@@ -6195,6 +6403,7 @@ export def "projects-custom-environments updateCustomEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --slug: string # The slug of the custom environment.
@@ -6210,7 +6419,7 @@ export def "projects-custom-environments updateCustomEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a custom environment
@@ -6227,6 +6436,7 @@ export def "projects-custom-environments removeCustomEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --deleteUnassignedEnvironmentVariables: oneof<nothing, bool> # Delete Environment Variables that are not assigned to any environments.
@@ -6240,7 +6450,7 @@ export def "projects-custom-environments removeCustomEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve project domains by project by id or name
@@ -6256,6 +6466,7 @@ export def "projects-domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --production: string@production-completer # Filters only production domains when set to `true`. (default: false)
   --target: string@target-completer # Filters on the target of the domain. Can be either "production", "preview"
   --customEnvironmentId: string # The unique custom environment identifier within the project (e.g. env_123abc4567)
@@ -6276,7 +6487,7 @@ export def "projects-domains list" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project domain
@@ -6293,6 +6504,7 @@ export def "projects-domains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<name: string, apexName: string, projectId: string, redirect: string, redirectStatusCode: float, gitBranch: string, customEnvironmentId: string, updatedAt: float, createdAt: float, verified: bool, verification: table<type: string, domain: string, value: string, reason: string>> {
@@ -6302,7 +6514,7 @@ export def "projects-domains get" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/domains/($domain)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project domain
@@ -6319,6 +6531,7 @@ export def "projects-domains updateProjectDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --gitBranch: string # Git branch to link the project domain (nullable)
@@ -6334,7 +6547,7 @@ export def "projects-domains updateProjectDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a domain from a project
@@ -6351,6 +6564,7 @@ export def "projects-domains removeProjectDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --removeRedirects: oneof<nothing, bool> # Whether to remove all domains from this project that redirect to the domain being removed.
@@ -6364,7 +6578,7 @@ export def "projects-domains removeProjectDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a domain to a project
@@ -6380,6 +6594,7 @@ export def "projects-domains addProjectDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The project domain name (e.g. www.example.com)
@@ -6397,7 +6612,7 @@ export def "projects-domains addProjectDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move a project domain
@@ -6414,6 +6629,7 @@ export def "projects-domains-move moveProjectDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: any # The unique target project identifier (e.g. prj_XLKmu1DyR1eY7zq8UgeRKbA7yVLA)
@@ -6430,7 +6646,7 @@ export def "projects-domains-move moveProjectDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify project domain
@@ -6447,6 +6663,7 @@ export def "projects-domains-verify verifyProjectDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<name: string, apexName: string, projectId: string, redirect: string, redirectStatusCode: float, gitBranch: string, customEnvironmentId: string, updatedAt: float, createdAt: float, verified: bool> {
@@ -6456,7 +6673,7 @@ export def "projects-domains-verify verifyProjectDomain" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/domains/($domain)/verify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the environment variables of a project by id or name
@@ -6472,6 +6689,7 @@ export def "projects-env filterProjectEnvs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gitBranch: string # If defined, the git branch of the environment variable to filter the results (must have target=preview) (e.g. feature-1)
   --decrypt: string@decrypt-completer # If true, the environment variable value will be decrypted (e.g. true)
   --qp-source: string # The source that is calling the endpoint. (e.g. vercel-cli:pull)
@@ -6486,7 +6704,7 @@ export def "projects-env filterProjectEnvs" [
   let full_url = (build-url $base $"/v10/projects/($idOrName)/env" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or more environment variables
@@ -6502,6 +6720,7 @@ export def "projects-env createProjectEnv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --upsert: string # Allow override of environment variable if it already exists (e.g. true)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -6522,7 +6741,7 @@ export def "projects-env createProjectEnv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the decrypted value of an environment variable of a project by id
@@ -6539,6 +6758,7 @@ export def "projects-env get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -6548,7 +6768,7 @@ export def "projects-env get" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/env/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an environment variable
@@ -6565,6 +6785,7 @@ export def "projects-env removeProjectEnv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customEnvironmentId: string # The unique custom environment identifier within the project (e.g. env_123abc4567)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -6575,7 +6796,7 @@ export def "projects-env removeProjectEnv" [
   let full_url = (build-url $base $"/v9/projects/($idOrName)/env/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an environment variable
@@ -6592,6 +6813,7 @@ export def "projects-env editProjectEnv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --key: string # The name of the environment variable (e.g. GITHUB_APP_ID)
@@ -6611,7 +6833,7 @@ export def "projects-env editProjectEnv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch remove environment variables
@@ -6627,6 +6849,7 @@ export def "projects-env batchRemoveProjectEnv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   ids: list # Array of environment variable IDs to delete
@@ -6640,7 +6863,7 @@ export def "projects-env batchRemoveProjectEnv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rolling release billing status
@@ -6656,6 +6879,7 @@ export def "projects-rolling-release-billing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -6665,7 +6889,7 @@ export def "projects-rolling-release-billing get" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/rolling-release/billing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rolling release configuration
@@ -6681,6 +6905,7 @@ export def "projects-rolling-release-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>> {
@@ -6690,7 +6915,7 @@ export def "projects-rolling-release-config get" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/rolling-release/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete rolling release configuration
@@ -6706,6 +6931,7 @@ export def "projects-rolling-release-config delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<rollingRelease: any> {
@@ -6715,7 +6941,7 @@ export def "projects-rolling-release-config delete" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/rolling-release/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the rolling release settings for the project
@@ -6731,6 +6957,7 @@ export def "projects-rolling-release-config updateRollingReleaseConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -6740,7 +6967,7 @@ export def "projects-rolling-release-config updateRollingReleaseConfig" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/rolling-release/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the active rolling release information for a project
@@ -6756,6 +6983,7 @@ export def "projects-rolling-release get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # Filter by rolling release state
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -6766,7 +6994,7 @@ export def "projects-rolling-release get" [
   let full_url = (build-url $base $"/v1/projects/($idOrName)/rolling-release" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the active rolling release to the next stage for a project
@@ -6782,6 +7010,7 @@ export def "projects-rolling-release-approve-stage approveRollingReleaseStage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   nextStageIndex: float # The index of the stage to transition to
@@ -6796,7 +7025,7 @@ export def "projects-rolling-release-approve-stage approveRollingReleaseStage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete the rolling release for the project
@@ -6812,6 +7041,7 @@ export def "projects-rolling-release-complete completeRollingRelease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   canaryDeploymentId: string # The ID of the canary deployment to complete
@@ -6825,7 +7055,7 @@ export def "projects-rolling-release-complete completeRollingRelease" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create project transfer request
@@ -6841,6 +7071,7 @@ export def "projects-transfer-request createProjectTransferRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --callbackUrl: string # The URL to send a webhook to when the transfer is accepted.
@@ -6855,7 +7086,7 @@ export def "projects-transfer-request createProjectTransferRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Accept project transfer request
@@ -6872,6 +7103,7 @@ export def "projects-transfer-request acceptProjectTransferRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --newProjectName: string # The desired name for the project (e.g. a-project-name)
@@ -6887,7 +7119,7 @@ export def "projects-transfer-request acceptProjectTransferRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Protection Bypass for Automation
@@ -6906,6 +7138,7 @@ export def "projects-protection-bypass updateProjectProtectionBypass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --revoke: record # Optional instructions for revoking and regenerating a automation bypass — shape: {secret: string, regenerate: bool}
@@ -6921,7 +7154,7 @@ export def "projects-protection-bypass updateProjectProtectionBypass" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Point production traffic to a previous production deployment by ID
@@ -6938,6 +7171,7 @@ export def "projects-rollback requestRollback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The reason for the rollback
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -6948,7 +7182,7 @@ export def "projects-rollback requestRollback" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/rollback/($deploymentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the description for a rollback
@@ -6965,6 +7199,7 @@ export def "projects-rollback-update-description updateProjectsByProjectIdRollba
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The reason for the rollback
 ]: any -> any {
   let input = $in
@@ -6975,7 +7210,7 @@ export def "projects-rollback-update-description updateProjectsByProjectIdRollba
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the microfrontends settings
@@ -6991,6 +7226,7 @@ export def "projects-microfrontends updateMicrofrontends" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --microfrontendsGroupId: string # The unique group identifier to add this microfrontend to (e.g. mfe_12HKQaOmR5t5Uy6vdcQsNIiZgHGB)
@@ -6999,7 +7235,7 @@ export def "projects-microfrontends updateMicrofrontends" [
   --defaultRoute: string # The default route used for screenshots and preview links for the project (e.g. /home)
   --routeObservabilityToThisProject: oneof<nothing, bool> # Whether observability data should be routed to this project or a root project. Can only be set for child applications.
   --doNotRouteWithMicrofrontendsRouting: oneof<nothing, bool> # Whether domains in this project should route as a microfrontend. Can only be set for child applications.
-]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
+]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, traffic_sources: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7009,7 +7245,7 @@ export def "projects-microfrontends updateMicrofrontends" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Point production traffic to a given deployment
@@ -7026,6 +7262,7 @@ export def "projects-promote requestPromote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7035,7 +7272,7 @@ export def "projects-promote requestPromote" [
   let full_url = (build-url $base $"/v10/projects/($projectId)/promote/($deploymentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of aliases with status for the current promote
@@ -7051,6 +7288,7 @@ export def "projects-promote-aliases listPromoteAliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of aliases to list from a request (max 100). (e.g. 20)
   --since: float # Get aliases created after this epoch timestamp. (e.g. 1609499532000)
   --until: float # Get aliases created before this epoch timestamp. (e.g. 1612264332000)
@@ -7064,7 +7302,7 @@ export def "projects-promote-aliases listPromoteAliases" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/promote/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause a project
@@ -7080,6 +7318,7 @@ export def "projects-pause pauseProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7089,7 +7328,7 @@ export def "projects-pause pauseProject" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/pause" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpause a project
@@ -7105,6 +7344,7 @@ export def "projects-unpause unpauseProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7114,7 +7354,7 @@ export def "projects-unpause unpauseProject" [
   let full_url = (build-url $base $"/v1/projects/($projectId)/unpause" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List sandboxes
@@ -7129,6 +7369,7 @@ export def "sandboxes listSandboxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project: string # The unique identifier or name of the project to list named sandboxes for. (e.g. prj_abc123)
   --limit: float # Maximum number of named sandboxes to return in the response. Used for pagination. (default: 20, e.g. 20)
   --sortBy: string@sortBy-completer # Field to sort by. (default: createdAt)
@@ -7145,7 +7386,7 @@ export def "sandboxes listSandboxes" [
   let full_url = (build-url $base "/v2/sandboxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a named sandbox
@@ -7162,6 +7403,7 @@ export def "sandboxes createSandboxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --networkPolicy: any
@@ -7188,7 +7430,7 @@ export def "sandboxes createSandboxes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List drives
@@ -7203,6 +7445,7 @@ export def "sandboxes-drives listDrives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project ID or name associated with the drives. Required unless using a Vercel OIDC token scoped to a project. (e.g. prj_abc123)
   --limit: float # Maximum number of drives to return in the response. Used for pagination. (default: 20, e.g. 20)
   --cursor: string # Opaque pagination cursor from a previous response.
@@ -7218,7 +7461,7 @@ export def "sandboxes-drives listDrives" [
   let full_url = (build-url $base "/v2/sandboxes/drives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get or create a drive
@@ -7234,6 +7477,7 @@ export def "sandboxes-drives post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --projectId: string # The project ID or name to associate the drive with. Required unless using a Vercel OIDC token scoped to a project. (e.g. prj_abc123)
@@ -7248,7 +7492,7 @@ export def "sandboxes-drives post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a drive
@@ -7264,6 +7508,7 @@ export def "sandboxes-drives delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project ID or name associated with the drive. Required unless using a Vercel OIDC token scoped to a project. (e.g. prj_abc123)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -7274,7 +7519,7 @@ export def "sandboxes-drives delete" [
   let full_url = (build-url $base $"/v2/sandboxes/drives/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List snapshots
@@ -7289,6 +7534,7 @@ export def "sandboxes-snapshots listSessionSnapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project: string # The unique identifier or name of the project to list snapshots for. (e.g. prj_abc123)
   --name: string # Name for the sandbox. Must be unique per project and URL-safe (alphanumeric, hyphens, underscores). (e.g. my-sandbox)
   --limit: float # Maximum number of snapshots to return in the response. Used for pagination. (default: 20, e.g. 20)
@@ -7303,7 +7549,7 @@ export def "sandboxes-snapshots listSessionSnapshots" [
   let full_url = (build-url $base "/v2/sandboxes/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a snapshot
@@ -7319,6 +7565,7 @@ export def "sandboxes-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<snapshot: record<id: string, sourceSessionId: string, region: string, status: string, sizeBytes: float, expiresAt: float, createdAt: float, updatedAt: float, lastUsedAt: float, creationMethod: string, parentId: string>> {
@@ -7328,7 +7575,7 @@ export def "sandboxes-snapshots get" [
   let full_url = (build-url $base $"/v2/sandboxes/snapshots/($snapshotId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a snapshot
@@ -7344,6 +7591,7 @@ export def "sandboxes-snapshots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<snapshot: record<id: string, sourceSessionId: string, region: string, status: string, sizeBytes: float, expiresAt: float, createdAt: float, updatedAt: float, lastUsedAt: float, creationMethod: string, parentId: string>> {
@@ -7353,7 +7601,7 @@ export def "sandboxes-snapshots delete" [
   let full_url = (build-url $base $"/v2/sandboxes/snapshots/($snapshotId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List sessions
@@ -7368,6 +7616,7 @@ export def "sandboxes-sessions listSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project: string # The unique identifier or name of the project to list sessions for. (e.g. prj_abc123)
   --name: string # Filter sessions by sandbox name. Only sessions belonging to the specified sandbox are returned. (e.g. my-sandbox)
   --limit: float # Maximum number of sessions to return in the response. Used for pagination. (default: 20, e.g. 20)
@@ -7382,7 +7631,7 @@ export def "sandboxes-sessions listSessions" [
   let full_url = (build-url $base "/v2/sandboxes/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a session
@@ -7398,6 +7647,7 @@ export def "sandboxes-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<session: record<sourceSandboxName: string, projectId: string, id: string, memory: float, vcpus: float, region: string, runtime: string, timeout: float, status: string, requestedAt: float, startedAt: float, cwd: string, requestedStopAt: float, stoppedAt: float, abortedAt: float, duration: float, sourceSnapshotId: string, snapshottedAt: float, createdAt: float, updatedAt: float, networkPolicy: record<mode: string, allowedDomains: list, allowedCIDRs: list, deniedCIDRs: list, injectionRules: list>, activeCpuDurationMs: float, networkTransfer: record<ingress: float, egress: float>>, routes: table<url: string, port: float, subdomain: string, system: bool>> {
@@ -7407,7 +7657,7 @@ export def "sandboxes-sessions get" [
   let full_url = (build-url $base $"/v2/sandboxes/sessions/($sessionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a named sandbox
@@ -7423,6 +7673,7 @@ export def "sandboxes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project ID or name (required when not using OIDC token). (e.g. prj_abc123)
   --resume: oneof<nothing, bool> # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -7434,7 +7685,7 @@ export def "sandboxes get" [
   let full_url = (build-url $base $"/v2/sandboxes/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a sandbox
@@ -7451,6 +7702,7 @@ export def "sandboxes updateSandbox" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project ID that owns the named sandbox. When provided, takes precedence over OIDC project context.
   --resume: oneof<nothing, bool> # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -7476,7 +7728,7 @@ export def "sandboxes updateSandbox" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a sandbox
@@ -7492,6 +7744,7 @@ export def "sandboxes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project ID that owns the named sandbox. When provided, takes precedence over OIDC project context.
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -7502,7 +7755,7 @@ export def "sandboxes delete" [
   let full_url = (build-url $base $"/v2/sandboxes/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commands
@@ -7518,6 +7771,7 @@ export def "sandboxes-sessions-cmd listSessionCommands" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<commands: table<id: string, name: string, args: list, cwd: string, sessionId: string, exitCode: float, startedAt: float>> {
@@ -7527,7 +7781,7 @@ export def "sandboxes-sessions-cmd listSessionCommands" [
   let full_url = (build-url $base $"/v2/sandboxes/sessions/($sessionId)/cmd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Execute a command
@@ -7543,6 +7797,7 @@ export def "sandboxes-sessions-cmd runSessionCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --cmdId: string # The unique identifier of the command to stream logs for. (e.g. cmd_abc123)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -7565,7 +7820,7 @@ export def "sandboxes-sessions-cmd runSessionCommand" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a command
@@ -7582,6 +7837,7 @@ export def "sandboxes-sessions-cmd get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: string@wait-completer # If set to "true", the request will block until the command finishes execution. Useful for synchronously waiting for command completion. (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -7592,7 +7848,7 @@ export def "sandboxes-sessions-cmd get" [
   let full_url = (build-url $base $"/v2/sandboxes/sessions/($sessionId)/cmd/($cmdId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Kill a command
@@ -7609,6 +7865,7 @@ export def "sandboxes-sessions-cmd-kill killSessionCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   signal: float # The POSIX signal number to send to the process. Common values: 15 (SIGTERM) for graceful termination, 9 (SIGKILL) for forced termination. (e.g. 15)
@@ -7622,7 +7879,7 @@ export def "sandboxes-sessions-cmd-kill killSessionCommand" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream command logs
@@ -7639,6 +7896,7 @@ export def "sandboxes-sessions-cmd-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7648,7 +7906,7 @@ export def "sandboxes-sessions-cmd-logs get" [
   let full_url = (build-url $base $"/v2/sandboxes/sessions/($sessionId)/cmd/($cmdId)/logs" $qp)
   let accept_val = "application/x-ndjson"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a session
@@ -7664,6 +7922,7 @@ export def "sandboxes-sessions-stop stopSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7673,7 +7932,7 @@ export def "sandboxes-sessions-stop stopSession" [
   let full_url = (build-url $base $"/v2/sandboxes/sessions/($sessionId)/stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extend session timeout
@@ -7689,6 +7948,7 @@ export def "sandboxes-sessions-extend-timeout extendSessionTimeout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   duration: float # The amount of time in milliseconds to add to the current timeout. Must be at least 1000ms (1 second). (e.g. 300000)
@@ -7702,7 +7962,7 @@ export def "sandboxes-sessions-extend-timeout extendSessionTimeout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update network policy
@@ -7720,6 +7980,7 @@ export def "sandboxes-sessions-network-policy updateSessionNetworkPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --mode: string@mode-completer # The network access policy mode. Use \"allow-all\" to permit all outbound traffic. Use \"deny-all\" to block all outbound traffic. Use \"custom\" to specify explicit allow/deny rules. (e.g. custom)
@@ -7739,7 +8000,7 @@ export def "sandboxes-sessions-network-policy updateSessionNetworkPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Read a file
@@ -7755,6 +8016,7 @@ export def "sandboxes-sessions-fs-read readSessionFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --cwd: string # The base directory for resolving relative paths. If not specified, paths are resolved from the sandbox home directory. (e.g. /home/vercel-sandbox)
@@ -7769,7 +8031,7 @@ export def "sandboxes-sessions-fs-read readSessionFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a directory
@@ -7785,6 +8047,7 @@ export def "sandboxes-sessions-fs-mkdir createSessionDirectory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --cwd: string # The base directory for resolving relative paths. If not specified, paths are resolved from the sandbox home directory. (e.g. /home/vercel-sandbox)
@@ -7800,7 +8063,7 @@ export def "sandboxes-sessions-fs-mkdir createSessionDirectory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Write files
@@ -7816,6 +8079,7 @@ export def "sandboxes-sessions-fs-write writeSessionFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --x-Cwd: string # The target directory where the tarball contents will be extracted. If not specified, files are extracted to the sandbox home directory. (e.g. /home/vercel-sandbox)
@@ -7828,7 +8092,7 @@ export def "sandboxes-sessions-fs-write writeSessionFiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a snapshot
@@ -7844,6 +8108,7 @@ export def "sandboxes-sessions-snapshot createSessionSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --expiration: any # The number of milliseconds after which the snapshot will expire and be deleted. Use 0 for no expiration.
@@ -7857,7 +8122,7 @@ export def "sandboxes-sessions-snapshot createSessionSnapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Attack Challenge mode
@@ -7872,6 +8137,7 @@ export def "security-attack-mode updateAttackChallengeMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --projectId: string
@@ -7887,7 +8153,7 @@ export def "security-attack-mode updateAttackChallengeMode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Put Firewall Configuration
@@ -7905,6 +8171,7 @@ export def "security-firewall-config put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -7915,7 +8182,7 @@ export def "security-firewall-config put" [
   --ips: list # item shape: {id?: string, hostname: string, ip: string, notes?: string, action: "deny"|"challenge"|"log"|"bypass"}
   --botIdEnabled: oneof<nothing, bool>
   --logHeaders: any
-]: any -> record<active: record<ownerId: string, projectKey: string, id: string, version: float, updatedAt: string, firewallEnabled: bool, crs: record<sd: record, ma: record, lfi: record, rfi: record, rce: record, php: record, gen: record, xss: record, sqli: record, sf: record, java: record>, rules: list<any>, ips: list<record>, changes: list<record>, managedRules: record<bot_protection: record, ai_bots: record, owasp: record, vercel_ruleset: record>, botIdEnabled: bool, logHeaders: any>> {
+]: any -> record<active: record<ownerId: string, projectKey: string, id: string, version: float, updatedAt: string, firewallEnabled: bool, crs: record<sd: record, ma: record, lfi: record, rfi: record, rce: record, php: record, gen: record, xss: record, sqli: record, sf: record, java: record>, rules: list<any>, ips: list<record>, changes: list<record>, managedRules: record<bot_protection: record, ai_bots: record, owasp: record, vercel_ruleset: record, traffic_sources: record>, botIdEnabled: bool, logHeaders: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7925,7 +8192,7 @@ export def "security-firewall-config put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Firewall Configuration
@@ -7940,6 +8207,7 @@ export def "security-firewall-config updateFirewallConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -7956,7 +8224,7 @@ export def "security-firewall-config updateFirewallConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Read Firewall Configuration
@@ -7972,17 +8240,18 @@ export def "security-firewall-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-]: nothing -> record<ownerId: string, projectKey: string, id: string, version: float, updatedAt: string, firewallEnabled: bool, crs: record<sd: record<active: bool, action: string>, ma: record<active: bool, action: string>, lfi: record<active: bool, action: string>, rfi: record<active: bool, action: string>, rce: record<active: bool, action: string>, php: record<active: bool, action: string>, gen: record<active: bool, action: string>, xss: record<active: bool, action: string>, sqli: record<active: bool, action: string>, sf: record<active: bool, action: string>, java: record<active: bool, action: string>>, rules: list<any>, ips: table<id: string, hostname: string, ip: string, notes: string, action: string>, changes: list<record>, managedRules: record<bot_protection: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, ai_bots: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, owasp: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, vercel_ruleset: record<active: bool, action: string, updatedAt: string, userId: string, username: string>>, botIdEnabled: bool, logHeaders: any> {
+]: nothing -> record<ownerId: string, projectKey: string, id: string, version: float, updatedAt: string, firewallEnabled: bool, crs: record<sd: record<active: bool, action: string>, ma: record<active: bool, action: string>, lfi: record<active: bool, action: string>, rfi: record<active: bool, action: string>, rce: record<active: bool, action: string>, php: record<active: bool, action: string>, gen: record<active: bool, action: string>, xss: record<active: bool, action: string>, sqli: record<active: bool, action: string>, sf: record<active: bool, action: string>, java: record<active: bool, action: string>>, rules: list<any>, ips: table<id: string, hostname: string, ip: string, notes: string, action: string>, changes: list<record>, managedRules: record<bot_protection: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, ai_bots: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, owasp: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, vercel_ruleset: record<active: bool, action: string, updatedAt: string, userId: string, username: string>, traffic_sources: record<active: bool, action: string, updatedAt: string, userId: string, username: string>>, botIdEnabled: bool, logHeaders: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "teamId" $teamId "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/security/firewall/config/($configVersion)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Read active attack data
@@ -7997,6 +8266,7 @@ export def "security-firewall-attack-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --since: float
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
@@ -8008,7 +8278,7 @@ export def "security-firewall-attack-status get" [
   let full_url = (build-url $base "/v1/security/firewall/attack-status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Read System Bypass
@@ -8023,6 +8293,7 @@ export def "security-firewall-bypass get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --limit: float # e.g. 10
   --sourceIp: string # Filter by source IP
@@ -8038,7 +8309,7 @@ export def "security-firewall-bypass get" [
   let full_url = (build-url $base "/v1/security/firewall/bypass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create System Bypass Rule
@@ -8053,6 +8324,7 @@ export def "security-firewall-bypass addBypassIp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -8072,7 +8344,7 @@ export def "security-firewall-bypass addBypassIp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove System Bypass Rule
@@ -8087,6 +8359,7 @@ export def "security-firewall-bypass removeBypassIp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -8105,7 +8378,7 @@ export def "security-firewall-bypass removeBypassIp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Read Firewall Actions by Project
@@ -8120,6 +8393,7 @@ export def "security-firewall-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --startTimestamp: float
   --endTimestamp: float
@@ -8131,7 +8405,7 @@ export def "security-firewall-events get" [
   let full_url = (build-url $base "/v1/security/firewall/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create integration store (free and paid plans)
@@ -8146,6 +8420,7 @@ export def "storage-stores-integration-direct createIntegrationStoreDirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # Human-readable name for the storage resource (e.g. my-dev-database)
@@ -8168,7 +8443,7 @@ export def "storage-stores-integration-direct createIntegrationStoreDirect" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List team members
@@ -8184,6 +8459,7 @@ export def "teams-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Limit how many teams should be returned (e.g. 20)
   --since: float # Timestamp in milliseconds to only include members added since then. (e.g. 1540095775951)
   --until: float # Timestamp in milliseconds to only include members added until then. (e.g. 1540095775951)
@@ -8199,7 +8475,7 @@ export def "teams-members get" [
   let full_url = (build-url $base $"/v3/teams/($teamId)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite a user
@@ -8215,6 +8491,7 @@ export def "teams-members inviteUserToTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --body: record
 ]: any -> record<uid: string, username: string, email: string, role: string, teamRoles: list<string>, teamPermissions: list<string>> {
@@ -8226,7 +8503,7 @@ export def "teams-members inviteUserToTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request access to a team
@@ -8243,6 +8520,7 @@ export def "teams-request requestAccessToTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   joinedFrom: record # shape: {origin: "import"|"teams"|"github"|"gitlab"|"bitbucket"|"feedback"|"organization-teams", commitId?: string, repoId?: string, repoPath?: string, gitUserId?: any, gitUserLogin?: string}
 ]: any -> record<teamSlug: string, teamName: string, confirmed: bool, joinedFrom: record<origin: string, commitId: string, repoId: string, repoPath: string, gitUserId: any, gitUserLogin: string, ssoUserId: string, ssoConnectedAt: float, idpUserId: string, dsyncUserId: string, dsyncConnectedAt: float>, accessRequestedAt: float, github: record<login: string>, gitlab: record<login: string>, bitbucket: record<login: string>> {
   let input = $in
@@ -8253,7 +8531,7 @@ export def "teams-request requestAccessToTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get access request status
@@ -8270,13 +8548,14 @@ export def "teams-request get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<teamSlug: string, teamName: string, confirmed: bool, joinedFrom: record<origin: string, commitId: string, repoId: string, repoPath: string, gitUserId: any, gitUserLogin: string, ssoUserId: string, ssoConnectedAt: float, idpUserId: string, dsyncUserId: string, dsyncConnectedAt: float>, accessRequestedAt: float, github: record<login: string>, gitlab: record<login: string>, bitbucket: record<login: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/teams/($teamId)/request/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Join a team
@@ -8292,6 +8571,7 @@ export def "teams-members-teams-join joinTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inviteCode: string # The invite code to join the team. (e.g. fisdh38aejkeivn34nslfore9vjtn4ls)
 ]: any -> record<teamId: string, slug: string, name: string, from: string> {
   let input = $in
@@ -8302,7 +8582,7 @@ export def "teams-members-teams-join joinTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a Team Member
@@ -8321,6 +8601,7 @@ export def "teams-members updateTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --confirmed: oneof<nothing, bool> # Accept a user who requested access to the team. (e.g. true)
   --role: string # The role in the team of the member. (default: MEMBER, e.g. VIEWER)
   --teamPermissions: list # The team permissions to set for the member. Permissions must be compatible with the team roles assigned to the member. (e.g. [CreateProject, FullProductionDeployment])
@@ -8335,7 +8616,7 @@ export def "teams-members updateTeamMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a Team Member
@@ -8352,6 +8633,7 @@ export def "teams-members removeTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --newDefaultTeamId: string # The ID of the team to set as the new default team for the Northstar user. (e.g. team_nllPyCtREAqxxdyFKbbMDlxd)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8360,7 +8642,7 @@ export def "teams-members removeTeamMember" [
   let full_url = (build-url $base $"/v1/teams/($teamId)/members/($uid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Team
@@ -8376,6 +8658,7 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # e.g. my-team-url-slug
 ]: nothing -> record<connect: record<enabled: bool>, creatorId: string, updatedAt: float, emailDomain: string, saml: record<connection: record<status: string, type: string, state: string, connectedAt: float, lastReceivedWebhookEvent: float, lastSyncedAt: float, syncState: string>, directory: record<type: string, state: string, connectedAt: float, lastReceivedWebhookEvent: float, lastSyncedAt: float, syncState: string>, enforced: bool, defaultRedirectUri: string, roles: record>, inviteCode: string, description: string, defaultRoles: record<teamRoles: list<string>, teamPermissions: list<string>>, stagingPrefix: string, resourceConfig: record<concurrentBuilds: float, elasticConcurrencyEnabled: bool, edgeConfigSize: float, edgeConfigs: float, kvDatabases: float, blobStores: float, postgresDatabases: float, customEnvironmentsPerProject: float, buildEntitlements: record<enhancedBuilds: bool>, buildMachine: record<default: string>>, previewDeploymentSuffix: string, platform: bool, disableHardAutoBlocks: any, remoteCaching: record<enabled: bool>, defaultDeploymentProtection: record<passwordProtection: record<deploymentType: string>, ssoProtection: record<deploymentType: string>>, defaultPassport: record<connectorId: string, deploymentType: string>, defaultExpirationSettings: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, defaultProjectJobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, enablePreviewFeedback: string, enableProductionFeedback: string, sensitiveEnvironmentVariablePolicy: string, hideIpAddresses: bool, hideIpAddressesInLogDrains: bool, dpAccessRequestsMode: string, ipBuckets: table<bucket: string, supportUntil: float, default: bool>, requireVerifiedCommits: bool, disableRepositoryDispatchEvents: bool, strictDeploymentProtectionSettings: record<enabled: bool, updatedAt: float>, strictShareableLinks: record<enabled: bool, updatedAt: float>, nsnbConfig: record<preference: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, personalAccessTokensInvalidatedAt: float, appTokensInvalidatedAt: float, apiKeysInvalidatedAt: float, integrationTokensInvalidatedAt: float, id: string, slug: string, name: string, avatar: string, membership: record<uid: string, entitlements: list<record>, teamId: string, confirmed: bool, accessRequestedAt: float, role: string, teamRoles: list<string>, teamPermissions: list<string>, createdAt: float, created: float, joinedFrom: record<origin: string, commitId: string, repoId: string, repoPath: string, gitUserId: any, gitUserLogin: string, ssoUserId: string, ssoConnectedAt: float, idpUserId: string, dsyncUserId: string, dsyncConnectedAt: float>>, createdAt: float, parentId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8384,7 +8667,7 @@ export def "teams get" [
   let full_url = (build-url $base $"/v2/teams/($teamId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Team
@@ -8408,6 +8691,7 @@ export def "teams patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --avatar: string # The hash value of an uploaded image. (format: regex)
   --description: string # A short text that describes the team. (e.g. Our mission is to make cloud computing accessible to everyone)
@@ -8445,7 +8729,7 @@ export def "teams patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all teams
@@ -8460,6 +8744,7 @@ export def "teams list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of Teams which may be returned. (e.g. 20)
   --since: float # Timestamp (in milliseconds) to only include Teams created since then. (e.g. 1540095775951)
   --until: float # Timestamp (in milliseconds) to only include Teams created until then. (e.g. 1540095775951)
@@ -8470,7 +8755,7 @@ export def "teams list" [
   let full_url = (build-url $base "/v2/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Team
@@ -8486,6 +8771,7 @@ export def "teams createTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slug: string # The desired slug for the Team (e.g. a-random-team)
   --name: string # The desired name for the Team. It will be generated from the provided slug if nothing is provided (e.g. A Random Team)
   --attribution: record # Attribution information for the session or current page — shape: {sessionReferrer?: string, landingPage?: string, pageBeforeConversionPage?: string, utm?: record}
@@ -8498,7 +8784,7 @@ export def "teams createTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Team Directory Sync Role Mappings
@@ -8514,6 +8800,7 @@ export def "teams-dsync-roles post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   roles: record # Directory groups to role or access group mappings.
 ]: any -> record<ok: bool> {
@@ -8526,7 +8813,7 @@ export def "teams-dsync-roles post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Team
@@ -8543,6 +8830,7 @@ export def "teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --newDefaultTeamId: string # Id of the team to be set as the new default team (e.g. team_LLHUOMOoDlqOp8wPE4kFo9pE)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --reasons: list # Optional array of objects that describe the reason why the team is being deleted. — item shape: {slug: string, description: string}
@@ -8556,7 +8844,7 @@ export def "teams delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Team invite code
@@ -8573,13 +8861,14 @@ export def "teams-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/teams/($teamId)/invites/($inviteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a microfrontends group
@@ -8596,6 +8885,7 @@ export def "teams-microfrontends updateMicrofrontendsGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The new name for the existing microfrontends group. (e.g. MFE Group 1)
   --fallbackEnvironment: string # The new fallback environment for the microfrontends group. Must be "SAME_ENV", "PRODUCTION", or a valid custom environment slug from the default app.
@@ -8609,7 +8899,7 @@ export def "teams-microfrontends updateMicrofrontendsGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a microfrontends group
@@ -8626,6 +8916,7 @@ export def "teams-microfrontends delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8634,7 +8925,7 @@ export def "teams-microfrontends delete" [
   let full_url = (build-url $base $"/v1/teams/($teamId)/microfrontends/($groupId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Deployment Files
@@ -8649,6 +8940,7 @@ export def "files uploadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --content-Length: float # The file size in bytes
@@ -8667,7 +8959,7 @@ export def "files uploadFile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # List Auth Tokens
@@ -8682,13 +8974,14 @@ export def "user-tokens listAuthTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v6/user/tokens")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Auth Token
@@ -8703,6 +8996,7 @@ export def "user-tokens createAuthToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string
@@ -8717,7 +9011,7 @@ export def "user-tokens createAuthToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Auth Token Metadata
@@ -8733,13 +9027,14 @@ export def "user-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<token: record<id: string, name: string, type: string, prefix: string, suffix: string, origin: string, scopes: list<any>, createdAt: float, activeAt: float, expiresAt: float, revokedAt: float, leakedAt: float, leakedUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v5/user/tokens/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an authentication token
@@ -8755,13 +9050,14 @@ export def "user-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tokenId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/user/tokens/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the User
@@ -8776,13 +9072,14 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete User Account
@@ -8798,6 +9095,7 @@ export def "user requestDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reasons: list # Optional array of objects that describe the reason why the User account is being deleted. — item shape: {slug: string, description: string}
 ]: any -> record<id: string, email: string, message: string> {
   let input = $in
@@ -8808,7 +9106,7 @@ export def "user requestDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a webhook
@@ -8823,6 +9121,7 @@ export def "webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --body-url: string # format: uri
@@ -8838,7 +9137,7 @@ export def "webhooks createWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of webhooks
@@ -8853,6 +9152,7 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -8863,7 +9163,7 @@ export def "webhooks list" [
   let full_url = (build-url $base "/v1/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook
@@ -8879,6 +9179,7 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<events: list<string>, id: string, url: string, ownerId: string, createdAt: float, updatedAt: float, projectIds: list<string>> {
@@ -8888,7 +9189,7 @@ export def "webhooks get" [
   let full_url = (build-url $base $"/v1/webhooks/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a webhook
@@ -8904,6 +9205,7 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -8913,7 +9215,7 @@ export def "webhooks delete" [
   let full_url = (build-url $base $"/v1/webhooks/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Deployment Aliases
@@ -8929,6 +9231,7 @@ export def "deployments-aliases listDeploymentAliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<aliases: table<uid: string, alias: string, created: string, redirect: string, protectionBypass: record>> {
@@ -8938,7 +9241,7 @@ export def "deployments-aliases listDeploymentAliases" [
   let full_url = (build-url $base $"/v2/deployments/($id)/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign an Alias
@@ -8954,6 +9257,7 @@ export def "deployments-aliases assignAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --alias: string # The alias we want to assign to the deployment defined in the URL (e.g. my-alias.vercel.app)
@@ -8968,7 +9272,7 @@ export def "deployments-aliases assignAlias" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List aliases
@@ -8983,6 +9287,7 @@ export def "aliases listAliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Get only aliases of the given domain name (e.g. my-test-domain.com)
   --qp-from: float # Get only aliases created after the provided timestamp (e.g. 1540095775951)
   --limit: float # Maximum number of aliases to list from a request (e.g. 10)
@@ -8999,7 +9304,7 @@ export def "aliases listAliases" [
   let full_url = (build-url $base "/v4/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Alias
@@ -9015,6 +9320,7 @@ export def "aliases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: float # Get the alias only if it was created after the provided timestamp (e.g. 1540095775951)
   --projectId: string # Get the alias only if it is assigned to the provided project ID (e.g. prj_12HKQaOmR5t5Uy6vdcQsNIiZgHGB)
   --since: float # Get the alias only if it was created after this JavaScript timestamp (e.g. 1540095775941)
@@ -9028,7 +9334,7 @@ export def "aliases get" [
   let full_url = (build-url $base $"/v4/aliases/($idOrAlias)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Alias
@@ -9044,6 +9350,7 @@ export def "aliases delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<status: string> {
@@ -9053,7 +9360,7 @@ export def "aliases delete" [
   let full_url = (build-url $base $"/v2/aliases/($aliasId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the protection bypass for a URL
@@ -9072,6 +9379,7 @@ export def "aliases-protection-bypass patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --ttl: float # Optional time the shareable link is valid for in seconds. If not provided, the shareable link will never expire.
@@ -9088,7 +9396,7 @@ export def "aliases-protection-bypass patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get cert by id
@@ -9104,6 +9412,7 @@ export def "certs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<id: string, createdAt: float, expiresAt: float, autoRenew: bool, cns: list<string>> {
@@ -9113,7 +9422,7 @@ export def "certs get" [
   let full_url = (build-url $base $"/v8/certs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove cert
@@ -9129,6 +9438,7 @@ export def "certs removeCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -9138,7 +9448,7 @@ export def "certs removeCert" [
   let full_url = (build-url $base $"/v8/certs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issue a new cert
@@ -9153,6 +9463,7 @@ export def "certs issueCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --cns: list # The common names the cert should be issued for
@@ -9166,7 +9477,7 @@ export def "certs issueCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload a cert
@@ -9181,6 +9492,7 @@ export def "certs uploadCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   ca: string # The certificate authority
@@ -9197,7 +9509,7 @@ export def "certs uploadCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Deployment Files
@@ -9213,6 +9525,7 @@ export def "deployments-files listDeploymentFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> table<name: string, type: string, uid: string, children: list<any>, contentType: string, mode: float> {
@@ -9222,7 +9535,7 @@ export def "deployments-files listDeploymentFiles" [
   let full_url = (build-url $base $"/v6/deployments/($id)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Deployment File Contents
@@ -9239,6 +9552,7 @@ export def "deployments-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # Path to the file to fetch (only for Git deployments)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -9249,7 +9563,7 @@ export def "deployments-files get" [
   let full_url = (build-url $base $"/v8/deployments/($id)/files/($fileId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deployments
@@ -9264,6 +9578,7 @@ export def "deployments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app: string # Name of the deployment. (e.g. docs)
   --qp-from: float # Gets the deployment created after this Date timestamp. (default: current time) (e.g. 1612948664566)
   --limit: float # Maximum number of deployments to list from a request. (e.g. 10)
@@ -9287,7 +9602,7 @@ export def "deployments list" [
   let full_url = (build-url $base "/v7/deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Deployment
@@ -9303,6 +9618,7 @@ export def "deployments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # A Deployment or Alias URL. In case it is passed, the ID will be ignored (e.g. https://files-orcin-xi.vercel.app/)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -9313,5 +9629,5 @@ export def "deployments delete" [
   let full_url = (build-url $base $"/v13/deployments/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

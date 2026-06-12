@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -80,7 +81,7 @@ def accept-completer [] { ["application/json; profile="http://nodeinfo.diaspora.
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-host-meta hostMetaGet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,13 +114,14 @@ export def "well-known-host-meta hostMetaGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Link: table<href: string, rel: string, template: string, type: string>, XMLNS: string, XMLName: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/host-meta")
   let accept_val = "application/xrd+xml""
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a well-known response which redirects callers to `/nodeinfo/2.0`.
@@ -134,13 +136,14 @@ export def "well-known-nodeinfo nodeInfoWellKnownGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<aliases: list<string>, links: table<href: string, rel: string, template: string, type: string>, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/nodeinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Handles webfinger account lookup requests.
@@ -155,13 +158,14 @@ export def "well-known-webfinger webfingerGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<aliases: list<string>, links: table<href: string, rel: string, template: string, type: string>, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/webfinger")
   let accept_val = "application/jrd+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a new media attachment.
@@ -177,6 +181,7 @@ export def "media mediaCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Image or media description to use as alt-text on the attachment. This is very useful for users of screenreaders! May or may not be required, depending on your instance settings.
   --focus: string # Focus of the media file. If present, it should be in the form of two comma-separated floats between -1 and 1. For example: `-0.5,0.25`.
   file: path # The media attachment to upload.
@@ -190,7 +195,7 @@ export def "media mediaCreate" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Search for statuses, accounts, or hashtags, on this instance or elsewhere.
@@ -206,6 +211,7 @@ export def "search searchGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only items *OLDER* than the given max ID. The item with the specified ID will not be included in the response. Currently only used if 'type' is set to a specific type.
   --min-id: string # Return only items *immediately newer* than the given min ID. The item with the specified ID will not be included in the response. Currently only used if 'type' is set to a specific type.
   --limit: int # Number of each type of item to return. (default: 20)
@@ -223,7 +229,7 @@ export def "search searchGet" [
   let full_url = (build-url $base $"/api/($api_version)/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new account using an application token.
@@ -238,6 +244,7 @@ export def "accounts accountCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Text that will be reviewed by moderators if registrations require manual approval.
   --username: string # The desired username for the account.
   --email: string # The email address to be used for login.
@@ -251,7 +258,7 @@ export def "accounts accountCreate" [
   let full_url = (build-url $base "/api/v1/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about an account with the given ID.
@@ -267,13 +274,14 @@ export def "accounts accountGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Block account with id.
@@ -289,13 +297,14 @@ export def "accounts-block accountBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/block")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of target account's featured tags.
@@ -311,13 +320,14 @@ export def "accounts-featured-tags accountsFeaturedTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/featured_tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Follow account with id.
@@ -333,6 +343,7 @@ export def "accounts-follow accountFollow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reblogs: oneof<nothing, bool> # Show reblogs from this account.
   --notify: oneof<nothing, bool> # Notify when this account posts.
 ]: any -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
@@ -344,7 +355,7 @@ export def "accounts-follow accountFollow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # See followers of account with given id.
@@ -360,6 +371,7 @@ export def "accounts-followers accountFollowers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only follower accounts *OLDER* than the given max ID. The follower account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
   --since-id: string # Return only follower accounts *NEWER* than the given since ID. The follower account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
   --min-id: string # Return only follower accounts *IMMEDIATELY NEWER* than the given min ID. The follower account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
@@ -371,7 +383,7 @@ export def "accounts-followers accountFollowers" [
   let full_url = (build-url $base $"/api/v1/accounts/($id)/followers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See accounts followed by given account id.
@@ -387,6 +399,7 @@ export def "accounts-following accountFollowing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only following accounts *OLDER* than the given max ID. The following account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
   --since-id: string # Return only following accounts *NEWER* than the given since ID. The following account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
   --min-id: string # Return only following accounts *IMMEDIATELY NEWER* than the given min ID. The following account with the specified ID will not be included in the response. NOTE: the ID is of the internal follow, NOT any of the returned accounts.
@@ -398,7 +411,7 @@ export def "accounts-following accountFollowing" [
   let full_url = (build-url $base $"/api/v1/accounts/($id)/following" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See all lists of yours that contain requested account.
@@ -414,13 +427,14 @@ export def "accounts-lists accountLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<exclusive: bool, id: string, replies_policy: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/lists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mute account by ID.
@@ -436,6 +450,7 @@ export def "accounts-mute accountMute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifications: oneof<nothing, bool> # Mute notifications as well as posts.
   --duration: float # How long the mute should last, in seconds. If 0 or not provided, mute lasts indefinitely.
 ]: any -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
@@ -447,7 +462,7 @@ export def "accounts-mute accountMute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set a private note for an account with the given id.
@@ -463,6 +478,7 @@ export def "accounts-note accountNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --comment: string # The text of the note. Omit this parameter or send an empty string to clear the note.
 ]: any -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let input = $in
@@ -473,7 +489,7 @@ export def "accounts-note accountNote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # See statuses posted by the requested account.
@@ -489,6 +505,7 @@ export def "accounts-statuses accountStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of statuses to return. (default: 30)
   --exclude-replies: oneof<nothing, bool> # Exclude statuses that are a reply to another status. (default: false)
   --exclude-reblogs: oneof<nothing, bool> # Exclude statuses that are a reblog/boost of another status. (default: false)
@@ -504,7 +521,7 @@ export def "accounts-statuses accountStatuses" [
   let full_url = (build-url $base $"/api/v1/accounts/($id)/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unblock account with ID.
@@ -520,13 +537,14 @@ export def "accounts-unblock accountUnblock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/unblock")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unfollow account with id.
@@ -542,13 +560,14 @@ export def "accounts-unfollow accountUnfollow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/unfollow")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unmute account by ID.
@@ -564,13 +583,14 @@ export def "accounts-unmute accountUnmute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/accounts/($id)/unmute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Alias your account to another account by setting alsoKnownAs to the given URI.
@@ -585,6 +605,7 @@ export def "accounts-alias accountAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   also_known_as_uris: string # ActivityPub URI/IDs of target accounts to which this account is being aliased. Eg., `["https://example.org/users/some_account"]`. Use an empty array to unset alsoKnownAs, clearing the aliases.
 ]: any -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let input = $in
@@ -595,7 +616,7 @@ export def "accounts-alias accountAlias" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete your account.
@@ -610,6 +631,7 @@ export def "accounts-delete accountDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # Password of the account user, for confirmation.
 ]: any -> any {
   let input = $in
@@ -620,7 +642,7 @@ export def "accounts-delete accountDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Quickly lookup a username to see if it is available, skipping WebFinger resolution.
@@ -635,6 +657,7 @@ export def "accounts-lookup accountLookupGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acct: string # The username or Webfinger address to lookup.
 ]: nothing -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -643,7 +666,7 @@ export def "accounts-lookup accountLookupGet" [
   let full_url = (build-url $base "/api/v1/accounts/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move your account to another account.
@@ -658,6 +681,7 @@ export def "accounts-move accountMove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # Password of the account user, for confirmation.
   moved_to_uri: string # ActivityPub URI/ID of the target account. Eg., `https://example.org/users/some_account`. The target account must be alsoKnownAs the requesting account in order for the move to be successful.
 ]: any -> any {
@@ -669,7 +693,7 @@ export def "accounts-move accountMove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # See your account's relationships with the given account IDs.
@@ -684,6 +708,7 @@ export def "accounts-relationships accountRelationships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Account IDs.
 ]: nothing -> table<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -692,7 +717,7 @@ export def "accounts-relationships accountRelationships" [
   let full_url = (build-url $base "/api/v1/accounts/relationships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for accounts by username and/or display name.
@@ -707,6 +732,7 @@ export def "accounts-search accountSearchGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to try to return. (default: 40)
   --offset: int # Page number of results to return (starts at 0). This parameter is currently not used, offsets over 0 will always return 0 results. (default: 0)
   --q: string # Query string to search for. This can be in the following forms: - `@[username]` -- search for an account with the given username on any domain. Can return multiple results. - `@[username]@[domain]` -- search for a remote account with exact username and domain. Will only ever return 1 result at most. - any arbitrary string -- search for accounts containing the given string in their username or display name. Can return multiple results.
@@ -719,7 +745,7 @@ export def "accounts-search accountSearchGet" [
   let full_url = (build-url $base "/api/v1/accounts/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See preset CSS themes available to accounts on this instance.
@@ -734,13 +760,14 @@ export def "accounts-themes accountThemes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, file_name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/accounts/themes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update your account.
@@ -755,6 +782,7 @@ export def "accounts-update-credentials accountUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --discoverable: oneof<nothing, bool> # Account should be made discoverable and shown in the profile directory (if enabled).
   --indexable: oneof<nothing, bool> # Account's posts should be made indexable by full-text search features (if enabled).
   --bot: oneof<nothing, bool> # Account is flagged as a bot.
@@ -799,7 +827,7 @@ export def "accounts-update-credentials accountUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($avatar | is-not-empty) { $body | upsert avatar (open -r $avatar) } else { $body }
   let body = if ($header | is-not-empty) { $body | upsert header (open -r $header) } else { $body }
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Verify a token by returning account details pertaining to it.
@@ -814,13 +842,14 @@ export def "accounts-verify-credentials accountVerify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/accounts/verify_credentials")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View + page through known accounts according to given filters.
@@ -835,6 +864,7 @@ export def "admin-accounts adminAccountsGetV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --local: oneof<nothing, bool> # Filter for local accounts. (default: false)
   --remote: oneof<nothing, bool> # Filter for remote accounts. (default: false)
   --active: oneof<nothing, bool> # Filter for currently active accounts. (default: false)
@@ -859,7 +889,7 @@ export def "admin-accounts adminAccountsGetV1" [
   let full_url = (build-url $base "/api/v1/admin/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View one account.
@@ -875,13 +905,14 @@ export def "admin-accounts adminAccountGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/accounts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform an admin action on an account.
@@ -897,6 +928,7 @@ export def "admin-accounts-action adminAccountAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string # Type of action to be taken, currently only supports `suspend`.
   --text: string # Optional text describing why this action was taken.
 ]: any -> any {
@@ -908,7 +940,7 @@ export def "admin-accounts-action adminAccountAction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Approve pending account.
@@ -924,13 +956,14 @@ export def "admin-accounts-approve adminAccountApprove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/accounts/($id)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject pending account.
@@ -946,6 +979,7 @@ export def "admin-accounts-reject adminAccountReject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --private-comment: string # Comment to leave on why the account was denied. The comment will be visible to admins only.
   --message: string # Message to include in email to applicant. Will be included only if send_email is true.
   --send-email: oneof<nothing, bool> # Send an email to the applicant informing them that their sign-up has been rejected.
@@ -958,7 +992,7 @@ export def "admin-accounts-reject adminAccountReject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View local and remote emojis available to / known by this instance.
@@ -973,6 +1007,7 @@ export def "admin-custom-emojis emojisGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Comma-separated list of filters to apply to results. Recognized filters are:  `domain:[domain]` -- show emojis from the given domain, eg `?filter=domain:example.org` will show emojis from `example.org` only. Instead of giving a specific domain, you can also give either one of the key words `local` or `all` to show either local emojis only (`domain:local`) or show all emojis from all domains (`domain:all`). Note: `domain:*` is equivalent to `domain:all` (including local). If no domain filter is provided, `domain:all` will be assumed.  `disabled` -- include emojis that have been disabled.  `enabled` -- include emojis that are enabled.  `shortcode:[shortcode]` -- show only emojis with the given shortcode, eg `?filter=shortcode:blob_cat_uwu` will show only emojis with the shortcode `blob_cat_uwu` (case sensitive).  If neither `disabled` or `enabled` are provided, both disabled and enabled emojis will be shown.  If no filter query string is provided, the default `domain:all` will be used, which will show all emojis from all domains. (default: domain:all)
   --limit: int # Number of emojis to return. Less than 1, or not set, means unlimited (all emojis). (default: 50)
   --max-shortcode-domain: string # Return only emojis with `[shortcode]@[domain]` *LOWER* (alphabetically) than given `[shortcode]@[domain]`. For example, if `max_shortcode_domain=beep@example.org`, then returned values might include emojis with `[shortcode]@[domain]`s like `car@example.org`, `debian@aaa.com`, `test@` (local emoji), etc. Emoji with the given `[shortcode]@[domain]` will not be included in the result set.
@@ -984,7 +1019,7 @@ export def "admin-custom-emojis emojisGet" [
   let full_url = (build-url $base "/api/v1/admin/custom_emojis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload and create a new instance emoji.
@@ -999,6 +1034,7 @@ export def "admin-custom-emojis emojiCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   shortcode: string # The code to use for the emoji, which will be used by instance denizens to select it. This must be unique on the instance.
   image: path # A png or gif image of the emoji. Animated pngs work too! To ensure compatibility with other fedi implementations, emoji size limit is 50kb by default.
   --category: string # Category in which to place the new emoji. If left blank, emoji will be uncategorized. If a category with the given name doesn't exist yet, it will be created.
@@ -1012,7 +1048,7 @@ export def "admin-custom-emojis emojiCreate" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($image | is-not-empty) { $body | upsert image (open -r $image) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete a **local** emoji with the given ID from the instance.
@@ -1028,13 +1064,14 @@ export def "admin-custom-emojis emojiDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<category: string, content_type: string, disabled: bool, domain: string, id: string, shortcode: string, static_url: string, total_file_size: int, updated_at: string, uri: string, url: string, visible_in_picker: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/custom_emojis/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the admin view of a single emoji.
@@ -1050,13 +1087,14 @@ export def "admin-custom-emojis emojiGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<category: string, content_type: string, disabled: bool, domain: string, id: string, shortcode: string, static_url: string, total_file_size: int, updated_at: string, uri: string, url: string, visible_in_picker: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/custom_emojis/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform admin action on a local or remote emoji known to this instance.
@@ -1072,6 +1110,7 @@ export def "admin-custom-emojis emojiUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer # Type of action to be taken. One of: (`disable`, `copy`, `modify`). For REMOTE emojis, `copy` or `disable` are supported. For LOCAL emojis, only `modify` is supported.
   --shortcode: string # The code to use for the emoji, which will be used by instance denizens to select it. This must be unique on the instance. Works for the `copy` action type only.
   --image: path # A new png or gif image to use for the emoji. Animated pngs work too! To ensure compatibility with other fedi implementations, emoji size limit is 50kb by default. Works for LOCAL emojis only.
@@ -1086,7 +1125,7 @@ export def "admin-custom-emojis emojiUpdate" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($image | is-not-empty) { $body | upsert image (open -r $image) } else { $body }
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get a list of existing emoji categories.
@@ -1101,13 +1140,14 @@ export def "admin-custom-emojis-categories emojiCategoriesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/admin/custom_emojis/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View all domain allows currently in place.
@@ -1122,6 +1162,7 @@ export def "admin-domain-allows domainAllowsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-export: oneof<nothing, bool> # If set to `true`, then each entry in the returned list of domain allows will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have allowed on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your allows, or private comments etc.
 ]: nothing -> table<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1130,7 +1171,7 @@ export def "admin-domain-allows domainAllowsGet" [
   let full_url = (build-url $base "/api/v1/admin/domain_allows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or more domain allows, from a string or a file.
@@ -1145,6 +1186,7 @@ export def "admin-domain-allows domainAllowCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --import: oneof<nothing, bool> # Signal that a list of domain allows is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
   --domains: path # JSON-formatted list of domain allows to import. This is only used if `import` is set to `true`.
   --domain: string # Single domain to allow. Used only if `import` is not `true`.
@@ -1162,7 +1204,7 @@ export def "admin-domain-allows domainAllowCreate" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($domains | is-not-empty) { $body | upsert domains (open -r $domains) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete domain allow with the given ID.
@@ -1178,13 +1220,14 @@ export def "admin-domain-allows domainAllowDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_allows/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View domain allow with the given ID.
@@ -1200,13 +1243,14 @@ export def "admin-domain-allows domainAllowGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_allows/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a single domain allow.
@@ -1222,6 +1266,7 @@ export def "admin-domain-allows domainAllowUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
   --public-comment: string # Public comment about this domain allow. This will be displayed alongside the domain allow if you choose to share allows.
   --private-comment: string # Private comment about this domain allow. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up allowed.
@@ -1234,7 +1279,7 @@ export def "admin-domain-allows domainAllowUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View all domain blocks currently in place.
@@ -1249,6 +1294,7 @@ export def "admin-domain-blocks domainBlocksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-export: oneof<nothing, bool> # If set to `true`, then each entry in the returned list of domain blocks will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have blocked on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your blocks, or private comments etc.
 ]: nothing -> table<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1257,7 +1303,7 @@ export def "admin-domain-blocks domainBlocksGet" [
   let full_url = (build-url $base "/api/v1/admin/domain_blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or more domain blocks, from a string or a file.
@@ -1272,6 +1318,7 @@ export def "admin-domain-blocks domainBlockCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --import: oneof<nothing, bool> # Signal that a list of domain blocks is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
   --domains: path # JSON-formatted list of domain blocks to import. This is only used if `import` is set to `true`.
   --domain: string # Single domain to block. Used only if `import` is not `true`.
@@ -1289,7 +1336,7 @@ export def "admin-domain-blocks domainBlockCreate" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($domains | is-not-empty) { $body | upsert domains (open -r $domains) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete domain block with the given ID.
@@ -1305,13 +1352,14 @@ export def "admin-domain-blocks domainBlockDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_blocks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View domain block with the given ID.
@@ -1327,13 +1375,14 @@ export def "admin-domain-blocks domainBlockGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_blocks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a single domain block.
@@ -1349,6 +1398,7 @@ export def "admin-domain-blocks domainBlockUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
   --public-comment: string # Public comment about this domain block. This will be displayed alongside the domain block if you choose to share blocks.
   --private-comment: string # Private comment about this domain block. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up blocked.
@@ -1361,7 +1411,7 @@ export def "admin-domain-blocks domainBlockUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Force expiry of cached public keys for all accounts on the given domain stored in your database.
@@ -1376,6 +1426,7 @@ export def "admin-domain-keys-expire domainKeysExpire" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Domain to expire keys for. Sample: example.org
 ]: any -> record<action_id: string> {
   let input = $in
@@ -1386,7 +1437,7 @@ export def "admin-domain-keys-expire domainKeysExpire" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View domain limits currently in place.
@@ -1401,6 +1452,7 @@ export def "admin-domain-limits domainLimitsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only items *OLDER* than the given max ID (for paging downwards). The item with the specified ID will not be included in the response.
   --since-id: string # Return only items *NEWER* than the given since ID. The item with the specified ID will not be included in the response.
   --min-id: string # Return only items immediately *NEWER* than the given min ID (for paging upwards). The item with the specified ID will not be included in the response.
@@ -1412,7 +1464,7 @@ export def "admin-domain-limits domainLimitsGet" [
   let full_url = (build-url $base "/api/v1/admin/domain_limits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a domain limit.
@@ -1427,6 +1479,7 @@ export def "admin-domain-limits domainLimitCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # Hostname of the domain to limit.
   --media-policy: string@media-policy-completer # Policy to apply to media files originating from the limited domain. No action = default (not limited). Mark sensitive = mark all media from the limited domain as sensitive. Reject = do not download media from the limited domain. Serve a link to the media instead.
   --follows-policy: string@follows-policy-completer # Policy to apply to follow (requests) originating from the limited domain. No action = default (not limited). Manual approval = require manual approval for all follows from limited domain. Reject non mutual = automatically reject follows from the limited domain when they're not follow-backs. Reject all = automatically reject all follows from the limited domain.
@@ -1444,7 +1497,7 @@ export def "admin-domain-limits domainLimitCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete domain limit with the given ID.
@@ -1460,13 +1513,14 @@ export def "admin-domain-limits domainLimitDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accounts_policy: string, content_warning: string, created_at: string, created_by: string, domain: string, follows_policy: string, id: string, media_policy: string, private_comment: string, public_comment: string, statuses_policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_limits/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a domain limit.
@@ -1482,6 +1536,7 @@ export def "admin-domain-limits domainLimitUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --media-policy: string@media-policy-completer # Policy to apply to media files originating from the limited domain. No action = default (not limited). Mark sensitive = mark all media from the limited domain as sensitive. Reject = do not download media from the limited domain. Serve a link to the media instead. Omit to keep current value.
   --follows-policy: string@follows-policy-completer # Policy to apply to follow (requests) originating from the limited domain. No action = default (not limited). Manual approval = require manual approval for all follows from limited domain. Reject non mutual = automatically reject follows from the limited domain when they're not follow-backs. Reject all = automatically reject all follows from the limited domain. Omit to keep current value.
   --statuses-policy: string@statuses-policy-completer # Policy to apply to statuses of non-followed accounts on the limited domain. No action = default (not limited). Filter warn = trigger a warn filter pointing to this domain limit. Filter hide = trigger a hide filter pointing to this domain limit. Omit to keep current value.
@@ -1498,7 +1553,7 @@ export def "admin-domain-limits domainLimitUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View domain permission drafts.
@@ -1513,6 +1568,7 @@ export def "admin-domain-permission-drafts domainPermissionDraftsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-id: string # Show only drafts created by the given subscription ID.
   --domain: string # Return only drafts that target the given domain.
   --permission-type: string # Filter on "block" or "allow" type drafts.
@@ -1527,7 +1583,7 @@ export def "admin-domain-permission-drafts domainPermissionDraftsGet" [
   let full_url = (build-url $base "/api/v1/admin/domain_permission_drafts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a domain permission draft with the given parameters.
@@ -1542,6 +1598,7 @@ export def "admin-domain-permission-drafts domainPermissionDraftCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Domain to create the permission draft for.
   --permission-type: string # Create a draft "allow" or a draft "block".
   --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
@@ -1556,7 +1613,7 @@ export def "admin-domain-permission-drafts domainPermissionDraftCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get domain permission draft with the given ID.
@@ -1572,13 +1629,14 @@ export def "admin-domain-permission-drafts domainPermissionDraftGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_permission_drafts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept a domain permission draft, turning it into an enforced domain permission.
@@ -1594,6 +1652,7 @@ export def "admin-domain-permission-drafts-accept domainPermissionDraftAccept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --overwrite: oneof<nothing, bool> # If a domain permission already exists with the same domain and permission type as the draft, overwrite the existing permission with fields from the draft.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let input = $in
@@ -1604,7 +1663,7 @@ export def "admin-domain-permission-drafts-accept domainPermissionDraftAccept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a domain permission draft, optionally ignoring all future drafts targeting the given domain.
@@ -1620,6 +1679,7 @@ export def "admin-domain-permission-drafts-remove domainPermissionDraftRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exclude-target: oneof<nothing, bool> # When removing the domain permission draft, also create a domain exclude entry for the target domain, so that drafts will not be created for this domain in the future.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let input = $in
@@ -1630,7 +1690,7 @@ export def "admin-domain-permission-drafts-remove domainPermissionDraftRemove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View domain permission excludes.
@@ -1645,6 +1705,7 @@ export def "admin-domain-permission-excludes domainPermissionExcludesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Return only excludes that target the given domain.
   --max-id: string # Return only items *OLDER* than the given max ID (for paging downwards). The item with the specified ID will not be included in the response.
   --since-id: string # Return only items *NEWER* than the given since ID. The item with the specified ID will not be included in the response.
@@ -1657,7 +1718,7 @@ export def "admin-domain-permission-excludes domainPermissionExcludesGet" [
   let full_url = (build-url $base "/api/v1/admin/domain_permission_excludes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a domain permission exclude with the given parameters.
@@ -1672,6 +1733,7 @@ export def "admin-domain-permission-excludes domainPermissionExcludeCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Domain to create the permission exclude for.
   --private-comment: string # Private comment about this domain exclude.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1683,7 +1745,7 @@ export def "admin-domain-permission-excludes domainPermissionExcludeCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a domain permission exclude.
@@ -1699,13 +1761,14 @@ export def "admin-domain-permission-excludes domainPermissionExcludeDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_permission_excludes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get domain permission exclude with the given ID.
@@ -1721,13 +1784,14 @@ export def "admin-domain-permission-excludes domainPermissionExcludeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_permission_excludes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View domain permission subscriptions.
@@ -1742,6 +1806,7 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionsG
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission-type: string # Filter on "block" or "allow" type subscriptions.
   --max-id: string # Return only items *OLDER* than the given max ID (for paging downwards). The item with the specified ID will not be included in the response.
   --since-id: string # Return only items *NEWER* than the given since ID. The item with the specified ID will not be included in the response.
@@ -1754,7 +1819,7 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionsG
   let full_url = (build-url $base "/api/v1/admin/domain_permission_subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a domain permission subscription with the given parameters.
@@ -1769,6 +1834,7 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --priority: float # Priority of this subscription compared to others of the same permission type. 0-255 (higher = higher priority). Higher priority subscriptions will overwrite permissions generated by lower priority subscriptions. When two subscriptions have the same `priority` value, priority is indeterminate, so it's recommended to always set this value manually.
   --title: string # Optional title for this subscription.
   permission_type: string # Type of permissions to create by parsing the targeted file/list. One of "allow" or "block".
@@ -1788,7 +1854,7 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionCr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a domain permission subscription with the given parameters.
@@ -1804,6 +1870,7 @@ export def "admin-domain-permission-subscriptions-id domainPermissionSubscriptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --priority: float # Priority of this subscription compared to others of the same permission type. 0-255 (higher = higher priority). Higher priority subscriptions will overwrite permissions generated by lower priority subscriptions. When two subscriptions have the same `priority` value, priority is indeterminate, so it's recommended to always set this value manually.
   --title: string # Optional title for this subscription.
   --uri: string # URI to call in order to fetch the permissions list.
@@ -1822,7 +1889,7 @@ export def "admin-domain-permission-subscriptions-id domainPermissionSubscriptio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get domain permission subscription with the given ID.
@@ -1838,13 +1905,14 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionGe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<adopt_orphans: bool, as_draft: bool, content_type: string, count: int, created_at: string, created_by: string, error: string, fetch_password: string, fetch_username: string, fetched_at: string, id: string, permission_type: string, priority: int, remove_retracted: bool, successfully_fetched_at: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_permission_subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a domain permission subscription.
@@ -1860,6 +1928,7 @@ export def "admin-domain-permission-subscriptions-remove domainPermissionSubscri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --remove-children: oneof<nothing, bool> # When removing the domain permission subscription, also remove children of this subscription, ie., domain permissions that are managed by this subscription. If false, then children will instead be orphaned but not removed. Note that removed permissions may end up being created again later by another domain permission subscription of lower priority than the removed subscription. Likewise, orphaned children may be later adopted by another subscription.
 ]: any -> record<adopt_orphans: bool, as_draft: bool, content_type: string, count: int, created_at: string, created_by: string, error: string, fetch_password: string, fetch_username: string, fetched_at: string, id: string, permission_type: string, priority: int, remove_retracted: bool, successfully_fetched_at: string, title: string, uri: string> {
   let input = $in
@@ -1870,7 +1939,7 @@ export def "admin-domain-permission-subscriptions-remove domainPermissionSubscri
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test one domain permission subscription by making your instance fetch and parse it *without creating permissions*.
@@ -1886,13 +1955,14 @@ export def "admin-domain-permission-subscriptions-test domainPermissionSubscript
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<comment: string, domain: string, public_comment: string, severity: string, silenced_at: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/domain_permission_subscriptions/($id)/test")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View all domain permission subscriptions of the given permission type, in priority order (highest to lowest).
@@ -1907,6 +1977,7 @@ export def "admin-domain-permission-subscriptions-preview domainPermissionSubscr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission-type: string # Filter on "block" or "allow" type subscriptions.
 ]: nothing -> table<adopt_orphans: bool, as_draft: bool, content_type: string, count: int, created_at: string, created_by: string, error: string, fetch_password: string, fetch_username: string, fetched_at: string, id: string, permission_type: string, priority: int, remove_retracted: bool, successfully_fetched_at: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1915,7 +1986,7 @@ export def "admin-domain-permission-subscriptions-preview domainPermissionSubscr
   let full_url = (build-url $base "/api/v1/admin/domain_permission_subscriptions/preview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a generic test email to a specified email address.
@@ -1930,6 +2001,7 @@ export def "admin-email-test testEmailSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address that the test email should be sent to.
   --message: string # Optional message to include in the email.
 ]: any -> any {
@@ -1941,7 +2013,7 @@ export def "admin-email-test testEmailSend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all "allow" header filters currently in place.
@@ -1956,13 +2028,14 @@ export def "admin-header-allows headerFilterAllowsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<created_at: string, created_by: string, header: string, id: string, regex: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/admin/header_allows")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new "allow" HTTP request header filter.
@@ -1977,6 +2050,7 @@ export def "admin-header-allows headerFilterAllowCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   header: string # The HTTP header to match against (e.g. User-Agent).
   regex: string # The header value matching regular expression.
 ]: any -> record<created_at: string, created_by: string, header: string, id: string, regex: string> {
@@ -1988,7 +2062,7 @@ export def "admin-header-allows headerFilterAllowCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete the "allow" header filter with the given ID.
@@ -2004,13 +2078,14 @@ export def "admin-header-allows headerFilterAllowDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/header_allows/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get "allow" header filter with the given ID.
@@ -2026,13 +2101,14 @@ export def "admin-header-allows headerFilterAllowGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, created_by: string, header: string, id: string, regex: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/header_allows/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all "allow" header filters currently in place.
@@ -2047,13 +2123,14 @@ export def "admin-header-blocks headerFilterBlocksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<created_at: string, created_by: string, header: string, id: string, regex: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/admin/header_blocks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new "block" HTTP request header filter.
@@ -2068,6 +2145,7 @@ export def "admin-header-blocks headerFilterBlockCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   header: string # The HTTP header to match against (e.g. User-Agent).
   regex: string # The header value matching regular expression.
 ]: any -> record<created_at: string, created_by: string, header: string, id: string, regex: string> {
@@ -2079,7 +2157,7 @@ export def "admin-header-blocks headerFilterBlockCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete the "block" header filter with the given ID.
@@ -2095,13 +2173,14 @@ export def "admin-header-blocks headerFilterBlockDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/header_blocks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get "block" header filter with the given ID.
@@ -2117,13 +2196,14 @@ export def "admin-header-blocks headerFilterBlockGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, created_by: string, header: string, id: string, regex: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/header_blocks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View instance rules, with IDs.
@@ -2138,13 +2218,14 @@ export def "admin-instance-rules adminsRuleGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/admin/instance/rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new instance rule.
@@ -2159,6 +2240,7 @@ export def "admin-instance-rules ruleCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text body for the instance rule, plaintext.
 ]: any -> record<id: string, text: string> {
   let input = $in
@@ -2169,7 +2251,7 @@ export def "admin-instance-rules ruleCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an existing instance rule.
@@ -2185,13 +2267,14 @@ export def "admin-instance-rules ruleDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/instance/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View instance rule with the given id.
@@ -2207,13 +2290,14 @@ export def "admin-instance-rules adminRuleGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/instance/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing instance rule.
@@ -2229,6 +2313,7 @@ export def "admin-instance-rules ruleUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text body for the updated instance rule, plaintext.
 ]: any -> record<id: string, text: string> {
   let input = $in
@@ -2239,7 +2324,7 @@ export def "admin-instance-rules ruleUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Show admin view of instances.
@@ -2254,6 +2339,7 @@ export def "admin-instances adminInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Filter by the given domain.
   --order: string # Order by default "first_seen" (newest -> oldest) or "alphabetical" (a -> z). (default: latest)
   --with-errors-only: oneof<nothing, bool> # Only include instances that have one or more delivery errors since the last successful delivery. (default: false)
@@ -2268,7 +2354,7 @@ export def "admin-instances adminInstances" [
   let full_url = (build-url $base "/api/v1/admin/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show admin view of one instance.
@@ -2284,13 +2370,14 @@ export def "admin-instances adminInstanceGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<delivery_errors: table<error: string, time: string>, domain: string, first_seen: string, id: string, latest_successful_delivery: string, software: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/instances/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear delivery errors for instance with given ID.
@@ -2306,13 +2393,14 @@ export def "admin-instances-clear-delivery-errors adminInstanceClearDeliveryErro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<delivery_errors: table<error: string, time: string>, domain: string, first_seen: string, id: string, latest_successful_delivery: string, software: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/instances/($id)/clear_delivery_errors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clean up remote media older than the specified number of days.
@@ -2327,6 +2415,7 @@ export def "admin-media-cleanup mediaCleanup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --remote-cache-days: string # Integer number of days, or duration string, of duration of remote media to keep. If value is not specified, the value of media-remote-cache-days in the server config will be used.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2335,7 +2424,7 @@ export def "admin-media-cleanup mediaCleanup" [
   let full_url = (build-url $base "/api/v1/admin/media_cleanup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purge all media (attachments, avatars, headers, emojis) from the given domain, completely removing them from storage.
@@ -2350,6 +2439,7 @@ export def "admin-media-purge mediaPurge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Domain to purge media from.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2358,7 +2448,7 @@ export def "admin-media-purge mediaPurge" [
   let full_url = (build-url $base "/api/v1/admin/media_purge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refetch media specified in the database but missing from storage.
@@ -2373,6 +2463,7 @@ export def "admin-media-refetch mediaRefetch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Domain to refetch media from. If empty, all domains will be refetched.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2381,7 +2472,7 @@ export def "admin-media-refetch mediaRefetch" [
   let full_url = (build-url $base "/api/v1/admin/media_refetch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View relay subscriptions.
@@ -2396,13 +2487,14 @@ export def "admin-relay-subscriptions adminRelaySubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: list<record>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/admin/relay_subscriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new relay subscription targeting a remote relay actor URI.
@@ -2417,6 +2509,7 @@ export def "admin-relay-subscriptions relaySubscriptionCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   relay_actor_uri: string # The ActivityPub URI of the remote relay actor.
   --public: oneof<nothing, bool> # Ingest public posts. If false, never ingest public posts via this subscription.
   --unlisted: oneof<nothing, bool> # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
@@ -2433,7 +2526,7 @@ export def "admin-relay-subscriptions relaySubscriptionCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete relay subscription with the given ID.
@@ -2449,13 +2542,14 @@ export def "admin-relay-subscriptions adminRelaySubscriptionDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/relay_subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View relay subscription with the given ID.
@@ -2471,13 +2565,14 @@ export def "admin-relay-subscriptions adminRelaySubscriptionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/relay_subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a relay subscription.
@@ -2493,6 +2588,7 @@ export def "admin-relay-subscriptions relaySubscriptionUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Ingest public posts. If false, never ingest public posts via this subscription.
   --unlisted: oneof<nothing, bool> # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
   --match-by-default: oneof<nothing, bool> # Controls whether the relay subscription should ingest all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the subscription, then all included, non-ignored posts will be ingested.
@@ -2508,7 +2604,7 @@ export def "admin-relay-subscriptions relaySubscriptionUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a relay matcher to a relay subscription.
@@ -2524,6 +2620,7 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be matched.
   --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
   --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
@@ -2536,7 +2633,7 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a relay matcher from a relay subscription.
@@ -2553,13 +2650,14 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/relay_subscriptions/($id)/matchers/($matcher_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a relay matcher on a relay subscription.
@@ -2576,6 +2674,7 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be matched.
   --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
   --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
@@ -2588,7 +2687,7 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View user moderation reports.
@@ -2603,6 +2702,7 @@ export def "admin-reports adminReports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resolved: oneof<nothing, bool> # If present, resolved reports will be returned. If not present, unresolved reports will be returned.
   --unresolved: oneof<nothing, bool> # If present, unresolved reports will always be returned. If not present, unresolved reports will be returned only if the resolved parameter is not present. Can be used with `resolved` to return both resolved and unresolved reports in the same query.
   --account-id: string # Return only reports created by the given account id.
@@ -2618,7 +2718,7 @@ export def "admin-reports adminReports" [
   let full_url = (build-url $base "/api/v1/admin/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View user moderation report with the given id.
@@ -2634,13 +2734,14 @@ export def "admin-reports adminReportGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, action_taken: bool, action_taken_at: string, action_taken_by_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, action_taken_comment: string, assigned_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, category: string, comment: string, created_at: string, forwarded: bool, id: string, rules: table<id: string, text: string>, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: record, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/admin/reports/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark a report as resolved.
@@ -2656,6 +2757,7 @@ export def "admin-reports-resolve adminReportResolve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action-taken-comment: string # Optional admin comment on the action taken in response to this report. Useful for providing an explanation about what action was taken (if any) before the report was marked as resolved. This will be visible to the user that created the report! Sample: The reported account was suspended.
 ]: any -> record<account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, action_taken: bool, action_taken_at: string, action_taken_by_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, action_taken_comment: string, assigned_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, category: string, comment: string, created_at: string, forwarded: bool, id: string, rules: table<id: string, text: string>, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: record, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string>, updated_at: string> {
   let input = $in
@@ -2666,7 +2768,7 @@ export def "admin-reports-resolve adminReportResolve" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get an array of currently active announcements.
@@ -2681,13 +2783,14 @@ export def "announcements announcementsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/announcements")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of applications that are managed by the requester.
@@ -2702,6 +2805,7 @@ export def "apps appsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only items *OLDER* than the given max item ID. The item with the specified ID will not be included in the response.
   --since-id: string # Return only items *newer* than the given since item ID. The item with the specified ID will not be included in the response.
   --min-id: string # Return only items *immediately newer* than the given since item ID. The item with the specified ID will not be included in the response.
@@ -2713,7 +2817,7 @@ export def "apps appsGet" [
   let full_url = (build-url $base "/api/v1/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register a new application on this instance.
@@ -2728,6 +2832,7 @@ export def "apps appCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_name: string # The name of the application.
   --redirect-uris: string # Single redirect URI or newline-separated list of redirect URIs (optional).  To display the authorization code to the user instead of redirecting to a web page, use `urn:ietf:wg:oauth:2.0:oob` in this parameter.  If no redirect URIs are provided, defaults to `urn:ietf:wg:oauth:2.0:oob`.
   --scopes: string # Space separated list of scopes (optional).  If no scopes are provided, defaults to `read`.
@@ -2741,7 +2846,7 @@ export def "apps appCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single application managed by the requester.
@@ -2757,13 +2862,14 @@ export def "apps appDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single application managed by the requester.
@@ -2779,13 +2885,14 @@ export def "apps appGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of accounts that requesting account has blocked.
@@ -2800,6 +2907,7 @@ export def "blocks blocksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only blocked accounts *OLDER* than the given max ID. The blocked account with the specified ID will not be included in the response. NOTE: the ID is of the internal block, NOT any of the returned accounts.
   --since-id: string # Return only blocked accounts *NEWER* than the given since ID. The blocked account with the specified ID will not be included in the response. NOTE: the ID is of the internal block, NOT any of the returned accounts.
   --min-id: string # Return only blocked accounts *IMMEDIATELY NEWER* than the given min ID. The blocked account with the specified ID will not be included in the response. NOTE: the ID is of the internal block, NOT any of the returned accounts.
@@ -2811,7 +2919,7 @@ export def "blocks blocksGet" [
   let full_url = (build-url $base "/api/v1/blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of statuses bookmarked in the instance
@@ -2826,6 +2934,7 @@ export def "bookmarks bookmarksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of statuses to return. (default: 30)
   --max-id: string # Return only bookmarked statuses *OLDER* than the given bookmark ID. The status with the corresponding bookmark ID will not be included in the response.
   --min-id: string # Return only bookmarked statuses *NEWER* than the given bookmark ID. The status with the corresponding bookmark ID will not be included in the response.
@@ -2836,7 +2945,7 @@ export def "bookmarks bookmarksGet" [
   let full_url = (build-url $base "/api/v1/bookmarks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark a conversation with the given ID as read.
@@ -2852,13 +2961,14 @@ export def "conversation-read conversationRead" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accounts: table<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, id: string, last_status: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, unread: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/conversation/($id)/read")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of (direct message) conversations that requesting account is involved in.
@@ -2873,6 +2983,7 @@ export def "conversations conversationsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only conversations with last statuses *OLDER* than the given max ID. The conversation with the specified ID will not be included in the response. NOTE: The ID is a status ID. Use the Link header for pagination.
   --since-id: string # Return only conversations with last statuses *NEWER* than the given since ID. The conversation with the specified ID will not be included in the response. NOTE: The ID is a status ID. Use the Link header for pagination.
   --min-id: string # Return only conversations with last statuses *IMMEDIATELY NEWER* than the given min ID. The conversation with the specified ID will not be included in the response. NOTE: The ID is a status ID. Use the Link header for pagination.
@@ -2884,7 +2995,7 @@ export def "conversations conversationsGet" [
   let full_url = (build-url $base "/api/v1/conversations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a single conversation with the given ID.
@@ -2900,13 +3011,14 @@ export def "conversations conversationDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/conversations/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of custom emojis available on the instance.
@@ -2921,13 +3033,14 @@ export def "custom-emojis customEmojisGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/custom_emojis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform a GET to the specified ActivityPub URL and return detailed debugging information.
@@ -2942,6 +3055,7 @@ export def "debug-apurl apURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The URL / ActivityPub ID to dereference. This should be a full URL, including protocol. Eg., `https://example.org/users/someone`
 ]: nothing -> record<request_headers: record, request_url: string, response_body: string, response_code: int, response_headers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2950,7 +3064,7 @@ export def "debug-apurl apURL" [
   let full_url = (build-url $base "/api/v1/debug/apurl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sweep/clear all in-memory caches.
@@ -2965,13 +3079,14 @@ export def "debug-caches-clear clearCaches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/debug/caches/clear")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View status debug visibility information.
@@ -2986,6 +3101,7 @@ export def "debug-status-visibility statusVisibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uri: string # Target status URL or URI.
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2994,7 +3110,7 @@ export def "debug-status-visibility statusVisibility" [
   let full_url = (build-url $base "/api/v1/debug/status/visibility" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of accounts **on this instance** that have marked themselves as being "discoverable" in the directory.
@@ -3009,6 +3125,7 @@ export def "directory directoryGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Skip the first n results. If offset is provided, other paging parameters will be ignored.
   --max-id: string # Return only items after than the given max ID. The item with the specified ID will not be included in the response. Parameter ignored if offset is specified.
   --since-id: string # Return only items before the given since ID. The item with the specified ID will not be included in the response. Parameter ignored if offset is specified.
@@ -3022,7 +3139,7 @@ export def "directory directoryGet" [
   let full_url = (build-url $base "/api/v1/directory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export a CSV file of accounts that you block.
@@ -3037,13 +3154,14 @@ export def "exports-blockscsv exportBlocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/blocks.csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export a CSV file of accounts that follow you.
@@ -3058,13 +3176,14 @@ export def "exports-followerscsv exportFollowers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/followers.csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export a CSV file of accounts that you follow.
@@ -3079,13 +3198,14 @@ export def "exports-followingcsv exportFollowing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/following.csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export a CSV file of lists created by you.
@@ -3100,13 +3220,14 @@ export def "exports-listscsv exportLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/lists.csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export a CSV file of accounts that you mute.
@@ -3121,13 +3242,14 @@ export def "exports-mutescsv exportMutes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/mutes.csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns informational stats on the number of items that can be exported for requesting account.
@@ -3142,13 +3264,14 @@ export def "exports-stats exportStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocks_count: int, followers_count: int, following_count: int, lists_count: int, media_storage: string, mutes_count: int, statuses_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/exports/stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of statuses that the requesting account has favourited.
@@ -3163,6 +3286,7 @@ export def "favourites favouritesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of statuses to return. (default: 20)
   --max-id: string # Return only favourited statuses *OLDER* than the given favourite ID. The status with the corresponding fave ID will not be included in the response.
   --min-id: string # Return only favourited statuses *NEWER* than the given favourite ID. The status with the corresponding fave ID will not be included in the response.
@@ -3173,7 +3297,7 @@ export def "favourites favouritesGet" [
   let full_url = (build-url $base "/api/v1/favourites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of all hashtags that you currently have featured on your profile.
@@ -3188,13 +3312,14 @@ export def "featured-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/featured_tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all filters for the authenticated account.
@@ -3209,13 +3334,14 @@ export def "filters filtersV1Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<context: list<string>, expires_at: string, id: string, irreversible: bool, phrase: string, whole_word: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/filters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a single filter.
@@ -3230,6 +3356,7 @@ export def "filters filterV1Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phrase: string # The text to be filtered.  Sample: fnord
   context: list # The contexts in which the filter should be applied.  Sample: home, public
   --expires-in: float # Number of seconds from now that the filter should expire. If omitted, filter never expires.  Sample: 86400
@@ -3244,7 +3371,7 @@ export def "filters filterV1Post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single filter with the given ID.
@@ -3260,13 +3387,14 @@ export def "filters filterV1Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/filters/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single filter with the given ID.
@@ -3282,13 +3410,14 @@ export def "filters filterV1Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<context: list<string>, expires_at: string, id: string, irreversible: bool, phrase: string, whole_word: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/filters/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a single filter with the given ID.
@@ -3304,6 +3433,7 @@ export def "filters filterV1Put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phrase: string # The text to be filtered.  Sample: fnord
   context: list # The contexts in which the filter should be applied.  Sample: home, public
   --expires-in: float # Number of seconds from now that the filter should expire. If omitted, filter never expires.  Sample: 86400
@@ -3318,7 +3448,7 @@ export def "filters filterV1Put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get an array of accounts that have requested to follow you.
@@ -3333,6 +3463,7 @@ export def "follow-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only follow requesting accounts *OLDER* than the given max ID. The follow requester with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
   --since-id: string # Return only follow requesting accounts *NEWER* than the given since ID. The follow requester with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
   --min-id: string # Return only follow requesting accounts *IMMEDIATELY NEWER* than the given min ID. The follow requester with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
@@ -3344,7 +3475,7 @@ export def "follow-requests get" [
   let full_url = (build-url $base "/api/v1/follow_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept/authorize follow request from the given account ID.
@@ -3360,13 +3491,14 @@ export def "follow-requests-authorize authorizeFollowRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/follow_requests/($account_id)/authorize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject/deny follow request from the given account ID.
@@ -3382,13 +3514,14 @@ export def "follow-requests-reject rejectFollowRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/follow_requests/($account_id)/reject")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of accounts that you have requested to follow.
@@ -3403,6 +3536,7 @@ export def "follow-requests-outgoing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only follow requested accounts *OLDER* than the given max ID. The follow requestee with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
   --since-id: string # Return only follow requested accounts *NEWER* than the given since ID. The follow requestee with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
   --min-id: string # Return only follow requested accounts *IMMEDIATELY NEWER* than the given min ID. The follow requestee with the specified ID will not be included in the response. NOTE: the ID is of the internal follow request, NOT any of the returned accounts.
@@ -3414,7 +3548,7 @@ export def "follow-requests-outgoing get" [
   let full_url = (build-url $base "/api/v1/follow_requests/outgoing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of all hashtags that you currently follow.
@@ -3429,6 +3563,7 @@ export def "followed-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only followed tags *OLDER* than the given max ID. The followed tag with the specified ID will not be included in the response. NOTE: the ID is of the internal followed tag, NOT a tag name.
   --since-id: string # Return only followed tags *NEWER* than the given since ID. The followed tag with the specified ID will not be included in the response. NOTE: the ID is of the internal followed tag, NOT a tag name.
   --min-id: string # Return only followed tags *IMMEDIATELY NEWER* than the given min ID. The followed tag with the specified ID will not be included in the response. NOTE: the ID is of the internal followed tag, NOT a tag name.
@@ -3440,7 +3575,7 @@ export def "followed-tags get" [
   let full_url = (build-url $base "/api/v1/followed_tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload some CSV-formatted data to your account.
@@ -3455,6 +3590,7 @@ export def "import importData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: path # The CSV data file to upload.
   type: string # Type of entries contained in the data file: - `following` - accounts to follow. - `blocks` - accounts to block. - `mutes` - accounts to mute.
   --mode: string # Mode to use when creating entries from the data file: - `merge` to merge entries in file with existing entries. - `overwrite` to replace existing entries with entries in file.
@@ -3468,7 +3604,7 @@ export def "import importData" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($data | is-not-empty) { $body | upsert data (open -r $data) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # View instance information.
@@ -3483,13 +3619,14 @@ export def "instance instanceGetV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_domain: string, approval_required: bool, configuration: record<accounts: record<allow_custom_css: bool, max_featured_tags: int, max_profile_fields: int>, emojis: record<emoji_size_limit: int>, media_attachments: record<description_limit: int, description_minimum: int, image_matrix_limit: int, image_size_limit: int, supported_mime_types: list, video_frame_rate_limit: int, video_matrix_limit: int, video_size_limit: int>, oidc_enabled: bool, polls: record<max_characters_per_option: int, max_expiration: int, max_options: int, min_expiration: int>, statuses: record<characters_reserved_per_url: int, max_characters: int, max_media_attachments: int, supported_mime_types: list>>, contact_account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, custom_css: string, debug: bool, description: string, description_text: string, email: string, invites_enabled: bool, languages: list<string>, max_toot_chars: int, registrations: bool, rules: table<id: string, text: string>, short_description: string, short_description_text: string, stats: record, terms: string, terms_text: string, thumbnail: string, thumbnail_description: string, thumbnail_static: string, thumbnail_static_type: string, thumbnail_type: string, title: string, uri: string, urls: record<streaming_api: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/instance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update your instance information and/or upload a new avatar/header for the instance.
@@ -3504,6 +3641,7 @@ export def "instance instanceUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Title to use for the instance.
   --contact-username: string # Username of the contact account. This must be the username of an instance admin.
   --contact-email: string # Email address to use as the instance contact.
@@ -3524,7 +3662,7 @@ export def "instance instanceUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($thumbnail | is-not-empty) { $body | upsert thumbnail (open -r $thumbnail) } else { $body }
   let body = if ($header | is-not-empty) { $body | upsert header (open -r $header) } else { $body }
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List explicitly allowed domains.
@@ -3539,13 +3677,14 @@ export def "instance-domain-allows instanceDomainAllowsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<comment: string, domain: string, public_comment: string, severity: string, silenced_at: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/instance/domain_allows")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List blocked domains.
@@ -3560,13 +3699,14 @@ export def "instance-domain-blocks instanceDomainBlocksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<comment: string, domain: string, public_comment: string, severity: string, silenced_at: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/instance/domain_blocks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List peer domains.
@@ -3581,6 +3721,7 @@ export def "instance-peers instancePeersGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Comma-separated list of filters to apply to results. Recognized filters are:   - `open` -- include known domains that are not in the domain blocklist   - `allowed` -- include domains that are in the domain allowlist   - `blocked` -- include domains that are in the domain blocklist   - `suspended` -- DEPRECATED! Use `blocked` instead. Same as `blocked`: include domains that are in the domain blocklist;  If filter is `open`, only domains that aren't in the blocklist will be shown.  If filter is `blocked`, only domains that *are* in the blocklist will be shown.  If filter is `allowed`, only domains that are in the allowlist will be shown.  If filter is `open,blocked`, then blocked domains and known domains not on the blocklist will be shown.  If filter is `open,allowed`, then allowed domains and known domains not on the blocklist will be shown.  If filter is an empty string or not set, then `open` will be assumed as the default. (default: flat)
   --flat: oneof<nothing, bool> # If true, a "flat" array of strings will be returned corresponding to just domain names. (default: false)
 ]: nothing -> table<comment: string, domain: string, public_comment: string, severity: string, silenced_at: string, suspended_at: string> {
@@ -3590,7 +3731,7 @@ export def "instance-peers instancePeersGet" [
   let full_url = (build-url $base "/api/v1/instance/peers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View instance rules (public).
@@ -3605,13 +3746,14 @@ export def "instance-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/instance/rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default interaction policies for new statuses created by you.
@@ -3626,13 +3768,14 @@ export def "interaction-policies-defaults policiesDefaultsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<direct: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, private: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, public: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, unlisted: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/interaction_policies/defaults")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default interaction policies per visibility level for new statuses created by you.
@@ -3647,6 +3790,7 @@ export def "interaction-policies-defaults policiesDefaultsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --publiccan-favouriteautomatic-approval0: string # Nth entry for public.can_favourite.automatic_approval.
   --publiccan-favouritemanual-approval0: string # Nth entry for public.can_favourite.manual_approval.
   --publiccan-replyautomatic-approval0: string # Nth entry for public.can_reply.automatic_approval.
@@ -3680,7 +3824,7 @@ export def "interaction-policies-defaults policiesDefaultsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get an array of interactions requested on your statuses by other accounts, and pending your approval.
@@ -3695,6 +3839,7 @@ export def "interaction-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-id: string # If set, then only interactions targeting the given status_id will be included in the results.
   --favourites: oneof<nothing, bool> # If true or not set, pending favourites will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
   --replies: oneof<nothing, bool> # If true or not set, pending replies will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
@@ -3710,7 +3855,7 @@ export def "interaction-requests list" [
   let full_url = (build-url $base "/api/v1/interaction_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get interaction request with the given ID.
@@ -3726,13 +3871,14 @@ export def "interaction-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accepted_at: string, account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, created_at: string, id: string, rejected_at: string, reply: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, status: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/interaction_requests/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept/authorize/approve an interaction request with the given ID.
@@ -3748,13 +3894,14 @@ export def "interaction-requests-authorize authorizeInteractionRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accepted_at: string, account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, created_at: string, id: string, rejected_at: string, reply: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, status: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/interaction_requests/($id)/authorize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject an interaction request with the given ID.
@@ -3770,13 +3917,14 @@ export def "interaction-requests-reject rejectInteractionRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accepted_at: string, account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, created_at: string, id: string, rejected_at: string, reply: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, status: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/interaction_requests/($id)/reject")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all lists owned by authorized user.
@@ -3791,13 +3939,14 @@ export def "lists lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<exclusive: bool, id: string, replies_policy: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/lists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new list.
@@ -3812,6 +3961,7 @@ export def "lists listCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # Title of this list. Sample: Cool People
   --replies-policy: string@replies-policy-completer # RepliesPolicy for this list. followed = Show replies to any followed user list = Show replies to members of the list none = Show replies to no one Sample: list
   --exclusive: oneof<nothing, bool> # Hide posts from members of this list from your home timeline.
@@ -3824,7 +3974,7 @@ export def "lists listCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single list with the given ID.
@@ -3840,13 +3990,14 @@ export def "lists listDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/lists/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single list with the given ID.
@@ -3862,13 +4013,14 @@ export def "lists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<exclusive: bool, id: string, replies_policy: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/lists/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing list.
@@ -3884,6 +4036,7 @@ export def "lists listUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Title of this list. Sample: Cool People
   --replies-policy: string@replies-policy-completer # RepliesPolicy for this list. followed = Show replies to any followed user list = Show replies to members of the list none = Show replies to no one Sample: list
   --exclusive: oneof<nothing, bool> # Hide posts from members of this list from your home timeline.
@@ -3896,7 +4049,7 @@ export def "lists listUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove one or more accounts from the given list.
@@ -3912,6 +4065,7 @@ export def "lists-accounts removeListAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_ids: list # Array of accountIDs to modify. Each accountID must correspond to an account that the requesting account follows.
 ]: any -> any {
   let input = $in
@@ -3922,7 +4076,7 @@ export def "lists-accounts removeListAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Page through accounts in this list.
@@ -3938,6 +4092,7 @@ export def "lists-accounts listAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only list entries *OLDER* than the given max ID. The account from the list entry with the specified ID will not be included in the response.
   --since-id: string # Return only list entries *NEWER* than the given since ID. The account from the list entry with the specified ID will not be included in the response.
   --min-id: string # Return only list entries *IMMEDIATELY NEWER* than the given min ID. The account from the list entry with the specified ID will not be included in the response.
@@ -3949,7 +4104,7 @@ export def "lists-accounts listAccounts" [
   let full_url = (build-url $base $"/api/v1/lists/($id)/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add one or more accounts to the given list.
@@ -3965,6 +4120,7 @@ export def "lists-accounts addListAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_ids: list # Array of accountIDs to modify. Each accountID must correspond to an account that the requesting account follows.
 ]: any -> any {
   let input = $in
@@ -3975,7 +4131,7 @@ export def "lists-accounts addListAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get timeline markers by name
@@ -3990,6 +4146,7 @@ export def "markers markersGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeline: list # Timelines to retrieve.
 ]: nothing -> record<home: record<last_read_id: string, updated_at: string, version: int>, notifications: record<last_read_id: string, updated_at: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3998,7 +4155,7 @@ export def "markers markersGet" [
   let full_url = (build-url $base "/api/v1/markers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update timeline markers by name
@@ -4013,6 +4170,7 @@ export def "markers markersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --homelast-read-id: string # Last status ID read on the home timeline.
   --notificationslast-read-id: string # Last notification ID read on the notifications timeline.
 ]: any -> record<home: record<last_read_id: string, updated_at: string, version: int>, notifications: record<last_read_id: string, updated_at: string, version: int>> {
@@ -4024,7 +4182,7 @@ export def "markers markersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a media attachment that you own.
@@ -4040,13 +4198,14 @@ export def "media mediaGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blurhash: string, description: string, error: string, id: string, meta: record<focus: record<x: float, y: float>, original: record<aspect: float, bitrate: int, duration: float, frame_rate: string, height: int, size: string, width: int>, small: record<aspect: float, bitrate: int, duration: float, frame_rate: string, height: int, size: string, width: int>>, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/media/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a media attachment.
@@ -4062,6 +4221,7 @@ export def "media mediaUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Image or media description to use as alt-text on the attachment. This is very useful for users of screenreaders! May or may not be required, depending on your instance settings.
   --focus: string # Focus of the media file. If present, it should be in the form of two comma-separated floats between -1 and 1. For example: `-0.5,0.25`.
 ]: any -> record<blurhash: string, description: string, error: string, id: string, meta: record<focus: record<x: float, y: float>, original: record<aspect: float, bitrate: int, duration: float, frame_rate: string, height: int, size: string, width: int>, small: record<aspect: float, bitrate: int, duration: float, frame_rate: string, height: int, size: string, width: int>>, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string> {
@@ -4073,7 +4233,7 @@ export def "media mediaUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get an array of accounts that requesting account has muted.
@@ -4088,6 +4248,7 @@ export def "mutes mutesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only muted accounts *OLDER* than the given max ID. The muted account with the specified ID will not be included in the response. NOTE: the ID is of the internal mute, NOT any of the returned accounts.
   --since-id: string # Return only muted accounts *NEWER* than the given since ID. The muted account with the specified ID will not be included in the response. NOTE: the ID is of the internal mute, NOT any of the returned accounts.
   --min-id: string # Return only muted accounts *IMMEDIATELY NEWER* than the given min ID. The muted account with the specified ID will not be included in the response. NOTE: the ID is of the internal mute, NOT any of the returned accounts.
@@ -4099,7 +4260,7 @@ export def "mutes mutesGet" [
   let full_url = (build-url $base "/api/v1/mutes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single notification with the given ID.
@@ -4115,13 +4276,14 @@ export def "notification notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, created_at: string, id: string, status: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/notification/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notifications for currently authorized user.
@@ -4136,6 +4298,7 @@ export def "notifications notifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only notifications *OLDER* than the given max notification ID. The notification with the specified ID will not be included in the response.
   --since-id: string # Return only notifications *newer* than the given since notification ID. The notification with the specified ID will not be included in the response.
   --min-id: string # Return only notifications *immediately newer* than the given since notification ID. The notification with the specified ID will not be included in the response.
@@ -4149,7 +4312,7 @@ export def "notifications notifications" [
   let full_url = (build-url $base "/api/v1/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear/delete all notifications for currently authorized user.
@@ -4164,13 +4327,14 @@ export def "notifications-clear clearNotifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/notifications/clear")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View poll with given ID.
@@ -4186,13 +4350,14 @@ export def "polls poll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, expired: bool, expires_at: string, id: string, multiple: bool, options: table<title: string, votes_count: int>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/polls/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Vote with choices in the given poll.
@@ -4208,6 +4373,7 @@ export def "polls-votes pollVote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   choices: list # Poll choice indices on which to vote.
 ]: any -> record<emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, expired: bool, expires_at: string, id: string, multiple: bool, options: table<title: string, votes_count: int>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int> {
   let input = $in
@@ -4218,7 +4384,7 @@ export def "polls-votes pollVote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Return an object of user preferences.
@@ -4233,13 +4399,14 @@ export def "preferences preferencesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/preferences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the authenticated account's avatar.
@@ -4254,13 +4421,14 @@ export def "profile-avatar accountAvatarDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/profile/avatar")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the authenticated account's header.
@@ -4275,13 +4443,14 @@ export def "profile-header accountHeaderDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, enable_rss: bool, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: table<color: string, id: string, name: string>, source: record<also_known_as_uris: list<string>, fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/profile/header")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the Web Push subscription associated with the current auth token.
@@ -4296,13 +4465,14 @@ export def "push-subscription pushSubscriptionDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/push/subscription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the push subscription for the current access token.
@@ -4317,13 +4487,14 @@ export def "push-subscription pushSubscriptionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alerts: record<admin_report: bool, admin_sign_up: bool, favourite: bool, follow: bool, follow_request: bool, mention: bool, pending_favourite: bool, pending_reblog: bool, pending_reply: bool, poll: bool, reblog: bool, status: bool, update: bool>, endpoint: string, id: string, policy: string, server_key: string, standard: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/push/subscription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Web Push subscription for the current access token, or replace the existing one.
@@ -4338,6 +4509,7 @@ export def "push-subscription pushSubscriptionPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscriptionendpoint: string # The URL to which Web Push notifications will be sent.
   subscriptionkeysauth: string # The auth secret, a Base64 encoded string of 16 bytes of random data.
   subscriptionkeysp256dh: string # The user agent public key, a Base64 encoded string of a public key from an ECDH keypair using the prime256v1 curve.
@@ -4364,7 +4536,7 @@ export def "push-subscription pushSubscriptionPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update the Web Push subscription for the current access token.
@@ -4379,6 +4551,7 @@ export def "push-subscription pushSubscriptionPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataalertsfollow: oneof<nothing, bool> # Receive a push notification when someone has followed you?
   --dataalertsfollow-request: oneof<nothing, bool> # Receive a push notification when someone has requested to follow you?
   --dataalertsfavourite: oneof<nothing, bool> # Receive a push notification when a status you created has been favourited by someone else?
@@ -4402,7 +4575,7 @@ export def "push-subscription pushSubscriptionPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View relay pushes.
@@ -4417,13 +4590,14 @@ export def "relay-pushes relayPushes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: list<record>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/relay_pushes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new relay push targeting a remote relay actor URI.
@@ -4438,6 +4612,7 @@ export def "relay-pushes relayPushCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   relay_actor_uri: string # The ActivityPub URI of the remote relay actor.
   --public: oneof<nothing, bool> # Push public posts. If false, never send public posts to this relay.
   --unlisted: oneof<nothing, bool> # Push unlisted posts. If false, never send unlisted posts to this relay.
@@ -4454,7 +4629,7 @@ export def "relay-pushes relayPushCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete relay push with the given ID.
@@ -4470,13 +4645,14 @@ export def "relay-pushes relayPushDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/relay_pushes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View relay push with the given ID.
@@ -4492,13 +4668,14 @@ export def "relay-pushes relayPushGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/relay_pushes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a relay push.
@@ -4514,6 +4691,7 @@ export def "relay-pushes relayPushUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Push public posts. If false, never send public posts to this relay.
   --unlisted: oneof<nothing, bool> # Push unlisted posts. If false, never send unlisted posts to this relay.
   --match-by-default: oneof<nothing, bool> # Controls whether the relay push should send all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the push, then all included, non-ignored posts will be sent.
@@ -4529,7 +4707,7 @@ export def "relay-pushes relayPushUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a relay matcher to a relay push.
@@ -4545,6 +4723,7 @@ export def "relay-pushes-matchers relayPushMatcherPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be matched.
   --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
   --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
@@ -4557,7 +4736,7 @@ export def "relay-pushes-matchers relayPushMatcherPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a relay matcher from a relay push.
@@ -4574,13 +4753,14 @@ export def "relay-pushes-matchers relayPushMatcherDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/relay_pushes/($id)/matchers/($matcher_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a relay matcher on a relay push.
@@ -4597,6 +4777,7 @@ export def "relay-pushes-matchers relayPushMatcherPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be matched.
   --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
   --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
@@ -4609,7 +4790,7 @@ export def "relay-pushes-matchers relayPushMatcherPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # See reports created by the requesting account.
@@ -4624,6 +4805,7 @@ export def "reports reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resolved: oneof<nothing, bool> # If set to true, only resolved reports will be returned. If false, only unresolved reports will be returned. If unset, reports will not be filtered on their resolved status.
   --target-account-id: string # Return only reports that target the given account id.
   --max-id: string # Return only reports *OLDER* than the given max ID (for paging downwards). The report with the specified ID will not be included in the response.
@@ -4637,7 +4819,7 @@ export def "reports reports" [
   let full_url = (build-url $base "/api/v1/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new user report with the given parameters.
@@ -4652,6 +4834,7 @@ export def "reports reportCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_id: string # ID of the account to report. Sample: 01GPE75FXSH2EGFBF85NXPH3KP
   --status-ids: list # IDs of statuses to attach to the report to provide additional context. Sample: ["01GPE76N4SBVRZ8K24TW51ZZQ4","01GPE76WN9JZE62EPT3Q9FRRD4"]
   --comment: string # The reason for the report. Default maximum of 1000 characters. Sample: Anti-Blackness, transphobia.
@@ -4667,7 +4850,7 @@ export def "reports reportCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get one report with the given id.
@@ -4683,13 +4866,14 @@ export def "reports reportGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<action_taken: bool, action_taken_at: string, action_taken_comment: string, category: string, comment: string, created_at: string, forwarded: bool, id: string, rule_ids: list<string>, status_ids: list<string>, target_account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/reports/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an array of statuses scheduled by authorized user.
@@ -4704,6 +4888,7 @@ export def "scheduled-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --since-id: string # Return only statuses *newer* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *immediately newer* than the given min ID. The status with the specified ID will not be included in the response.
@@ -4715,7 +4900,7 @@ export def "scheduled-statuses list" [
   let full_url = (build-url $base "/api/v1/scheduled_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a scheduled status with the given id.
@@ -4731,13 +4916,14 @@ export def "scheduled-statuses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/scheduled_statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a scheduled status with the given id.
@@ -4753,13 +4939,14 @@ export def "scheduled-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, params: record<application_id: string, content_type: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_ids: list<string>, poll: record<expires_in: int, hide_totals: bool, multiple: bool, options: list>, scheduled_at: string, sensitive: bool, spoiler_text: string, text: string, visibility: string>, scheduled_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/scheduled_statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a scheduled status's publishing date.
@@ -4775,6 +4962,7 @@ export def "scheduled-statuses updateScheduledStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scheduled-at: string # ISO 8601 Datetime at which to schedule a status.  Must be at least 5 minutes in the future.
 ]: any -> record<id: string, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, params: record<application_id: string, content_type: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_ids: list<string>, poll: record<expires_in: int, hide_totals: bool, multiple: bool, options: list>, scheduled_at: string, sensitive: bool, spoiler_text: string, text: string, visibility: string>, scheduled_at: string> {
   let input = $in
@@ -4785,7 +4973,7 @@ export def "scheduled-statuses updateScheduledStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View multiple statuses with the given IDs.
@@ -4800,6 +4988,7 @@ export def "statuses statusesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Target status IDs.
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4808,7 +4997,7 @@ export def "statuses statusesGet" [
   let full_url = (build-url $base "/api/v1/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new status using the given form field parameters.
@@ -4823,6 +5012,7 @@ export def "statuses statusCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Text content of the status. If media_ids is provided, this becomes optional. Attaching a poll is optional while status is provided.
   --media-ids: list # Array of Attachment ids to be attached as media. If provided, status becomes optional, and poll cannot be used.  If the status is being submitted as a form, the key is 'media_ids[]', but if it's json or xml, the key is 'media_ids'.
   --polloptions: list # Array of possible poll answers. If provided, media_ids cannot be used, and poll[expires_in] must be provided.
@@ -4853,7 +5043,7 @@ export def "statuses statusCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete status with the given ID. The status must belong to you.
@@ -4869,13 +5059,14 @@ export def "statuses statusDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View status with the given ID.
@@ -4891,13 +5082,14 @@ export def "statuses statusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an existing status using the given form field parameters.
@@ -4913,6 +5105,7 @@ export def "statuses statusEdit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Text content of the status. If media_ids is provided, this becomes optional. Attaching a poll is optional while status is provided.
   --media-ids: list # Array of Attachment ids to be attached as media. If provided, status becomes optional, and poll cannot be used.  If the status is being submitted as a form, the key is 'media_ids[]', but if it's json or xml, the key is 'media_ids'.
   --polloptions: list # Array of possible poll answers. If provided, media_ids cannot be used, and poll[expires_in] must be provided.
@@ -4932,7 +5125,7 @@ export def "statuses statusEdit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Bookmark status with the given ID.
@@ -4948,13 +5141,14 @@ export def "statuses-bookmark statusBookmark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/bookmark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return ancestors and descendants of the given status.
@@ -4970,13 +5164,14 @@ export def "statuses-context threadContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ancestors: table<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: record, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, descendants: table<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: record, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/context")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Star/like/favourite the given status, if permitted.
@@ -4992,13 +5187,14 @@ export def "statuses-favourite statusFave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/favourite")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View accounts that have faved/starred/liked the target status.
@@ -5014,13 +5210,14 @@ export def "statuses-favourited-by statusFavedBy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/favourited_by")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View edit history of status with the given ID.
@@ -5036,13 +5233,14 @@ export def "statuses-history statusHistoryGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, content: string, created_at: string, emojis: list<record>, media_attachments: list<record>, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, sensitive: bool, spoiler_text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/history")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mute a status's thread. This prevents notifications from being created for future replies, likes, boosts etc in the thread of which the target status is a part.
@@ -5058,13 +5256,14 @@ export def "statuses-mute statusMute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/mute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pin a status to the top of your profile, and add it to your Featured ActivityPub collection.
@@ -5080,13 +5279,14 @@ export def "statuses-pin statusPin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/pin")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reblog/boost status with the given ID.
@@ -5102,13 +5302,14 @@ export def "statuses-reblog statusReblog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/reblog")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View accounts that have reblogged/boosted the target status.
@@ -5124,13 +5325,14 @@ export def "statuses-reblogged-by statusBoostedBy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/reblogged_by")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View source text of status with the given ID. Requester must own the status.
@@ -5146,13 +5348,14 @@ export def "statuses-source statusSourceGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<content_type: string, id: string, spoiler_text: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/source")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unbookmark status with the given ID.
@@ -5168,13 +5371,14 @@ export def "statuses-unbookmark statusUnbookmark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/unbookmark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unstar/unlike/unfavourite the given status.
@@ -5190,13 +5394,14 @@ export def "statuses-unfavourite statusUnfave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/unfavourite")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unmute a status's thread. This reenables notifications for future replies, likes, boosts etc in the thread of which the target status is a part.
@@ -5212,13 +5417,14 @@ export def "statuses-unmute statusUnmute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/unmute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpin one of your pinned statuses.
@@ -5234,13 +5440,14 @@ export def "statuses-unpin statusUnpin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/unpin")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unreblog/unboost status with the given ID.
@@ -5256,13 +5463,14 @@ export def "statuses-unreblog statusUnreblog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, filtered: table<filter: record, keyword_matches: list, status_matches: list>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record<automatic_approval: list, manual_approval: list>, can_reblog: record<automatic_approval: list, manual_approval: list>, can_reply: record<automatic_approval: list, manual_approval: list>>, language: string, local_only: bool, media_attachments: table<blurhash: string, description: string, error: string, id: string, meta: record, preview_remote_url: string, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<record>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<following: bool, history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/statuses/($id)/unreblog")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate a websocket connection for live streaming of statuses and notifications.
@@ -5277,6 +5485,7 @@ export def "streaming streamGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # Access token for the requesting account.
   --stream: string@stream-completer # Type of stream to request.  Options are:  `user`: receive updates for the account's home timeline, and notifications for the account. `user:notification`: receive notifications for the account. `public`: receive updates for the public timeline. `public:local`: receive updates for the local timeline. `hashtag`: receive updates for a given hashtag. `hashtag:local`: receive local updates for a given hashtag. `list`: receive updates for a certain list of accounts. `direct`: receive updates for direct messages.
   --list: string # ID of the list to subscribe to. Only used if stream type is 'list'.
@@ -5288,7 +5497,7 @@ export def "streaming streamGet" [
   let full_url = (build-url $base "/api/v1/streaming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accounts that are promoted by staff, or that the user has had past positive interactions with, but is not yet following.
@@ -5303,13 +5512,14 @@ export def "suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/suggestions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details for a hashtag, including whether you currently follow it.
@@ -5325,13 +5535,14 @@ export def "tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<following: bool, history: list<any>, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tags/($tag_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Follow a hashtag.
@@ -5347,13 +5558,14 @@ export def "tags-follow followTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<following: bool, history: list<any>, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tags/($tag_name)/follow")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unfollow a hashtag.
@@ -5369,13 +5581,14 @@ export def "tags-unfollow unfollowTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<following: bool, history: list<any>, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tags/($tag_name)/unfollow")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See statuses/posts by accounts you follow.
@@ -5390,6 +5603,7 @@ export def "timelines-home homeTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --since-id: string # Return only statuses *newer* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *immediately newer* than the given since status ID. The status with the specified ID will not be included in the response.
@@ -5402,7 +5616,7 @@ export def "timelines-home homeTimeline" [
   let full_url = (build-url $base "/api/v1/timelines/home" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See statuses/posts from the given list timeline.
@@ -5418,6 +5632,7 @@ export def "timelines-list listTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --since-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
@@ -5429,7 +5644,7 @@ export def "timelines-list listTimeline" [
   let full_url = (build-url $base $"/api/v1/timelines/list/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See public statuses/posts that your instance is aware of.
@@ -5444,6 +5659,7 @@ export def "timelines-public publicTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --since-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
@@ -5456,7 +5672,7 @@ export def "timelines-public publicTimeline" [
   let full_url = (build-url $base "/api/v1/timelines/public" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See public statuses that use the given hashtag (case insensitive).
@@ -5472,6 +5688,7 @@ export def "timelines-tag tagTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --since-id: string # Return only statuses *newer* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *immediately newer* than the given since status ID. The status with the specified ID will not be included in the response.
@@ -5483,7 +5700,7 @@ export def "timelines-tag tagTimeline" [
   let full_url = (build-url $base $"/api/v1/timelines/tag/($tag_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See info about tokens created for/by your account.
@@ -5498,6 +5715,7 @@ export def "tokens tokensInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order results by "last_used" (latest to oldest), or "created" (newest to oldest). (default: last_used)
   --max-id: string # Return only items after the given max item ID. The item with the specified ID will not be included in the response.
   --since-id: string # Return only items before the given item ID. The item with the specified ID will not be included in the response.
@@ -5510,7 +5728,7 @@ export def "tokens tokensInfoGet" [
   let full_url = (build-url $base "/api/v1/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about a single token.
@@ -5526,13 +5744,14 @@ export def "tokens tokenInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, created_at: string, id: string, last_used: string, name: string, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the given token to set / unset the "name" property.
@@ -5548,13 +5767,14 @@ export def "tokens tokenUpdatePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, created_at: string, id: string, last_used: string, name: string, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invalidate the target token, removing it from the database and making it unusable.
@@ -5570,13 +5790,14 @@ export def "tokens-invalidate tokenInvalidatePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list<string>, scopes: list<string>, vapid_key: string, website: string>, created_at: string, id: string, last_used: string, name: string, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/tokens/($id)/invalidate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Links that have been shared more than others.
@@ -5591,13 +5812,14 @@ export def "trends-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/trends/links")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Statuses that have been interacted with more than others.
@@ -5612,13 +5834,14 @@ export def "trends-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/trends/statuses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View hashtags that are currently being used more frequently than usual.
@@ -5633,13 +5856,14 @@ export def "trends-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/trends/tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get your own user model.
@@ -5654,13 +5878,14 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<admin: bool, approved: bool, confirmation_sent_at: string, confirmed_at: string, created_at: string, disabled: bool, email: string, id: string, last_emailed_at: string, moderator: bool, reason: string, reset_password_sent_at: string, two_factor_enabled_at: string, unconfirmed_email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable 2fa for the authorized user. User's current password must be provided for verification purposes.
@@ -5675,6 +5900,7 @@ export def "user-2fa-disable TwoFactorDisablePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # User's current password, for verification.
 ]: any -> any {
   let input = $in
@@ -5685,7 +5911,7 @@ export def "user-2fa-disable TwoFactorDisablePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Enable 2fa for the authorized user, using the provided code from an authenticator app, and return an array of one-time recovery codes to allow bypassing 2fa.
@@ -5700,6 +5926,7 @@ export def "user-2fa-enable TwoFactorEnablePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # 2fa code from the user's authenticator app. Sample: 123456
 ]: any -> any {
   let input = $in
@@ -5710,7 +5937,7 @@ export def "user-2fa-enable TwoFactorEnablePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Return a QR code png to allow the authorized user to enable 2fa for their login.
@@ -5725,13 +5952,14 @@ export def "user-2fa-qrpng TwoFactorQRCodePngGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/user/2fa/qr.png")
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a QR code uri to allow the authorized user to enable 2fa for their login.
@@ -5746,13 +5974,14 @@ export def "user-2fa-qruri TwoFactorQRCodeURIGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/user/2fa/qruri")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request changing the email address of authenticated user.
@@ -5767,6 +5996,7 @@ export def "user-email-change userEmailChange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # User's current password, for verification.
   new_email: string # Desired new email address.
 ]: any -> record<admin: bool, approved: bool, confirmation_sent_at: string, confirmed_at: string, created_at: string, disabled: bool, email: string, id: string, last_emailed_at: string, moderator: bool, reason: string, reset_password_sent_at: string, two_factor_enabled_at: string, unconfirmed_email: string> {
@@ -5778,7 +6008,7 @@ export def "user-email-change userEmailChange" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Change the password of authenticated user.
@@ -5793,6 +6023,7 @@ export def "user-password-change userPasswordChange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   old_password: string # User's previous password.
   new_password: string # Desired new password. If the password does not have high enough entropy, it will be rejected. See https://github.com/wagslane/go-password-validator
 ]: any -> any {
@@ -5804,7 +6035,7 @@ export def "user-password-change userPasswordChange" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # View + page through known accounts according to given filters.
@@ -5819,6 +6050,7 @@ export def "admin-accounts adminAccountsGetV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --origin: string # Filter for `local` or `remote` accounts.
   --status: string # Filter for `active`, `pending`, `disabled`, `silenced`, or `suspended` accounts.
   --permissions: string # Filter for accounts with staff permissions (users that can manage reports).
@@ -5839,7 +6071,7 @@ export def "admin-accounts adminAccountsGetV2" [
   let full_url = (build-url $base "/api/v2/admin/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all filters for the authenticated account.
@@ -5854,13 +6086,14 @@ export def "filters filtersV2Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<context: list<string>, expires_at: string, filter_action: string, id: string, keywords: list<record>, statuses: list<record>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/filters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a single filter.
@@ -5875,6 +6108,7 @@ export def "filters filterV2Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # The name of the filter.  Sample: illuminati nonsense
   context: list # The contexts in which the filter should be applied.  Sample: home, public
   --expires-in: float # Number of seconds from now that the filter should expire. If omitted, filter never expires.  Sample: 86400
@@ -5891,7 +6125,7 @@ export def "filters filterV2Post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single filter with the given ID.
@@ -5907,13 +6141,14 @@ export def "filters filterV2Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single filter with the given ID.
@@ -5929,13 +6164,14 @@ export def "filters filterV2Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<context: list<string>, expires_at: string, filter_action: string, id: string, keywords: table<id: string, keyword: string, whole_word: bool>, statuses: table<id: string, phrase: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a single filter with the given ID.
@@ -5951,6 +6187,7 @@ export def "filters filterV2Put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # The name of the filter.  Sample: illuminati nonsense
   --keywords-attributeskeyword: list # Keywords to be added to the created filter.
   --keywords-attributeswhole-word: list # Should each keyword consider word boundaries?
@@ -5967,7 +6204,7 @@ export def "filters filterV2Put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all filter keywords for a given filter.
@@ -5983,13 +6220,14 @@ export def "filters-keywords filterKeywordsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, keyword: string, whole_word: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/($id)/keywords")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a filter keyword to an existing filter.
@@ -6005,6 +6243,7 @@ export def "filters-keywords filterKeywordPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be filtered  Sample: fnord
   --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<id: string, keyword: string, whole_word: bool> {
@@ -6016,7 +6255,7 @@ export def "filters-keywords filterKeywordPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all filter statuses for a given filter.
@@ -6032,13 +6271,14 @@ export def "filters-statuses filterStatusesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, phrase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/($id)/statuses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a filter status to an existing filter.
@@ -6054,6 +6294,7 @@ export def "filters-statuses filterStatusPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status_id: string # The ID of the status to filter.  Sample: 01HXA2NE0K8T1C70K90E74GYD0
 ]: any -> record<id: string, phrase: string> {
   let input = $in
@@ -6064,7 +6305,7 @@ export def "filters-statuses filterStatusPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single filter keyword with the given ID.
@@ -6080,13 +6321,14 @@ export def "filters-keywords filterKeywordDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/keywords/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single filter keyword with the given ID.
@@ -6102,13 +6344,14 @@ export def "filters-keywords filterKeywordGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, keyword: string, whole_word: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/keywords/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a single filter keyword with the given ID.
@@ -6124,6 +6367,7 @@ export def "filters-keywords-id filterKeywordPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keyword: string # The text to be filtered  Sample: fnord
   --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<id: string, keyword: string, whole_word: bool> {
@@ -6135,7 +6379,7 @@ export def "filters-keywords-id filterKeywordPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a single filter status with the given ID.
@@ -6151,13 +6395,14 @@ export def "filters-statuses filterStatusDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single filter status with the given ID.
@@ -6173,13 +6418,14 @@ export def "filters-statuses filterStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, phrase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/filters/statuses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View instance information.
@@ -6194,13 +6440,14 @@ export def "instance instanceGetV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_domain: string, configuration: record<accounts: record<allow_custom_css: bool, max_featured_tags: int, max_profile_fields: int>, emojis: record<emoji_size_limit: int>, media_attachments: record<description_limit: int, description_minimum: int, image_matrix_limit: int, image_size_limit: int, supported_mime_types: list, video_frame_rate_limit: int, video_matrix_limit: int, video_size_limit: int>, oidc_enabled: bool, polls: record<max_characters_per_option: int, max_expiration: int, max_options: int, min_expiration: int>, statuses: record<characters_reserved_per_url: int, max_characters: int, max_media_attachments: int, supported_mime_types: list>, translation: record<enabled: bool>, urls: record<about: string, privacy_policy: string, streaming: string, terms_of_service: string>, vapid: record<public_key: string>>, contact: record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, email: string>, custom_css: string, debug: bool, description: string, description_text: string, domain: string, languages: list<string>, registrations: record<approval_required: bool, enabled: bool, message: string, min_age: int, reason_required: bool>, rules: table<id: string, text: string>, source_url: string, terms: string, terms_text: string, thumbnail: record<blurhash: string, static_url: string, thumbnail_description: string, thumbnail_static_type: string, thumbnail_type: string, url: string, versions: record<_1x: string, _2x: string>>, title: string, usage: record<users: record<active_month: int>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/instance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns code 200 with no body if GoToSocial is "live", ie., able to respond to HTTP requests.
@@ -6215,13 +6462,14 @@ export def "livez liveGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/livez")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns code 200 if GoToSocial is "live", ie., able to respond to HTTP requests.
@@ -6236,13 +6484,14 @@ export def "livez liveHead" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/livez")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a compliant nodeinfo response to node info queries.
@@ -6258,6 +6507,7 @@ export def "nodeinfo nodeInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<metadata: record, openRegistrations: bool, protocols: list<string>, services: record<inbound: list<string>, outbound: list<string>>, software: record<homepage: string, name: string, repository: string, version: string>, usage: record<localComments: int, localPosts: int, users: record<activeHalfYear: int, activeMonth: int, total: int>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6265,7 +6515,7 @@ export def "nodeinfo nodeInfoGet" [
   let full_url = (build-url $base $"/nodeinfo/($schema_version)")
   let accept_val = ($accept | default "application/json; profile="http://nodeinfo.diaspora.software/ns/schema/2.0#"")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke an access token to make it no longer valid for use.
@@ -6280,6 +6530,7 @@ export def "oauth-revoke oauthTokenRevoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The client ID, obtained during app registration.
   client_secret: string # The client secret, obtained during app registration.
   --body-token: string # The previously obtained token, to be invalidated.
@@ -6292,7 +6543,7 @@ export def "oauth-revoke oauthTokenRevoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Returns code 200 with no body if GoToSocial is "ready", ie., able to connect to the database backend and do a simple SELECT.
@@ -6307,13 +6558,14 @@ export def "readyz readyGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/readyz")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns code 200 with no body if GoToSocial is "ready", ie., able to connect to the database backend and do a simple SELECT.
@@ -6328,13 +6580,14 @@ export def "readyz readyHead" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/readyz")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the featured collection (pinned posts) for a user.
@@ -6350,13 +6603,14 @@ export def "users-collections-featured s2sFeaturedCollectionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_context: any, TotalItems: int, id: string, items: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)/collections/featured")
   let accept_val = "application/activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the public outbox collection for an actor.
@@ -6372,6 +6626,7 @@ export def "users-outbox s2sOutboxGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: oneof<nothing, bool> # Return response as a CollectionPage. (default: false)
   --min-id: string # Minimum ID of the next status, used for paging.
   --max-id: string # Maximum ID of the next status, used for paging.
@@ -6382,7 +6637,7 @@ export def "users-outbox s2sOutboxGet" [
   let full_url = (build-url $base $"/users/($username)/outbox" $qp)
   let accept_val = "application/activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the replies collection for a status.
@@ -6399,6 +6654,7 @@ export def "users-statuses-replies s2sRepliesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: oneof<nothing, bool> # Return response as a CollectionPage. (default: false)
   --only-other-accounts: oneof<nothing, bool> # Return replies only from accounts other than the status owner. (default: false)
   --min-id: string # Minimum ID of the next status, used for paging.
@@ -6409,5 +6665,5 @@ export def "users-statuses-replies s2sRepliesGet" [
   let full_url = (build-url $base $"/users/($username)/statuses/($status)/replies" $qp)
   let accept_val = "application/activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

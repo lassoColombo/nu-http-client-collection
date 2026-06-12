@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def tz-completer [] { ["local" "utc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts-lat-lat-lon-lon get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "alerts-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<alerts: table<alerts: list, description: string, effective_local: string, effective_utc: string, expires_local: string, expires_utc: string, severity: string, title: string, uri: string>, lat: float, lon: float> {
@@ -117,7 +119,7 @@ export def "alerts-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/alerts?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download pre-generated bulk datasets
@@ -132,6 +134,7 @@ export def "bulk-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -140,7 +143,7 @@ export def "bulk-files get" [
   let full_url = (build-url $base $"/bulk/files/($file)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns current air quality conditions - Given City and/or State, Country.
@@ -156,6 +159,7 @@ export def "current-airquality-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -166,7 +170,7 @@ export def "current-airquality-city-city-country-country get" [
   let full_url = (build-url $base $"/current/airquality?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns current air quality conditions - Given a City ID.
@@ -181,6 +185,7 @@ export def "current-airquality-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
@@ -190,7 +195,7 @@ export def "current-airquality-city-id-city-id get" [
   let full_url = (build-url $base $"/current/airquality?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns current air quality conditions - Given a lat/lon.
@@ -206,6 +211,7 @@ export def "current-airquality-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
@@ -215,7 +221,7 @@ export def "current-airquality-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/current/airquality?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns current air quality conditions - Given a Postal Code.
@@ -230,6 +236,7 @@ export def "current-airquality-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -240,7 +247,7 @@ export def "current-airquality-postal-code-postal-code get" [
   let full_url = (build-url $base $"/current/airquality?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a group of observations given a list of cities
@@ -255,6 +262,7 @@ export def "current-cities-cities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -267,7 +275,7 @@ export def "current-cities-cities get" [
   let full_url = (build-url $base $"/current?cities=($cities)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a Current Observation - Given City and/or State, Country.
@@ -283,6 +291,7 @@ export def "current-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --state: string # Full name of state. (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
@@ -297,7 +306,7 @@ export def "current-city-city-country-country get" [
   let full_url = (build-url $base $"/current?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a current observation by city id.
@@ -312,6 +321,7 @@ export def "current-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
@@ -325,7 +335,7 @@ export def "current-city-id-city-id get" [
   let full_url = (build-url $base $"/current?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a Current Observation - Given a lat/lon.
@@ -341,6 +351,7 @@ export def "current-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -354,7 +365,7 @@ export def "current-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/current?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a group of observations given a list of points in the format (lat1, lon1), (lat2, lon2), (latN, lonN), ...
@@ -369,6 +380,7 @@ export def "current-points-points get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
@@ -380,7 +392,7 @@ export def "current-points-points get" [
   let full_url = (build-url $base $"/current?points=($points)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a current observation by postal code.
@@ -395,6 +407,7 @@ export def "current-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
@@ -409,7 +422,7 @@ export def "current-postal-code-postal-code get" [
   let full_url = (build-url $base $"/current?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a Current Observation. - Given a station ID.
@@ -424,6 +437,7 @@ export def "current-station-station get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -436,7 +450,7 @@ export def "current-station-station get" [
   let full_url = (build-url $base $"/current?station=($station)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a group of observations given a list of stations
@@ -451,6 +465,7 @@ export def "current-stations-stations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
@@ -462,7 +477,7 @@ export def "current-stations-stations get" [
   let full_url = (build-url $base $"/current?stations=($stations)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hour (hourly) Air Quality forecast - Given City and/or State, Country.
@@ -478,6 +493,7 @@ export def "forecast-airquality-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
@@ -489,7 +505,7 @@ export def "forecast-airquality-city-city-country-country get" [
   let full_url = (build-url $base $"/forecast/airquality?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hour (hourly) Air Quality forecast - Given a City ID.
@@ -504,6 +520,7 @@ export def "forecast-airquality-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
   --key: string # Your registered API key. (format: string)
@@ -514,7 +531,7 @@ export def "forecast-airquality-city-id-city-id get" [
   let full_url = (build-url $base $"/forecast/airquality?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hour (hourly) Air Quality forecast - Given a lat/lon.
@@ -530,6 +547,7 @@ export def "forecast-airquality-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
   --hours: int # Number of hours to return. (format: integer)
@@ -540,7 +558,7 @@ export def "forecast-airquality-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/forecast/airquality?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hour (hourly) Air Quality forecast - Given a Postal Code.
@@ -555,6 +573,7 @@ export def "forecast-airquality-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
@@ -566,7 +585,7 @@ export def "forecast-airquality-postal-code-postal-code get" [
   let full_url = (build-url $base $"/forecast/airquality?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a daily forecast - Given City and/or State, Country.
@@ -582,6 +601,7 @@ export def "forecast-daily-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --days: float # Number of days to return. Default 16. (format: integer)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -595,7 +615,7 @@ export def "forecast-daily-city-city-country-country get" [
   let full_url = (build-url $base $"/forecast/daily?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a daily forecast - Given a City ID.
@@ -610,6 +630,7 @@ export def "forecast-daily-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: float # Number of days to return. Default 16. (format: integer)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -622,7 +643,7 @@ export def "forecast-daily-city-id-city-id get" [
   let full_url = (build-url $base $"/forecast/daily?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a daily forecast - Given Lat/Lon.
@@ -638,6 +659,7 @@ export def "forecast-daily-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: float # Number of days to return. Default 16. (format: integer)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -650,7 +672,7 @@ export def "forecast-daily-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/forecast/daily?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a daily forecast - Given a Postal Code.
@@ -665,6 +687,7 @@ export def "forecast-daily-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --days: float # Number of days to return. Default 16. (format: integer)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -678,7 +701,7 @@ export def "forecast-daily-postal-code-postal-code get" [
   let full_url = (build-url $base $"/forecast/daily?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Energy Forecast API response  - Given a single lat/lon. 
@@ -694,6 +717,7 @@ export def "forecast-energy-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --threshold: float # Temperature threshold to use to calculate degree days (default 18 C)  (format: double)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --tp: string@tp-completer # Time period (default: daily) (format: string)
@@ -706,7 +730,7 @@ export def "forecast-energy-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/forecast/energy?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an hourly forecast - Given City and/or State, Country.
@@ -722,6 +746,7 @@ export def "forecast-hourly-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -735,7 +760,7 @@ export def "forecast-hourly-city-city-country-country get" [
   let full_url = (build-url $base $"/forecast/hourly?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an hourly forecast - Given a City ID.
@@ -750,6 +775,7 @@ export def "forecast-hourly-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
@@ -762,7 +788,7 @@ export def "forecast-hourly-city-id-city-id get" [
   let full_url = (build-url $base $"/forecast/hourly?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an hourly forecast - Given a lat/lon.
@@ -778,6 +804,7 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
@@ -790,7 +817,7 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/forecast/hourly?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an hourly forecast - Given a Postal Code.
@@ -805,6 +832,7 @@ export def "forecast-hourly-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
   --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
@@ -818,7 +846,7 @@ export def "forecast-hourly-postal-code-postal-code get" [
   let full_url = (build-url $base $"/forecast/hourly?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hours of historical quality conditions - Given City and/or State, Country.
@@ -834,6 +862,7 @@ export def "history-airquality-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -844,7 +873,7 @@ export def "history-airquality-city-city-country-country get" [
   let full_url = (build-url $base $"/history/airquality?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hours of historical air quality conditions - Given a City ID.
@@ -859,6 +888,7 @@ export def "history-airquality-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
@@ -868,7 +898,7 @@ export def "history-airquality-city-id-city-id get" [
   let full_url = (build-url $base $"/history/airquality?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hours of historical air quality conditions - Given a lat/lon.
@@ -884,6 +914,7 @@ export def "history-airquality-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
@@ -893,7 +924,7 @@ export def "history-airquality-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/history/airquality?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns 72 hours of historical air quality conditions - Given a Postal Code.
@@ -908,6 +939,7 @@ export def "history-airquality-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -918,7 +950,7 @@ export def "history-airquality-postal-code-postal-code get" [
   let full_url = (build-url $base $"/history/airquality?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given City and/or State, Country.
@@ -934,6 +966,7 @@ export def "history-daily-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
@@ -948,7 +981,7 @@ export def "history-daily-city-city-country-country get" [
   let full_url = (build-url $base $"/history/daily?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a City ID
@@ -963,6 +996,7 @@ export def "history-daily-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -976,7 +1010,7 @@ export def "history-daily-city-id-city-id get" [
   let full_url = (build-url $base $"/history/daily?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a lat/lon.
@@ -992,6 +1026,7 @@ export def "history-daily-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1005,7 +1040,7 @@ export def "history-daily-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/history/daily?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a Postal Code
@@ -1020,6 +1055,7 @@ export def "history-daily-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
@@ -1034,7 +1070,7 @@ export def "history-daily-postal-code-postal-code get" [
   let full_url = (build-url $base $"/history/daily?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a station ID.
@@ -1049,6 +1085,7 @@ export def "history-daily-station-station get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1062,7 +1099,7 @@ export def "history-daily-station-station get" [
   let full_url = (build-url $base $"/history/daily?station=($station)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Energy API response  - Given a single lat/lon. 
@@ -1078,6 +1115,7 @@ export def "history-energy-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --tp: string@tp-completer-1 # Time period to aggregate by (daily, monthly) (format: string)
@@ -1092,7 +1130,7 @@ export def "history-energy-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/history/energy?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given City and/or State, Country.
@@ -1108,6 +1146,7 @@ export def "history-hourly-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
@@ -1123,7 +1162,7 @@ export def "history-hourly-city-city-country-country get" [
   let full_url = (build-url $base $"/history/hourly?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a City ID
@@ -1138,6 +1177,7 @@ export def "history-hourly-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1152,7 +1192,7 @@ export def "history-hourly-city-id-city-id get" [
   let full_url = (build-url $base $"/history/hourly?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a lat/lon.
@@ -1168,6 +1208,7 @@ export def "history-hourly-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1182,7 +1223,7 @@ export def "history-hourly-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/history/hourly?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a Postal Code
@@ -1197,6 +1238,7 @@ export def "history-hourly-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
@@ -1212,7 +1254,7 @@ export def "history-hourly-postal-code-postal-code get" [
   let full_url = (build-url $base $"/history/hourly?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a station ID.
@@ -1227,6 +1269,7 @@ export def "history-hourly-station-station get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1241,7 +1284,7 @@ export def "history-hourly-station-station get" [
   let full_url = (build-url $base $"/history/hourly?station=($station)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given City and/or State, Country.
@@ -1257,6 +1300,7 @@ export def "history-subhourly-city-city-country-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
@@ -1272,7 +1316,7 @@ export def "history-subhourly-city-city-country-country get" [
   let full_url = (build-url $base $"/history/subhourly?city=($city)&country=($country)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a City ID
@@ -1287,6 +1331,7 @@ export def "history-subhourly-city-id-city-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1301,7 +1346,7 @@ export def "history-subhourly-city-id-city-id get" [
   let full_url = (build-url $base $"/history/subhourly?city_id=($city_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a lat/lon.
@@ -1317,6 +1362,7 @@ export def "history-subhourly-lat-lat-lon-lon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1331,7 +1377,7 @@ export def "history-subhourly-lat-lat-lon-lon get" [
   let full_url = (build-url $base $"/history/subhourly?lat=($lat)&lon=($lon)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a Postal Code
@@ -1346,6 +1392,7 @@ export def "history-subhourly-postal-code-postal-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
@@ -1361,7 +1408,7 @@ export def "history-subhourly-postal-code-postal-code get" [
   let full_url = (build-url $base $"/history/subhourly?postal_code=($postal_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Historical Observations - Given a station ID.
@@ -1376,6 +1423,7 @@ export def "history-subhourly-station-station get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
@@ -1390,5 +1438,5 @@ export def "history-subhourly-station-station get" [
   let full_url = (build-url $base $"/history/subhourly?station=($station)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

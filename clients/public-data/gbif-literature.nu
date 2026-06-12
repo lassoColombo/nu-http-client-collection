@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def format-completer [] { ["CSV" "TSV"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "literature get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,13 +104,14 @@ export def "literature get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<discovered: string, authors: list<record>, countriesOfCoverage: list<string>, countriesOfResearcher: list<string>, publishingCountry: list<string>, added: string, published: string, day: int, gbifDownloadKey: list<string>, gbifOccurrenceKey: list<int>, gbifTaxonKey: list<int>, gbifHigherTaxonKey: list<int>, gbifNetworkKey: list<string>, gbifProjectIdentifier: list<string>, gbifProgramme: list<string>, citationType: string, gbifRegion: list<string>, id: string, identifiers: record, keywords: list<string>, language: string, literatureType: string, month: int, notes: string, openAccess: bool, peerReview: bool, publisher: string, relevance: list<string>, source: string, tags: list<string>, title: string, topics: list<string>, modified: string, websites: list<string>, year: int, abstract: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/literature/($uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search literature
@@ -124,6 +126,7 @@ export def "literature-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --citationType: list # The manner in which GBIF is cited in a paper.  Make a [facet query](https://api.gbif.org/v1/literature/search?limit=0&facet=citationType) for available values.  *This parameter may be repeated to search for multiple values.*
   --countriesOfCoverage: list # Country or area of focus of study. Country codes are listed in our [Country enum](https://api.gbif.org/v1/enumeration/country).  *This parameter may be repeated to search for multiple values.*
   --countriesOfResearcher: list # Country or area of institution with which author is affiliated. Country codes are listed in our [Country enum](https://api.gbif.org/v1/enumeration/country).  *This parameter may be repeated to search for multiple values.*
@@ -168,7 +171,7 @@ export def "literature-search search" [
   let full_url = (build-url $base "/literature/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export literature search results
@@ -183,6 +186,7 @@ export def "literature-export export" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # The format for the search results export. Defaults to `TSV`. (default: TSV)
   --citationType: list # The manner in which GBIF is cited in a paper.  Make a [facet query](https://api.gbif.org/v1/literature/search?limit=0&facet=citationType) for available values.  *This parameter may be repeated to search for multiple values.*
   --countriesOfCoverage: list # Country or area of focus of study. Country codes are listed in our [Country enum](https://api.gbif.org/v1/enumeration/country).  *This parameter may be repeated to search for multiple values.*
@@ -220,5 +224,5 @@ export def "literature-export export" [
   let full_url = (build-url $base "/literature/export" $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

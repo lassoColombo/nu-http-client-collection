@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def casting-time-completer [] { ["10minutes" "12hours" "1hour" "1minute" "1week"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "items list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "items list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --name-iexact: string
@@ -148,7 +150,7 @@ export def "items list" [
   let full_url = (build-url $base "/v2/items/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of items.  retrieve: API endpoint for returning a particular item.
@@ -164,13 +166,14 @@ export def "items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, category: record<name: string, key: string>, weapon: record<name: string, key: string, damage_type: record<name: string, key: string>, damage_dice: string, properties: list<record>, is_melee: string, is_simple: bool, is_martial: bool, is_improvised: bool, distance_unit: string>, armor: record<name: string, key: string, category: string, ac_base: int, ac_display: string, ac_add_dexmod: bool, ac_cap_dexmod: int, grants_stealth_disadvantage: bool, strength_score_required: int>, size: record<name: string, key: string>, weight: string, weight_unit: string, cost: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/items/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of magic items.  retrieve: API endpoint for returning a particular magic item.
@@ -185,6 +188,7 @@ export def "magicitems list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --name-iexact: string
@@ -231,7 +235,7 @@ export def "magicitems list" [
   let full_url = (build-url $base "/v2/magicitems/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of magic items.  retrieve: API endpoint for returning a particular magic item.
@@ -247,13 +251,14 @@ export def "magicitems get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, category: record<name: string, key: string>, rarity: record<name: string, key: string, rank: int>, is_magic_item: string, weapon: record<name: string, key: string, damage_type: record<name: string, key: string>, damage_dice: string, properties: list<record>, is_melee: string, is_simple: bool, is_martial: bool, is_improvised: bool, distance_unit: string>, armor: record<name: string, key: string, category: string, ac_base: int, ac_display: string, ac_add_dexmod: bool, ac_cap_dexmod: int, grants_stealth_disadvantage: bool, strength_score_required: int>, size: record<name: string, key: string>, weight: string, weight_unit: string, cost: string, requires_attunement: bool, attunement_detail: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/magicitems/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API Endpoint for returning a set of itemsets.  retrieve: API endpoint for return a particular itemset.
@@ -268,6 +273,7 @@ export def "itemsets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -290,7 +296,7 @@ export def "itemsets list" [
   let full_url = (build-url $base "/v2/itemsets/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API Endpoint for returning a set of itemsets.  retrieve: API endpoint for return a particular itemset.
@@ -306,13 +312,14 @@ export def "itemsets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, items: table<name: string, key: string, url: string>, name: string, desc: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/itemsets/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API Endpoint for returning a set of item categories.  retrieve: API endpoint for return a particular item categories.
@@ -327,6 +334,7 @@ export def "itemcategories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -338,7 +346,7 @@ export def "itemcategories list" [
   let full_url = (build-url $base "/v2/itemcategories/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API Endpoint for returning a set of item categories.  retrieve: API endpoint for return a particular item categories.
@@ -354,13 +362,14 @@ export def "itemcategories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/itemcategories/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of documents. retrieve: API endpoint for returning a particular document.
@@ -375,6 +384,7 @@ export def "documents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --desc: string
   --key: string
@@ -399,7 +409,7 @@ export def "documents list" [
   let full_url = (build-url $base "/v2/documents/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of documents. retrieve: API endpoint for returning a particular document.
@@ -415,13 +425,14 @@ export def "documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, licenses: table<name: string, key: string>, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, display_name: string, name: string, desc: string, type: string, author: string, publication_date: string, permalink: string, distance_unit: string, weight_unit: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/documents/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of licenses. retrieve: API endpoint for returning a particular license.
@@ -436,6 +447,7 @@ export def "licenses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --desc: string
   --key: string
@@ -450,7 +462,7 @@ export def "licenses list" [
   let full_url = (build-url $base "/v2/licenses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of licenses. retrieve: API endpoint for returning a particular license.
@@ -466,13 +478,14 @@ export def "licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/licenses/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of publishers. retrieve: API endpoint for returning a particular publisher.
@@ -487,6 +500,7 @@ export def "publishers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --key: string
   --ordering: string # Which field to use when ordering the results.
@@ -500,7 +514,7 @@ export def "publishers list" [
   let full_url = (build-url $base "/v2/publishers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of publishers. retrieve: API endpoint for returning a particular publisher.
@@ -516,13 +530,14 @@ export def "publishers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/publishers/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of weapons. retrieve: API endpoint for returning a particular weapon.
@@ -537,6 +552,7 @@ export def "weapons list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --name-iexact: string
@@ -562,7 +578,7 @@ export def "weapons list" [
   let full_url = (build-url $base "/v2/weapons/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of weapons. retrieve: API endpoint for returning a particular weapon.
@@ -578,13 +594,14 @@ export def "weapons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, properties: string, damage_type: record<name: string, key: string>, ranged_attack_possible: string, range_melee: string, distance_unit: string, name: string, damage_dice: string, range: int, long_range: int, is_simple: bool, is_improvised: bool, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/weapons/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of armor. retrieve: API endpoint for returning a particular armor.
@@ -599,6 +616,7 @@ export def "armor list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -634,7 +652,7 @@ export def "armor list" [
   let full_url = (build-url $base "/v2/armor/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of armor. retrieve: API endpoint for returning a particular armor.
@@ -650,13 +668,14 @@ export def "armor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, ac_display: string, category: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, grants_stealth_disadvantage: bool, strength_score_required: int, ac_base: int, ac_add_dexmod: bool, ac_cap_dexmod: int, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/armor/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # " list: API Endpoint for returning a set of gamesystems.  retrieve: API endpoint for return a particular gamesystem.
@@ -671,6 +690,7 @@ export def "gamesystems list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -682,7 +702,7 @@ export def "gamesystems list" [
   let full_url = (build-url $base "/v2/gamesystems/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # " list: API Endpoint for returning a set of gamesystems.  retrieve: API endpoint for return a particular gamesystem.
@@ -698,13 +718,14 @@ export def "gamesystems get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, content_prefix: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/gamesystems/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of backgrounds. retrieve: API endpoint for returning a particular background.
@@ -719,6 +740,7 @@ export def "backgrounds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -742,7 +764,7 @@ export def "backgrounds list" [
   let full_url = (build-url $base "/v2/backgrounds/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of backgrounds. retrieve: API endpoint for returning a particular background.
@@ -758,13 +780,14 @@ export def "backgrounds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, benefits: table<name: string, desc: string, type: string>, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, desc: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/backgrounds/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of feats. retrieve: API endpoint for returning a particular feat.
@@ -779,6 +802,7 @@ export def "feats list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -802,7 +826,7 @@ export def "feats list" [
   let full_url = (build-url $base "/v2/feats/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of feats. retrieve: API endpoint for returning a particular feat.
@@ -818,13 +842,14 @@ export def "feats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, has_prerequisite: bool, benefits: table<desc: string>, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, desc: string, prerequisite: string, type: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/feats/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of species. retrieve: API endpoint for returning a particular species.
@@ -839,6 +864,7 @@ export def "species list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -866,7 +892,7 @@ export def "species list" [
   let full_url = (build-url $base "/v2/species/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of species. retrieve: API endpoint for returning a particular species.
@@ -882,13 +908,14 @@ export def "species get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, is_subspecies: bool, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, traits: table<name: string, desc: string, type: string, order: int>, name: string, desc: string, subspecies_of: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/species/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creatures. retrieve: API endpoint for returning a particular creature.
@@ -903,6 +930,7 @@ export def "creatures list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1001,7 +1029,7 @@ export def "creatures list" [
   let full_url = (build-url $base "/v2/creatures/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creatures. retrieve: API endpoint for returning a particular creature.
@@ -1017,13 +1045,14 @@ export def "creatures get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, type: record<name: string, key: string>, size: record<name: string, key: string>, challenge_rating: float, proficiency_bonus: int, speed: record<walk: string, fly: string, swim: string, climb: string, burrow: string, hover: bool>, speed_all: record<unit: string, walk: int, crawl: int, hover: bool, fly: int, burrow: int, climb: int, swim: int>, category: string, subcategory: string, alignment: string, languages: record<as_string: string, data: list<record>>, armor_class: int, armor_detail: string, hit_points: int, hit_dice: string, experience_points: int, ability_scores: record<strength: int, dexterity: int, constitution: int, intelligence: int, wisdom: int, charisma: int>, modifiers: record<strength: int, dexterity: int, constitution: int, intelligence: int, wisdom: int, charisma: int>, initiative_bonus: int, saving_throws: record<strength: int, dexterity: int, constitution: int, intelligence: int, wisdom: int, charisma: int>, saving_throws_all: record<strength: int, dexterity: int, constitution: int, intelligence: int, wisdom: int, charisma: int>, skill_bonuses: record<acrobatics: int, animal_handling: int, arcana: int, athletics: int, deception: int, history: int, insight: int, intimidation: int, investigation: int, medicine: int, nature: int, perception: int, performance: int, persuasion: int, religion: int, sleight_of_hand: int, stealth: int, survival: int>, skill_bonuses_all: record<acrobatics: int, animal_handling: int, arcana: int, athletics: int, deception: int, history: int, insight: int, intimidation: int, investigation: int, medicine: int, nature: int, perception: int, performance: int, persuasion: int, religion: int, sleight_of_hand: int, stealth: int, survival: int>, passive_perception: int, resistances_and_immunities: record<damage_immunities_display: string, damage_immunities: list<record>, damage_resistances_display: string, damage_resistances: list<record>, damage_vulnerabilities_display: string, damage_vulnerabilities: list<record>, condition_immunities_display: string, condition_immunities: list<record>>, normal_sight_range: int, darkvision_range: int, blindsight_range: int, tremorsense_range: int, truesight_range: int, actions: table<name: string, desc: string, attacks: list, action_type: string, order_in_statblock: int, legendary_action_cost: int, limited_to_form: string, usage_limits: record>, traits: table<name: string, desc: string>, creaturesets: list<string>, environments: table<name: string, key: string>, illustration: record<name: string, key: string, file_url: string, alt_text: string, attribution: string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/creatures/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creatures types. retrieve: API endpoint for returning a particular creature type.
@@ -1038,6 +1067,7 @@ export def "creaturetypes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1061,7 +1091,7 @@ export def "creaturetypes list" [
   let full_url = (build-url $base "/v2/creaturetypes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creatures types. retrieve: API endpoint for returning a particular creature type.
@@ -1077,13 +1107,14 @@ export def "creaturetypes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, descriptions: table<desc: string, document: string, gamesystem: string>, name: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/creaturetypes/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creature sets, which is similar to tags. retrieve: API endpoint for returning a particular creature set.
@@ -1098,6 +1129,7 @@ export def "creaturesets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1121,7 +1153,7 @@ export def "creaturesets list" [
   let full_url = (build-url $base "/v2/creaturesets/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of creature sets, which is similar to tags. retrieve: API endpoint for returning a particular creature set.
@@ -1137,13 +1169,14 @@ export def "creaturesets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, creatures: table<key: string, name: string, document: record, type: record, size: record, challenge_rating: float, proficiency_bonus: int, speed: record, speed_all: record, category: string, subcategory: string, alignment: string, languages: record, armor_class: int, armor_detail: string, hit_points: int, hit_dice: string, experience_points: int, ability_scores: record, modifiers: record, initiative_bonus: int, saving_throws: record, saving_throws_all: record, skill_bonuses: record, skill_bonuses_all: record, passive_perception: int, resistances_and_immunities: record, normal_sight_range: int, darkvision_range: int, blindsight_range: int, tremorsense_range: int, truesight_range: int, actions: list, traits: list, creaturesets: list, environments: list, illustration: record, crossreferences: record>, name: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/creaturesets/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of damage types. retrieve: API endpoint for returning a particular damage type.
@@ -1158,6 +1191,7 @@ export def "damagetypes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1181,7 +1215,7 @@ export def "damagetypes list" [
   let full_url = (build-url $base "/v2/damagetypes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of damage types. retrieve: API endpoint for returning a particular damage type.
@@ -1197,13 +1231,14 @@ export def "damagetypes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, descriptions: table<desc: string, document: string, gamesystem: string>, name: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/damagetypes/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of feats. retrieve: API endpoint for returning a particular feat.
@@ -1218,6 +1253,7 @@ export def "languages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1242,7 +1278,7 @@ export def "languages list" [
   let full_url = (build-url $base "/v2/languages/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of feats. retrieve: API endpoint for returning a particular feat.
@@ -1258,13 +1294,14 @@ export def "languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, desc: string, is_exotic: bool, is_secret: bool, script_language: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/languages/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of alignments. retrieve: API endpoint for returning a particular alignment.
@@ -1279,6 +1316,7 @@ export def "alignments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1302,7 +1340,7 @@ export def "alignments list" [
   let full_url = (build-url $base "/v2/alignments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of alignments. retrieve: API endpoint for returning a particular alignment.
@@ -1318,13 +1356,14 @@ export def "alignments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, morality: string, societal_attitude: string, short_name: string, descriptions: table<desc: string, document: string, gamesystem: string>, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/alignments/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of conditions. retrieve: API endpoint for returning a particular condition.
@@ -1339,6 +1378,7 @@ export def "conditions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1362,7 +1402,7 @@ export def "conditions list" [
   let full_url = (build-url $base "/v2/conditions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of conditions. retrieve: API endpoint for returning a particular condition.
@@ -1378,13 +1418,14 @@ export def "conditions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, icon: record<name: string, key: string, file_url: string, alt_text: string, attribution: string>, descriptions: table<desc: string, document: string, gamesystem: string>, name: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/conditions/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of spells. retrieve: API endpoint for returning a particular spell.
@@ -1399,6 +1440,7 @@ export def "spells list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1454,7 +1496,7 @@ export def "spells list" [
   let full_url = (build-url $base "/v2/spells/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of spells. retrieve: API endpoint for returning a particular spell.
@@ -1470,13 +1512,14 @@ export def "spells get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, casting_options: table<type: string, damage_roll: string, target_count: int, duration: string, range: string, concentration: bool, shape_size: int, desc: string>, school: record<name: string, key: string>, classes: table<name: string, key: string>, range_unit: string, shape_size_unit: string, name: string, desc: string, level: int, higher_level: string, target_type: string, range_text: string, range: int, ritual: bool, casting_time: string, reaction_condition: string, verbal: bool, somatic: bool, material: bool, material_specified: string, material_cost: string, material_consumed: bool, target_count: int, saving_throw_ability: string, attack_roll: bool, damage_roll: string, damage_types: any, duration: string, shape_type: string, shape_size: int, concentration: bool, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/spells/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/spellschools/
@@ -1490,6 +1533,7 @@ export def "spellschools list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1513,7 +1557,7 @@ export def "spellschools list" [
   let full_url = (build-url $base "/v2/spellschools/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/spellschools/{key}/
@@ -1528,13 +1572,14 @@ export def "spellschools get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/spellschools/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of classes. retrieve: API endpoint for returning a particular class.
@@ -1549,6 +1594,7 @@ export def "classes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1574,7 +1620,7 @@ export def "classes list" [
   let full_url = (build-url $base "/v2/classes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of classes. retrieve: API endpoint for returning a particular class.
@@ -1590,13 +1636,14 @@ export def "classes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, features: table<key: string, name: string, desc: string, feature_type: string, feature_items: list>, hit_points: record<hit_dice: int, hit_dice_name: string, hit_points_at_1st_level: int, hit_points_at_higher_levels: int>, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, saving_throws: table<name: string>, subclass_of: record<name: string, key: string>, name: string, desc: string, hit_dice: string, caster_type: string, primary_abilities: list<string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/classes/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of damage types. retrieve: API endpoint for returning a particular damage type.
@@ -1611,6 +1658,7 @@ export def "sizes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1634,7 +1682,7 @@ export def "sizes list" [
   let full_url = (build-url $base "/v2/sizes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of damage types. retrieve: API endpoint for returning a particular damage type.
@@ -1650,13 +1698,14 @@ export def "sizes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, distance_unit: string, name: string, rank: int, space_diameter: int, suggested_hit_dice: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/sizes/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of item rarities.  retrieve: API endpoint for returning a particular item rarity.
@@ -1671,6 +1720,7 @@ export def "itemrarities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -1682,7 +1732,7 @@ export def "itemrarities list" [
   let full_url = (build-url $base "/v2/itemrarities/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of item rarities.  retrieve: API endpoint for returning a particular item rarity.
@@ -1698,13 +1748,14 @@ export def "itemrarities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, key: string, rank: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/itemrarities/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of environments. retrieve: API endpoint for returning a particular environment.
@@ -1719,6 +1770,7 @@ export def "environments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1742,7 +1794,7 @@ export def "environments list" [
   let full_url = (build-url $base "/v2/environments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of environments. retrieve: API endpoint for returning a particular environment.
@@ -1758,13 +1810,14 @@ export def "environments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, aquatic: bool, planar: bool, interior: bool, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/environments/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of abilities. retrieve: API endpoint for returning a particular ability.
@@ -1779,6 +1832,7 @@ export def "abilities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1802,7 +1856,7 @@ export def "abilities list" [
   let full_url = (build-url $base "/v2/abilities/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of abilities. retrieve: API endpoint for returning a particular ability.
@@ -1818,13 +1872,14 @@ export def "abilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, descriptions: table<desc: string, document: string, gamesystem: string>, skills: table<key: string, descriptions: list, name: string, document: string, ability: string>, name: string, short_desc: string, document: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/abilities/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of skills. retrieve: API endpoint for returning a particular skill.
@@ -1839,6 +1894,7 @@ export def "skills list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -1850,7 +1906,7 @@ export def "skills list" [
   let full_url = (build-url $base "/v2/skills/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list: API endpoint for returning a list of skills. retrieve: API endpoint for returning a particular skill.
@@ -1866,13 +1922,14 @@ export def "skills get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, descriptions: table<desc: string, document: string, gamesystem: string>, name: string, document: string, ability: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/skills/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This Mixin supports dynamically excluding returned fields of serializers that inherit from it via the `?exclude` query parameter.  Syntactically similar to the default `?field` DRF query parameter. Nested fields are similarly excluded via the '__' operator (see Examples).  ## Usage 1. Make sure your ViewSet inherits from `ExcludeFieldsMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Pass exclude params in the request query string to remove fields from the response.  # Exclude top-level fields GET /v2/creatures/?exclude=traits,actions  # Exclude nested fields GET /v2/creatures/?actions__exclude=attacks
@@ -1887,6 +1944,7 @@ export def "rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -1910,7 +1968,7 @@ export def "rules list" [
   let full_url = (build-url $base "/v2/rules/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This Mixin supports dynamically excluding returned fields of serializers that inherit from it via the `?exclude` query parameter.  Syntactically similar to the default `?field` DRF query parameter. Nested fields are similarly excluded via the '__' operator (see Examples).  ## Usage 1. Make sure your ViewSet inherits from `ExcludeFieldsMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Pass exclude params in the request query string to remove fields from the response.  # Exclude top-level fields GET /v2/creatures/?exclude=traits,actions  # Exclude nested fields GET /v2/creatures/?actions__exclude=attacks
@@ -1926,13 +1984,14 @@ export def "rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, index: int, initialHeaderLevel: int, document: string, ruleset: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/rules/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mixin to apply eager loading optimisations to a ViewSet.  Handles the running of `select_related()` (for ForeignKey fields) and `prefetch_related()` (from ManyToMany/reverse relationships) queryset methods to allow developers to solve N+1 problems on Open5e endpoints.  ## Usage 1. Make sure your ViewSet inherits from `EagerLoadingMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Re-define `select_related_fields` and `prefetch_related_fields` lists on the child ViewSet to specify relationships to select related / pre-fetch.  ## Usage Example ```   class CreatureViewSet(EagerLoadingMixin, viewsets.ReadOnlyModelViewSet):     queryset = models.Creature.objects.all().order_by('pk')     serializer_class = serializers.CreatureSerializer     filterset_class = CreatureFilterSet     select_related_fields = []   # ForeignKey relations to optimise with select_related()     prefetch_related_fields = [] # ManyToMany/reverse relations to optimise with prefetch_related() ```
@@ -1947,6 +2006,7 @@ export def "rulesets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key: string
   --name: string
@@ -1966,7 +2026,7 @@ export def "rulesets list" [
   let full_url = (build-url $base "/v2/rulesets/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mixin to apply eager loading optimisations to a ViewSet.  Handles the running of `select_related()` (for ForeignKey fields) and `prefetch_related()` (from ManyToMany/reverse relationships) queryset methods to allow developers to solve N+1 problems on Open5e endpoints.  ## Usage 1. Make sure your ViewSet inherits from `EagerLoadingMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Re-define `select_related_fields` and `prefetch_related_fields` lists on the child ViewSet to specify relationships to select related / pre-fetch.  ## Usage Example ```   class CreatureViewSet(EagerLoadingMixin, viewsets.ReadOnlyModelViewSet):     queryset = models.Creature.objects.all().order_by('pk')     serializer_class = serializers.CreatureSerializer     filterset_class = CreatureFilterSet     select_related_fields = []   # ForeignKey relations to optimise with select_related()     prefetch_related_fields = [] # ManyToMany/reverse relations to optimise with prefetch_related() ```
@@ -1982,13 +2042,14 @@ export def "rulesets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, desc: string, rules: table<key: string, name: string, desc: string, index: int, initialHeaderLevel: int, document: string, ruleset: string, crossreferences: record>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/rulesets/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This Mixin supports dynamically excluding returned fields of serializers that inherit from it via the `?exclude` query parameter.  Syntactically similar to the default `?field` DRF query parameter. Nested fields are similarly excluded via the '__' operator (see Examples).  ## Usage 1. Make sure your ViewSet inherits from `ExcludeFieldsMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Pass exclude params in the request query string to remove fields from the response.  # Exclude top-level fields GET /v2/creatures/?exclude=traits,actions  # Exclude nested fields GET /v2/creatures/?actions__exclude=attacks
@@ -2003,6 +2064,7 @@ export def "images list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -2014,7 +2076,7 @@ export def "images list" [
   let full_url = (build-url $base "/v2/images/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This Mixin supports dynamically excluding returned fields of serializers that inherit from it via the `?exclude` query parameter.  Syntactically similar to the default `?field` DRF query parameter. Nested fields are similarly excluded via the '__' operator (see Examples).  ## Usage 1. Make sure your ViewSet inherits from `ExcludeFieldsMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Pass exclude params in the request query string to remove fields from the response.  # Exclude top-level fields GET /v2/creatures/?exclude=traits,actions  # Exclude nested fields GET /v2/creatures/?actions__exclude=attacks
@@ -2030,13 +2092,14 @@ export def "images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, key: string, file_url: string, alt_text: string, attribution: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/images/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mixin to apply eager loading optimisations to a ViewSet.  Handles the running of `select_related()` (for ForeignKey fields) and `prefetch_related()` (from ManyToMany/reverse relationships) queryset methods to allow developers to solve N+1 problems on Open5e endpoints.  ## Usage 1. Make sure your ViewSet inherits from `EagerLoadingMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Re-define `select_related_fields` and `prefetch_related_fields` lists on the child ViewSet to specify relationships to select related / pre-fetch.  ## Usage Example ```   class CreatureViewSet(EagerLoadingMixin, viewsets.ReadOnlyModelViewSet):     queryset = models.Creature.objects.all().order_by('pk')     serializer_class = serializers.CreatureSerializer     filterset_class = CreatureFilterSet     select_related_fields = []   # ForeignKey relations to optimise with select_related()     prefetch_related_fields = [] # ManyToMany/reverse relations to optimise with prefetch_related() ```
@@ -2051,6 +2114,7 @@ export def "weaponproperties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key-in: list # Multiple values may be separated by commas.
   --key-iexact: string
   --key: string
@@ -2076,7 +2140,7 @@ export def "weaponproperties list" [
   let full_url = (build-url $base "/v2/weaponproperties/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mixin to apply eager loading optimisations to a ViewSet.  Handles the running of `select_related()` (for ForeignKey fields) and `prefetch_related()` (from ManyToMany/reverse relationships) queryset methods to allow developers to solve N+1 problems on Open5e endpoints.  ## Usage 1. Make sure your ViewSet inherits from `EagerLoadingMixin` before its base class (ie. ReadOnlyModelViewSet). 2. Re-define `select_related_fields` and `prefetch_related_fields` lists on the child ViewSet to specify relationships to select related / pre-fetch.  ## Usage Example ```   class CreatureViewSet(EagerLoadingMixin, viewsets.ReadOnlyModelViewSet):     queryset = models.Creature.objects.all().order_by('pk')     serializer_class = serializers.CreatureSerializer     filterset_class = CreatureFilterSet     select_related_fields = []   # ForeignKey relations to optimise with select_related()     prefetch_related_fields = [] # ManyToMany/reverse relations to optimise with prefetch_related() ```
@@ -2092,13 +2156,14 @@ export def "weaponproperties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, desc: string, document: string, type: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/weaponproperties/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/services/
@@ -2112,6 +2177,7 @@ export def "services list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -2123,7 +2189,7 @@ export def "services list" [
   let full_url = (build-url $base "/v2/services/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/services/{key}/
@@ -2138,13 +2204,14 @@ export def "services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, document: record<name: string, key: string, type: string, display_name: string, publisher: record<name: string, key: string>, gamesystem: record<name: string, key: string>, permalink: string>, name: string, desc: string, cost: string, detail: string, crossreferences: record<to: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/services/($key)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API endpoint for enums.
@@ -2159,13 +2226,14 @@ export def "enums list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/enums/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search across D&D 5E content
@@ -2180,6 +2248,7 @@ export def "search list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -2198,7 +2267,7 @@ export def "search list" [
   let full_url = (build-url $base "/v2/search/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unified search across exact text, fuzzy, and vector search methods.
@@ -2214,11 +2283,12 @@ export def "search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<document: record<key: string, name: string>, object_pk: string, object_name: string, object: any, object_model: string, schema_version: string, route: string, text: string, highlighted: string, match_type: string, matched_term: string, match_score: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/search/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

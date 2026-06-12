@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -133,7 +134,7 @@ def type-completer-3 [] { ["ATTENDANCE" "DETAILED" "EXPENSE_DETAILED" "EXPENSE_R
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "file-image uploadImage" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -166,6 +167,7 @@ export def "file-image uploadImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Image to be uploaded (format: binary)
 ]: any -> record<name: string, url: string> {
   let input = $in
@@ -176,7 +178,7 @@ export def "file-image uploadImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get currently logged-in user's info
@@ -191,6 +193,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-memberships: oneof<nothing, bool> # If set to true, memberships will be included. (default: false, e.g. true)
 ]: nothing -> record<activeWorkspace: string, customFields: table<customFieldId: string, customFieldName: string, customFieldType: record, userId: string, value: record>, defaultWorkspace: string, email: string, id: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, profilePicture: string, settings: record<alerts: bool, approval: bool, collapseAllProjectLists: bool, dashboardPinToTop: bool, dashboardSelection: string, dashboardViewType: string, dateFormat: string, groupSimilarEntriesDisabled: bool, invoiceReminders: bool, isCompactViewOn: bool, lang: string, longRunning: bool, multiFactorEnabled: bool, myStartOfDay: string, onboarding: bool, projectListCollapse: int, projectPickerTaskFilter: bool, pto: bool, reminders: bool, scheduledReports: bool, scheduling: bool, sendNewsletter: bool, showOnlyWorkingDays: bool, summaryReportSettings: record<group: string, subgroup: string>, theme: string, timeFormat: string, timeTrackingManual: bool, timeZone: string, weekStart: string, weeklyUpdates: bool>, status: record<ACTIVE: string, DELETED: string, LIMITED: string, LIMITED_DELETED: string, NOT_REGISTERED: string, PENDING_EMAIL_VERIFICATION: string, active: bool, limitedAccount: bool, notRegistered: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-marketplace-token"))
@@ -199,7 +202,7 @@ export def "user get" [
   let full_url = (build-url $base "/v1/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all my workspaces
@@ -214,6 +217,7 @@ export def "workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --roles: string@roles-completer # If provided, you'll get a filtered list of workspaces where you have any of the specified roles. Owners are not counted as admins when filtering. (e.g. [WORKSPACE_ADMIN, OWNER])
 ]: nothing -> table<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: list<record>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: list<record>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-marketplace-token"))
@@ -222,7 +226,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/v1/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a workspace
@@ -237,6 +241,7 @@ export def "workspaces createWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a workspace name. (e.g. Cool Company)
   --organizationId: string # Represents the Cake organization identifier across the system. (e.g. 67d471fb56aa9668b7bfa295)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
@@ -248,7 +253,7 @@ export def "workspaces createWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workspace info
@@ -264,13 +269,14 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all webhooks for addon on a workspace
@@ -287,13 +293,14 @@ export def "workspaces-addons-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhooks: table<authToken: string, deliveryEnabled: bool, enabled: bool, id: string, name: string, planEnabled: bool, triggerSource: list, triggerSourceType: record, url: string, userId: string, webhookEvent: record, workspaceId: string>, workspaceWebhookCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/addons/($addonId)/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get approval requests
@@ -309,6 +316,7 @@ export def "workspaces-approval-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filters results based on the provided approval state. (e.g. PENDING)
   --sort-column: string@sort-column-completer # Represents the column name to be used as sorting criteria. (e.g. START)
   --sort-order: string@sort-order-completer # Represents the sorting order. (e.g. ASCENDING)
@@ -321,7 +329,7 @@ export def "workspaces-approval-requests get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/approval-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit approval request
@@ -337,6 +345,7 @@ export def "workspaces-approval-requests createApprrovalRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Specifies the approval period. It has to match the workspace approval period setting. (e.g. MONTHLY)
   periodStart: string # Specifies an approval period start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00.000Z)
 ]: any -> record<creator: record<userEmail: string, userId: string, userName: string>, dateRange: record<end: string, start: string>, id: string, owner: record<startOfWeek: string, timeZone: string, userId: string, userName: string>, status: record<note: string, state: string, updatedAt: string, updatedBy: string, updatedByUserName: string>, workspaceId: string> {
@@ -348,7 +357,7 @@ export def "workspaces-approval-requests createApprrovalRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit non pending/approved entries/expenses for approval to an existing approval request
@@ -364,6 +373,7 @@ export def "workspaces-approval-requests-resubmit-entries-for-approval resubmitA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Specifies the approval period. It has to match the workspace approval period setting. (e.g. MONTHLY)
   periodStart: string # Specifies an approval period start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00.000Z)
 ]: any -> any {
@@ -375,7 +385,7 @@ export def "workspaces-approval-requests-resubmit-entries-for-approval resubmitA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit an approval request for a user
@@ -392,6 +402,7 @@ export def "workspaces-approval-requests-users createApprovalForOther" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Specifies the approval period. It has to match the workspace approval period setting. (e.g. MONTHLY)
   periodStart: string # Specifies an approval period start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00.000Z)
 ]: any -> record<creator: record<userEmail: string, userId: string, userName: string>, dateRange: record<end: string, start: string>, id: string, owner: record<startOfWeek: string, timeZone: string, userId: string, userName: string>, status: record<note: string, state: string, updatedAt: string, updatedBy: string, updatedByUserName: string>, workspaceId: string> {
@@ -403,7 +414,7 @@ export def "workspaces-approval-requests-users createApprovalForOther" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Re-submit rejected/withdrawn entries/expenses for an approval of a user
@@ -420,6 +431,7 @@ export def "workspaces-approval-requests-users-resubmit-entries-for-approval res
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Specifies the approval period. It has to match the workspace approval period setting. (e.g. MONTHLY)
   periodStart: string # Specifies an approval period start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00.000Z)
 ]: any -> any {
@@ -431,7 +443,7 @@ export def "workspaces-approval-requests-users-resubmit-entries-for-approval res
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an approval request
@@ -448,6 +460,7 @@ export def "workspaces-approval-requests updateApprovalStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Additional notes for the approval request. (e.g. This is a sample note.)
   state: string@state-completer # Specifies the approval state to set. (e.g. PENDING)
 ]: any -> record<creator: record<userEmail: string, userId: string, userName: string>, dateRange: record<end: string, start: string>, id: string, owner: record<startOfWeek: string, timeZone: string, userId: string, userName: string>, status: record<note: string, state: string, updatedAt: string, updatedBy: string, updatedByUserName: string>, workspaceId: string> {
@@ -459,7 +472,7 @@ export def "workspaces-approval-requests updateApprovalStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find clients on a workspace
@@ -475,6 +488,7 @@ export def "workspaces-clients list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filters client results that matches with the string provided in their client name. (e.g. Client X)
   --sort-column: string # Column name that will be used as criteria for sorting results. (default: NAME, e.g. NAME)
   --sort-order: string # Sorting mode (e.g. ASCENDING)
@@ -488,7 +502,7 @@ export def "workspaces-clients list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/clients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new client
@@ -504,6 +518,7 @@ export def "workspaces-clients createClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Represents a client's address. (e.g. Ground Floor, ABC Bldg., Palo Alto, California, USA 94020)
   --email: string # Represents a client email. (format: email, e.g. clientx@example.com)
   --name: string # Represents a client name. (e.g. Client X)
@@ -517,7 +532,7 @@ export def "workspaces-clients createClient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a client
@@ -534,13 +549,14 @@ export def "workspaces-clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, archived: bool, ccEmails: list<string>, currencyId: string, email: string, id: string, name: string, note: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/clients/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a client by ID
@@ -557,13 +573,14 @@ export def "workspaces-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, archived: bool, ccEmails: list<string>, currencyCode: string, currencyId: string, email: string, id: string, name: string, note: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/clients/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a client
@@ -580,6 +597,7 @@ export def "workspaces-clients updateClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archive-projects: oneof<nothing, bool>
   --mark-tasks-as-done: oneof<nothing, bool>
   --address: string # Represents a client's address. (e.g. Ground Floor, ABC Bldg., Palo Alto, California, USA 94020)
@@ -599,7 +617,7 @@ export def "workspaces-clients updateClient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update workspace cost rate
@@ -615,6 +633,7 @@ export def "workspaces-cost-rate setWorkspaceCostRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
@@ -626,7 +645,7 @@ export def "workspaces-cost-rate setWorkspaceCostRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom fields on a workspace
@@ -642,6 +661,7 @@ export def "workspaces-custom-fields ofWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, you'll get a filtered list of custom fields that contain the provided string in their name. (e.g. location)
   --status: string@status-completer-1 # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field status. (e.g. VISIBLE)
   --entity-type: string # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field entity type. (e.g. [TIMEENTRY, USER])
@@ -652,7 +672,7 @@ export def "workspaces-custom-fields ofWorkspace" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/custom-fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create custom fields on a workspace
@@ -668,6 +688,7 @@ export def "workspaces-custom-fields create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowedValues: list # Represents a list of custom field's allowed values. (e.g. [New York, London, Manila, Sydney, Belgrade])
   --description: string # Represents custom field description. (e.g. This field contains a location.)
   --entityType: string@entityType-completer # Represents custom field entity type (e.g. TIMEENTRY)
@@ -686,7 +707,7 @@ export def "workspaces-custom-fields create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom field
@@ -703,13 +724,14 @@ export def "workspaces-custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/custom-fields/($customFieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update custom field on workspace
@@ -726,6 +748,7 @@ export def "workspaces-custom-fields editCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowedValues: list # Represents a list of custom field's allowed values. (e.g. [New York, London, Manila, Sydney, Belgrade])
   --description: string # Represents a custom field description. (e.g. This field contains a location.)
   name: string # Represents a custom field name. (e.g. location)
@@ -744,7 +767,7 @@ export def "workspaces-custom-fields editCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Created entities (Experimental)
@@ -760,6 +783,7 @@ export def "workspaces-entities-created get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Specifies the type of document to be retrieved. Expected values are CLIENTS, PROJECTS, TAGS, TASKS, SCHEDULED_ASSIGNMENT, TIME_ENTRY, TIME_ENTRY_RATE, TIME_ENTRY_CUSTOM_FIELD_VALUE, CUSTOM_FIELDS, USER, USER_GROUPS, INVOICES, APPROVAL_REQUESTS, BALANCE, HOLIDAYS, PTO_POLICY, TIME_OFF_REQUEST.This parameter can accept multiple values, and at least one option must be provided. Based on the input, the application will return results corresponding to the selected document types. (e.g. TIME_ENTRY)
   --start: string # Represents the start date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no start date is provided, the application will set a default start date that matches the end date to create a date range of 30 days. If the end date is not specified either, the default behavior will apply from the current date. (e.g. 2024-10-29T10:00:00Z)
   --end: string # Represents the end date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no end date is provided, the application will set a default end date that matches the start date to create a date range of 30 days. (e.g. 2024-11-28T10:00:00Z)
@@ -772,7 +796,7 @@ export def "workspaces-entities-created get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/entities/created" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deleted entities (Experimental)
@@ -788,6 +812,7 @@ export def "workspaces-entities-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Specifies the type of document to be retrieved. Expected values are CLIENTS, PROJECTS, TAGS, TASKS, SCHEDULED_ASSIGNMENT, TIME_ENTRY, TIME_ENTRY_RATE, TIME_ENTRY_CUSTOM_FIELD_VALUE, CUSTOM_FIELDS, USER, USER_GROUPS, INVOICES, APPROVAL_REQUESTS, BALANCE, HOLIDAYS, PTO_POLICY, TIME_OFF_REQUEST.This parameter can accept multiple values, and at least one option must be provided. Based on the input, the application will return results corresponding to the selected document types. (e.g. TIME_ENTRY)
   --start: string # Represents the start date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no start date is provided, the application will set a default start date that matches the end date to create a date range of 30 days. If the end date is not specified either, the default behavior will apply from the current date. (e.g. 2024-10-29T10:00:00Z)
   --end: string # Represents the end date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no end date is provided, the application will set a default end date that matches the start date to create a date range of 30 days. (e.g. 2024-11-28T10:00:00Z)
@@ -800,7 +825,7 @@ export def "workspaces-entities-deleted get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/entities/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updated entities (Experimental)
@@ -816,6 +841,7 @@ export def "workspaces-entities-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Specifies the type of document to be retrieved. Expected values are CLIENTS, PROJECTS, TAGS, TASKS, SCHEDULED_ASSIGNMENT, TIME_ENTRY, TIME_ENTRY_RATE, TIME_ENTRY_CUSTOM_FIELD_VALUE, CUSTOM_FIELDS, USER, USER_GROUPS, INVOICES, APPROVAL_REQUESTS, BALANCE, HOLIDAYS, PTO_POLICY, TIME_OFF_REQUEST.This parameter can accept multiple values, and at least one option must be provided. Based on the input, the application will return results corresponding to the selected document types. (e.g. TIME_ENTRY)
   --start: string # Represents the start date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no start date is provided, the application will set a default start date that matches the end date to create a date range of 30 days. If the end date is not specified either, the default behavior will apply from the current date. (e.g. 2024-10-29T10:00:00Z)
   --end: string # Represents the end date in yyyy-MM-ddThh:mm:ssZ format. This parameter is optional; if no end date is provided, the application will set a default end date that matches the start date to create a date range of 30 days. (e.g. 2024-11-28T10:00:00Z)
@@ -828,7 +854,7 @@ export def "workspaces-entities-updated get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/entities/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all expenses on a workspace
@@ -844,6 +870,7 @@ export def "workspaces-expenses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --user-id: string # If provided, you'll get a filtered list of expenses which match the provided string in the user ID linked to the expense. (e.g. 5a0ab5acb07987125438b60f)
@@ -854,7 +881,7 @@ export def "workspaces-expenses list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an expense
@@ -870,6 +897,7 @@ export def "workspaces-expenses createExpense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # Represents an expense amount as the double data type. (format: double, e.g. 99.5)
   --billable: oneof<nothing, bool> # Indicates whether expense is billable or not. (default: false)
   categoryId: string # Represents a category identifier across the system. (e.g. 45y687e29ae1f428e7ebe890)
@@ -888,7 +916,7 @@ export def "workspaces-expenses createExpense" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get all expense categories
@@ -904,6 +932,7 @@ export def "workspaces-expenses-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-column: string@sort-column-completer-1 # Represents the column name to be used as sorting criteria. (e.g. NAME)
   --sort-order: string@sort-order-completer # Represents the sorting order. (e.g. ASCENDING)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
@@ -917,7 +946,7 @@ export def "workspaces-expenses-categories get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an expense category
@@ -933,6 +962,7 @@ export def "workspaces-expenses-categories createExpenseCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hasUnitPrice: oneof<nothing, bool> # Flag whether expense category has unit price or none. (default: false)
   name: string # Represents a valid expense category name. (e.g. Procurement)
   --priceInCents: int # Represents price in cents as integer. (format: int32, e.g. 1000)
@@ -946,7 +976,7 @@ export def "workspaces-expenses-categories createExpenseCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an expense category
@@ -963,13 +993,14 @@ export def "workspaces-expenses-categories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses/categories/($categoryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an expense category
@@ -986,6 +1017,7 @@ export def "workspaces-expenses-categories updateCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hasUnitPrice: oneof<nothing, bool> # Flag whether expense category has unit price or none. (default: false)
   name: string # Represents a valid expense category name. (e.g. Procurement)
   --priceInCents: int # Represents price in cents as integer. (format: int32, e.g. 1000)
@@ -999,7 +1031,7 @@ export def "workspaces-expenses-categories updateCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive an expense category
@@ -1016,6 +1048,7 @@ export def "workspaces-expenses-categories-status updateExpenseCategoryStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # Flag whether to archive the expense category or not. (default: false)
 ]: any -> record<archived: bool, hasUnitPrice: bool, id: string, name: string, priceInCents: int, unit: string, workspaceId: string> {
   let input = $in
@@ -1026,7 +1059,7 @@ export def "workspaces-expenses-categories-status updateExpenseCategoryStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an expense
@@ -1043,13 +1076,14 @@ export def "workspaces-expenses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses/($expenseId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an expense by ID
@@ -1066,13 +1100,14 @@ export def "workspaces-expenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billable: bool, categoryId: string, date: string, fileId: string, id: string, isLocked: bool, locked: bool, notes: string, projectId: string, quantity: float, taskId: string, total: float, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses/($expenseId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an expense
@@ -1089,6 +1124,7 @@ export def "workspaces-expenses updateExpense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # Represents an expense amount as the double data type. (format: double, e.g. 99.5)
   --billable: oneof<nothing, bool> # Indicates whether expense is billable or not. (default: false)
   categoryId: string # Represents a category identifier across the system. (e.g. 45y687e29ae1f428e7ebe890)
@@ -1108,7 +1144,7 @@ export def "workspaces-expenses updateExpense" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Download a receipt
@@ -1126,13 +1162,14 @@ export def "workspaces-expenses-files downloadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/expenses/($expenseId)/files/($fileId)")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get holidays on a workspace
@@ -1148,6 +1185,7 @@ export def "workspaces-holidays get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assigned-to: string # If provided, you'll get a filtered list of holidays assigned to user. (e.g. 60f924bafdaf031696ec6218)
 ]: nothing -> table<automaticTimeEntryCreation: bool, datePeriod: record<endDate: string, startDate: string>, everyoneIncludingNew: bool, id: string, name: string, occursAnnually: bool, projectId: string, taskId: string, userGroupIds: list<string>, userIds: list<string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1156,7 +1194,7 @@ export def "workspaces-holidays get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/holidays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a holiday
@@ -1176,6 +1214,7 @@ export def "workspaces-holidays createHoliday" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
   datePeriod: record # Provide startDate and endDate for the holiday. — shape: {endDate: string, startDate: string}
@@ -1193,7 +1232,7 @@ export def "workspaces-holidays createHoliday" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get holidays in a specific period
@@ -1209,6 +1248,7 @@ export def "workspaces-holidays-in-period get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assigned-to: string # Filter list of holidays assigned to user. (e.g. 60f924bafdaf031696ec6218)
   --start: string # Filter list of holidays starting from start date. Expected date format yyyy-MM-ddThh:mm:ssZ (e.g. 2022-12-03T10:59:59.999Z)
   --end: string # Filter list of holidays ending by end date. Expected date format yyyy-MM-ddThh:mm:ssZ (e.g. 2022-12-05T23:59:59.999Z)
@@ -1219,7 +1259,7 @@ export def "workspaces-holidays-in-period get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/holidays/in-period" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a holiday
@@ -1236,13 +1276,14 @@ export def "workspaces-holidays delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<automaticTimeEntryCreation: record<defaultEntities: record<projectId: string, taskId: string>, enabled: bool>, color: string, datePeriod: record<endDate: string, startDate: string>, everyoneIncludingNew: bool, id: string, name: string, occursAnnually: bool, userGroupIds: list<string>, userGroups: table<id: string, name: string>, userIds: list<string>, users: table<id: string, name: string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/holidays/($holidayId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a holiday
@@ -1263,6 +1304,7 @@ export def "workspaces-holidays updateHoliday" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
   datePeriod: record # Provide startDate and endDate for the holiday. — shape: {endDate: string, startDate: string}
@@ -1280,7 +1322,7 @@ export def "workspaces-holidays updateHoliday" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update workspace billable rate
@@ -1296,6 +1338,7 @@ export def "workspaces-hourly-rate setWorkspaceHourlyRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 2000)
   currency: string # Represents a currency. (default: USD, e.g. USD)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
@@ -1308,7 +1351,7 @@ export def "workspaces-hourly-rate setWorkspaceHourlyRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all invoices on a workspace
@@ -1324,6 +1367,7 @@ export def "workspaces-invoices list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --statuses: string@statuses-completer # If provided, you'll get a filtered result of invoices that matches the provided string in the user ID linked to the expense. (e.g. [UNSENT, PAID])
@@ -1336,7 +1380,7 @@ export def "workspaces-invoices list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an invoice
@@ -1352,6 +1396,7 @@ export def "workspaces-invoices createInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clientId: string # Represents a client identifier across the system. (e.g. 98h687e29ae1f428e7ebe707)
   currency: string # Represents the currency used by the invoice. (e.g. USD)
   dueDate: string # Represents an invoice due date in yyyy-MM-ddThh:mm:ssZ format. (format: date-time, e.g. 2020-06-01T08:00:00Z)
@@ -1367,7 +1412,7 @@ export def "workspaces-invoices createInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Filter out invoices
@@ -1386,6 +1431,7 @@ export def "workspaces-invoices-info post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clients: record # Represents a project filter for imported items. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --companies: record # Represents a company filter object. If provided, you'll get a filtered list of invoices that matches the specified company filter. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list}
   --exactAmount: int # Represents an invoice amount. If provided, you'll get a filtered list of invoices that has the equal amount as specified. (format: int64, e.g. 1000)
@@ -1411,7 +1457,7 @@ export def "workspaces-invoices-info post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an invoice in another language
@@ -1427,13 +1473,14 @@ export def "workspaces-invoices-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaults: record<companyId: string, defaultImportExpenseItemTypeId: string, defaultImportTimeItemTypeId: string, dueDays: int, itemType: string, itemTypeId: string, notes: string, subject: string, tax: int, tax2: int, tax2Percent: float, taxPercent: float, taxType: string>, exportFields: record<RTL: bool, itemType: bool, quantity: bool, rtl: bool, tax: bool, tax2: bool, unitPrice: bool>, labels: record<amount: string, billFrom: string, billTo: string, description: string, discount: string, dueDate: string, issueDate: string, itemType: string, notes: string, paid: string, quantity: string, subtotal: string, tax: string, tax2: string, total: string, totalAmount: string, unitPrice: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change an invoice language
@@ -1452,6 +1499,7 @@ export def "workspaces-invoices-settings updateInvoiceSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaults: record # Represents an invoice default settings object. — shape: {companyId?: string, dueDays?: int, itemTypeId?: string, notes: string, subject: string, tax2Percent?: float, taxPercent?: float, taxType?: "COMPOUND"|"SIMPLE"|"NONE"}
   --exportFields: record # Represents an invoice export fields object. — shape: {itemType?: bool, quantity?: bool, rtl?: bool, tax?: bool, tax2?: bool, unitPrice?: bool}
   labels: record # Represents a label customization object. — shape: {amount: string, billFrom: string, billTo: string, description: string, discount: string, dueDate: string, issueDate: string, itemType: string, notes: string, paid: string, quantity: string, subtotal: string, tax: string, tax2: string, total: string, totalAmountDue: string, unitPrice: string}
@@ -1464,7 +1512,7 @@ export def "workspaces-invoices-settings updateInvoiceSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an invoice
@@ -1481,13 +1529,14 @@ export def "workspaces-invoices delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an invoice by ID
@@ -1504,13 +1553,14 @@ export def "workspaces-invoices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, balance: int, billFrom: string, calculationType: record<INVOICE_BASED: string, ITEM_BASED: string, value: string>, clientAddress: string, clientId: string, clientName: string, companyId: string, containsImportedExpenses: bool, containsImportedTimes: bool, currency: string, discount: float, discountAmount: int, dueDate: string, id: string, issuedDate: string, items: table<amount: int, applyTaxes: record, description: string, expenseIds: list, importType: string, itemType: string, order: int, quantity: int, timeEntryIds: list, unitPrice: int>, note: string, number: string, paid: int, status: string, subject: string, subtotal: int, tax: float, tax2: float, tax2Amount: int, taxAmount: int, taxType: record<COMPOUND: string, NONE: string, SIMPLE: string, value: string>, userId: string, visibleZeroFields: record<DISCOUNT: string, TAX: string, TAX_2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an invoice
@@ -1528,6 +1578,7 @@ export def "workspaces-invoices updateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # Represents client identifier across the system. (e.g. 98h687e29ae1f428e7ebe707)
   --companyId: string # Represents company identifier across the system. (e.g. 04g687e29ae1f428e7ebe123)
   currency: string # Represents the currency used by the invoice. (e.g. USD)
@@ -1550,7 +1601,7 @@ export def "workspaces-invoices updateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Duplicate an invoice
@@ -1567,13 +1618,14 @@ export def "workspaces-invoices-duplicate duplicateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, balance: int, billFrom: string, calculationType: record<INVOICE_BASED: string, ITEM_BASED: string, value: string>, clientAddress: string, clientId: string, clientName: string, companyId: string, containsImportedExpenses: bool, containsImportedTimes: bool, currency: string, discount: float, discountAmount: int, dueDate: string, id: string, issuedDate: string, items: table<amount: int, applyTaxes: record, description: string, expenseIds: list, importType: string, itemType: string, order: int, quantity: int, timeEntryIds: list, unitPrice: int>, note: string, number: string, paid: int, status: string, subject: string, subtotal: int, tax: float, tax2: float, tax2Amount: int, taxAmount: int, taxType: record<COMPOUND: string, NONE: string, SIMPLE: string, value: string>, userId: string, visibleZeroFields: record<DISCOUNT: string, TAX: string, TAX_2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)/duplicate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export an invoice
@@ -1590,6 +1642,7 @@ export def "workspaces-invoices-export exportInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userLocale: string # Represents a locale. (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1598,7 +1651,7 @@ export def "workspaces-invoices-export exportInvoice" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)/export" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add item to an invoice
@@ -1615,6 +1668,7 @@ export def "workspaces-invoices-items addInvoiceItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   applyTaxes: string@applyTaxes-completer # Represents taxes applied to the invoice item. Applies only when the specified taxes are active on the invoice. (e.g. TAX1TAX2)
   description: string # Represents an invoice item description. (e.g. This is a description of an invoice item.)
   itemType: string # Represents an item type. (e.g. Service)
@@ -1629,7 +1683,7 @@ export def "workspaces-invoices-items addInvoiceItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import time entries and expenses to an invoice
@@ -1647,6 +1701,7 @@ export def "workspaces-invoices-items-import importTimeEntriesAndExpenses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expenseFieldsForDetailedGroup: list # Represents a set of expense fields to include when using the DETAILED expense grouping type. (default: NOTE, e.g. [NOTE])
   --expensesGroupBy: string@expensesGroupBy-completer # Represents a group field when using the GROUPED expense group type. (default: PROJECT, e.g. CATEGORY)
   --expensesGroupType: string@expensesGroupType-completer # Represents an expense group type. (default: DETAILED)
@@ -1668,7 +1723,7 @@ export def "workspaces-invoices-items-import importTimeEntriesAndExpenses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete item from an invoice
@@ -1686,13 +1741,14 @@ export def "workspaces-invoices-items removeInvoiceItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, balance: int, billFrom: string, calculationType: record<INVOICE_BASED: string, ITEM_BASED: string, value: string>, clientAddress: string, clientId: string, clientName: string, companyId: string, containsImportedExpenses: bool, containsImportedTimes: bool, currency: string, discount: float, discountAmount: int, dueDate: string, id: string, issuedDate: string, items: table<amount: int, applyTaxes: record, description: string, expenseIds: list, importType: string, itemType: string, order: int, quantity: int, timeEntryIds: list, unitPrice: int>, note: string, number: string, paid: int, status: string, subject: string, subtotal: int, tax: float, tax2: float, tax2Amount: int, taxAmount: int, taxType: record<COMPOUND: string, NONE: string, SIMPLE: string, value: string>, userId: string, visibleZeroFields: record<DISCOUNT: string, TAX: string, TAX_2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)/items/($order)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get payments for an invoice
@@ -1709,6 +1765,7 @@ export def "workspaces-invoices-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
 ]: nothing -> table<amount: int, author: string, date: string, id: string, note: string> {
@@ -1718,7 +1775,7 @@ export def "workspaces-invoices-payments get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add payment to an invoice
@@ -1735,6 +1792,7 @@ export def "workspaces-invoices-payments createInvoicePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Represents an invoice payment amount as long. (format: int64, e.g. 100)
   --note: string # Represents an invoice payment note. (e.g. This is a sample note for this invoice payment.)
   --paymentDate: string # Represents an invoice payment date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T12:00:00Z)
@@ -1747,7 +1805,7 @@ export def "workspaces-invoices-payments createInvoicePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete payment from an invoice
@@ -1765,13 +1823,14 @@ export def "workspaces-invoices-payments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, balance: int, billFrom: string, calculationType: record<INVOICE_BASED: string, ITEM_BASED: string, value: string>, clientAddress: string, clientId: string, clientName: string, companyId: string, containsImportedExpenses: bool, containsImportedTimes: bool, currency: string, discount: float, discountAmount: int, dueDate: string, id: string, issuedDate: string, items: table<amount: int, applyTaxes: record, description: string, expenseIds: list, importType: string, itemType: string, order: int, quantity: int, timeEntryIds: list, unitPrice: int>, note: string, number: string, paid: int, status: string, subject: string, subtotal: int, tax: float, tax2: float, tax2Amount: int, taxAmount: int, taxType: record<COMPOUND: string, NONE: string, SIMPLE: string, value: string>, userId: string, visibleZeroFields: record<DISCOUNT: string, TAX: string, TAX_2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/invoices/($invoiceId)/payments/($paymentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change an invoice status
@@ -1788,6 +1847,7 @@ export def "workspaces-invoices-status changeInvoiceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --invoiceStatus: string@invoiceStatus-completer # Represents the invoice status to be set. (e.g. PAID)
 ]: any -> any {
   let input = $in
@@ -1798,7 +1858,7 @@ export def "workspaces-invoices-status changeInvoiceStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /v1/workspaces/{workspaceId}/limited-users
@@ -1814,6 +1874,7 @@ export def "workspaces-limited-users addLimitedUsersWithInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   users: list # item shape: {costRate?: int, hourlyRate?: int, name: string, userCustomFields?: list, userGroups?: list, weekStart?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", workCapacity?: string, workingDays?: list}
 ]: any -> any {
   let input = $in
@@ -1824,7 +1885,7 @@ export def "workspaces-limited-users addLimitedUsersWithInfo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a member's profile
@@ -1841,13 +1902,14 @@ export def "workspaces-member-profile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, hasPassword: bool, hasPendingApprovalRequest: bool, imageUrl: string, name: string, userCustomFieldValues: table<customField: record, customFieldId: string, name: string, sourceType: string, type: string, userId: string, value: record>, weekStart: string, workCapacity: string, workingDays: string, workspaceNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/member-profile/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a member's profile
@@ -1866,6 +1928,7 @@ export def "workspaces-member-profile updateMemberProfileWithAdditionalData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --imageUrl: string # Represents an image url. A field that can only be updated for limited users. (e.g. https://www.url.com/imageurl-1234567890.jpg)
   --name: string # This body field is deprecated and can only be updated for limited users. Represents name of the user and can be changed on the CAKE.com Account profile page. (DEPRECATED, e.g. John Doe)
   --removeProfileImage: oneof<nothing, bool> # Indicates whether to remove profile image or not. A field that can only be updated for limited users. (default: false)
@@ -1882,7 +1945,7 @@ export def "workspaces-member-profile updateMemberProfileWithAdditionalData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all projects on a workspace
@@ -1898,6 +1961,7 @@ export def "workspaces-projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, you'll get a filtered list of projects that contains the provided string in the project name. (e.g. Software Development)
   --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name will only return projects whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include projects whose name contain the string value, but could be longer than the string value itself. For example, if there is a project with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that project in the results, whereas setting it to false will. (default: false)
   --archived: oneof<nothing, bool> # If provided and set to true, you'll only get archived projects. If omitted, you'll get both archived and non-archived projects. (default: false)
@@ -1926,7 +1990,7 @@ export def "workspaces-projects list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new project
@@ -1947,6 +2011,7 @@ export def "workspaces-projects createNewProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billable: oneof<nothing, bool> # Indicates whether project is billable or not. (default: false)
   --clientId: string # Represents client identifier across the system. (e.g. 9t641568b07987035750704)
   --color: string # Color format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #000000)
@@ -1967,7 +2032,7 @@ export def "workspaces-projects createNewProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create project from a template
@@ -1983,6 +2048,7 @@ export def "workspaces-projects-from-template createProjectFromTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # Represents a client identifier across the system. (e.g. 9t641568b07987035750704)
   --color: string # Color format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #000000)
   --isPublic: oneof<nothing, bool> # Indicates whether the project is public or not. (default: false)
@@ -1997,7 +2063,7 @@ export def "workspaces-projects-from-template createProjectFromTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a project from a workspace
@@ -2014,13 +2080,14 @@ export def "workspaces-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find a project by ID
@@ -2037,6 +2104,7 @@ export def "workspaces-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hydrated: oneof<nothing, bool> # If set to true, results will contain additional information about the project (default: false)
   --custom-field-entity-type: string # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field entity type. (default: TIMEENTRY, e.g. TIMEENTRY)
   --expense-limit: int # Represents the maximum number of expenses to fetch. (format: int32, default: 20, e.g. 10)
@@ -2048,7 +2116,7 @@ export def "workspaces-projects get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project on a workspace
@@ -2067,6 +2135,7 @@ export def "workspaces-projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # Indicates whether project is archived or not. (default: false)
   --billable: oneof<nothing, bool> # Indicates whether project is billable or not. (default: false)
   --clientId: string # Represents client identifier across the system. (e.g. 9t641568b07987035750704)
@@ -2085,7 +2154,7 @@ export def "workspaces-projects updateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom fields on a project
@@ -2102,6 +2171,7 @@ export def "workspaces-projects-custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field status. (e.g. INACTIVE)
   --entity-type: string # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field entity type. (e.g. TIMEENTRY)
 ]: nothing -> table<allowedValues: list<string>, description: string, entityType: string, id: string, name: string, onlyAdminCanEdit: bool, placeholder: string, projectDefaultValues: list<record>, required: bool, status: string, type: string, workspaceDefaultValue: record, workspaceId: string> {
@@ -2111,7 +2181,7 @@ export def "workspaces-projects-custom-fields get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)/custom-fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove custom field from a project
@@ -2129,13 +2199,14 @@ export def "workspaces-projects-custom-fields removeDefaultValueOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowedValues: list<string>, description: string, entityType: string, id: string, name: string, onlyAdminCanEdit: bool, placeholder: string, projectDefaultValues: table<projectId: string, status: string, value: record>, required: bool, status: string, type: string, workspaceDefaultValue: record, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)/custom-fields/($customFieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update custom field on a project
@@ -2153,6 +2224,7 @@ export def "workspaces-projects-custom-fields editProjectCustomFieldDefaultValue
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultValue: record # Represents a custom field's default value. (e.g. Manila)
   --status: string@status-completer-1 # Represents a custom field status. (e.g. VISIBLE)
 ]: any -> record<allowedValues: list<string>, description: string, entityType: string, id: string, name: string, onlyAdminCanEdit: bool, placeholder: string, projectDefaultValues: table<projectId: string, status: string, value: record>, required: bool, status: string, type: string, workspaceDefaultValue: record, workspaceId: string> {
@@ -2164,7 +2236,7 @@ export def "workspaces-projects-custom-fields editProjectCustomFieldDefaultValue
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update project estimate
@@ -2184,6 +2256,7 @@ export def "workspaces-projects-estimate updateEstimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --budgetEstimate: record # Represents estimate with options request object. — shape: {active?: bool, estimate?: int, includeExpenses?: bool, resetOption?: "WEEKLY"|"MONTHLY"|"YEARLY", type?: "AUTO"|"MANUAL"}
   --estimateReset: record # Represents estimate reset request object. — shape: {active?: bool, dayOfMonth?: int, dayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", hour?: int, interval?: "WEEKLY"|"MONTHLY"|"YEARLY", isActive?: bool, month?: "JANUARY"|"FEBRUARY"|"MARCH"|"APRIL"|"MAY"|"JUNE"|"JULY"|"AUGUST"|"SEPTEMBER"|"OCTOBER"|"NOVEMBER"|"DECEMBER"}
   --timeEstimate: record # Represents project time estimate request object. — shape: {active?: bool, estimate?: string, includeNonBillable?: bool, resetOption?: "WEEKLY"|"MONTHLY"|"YEARLY", type?: "AUTO"|"MANUAL"}
@@ -2196,7 +2269,7 @@ export def "workspaces-projects-estimate updateEstimate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update project memberships
@@ -2215,6 +2288,7 @@ export def "workspaces-projects-memberships updateMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   memberships: list # Represents a list of users with id and rates request objects. — item shape: {costRate?: record, hourlyRate?: record, userId: string}
   --userGroups: record # Provide list with user group ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE"}
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
@@ -2226,7 +2300,7 @@ export def "workspaces-projects-memberships updateMemberships" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign/remove users to/from the project
@@ -2244,6 +2318,7 @@ export def "workspaces-projects-memberships addUsersToProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --remove: oneof<nothing, bool> # Setting this flag to 'true' will remove the given users from the project. (default: false)
   --userGroups: record # Provide list with user group ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE"}
   --userIds: list # Represents array of user ids which should be added/removed. (e.g. [45b687e29ae1f428e7ebe123, 67s687e29ae1f428e7ebe678])
@@ -2256,7 +2331,7 @@ export def "workspaces-projects-memberships addUsersToProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find tasks on a project
@@ -2273,6 +2348,7 @@ export def "workspaces-projects-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, you'll get a filtered list of tasks that matches the provided string in their name. (e.g. Bugfixing)
   --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name only will return tasks whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tasks whose name contain the string value, but could be longer than the string value itself. For example, if there is a task with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that task in the results, whereas setting it to false will. (default: false)
   --is-active: oneof<nothing, bool> # Filters search results whether task is active or not. (default: false)
@@ -2287,7 +2363,7 @@ export def "workspaces-projects-tasks list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new task on a project
@@ -2305,6 +2381,7 @@ export def "workspaces-projects-tasks createTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contains-assignee: oneof<nothing, bool> # Flag to set whether task will have assignee or none. (default: true)
   --assigneeId: string # DEPRECATED
   --assigneeIds: list # Represents list of assignee ids for the task. (e.g. [45b687e29ae1f428e7ebe123, 67s687e29ae1f428e7ebe678])
@@ -2324,7 +2401,7 @@ export def "workspaces-projects-tasks createTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a task's cost rate
@@ -2342,6 +2419,7 @@ export def "workspaces-projects-tasks-cost-rate setTaskCostRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<assigneeId: string, assigneeIds: list<string>, billable: bool, budgetEstimate: int, costRate: record<amount: int, currency: string>, duration: string, estimate: string, hourlyRate: record<amount: int, currency: string>, id: string, name: string, projectId: string, status: record<ACTIVE: string, ALL: string, DONE: string, active: bool>, userGroupIds: list<string>> {
@@ -2353,7 +2431,7 @@ export def "workspaces-projects-tasks-cost-rate setTaskCostRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a task's billable rate
@@ -2371,6 +2449,7 @@ export def "workspaces-projects-tasks-hourly-rate setTaskHourlyRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an hourly rate amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<assigneeId: string, assigneeIds: list<string>, billable: bool, budgetEstimate: int, costRate: record<amount: int, currency: string>, duration: string, estimate: string, hourlyRate: record<amount: int, currency: string>, id: string, name: string, projectId: string, status: record<ACTIVE: string, ALL: string, DONE: string, active: bool>, userGroupIds: list<string>> {
@@ -2382,7 +2461,7 @@ export def "workspaces-projects-tasks-hourly-rate setTaskHourlyRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a task from a project
@@ -2400,13 +2479,14 @@ export def "workspaces-projects-tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assigneeId: string, assigneeIds: list<string>, billable: bool, budgetEstimate: int, costRate: record<amount: int, currency: string>, duration: string, estimate: string, hourlyRate: record<amount: int, currency: string>, id: string, name: string, projectId: string, status: record<ACTIVE: string, ALL: string, DONE: string, active: bool>, userGroupIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a task by id
@@ -2424,13 +2504,14 @@ export def "workspaces-projects-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assigneeId: string, assigneeIds: list<string>, billable: bool, budgetEstimate: int, costRate: record<amount: int, currency: string>, duration: string, estimate: string, hourlyRate: record<amount: int, currency: string>, id: string, name: string, projectId: string, status: record<ACTIVE: string, ALL: string, DONE: string, active: bool>, userGroupIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/projects/($projectId)/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a task on a project
@@ -2449,6 +2530,7 @@ export def "workspaces-projects-tasks updateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contains-assignee: oneof<nothing, bool> # Flag to set whether task will have assignee or none. (default: true)
   --membership-status: string@membership-status-completer # Represents a membership status. (e.g. ACTIVE)
   --assigneeId: string # DEPRECATED
@@ -2469,7 +2551,7 @@ export def "workspaces-projects-tasks updateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a project template
@@ -2486,6 +2568,7 @@ export def "workspaces-projects-template updateIsProjectTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isTemplate: oneof<nothing, bool> # Indicates whether project is a template or not. (default: false)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
   let input = $in
@@ -2496,7 +2579,7 @@ export def "workspaces-projects-template updateIsProjectTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update project user's cost rate
@@ -2514,6 +2597,7 @@ export def "workspaces-projects-users-cost-rate addUsersCostRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
@@ -2525,7 +2609,7 @@ export def "workspaces-projects-users-cost-rate addUsersCostRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a project user's billable rate
@@ -2543,6 +2627,7 @@ export def "workspaces-projects-users-hourly-rate addUsersHourlyRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
@@ -2554,7 +2639,7 @@ export def "workspaces-projects-users-hourly-rate addUsersHourlyRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all assignments
@@ -2570,6 +2655,7 @@ export def "workspaces-scheduling-assignments-all get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, assignments will be filtered by name (default: , e.g. Bugfixing)
   --start: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
   --end: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
@@ -2584,7 +2670,7 @@ export def "workspaces-scheduling-assignments-all get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/scheduling/assignments/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all scheduled assignments per project
@@ -2602,6 +2688,7 @@ export def "workspaces-scheduling-assignments-projects-totals list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Represents a term for searching projects and clients by name. (default: , e.g. Project name)
   --start: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
   --end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
@@ -2614,7 +2701,7 @@ export def "workspaces-scheduling-assignments-projects-totals list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/scheduling/assignments/projects/totals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all scheduled assignments per project
@@ -2630,6 +2717,7 @@ export def "workspaces-scheduling-assignments-projects-totals post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --pageSize: int # Page size. (format: int32, default: 50, e.g. 50)
@@ -2645,7 +2733,7 @@ export def "workspaces-scheduling-assignments-projects-totals post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all scheduled assignments on project
@@ -2662,6 +2750,7 @@ export def "workspaces-scheduling-assignments-projects-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
   --end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
 ]: nothing -> record<assignments: table<date: string, hasAssignment: bool>, clientName: string, milestones: table<date: string, id: string, name: string, projectId: string, workspaceId: string>, projectArchived: bool, projectBillable: bool, projectColor: string, projectId: string, projectName: string, taskId: string, taskName: string, totalHours: float, workspaceId: string> {
@@ -2671,7 +2760,7 @@ export def "workspaces-scheduling-assignments-projects-totals get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/scheduling/assignments/projects/totals/($projectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Publish assignments
@@ -2689,6 +2778,7 @@ export def "workspaces-scheduling-assignments-publish publishAssignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   end: string # Represents end date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
   --notifyUsers: oneof<nothing, bool> # Indicates whether to notify users when assignment is published. (default: false)
   --search: string # Represents a search string. (e.g. search keyword)
@@ -2705,7 +2795,7 @@ export def "workspaces-scheduling-assignments-publish publishAssignments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create assignment
@@ -2722,6 +2812,7 @@ export def "workspaces-scheduling-assignments-recurring createRecurring" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billable: oneof<nothing, bool> # Indicates whether assignment is billable or not. (default: false)
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
   hoursPerDay: float # Represents assignment total hours per day. (format: double, e.g. 7.5)
@@ -2742,7 +2833,7 @@ export def "workspaces-scheduling-assignments-recurring createRecurring" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete assignment
@@ -2759,6 +2850,7 @@ export def "workspaces-scheduling-assignments-recurring delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --seriesUpdateOption: string@seriesUpdateOption-completer # Represents a series option. (e.g. ALL)
 ]: nothing -> table<billable: bool, excludeDays: list<record>, hoursPerDay: float, id: string, includeNonWorkingDays: bool, note: string, period: record<end: string, start: string>, projectId: string, published: bool, recurring: record<repeat: bool, seriesId: string, weeks: int>, startTime: string, taskId: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2767,7 +2859,7 @@ export def "workspaces-scheduling-assignments-recurring delete" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/scheduling/assignments/recurring/($assignmentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update assignment
@@ -2784,6 +2876,7 @@ export def "workspaces-scheduling-assignments-recurring editRecurring" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billable: oneof<nothing, bool> # Indicates whether assignment is billable or not. (default: false)
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
   --hoursPerDay: float # Represents assignment total hours per day. (format: double, e.g. 7.5)
@@ -2802,7 +2895,7 @@ export def "workspaces-scheduling-assignments-recurring editRecurring" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change the recurring period
@@ -2819,6 +2912,7 @@ export def "workspaces-scheduling-assignments-series editRecurringPeriod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repeat: oneof<nothing, bool> # Indicates whether assignment is recurring or not. (default: false)
   weeks: int # Indicates number of weeks for assignment. (format: int32, e.g. 5)
 ]: any -> table<billable: bool, excludeDays: list<record>, hoursPerDay: float, id: string, includeNonWorkingDays: bool, note: string, period: record<end: string, start: string>, projectId: string, published: bool, recurring: record<repeat: bool, seriesId: string, weeks: int>, startTime: string, taskId: string, userId: string, workspaceId: string> {
@@ -2830,7 +2924,7 @@ export def "workspaces-scheduling-assignments-series editRecurringPeriod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get total of users' capacity on workspace
@@ -2848,6 +2942,7 @@ export def "workspaces-scheduling-assignments-user-filter-totals post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --pageSize: int # Page size. (format: int32, default: 50, e.g. 50)
@@ -2865,7 +2960,7 @@ export def "workspaces-scheduling-assignments-user-filter-totals post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get total capacity of a user
@@ -2882,6 +2977,7 @@ export def "workspaces-scheduling-assignments-users-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --start: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
@@ -2893,7 +2989,7 @@ export def "workspaces-scheduling-assignments-users-totals get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/scheduling/assignments/users/($userId)/totals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy a scheduled assignment
@@ -2910,6 +3006,7 @@ export def "workspaces-scheduling-assignments-copy copyAssignment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --seriesUpdateOption: string@seriesUpdateOption-completer # Represents a series update option. (e.g. THIS_ONE)
   userId: string # Represents a user identifier across the system. (e.g. 72k687e29ae1f428e7ebe109)
 ]: any -> table<billable: bool, excludeDays: list<record>, hoursPerDay: float, id: string, includeNonWorkingDays: bool, note: string, period: record<end: string, start: string>, projectId: string, published: bool, recurring: record<repeat: bool, seriesId: string, weeks: int>, startTime: string, taskId: string, userId: string, workspaceId: string> {
@@ -2921,7 +3018,7 @@ export def "workspaces-scheduling-assignments-copy copyAssignment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find tags on a workspace
@@ -2937,6 +3034,7 @@ export def "workspaces-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, you'll get a filtered list of tags that matches the provided string in their name. (e.g. feature_X)
   --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name will only return tags whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tags whose name contain the string value, but could be longer than the string value itself. For example, if there is a tag with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that tag in the results, whereas setting it to false will. (default: false)
   --excluded-ids: string # Represents a list of excluded ids (e.g. [90p687e29ae1f428e7ebe657, 3r8687e29ae1f428e7eg567y])
@@ -2952,7 +3050,7 @@ export def "workspaces-tags list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new tag
@@ -2968,6 +3066,7 @@ export def "workspaces-tags createNewTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a tag name. (e.g. Sprint1)
 ]: any -> record<archived: bool, id: string, name: string, workspaceId: string> {
   let input = $in
@@ -2978,7 +3077,7 @@ export def "workspaces-tags createNewTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tag
@@ -2995,13 +3094,14 @@ export def "workspaces-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived: bool, id: string, name: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/tags/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a tag by ID
@@ -3018,13 +3118,14 @@ export def "workspaces-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived: bool, id: string, name: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/tags/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a tag
@@ -3041,6 +3142,7 @@ export def "workspaces-tags updateTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # Indicates whether a tag will be archived or not. (default: false)
   --name: string # Represents a tag name. (e.g. Sprint1)
 ]: any -> record<archived: bool, id: string, name: string, workspaceId: string> {
@@ -3052,7 +3154,7 @@ export def "workspaces-tags updateTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all templates on a workspace
@@ -3070,6 +3172,7 @@ export def "workspaces-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # If provided, you'll get a filtered list of templates that contain the provided string in their name.
   --cleansed: oneof<nothing, bool> # If set to true will filter out inactive template projects and tasks. (default: false)
   --hydrated: oneof<nothing, bool> # If set to true will return hydrated template projects and tasks. (default: false)
@@ -3082,7 +3185,7 @@ export def "workspaces-templates list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create templates on a workspace
@@ -3100,6 +3203,7 @@ export def "workspaces-templates createMany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<entries: list<record>, id: string, name: string, projectsAndTasks: list<record>, userId: string, weekStart: string, workspaceId: string> {
   let input = $in
@@ -3109,7 +3213,7 @@ export def "workspaces-templates createMany" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a template
@@ -3128,13 +3232,14 @@ export def "workspaces-templates delete-by-workspaceId-templateId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entries: table<billable: bool, customFieldValues: list, description: string, id: string, projectId: string, tagIds: list, taskId: string, timeInterval: record, type: string, userId: string, workspaceId: string>, id: string, name: string, projectsAndTasks: table<projectId: string, taskId: string>, userId: string, weekStart: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/templates/($templateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get template by ID on a workspace
@@ -3153,6 +3258,7 @@ export def "workspaces-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cleansed: oneof<nothing, bool> # If set to true will filter out inactive template projects and tasks. (default: false)
   --hydrated: oneof<nothing, bool> # If set to true will return hydrated template projects and tasks. (default: false)
 ]: nothing -> record<id: string, name: string, userId: string, workspaceId: string> {
@@ -3162,7 +3268,7 @@ export def "workspaces-templates get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/templates/($templateId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a template
@@ -3181,6 +3287,7 @@ export def "workspaces-templates update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Represents a template name. (e.g. exampleTemplate)
 ]: any -> record<entries: table<billable: bool, customFieldValues: list, description: string, id: string, projectId: string, tagIds: list, taskId: string, timeInterval: record, type: string, userId: string, workspaceId: string>, id: string, name: string, projectsAndTasks: table<projectId: string, taskId: string>, userId: string, weekStart: string, workspaceId: string> {
   let input = $in
@@ -3191,7 +3298,7 @@ export def "workspaces-templates update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new time entry
@@ -3209,6 +3316,7 @@ export def "workspaces-time-entries createTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customAttributes: list # Represents a list of create custom field request objects. — item shape: {name: string, namespace: string, value: string}
   --customFields: list # Represents a list of value objects for user’s custom fields. — item shape: {customFieldId: string, sourceType?: "WORKSPACE"|"PROJECT"|"TIMEENTRY", value?: record}
@@ -3228,7 +3336,7 @@ export def "workspaces-time-entries createTimeEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark time entries as invoiced
@@ -3245,6 +3353,7 @@ export def "workspaces-time-entries-invoiced updateInvoicedStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --invoiced: oneof<nothing, bool> # Indicates whether time entry is invoiced or not. (default: false)
   timeEntryIds: list # Represents a list of invoiced time entry ids (e.g. [54m377ddd3fcab07cfbb432w, 25b687e29ae1f428e7ebe123]) — item shape: {dateOfCreationFromObjectId?: string}
 ]: any -> any {
@@ -3256,7 +3365,7 @@ export def "workspaces-time-entries-invoiced updateInvoicedStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all in progress time entries on a workspace
@@ -3272,6 +3381,7 @@ export def "workspaces-time-entries-status-in-progress get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1
   --page-size: int # format: int32, default: 10
 ]: nothing -> any {
@@ -3281,7 +3391,7 @@ export def "workspaces-time-entries-status-in-progress get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-entries/status/in-progress" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a time entry from a workspace
@@ -3298,13 +3408,14 @@ export def "workspaces-time-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-entries/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific time entry on a workspace
@@ -3321,6 +3432,7 @@ export def "workspaces-time-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hydrated: oneof<nothing, bool> # Flag to set whether to include additional information of a time entry or not. (default: false)
 ]: nothing -> record<billable: bool, costRate: record<amount: int, currency: string>, customFieldValues: table<customFieldId: string, name: string, timeEntryId: string, type: string, value: record>, description: string, hourlyRate: record<amount: int, currency: string>, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3329,7 +3441,7 @@ export def "workspaces-time-entries get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-entries/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update time entry on a workspace
@@ -3347,6 +3459,7 @@ export def "workspaces-time-entries updateTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customFields: list # Represents a list of value objects for user’s custom fields. — item shape: {customFieldId: string, sourceType?: "WORKSPACE"|"PROJECT"|"TIMEENTRY", value?: record}
   --description: string # Represents time entry description. (e.g. This is a sample time entry description.)
@@ -3365,7 +3478,7 @@ export def "workspaces-time-entries updateTimeEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get balances for a policy
@@ -3382,6 +3495,7 @@ export def "workspaces-time-off-balance-policy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1, e.g. 1
   --page-size: int # format: int32, default: 50, e.g. 50
   --qp-sort: string@sort-completer # If provided, you'll get result sorted by sort column. (e.g. USER)
@@ -3393,7 +3507,7 @@ export def "workspaces-time-off-balance-policy get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/balance/policy/($policyId)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a balance
@@ -3410,6 +3524,7 @@ export def "workspaces-time-off-balance-policy updateBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Represents a new balance note value. (e.g. Bonus days added.)
   userIds: list # Represents the list of users' identifiers whose balance is to be updated. (e.g. [5b715448b079875110792222, 5b715448b079875110791111])
   value: float # Represents a new balance value. (format: double, e.g. 22)
@@ -3422,7 +3537,7 @@ export def "workspaces-time-off-balance-policy updateBalance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get balance for a user
@@ -3439,6 +3554,7 @@ export def "workspaces-time-off-balance-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Page number.
   --page-size: string # Page size.
   --qp-sort: string@sort-completer # Sort result based on given criteria (e.g. POLICY)
@@ -3450,7 +3566,7 @@ export def "workspaces-time-off-balance-user get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/balance/user/($userId)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get policies on a workspace
@@ -3466,6 +3582,7 @@ export def "workspaces-time-off-policies findPoliciesForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Page number.
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --name: string # If provided, you'll get a filtered list of policies that contain the provided string in their name. (e.g. Holidays)
@@ -3479,7 +3596,7 @@ export def "workspaces-time-off-policies findPoliciesForWorkspace" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a time off policy
@@ -3501,6 +3618,7 @@ export def "workspaces-time-off-policies createPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowHalfDay: oneof<nothing, bool> # Indicates whether policy allows half days. (default: false, e.g. false)
   --allowNegativeBalance: oneof<nothing, bool> # Indicates whether policy allows negative balances. (default: false, e.g. true)
   approve: record # Represents approval settings. — shape: {requiresApproval?: bool, specificMembers?: bool, teamManagers?: bool, userIds?: list}
@@ -3525,7 +3643,7 @@ export def "workspaces-time-off-policies createPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a policy
@@ -3542,13 +3660,14 @@ export def "workspaces-time-off-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a time off policy
@@ -3565,13 +3684,14 @@ export def "workspaces-time-off-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowHalfDay: bool, allowNegativeBalance: bool, approve: record<requiresApproval: bool, specificMembers: bool, teamManagers: bool, userIds: list<string>>, archived: bool, automaticAccrual: record<amount: float, period: string, timeUnit: string>, automaticTimeEntryCreation: record<defaultEntities: record<projectId: string, taskId: string>, enabled: bool>, everyoneIncludingNew: bool, id: string, name: string, negativeBalance: record<amount: float, period: string, shouldReset: bool, timeUnit: string>, projectId: string, timeUnit: string, userGroupIds: list<string>, userIds: list<string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change a policy status
@@ -3588,6 +3708,7 @@ export def "workspaces-time-off-policies updatePolicyStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-3 # Provide the status you would like to use for changing the policy. (e.g. ACTIVE)
 ]: any -> record<allowHalfDay: bool, allowNegativeBalance: bool, approve: record<requiresApproval: bool, specificMembers: bool, teamManagers: bool, userIds: list<string>>, archived: bool, automaticAccrual: record<amount: float, period: string, timeUnit: string>, automaticTimeEntryCreation: record<defaultEntities: record<projectId: string, taskId: string>, enabled: bool>, everyoneIncludingNew: bool, id: string, name: string, negativeBalance: record<amount: float, period: string, shouldReset: bool, timeUnit: string>, projectId: string, timeUnit: string, userGroupIds: list<string>, userIds: list<string>, workspaceId: string> {
   let input = $in
@@ -3598,7 +3719,7 @@ export def "workspaces-time-off-policies updatePolicyStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a policy
@@ -3621,6 +3742,7 @@ export def "workspaces-time-off-policies updatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowHalfDay: oneof<nothing, bool> # Indicates whether policy allows half day. (default: false, e.g. true)
   --allowNegativeBalance: oneof<nothing, bool> # Indicates whether policy allows negative balance. (default: false, e.g. false)
   approve: record # Represents approval settings. — shape: {requiresApproval?: bool, specificMembers?: bool, teamManagers?: bool, userIds?: list}
@@ -3644,7 +3766,7 @@ export def "workspaces-time-off-policies updatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a time off request
@@ -3662,6 +3784,7 @@ export def "workspaces-time-off-policies-requests createTimeOffRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Provide the note you would like to use for creating the time off request. (e.g. Create Time Off Note)
   timeOffPeriod: record # Provide the period you would like to use for creating the time off request. If `timeZone` isn't set, should be aligned with time zone for user in settings. Can be shifted from user time zone with explicit setting of `timeZone`. — shape: {halfDayPeriod?: "FIRST_HALF"|"SECOND_HALF"|"NOT_DEFINED", isHalfDay?: bool, period: record, timeOffHalfDayPeriod?: "FIRST_HALF"|"SECOND_HALF"|"NOT_DEFINED"}
 ]: any -> record<balance: float, balanceDiff: float, createdAt: string, id: string, note: string, policyId: string, policyName: string, requesterUserId: string, requesterUserName: string, status: record<changedAt: string, changedByUserId: string, changedByUserName: string, changedForUserName: string, note: string, statusType: string>, timeOffPeriod: record<halfDay: bool, halfDayHours: record<end: string, start: string>, halfDayPeriod: string, period: record<end: string, start: string>>, timeUnit: string, userEmail: string, userId: string, userName: string, userTimeZone: string, workspaceId: string> {
@@ -3673,7 +3796,7 @@ export def "workspaces-time-off-policies-requests createTimeOffRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a time off request
@@ -3691,13 +3814,14 @@ export def "workspaces-time-off-policies-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<balanceDiff: float, createdAt: string, id: string, note: string, policyId: string, status: record<changedAt: string, changedByUserId: string, changedByUserName: string, changedForUserName: string, note: string, statusType: string>, timeOffPeriod: record<halfDay: bool, halfDayHours: record<end: string, start: string>, halfDayPeriod: string, period: record<end: string, start: string>>, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/time-off/policies/($policyId)/requests/($requestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change a time off request status
@@ -3715,6 +3839,7 @@ export def "workspaces-time-off-policies-requests changeTimeOffRequestStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Provide the note you would like to use for changing the time off request. (e.g. Time Off Request Note)
   --status: string@status-completer-4 # Provide the status you would like to use for changing the time off request. (e.g. APPROVED)
 ]: any -> record<balanceDiff: float, createdAt: string, id: string, note: string, policyId: string, status: record<changedAt: string, changedByUserId: string, changedByUserName: string, changedForUserName: string, note: string, statusType: string>, timeOffPeriod: record<halfDay: bool, halfDayHours: record<end: string, start: string>, halfDayPeriod: string, period: record<end: string, start: string>>, userId: string, workspaceId: string> {
@@ -3726,7 +3851,7 @@ export def "workspaces-time-off-policies-requests changeTimeOffRequestStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a time off request for a user
@@ -3745,6 +3870,7 @@ export def "workspaces-time-off-policies-users-requests createTimeOffRequestForO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Provide the note you would like to use for creating the time off request. (e.g. Create Time Off Note)
   timeOffPeriod: record # Provide the period you would like to use for creating the time off request. If `timeZone` isn't set, should be aligned with time zone for user in settings. Can be shifted from user time zone with explicit setting of `timeZone`. — shape: {halfDayPeriod?: "FIRST_HALF"|"SECOND_HALF"|"NOT_DEFINED", isHalfDay?: bool, period: record, timeOffHalfDayPeriod?: "FIRST_HALF"|"SECOND_HALF"|"NOT_DEFINED"}
 ]: any -> record<balance: float, balanceDiff: float, createdAt: string, id: string, note: string, policyId: string, policyName: string, requesterUserId: string, requesterUserName: string, status: record<changedAt: string, changedByUserId: string, changedByUserName: string, changedForUserName: string, note: string, statusType: string>, timeOffPeriod: record<halfDay: bool, halfDayHours: record<end: string, start: string>, halfDayPeriod: string, period: record<end: string, start: string>>, timeUnit: string, userEmail: string, userId: string, userName: string, userTimeZone: string, workspaceId: string> {
@@ -3756,7 +3882,7 @@ export def "workspaces-time-off-policies-users-requests createTimeOffRequestForO
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all time off requests on a workspace
@@ -3772,6 +3898,7 @@ export def "workspaces-time-off-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --end: string # Provide the end of the filtering period. Used with `start` to filter for time-off requests periods that occur (fully or partially) within this range. Both parameters must be provided for filtering to take effect. Provide end in format YYYY-MM-DDTHH:MM:SS.ssssssZ (format: date-time, e.g. 2022-08-26T23:55:06.281873Z)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --pageSize: int # Page size. (format: int32, default: 50, e.g. 50)
@@ -3788,7 +3915,7 @@ export def "workspaces-time-off-requests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find all groups on a workspace
@@ -3804,6 +3931,7 @@ export def "workspaces-user-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string # If provided, you'll get a filtered list of groups that matches the string provided in their project id. (e.g. 5a0ab5acb07987125438b60f)
   --name: string # If provided, you'll get a filtered list of groups that matches the string provided in their name. (e.g. development_team)
   --sort-column: string@sort-column-completer-4 # Column to be used as the sorting criteria. (e.g. NAME)
@@ -3818,7 +3946,7 @@ export def "workspaces-user-groups get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new group
@@ -3834,6 +3962,7 @@ export def "workspaces-user-groups createUserGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a user group name. (e.g. development_team)
 ]: any -> record<id: string, name: string, teamManagers: table<id: string, name: string>, userIds: list<string>, workspaceId: string> {
   let input = $in
@@ -3844,7 +3973,7 @@ export def "workspaces-user-groups createUserGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a group
@@ -3861,13 +3990,14 @@ export def "workspaces-user-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, teamManagers: table<id: string, name: string>, userIds: list<string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user-groups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group
@@ -3884,6 +4014,7 @@ export def "workspaces-user-groups updateUserGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a user group name. (e.g. development_team)
 ]: any -> record<id: string, name: string, teamManagers: table<id: string, name: string>, userIds: list<string>, workspaceId: string> {
   let input = $in
@@ -3894,7 +4025,7 @@ export def "workspaces-user-groups updateUserGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add users to a group
@@ -3911,6 +4042,7 @@ export def "workspaces-user-groups-users addUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # Represents a user identifier across the system. (e.g. 5a0ab5acb07987125438b60f)
 ]: any -> record<id: string, name: string, teamManagers: table<id: string, name: string>, userIds: list<string>, workspaceId: string> {
   let input = $in
@@ -3921,7 +4053,7 @@ export def "workspaces-user-groups-users addUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a user from a group
@@ -3939,13 +4071,14 @@ export def "workspaces-user-groups-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, teamManagers: table<id: string, name: string>, userIds: list<string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user-groups/($userGroupId)/users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all time entries for a user on a workspace
@@ -3962,6 +4095,7 @@ export def "workspaces-user-time-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time-entry-ids: list # Represents a list of time entry ids to delete. (e.g. 5a0ab5acb07987125438b60f)
 ]: nothing -> table<billable: bool, customFieldValues: list<record>, description: string, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3970,7 +4104,7 @@ export def "workspaces-user-time-entries delete" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user/($userId)/time-entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time entries for a user on a workspace
@@ -3987,6 +4121,7 @@ export def "workspaces-user-time-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Represents a term for searching time entries by description. (e.g. Description keywords)
   --start: string # Represents a start date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
   --end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
@@ -4007,7 +4142,7 @@ export def "workspaces-user-time-entries get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user/($userId)/time-entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a currently running timer on a workspace for a user
@@ -4024,6 +4159,7 @@ export def "workspaces-user-time-entries stopRunningTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (format: date-time, e.g. 2021-01-01T00:00:00Z)
 ]: any -> record<billable: bool, customFieldValues: table<customFieldId: string, name: string, timeEntryId: string, type: string, value: record>, description: string, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let input = $in
@@ -4034,7 +4170,7 @@ export def "workspaces-user-time-entries stopRunningTimeEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new time entry for another user on workspace
@@ -4053,6 +4189,7 @@ export def "workspaces-user-time-entries createForOthers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-entry: string # Represents a time entry identifier across the system. (e.g. 64c777ddd3fcab07cfbb210c)
   --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customAttributes: list # Represents a list of create custom field request objects. — item shape: {name: string, namespace: string, value: string}
@@ -4074,7 +4211,7 @@ export def "workspaces-user-time-entries createForOthers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk edit time entries
@@ -4091,6 +4228,7 @@ export def "workspaces-user-time-entries replaceMany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hydrated: oneof<nothing, bool> # If set to true, results will contain additional information about the time entry. (default: false)
   --body: record
 ]: any -> table<billable: bool, customFieldValues: list<record>, description: string, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
@@ -4102,7 +4240,7 @@ export def "workspaces-user-time-entries replaceMany" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Duplicate a time entry
@@ -4120,13 +4258,14 @@ export def "workspaces-user-time-entries-duplicate duplicateTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billable: bool, customFieldValues: table<customFieldId: string, name: string, timeEntryId: string, type: string, value: record>, description: string, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/user/($userId)/time-entries/($id)/duplicate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find all users on a workspace
@@ -4142,6 +4281,7 @@ export def "workspaces-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # If provided, you'll get a filtered list of users that contain the provided string in their email address. (e.g. mail@example.com)
   --project-id: string # If provided, you'll get a list of users that have access to the project. (e.g. 21a687e29ae1f428e7ebe606)
   --status: string@status-completer-5 # If provided, you'll get a filtered list of users with the corresponding status. (e.g. ACTIVE)
@@ -4160,7 +4300,7 @@ export def "workspaces-users get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to a workspace
@@ -4176,6 +4316,7 @@ export def "workspaces-users addUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --send-email: string # Indicates whether to send an email when user is added to the workspace. (default: true)
   email: string # Represents an email address of the user. (e.g. johndoe@example.com)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
@@ -4188,7 +4329,7 @@ export def "workspaces-users addUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Filter workspace users
@@ -4204,6 +4345,7 @@ export def "workspaces-users-info filterUsersOfWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountStatuses: list # If provided, you'll get a filtered list of users with the corresponding account status filter. If not, this will only filter ACTIVE, PENDING_EMAIL_VERIFICATION, and NOT_REGISTERED Users. (e.g. [LIMITED, ACTIVE])
   --email: string # If provided, you'll get a filtered list of users that contain the provided string in their email address. (e.g. mail@example.com)
   --includeRoles: oneof<nothing, bool> # If you pass along includeRoles=true, you'll get each user's detailed manager role (including projects and members for whom they're managers) (default: false)
@@ -4226,7 +4368,7 @@ export def "workspaces-users-info filterUsersOfWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove user from a workspace
@@ -4245,13 +4387,14 @@ export def "workspaces-users removeMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's status
@@ -4268,6 +4411,7 @@ export def "workspaces-users updateUserStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-6 # Represents membership status. (e.g. ACTIVE)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
   let input = $in
@@ -4278,7 +4422,7 @@ export def "workspaces-users updateUserStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a user's cost rate
@@ -4295,6 +4439,7 @@ export def "workspaces-users-cost-rate setCostRateForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
@@ -4306,7 +4451,7 @@ export def "workspaces-users-cost-rate setCostRateForUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a user's custom field
@@ -4324,6 +4469,7 @@ export def "workspaces-users-custom-field-value upsertUserCustomFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --value: record # Represents custom field value. (e.g. 20231211-12345)
 ]: any -> record<customFieldId: string, customFieldName: string, customFieldType: record<CHECKBOX: string, DROPDOWN_MULTIPLE: string, DROPDOWN_SINGLE: string, LINK: string, NUMBER: string, TXT: string>, userId: string, value: record> {
   let input = $in
@@ -4334,7 +4480,7 @@ export def "workspaces-users-custom-field-value upsertUserCustomFieldValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a user's hourly rate
@@ -4351,6 +4497,7 @@ export def "workspaces-users-hourly-rate setHourlyRateForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Represents an hourly rate amount as integer. (format: int32, e.g. 20000)
   --since: string # Represents a date and time in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
 ]: any -> record<cakeOrganizationId: string, costRate: record<amount: int, currency: string>, currencies: table<code: string, id: string, isDefault: bool>, featureSubscriptionType: record<addonSubscriptionPlan: string, featurePermissions: list<string>, legacy: bool, paidPlan: bool, regionalAllowed: bool, weight: int>, features: record<ADD_TIME_FOR_OTHERS: string, ADMIN_PANEL: string, ALERTS: string, APPROVAL: string, ATTENDANCE_REPORT: string, AUDIT_LOG: string, AUTOMATIC_LOCK: string, BILLABLE_HOURS: string, BRANDED_REPORTS: string, BREAKS: string, BULK_EDIT: string, CLIENT_CURRENCY: string, CREATION_PERMISSIONS: string, CSV_EXPORT: string, CUSTOM_FIELDS: string, CUSTOM_REPORTING: string, CUSTOM_SUBDOMAIN: string, DECIMAL_FORMAT: string, DISABLE_MANUAL_MODE: string, EDIT_MEMBER_PROFILE: string, EXCLUDE_NON_BILLABLE_FROM_ESTIMATE: string, EXPENSES: string, FAVORITE_ENTRIES: string, FILE_IMPORT: string, FORECASTING: string, GRANT_PROJECT_MANAGER_ROLE: string, HIDE_PAGES: string, HISTORIC_RATES: string, INVOICE_EMAILS: string, INVOICE_REMINDERS: string, INVOICING: string, KIOSK: string, KIOSK_PIN_REQUIRED: string, KIOSK_QR_CODE: string, KIOSK_SESSION_DURATION: string, KIOSK_SIX_DIGIT_PIN: string, LABOR_COST: string, LIMITED_USERS: string, LOCATIONS: string, MANAGER_ROLE: string, MONTHLY_OVERTIME_CALCULATION_PERIOD: string, MULTI_FACTOR_AUTHENTICATION: string, ONE_MONTH_RANGE_REPORTS: string, ONE_YEAR_RANGE_REPORTS: string, PRIVATE_PROJECT_ACCESS: string, PROJECT_BUDGET: string, PROJECT_ESTIMATE: string, PROJECT_TEMPLATES: string, QUICKBOOKS_INTEGRATION: string, RECURRING_ESTIMATES: string, RECURRING_INVOICES: string, REQUIRED_FIELDS: string, SCHEDULED_REPORTS: string, SCHEDULING: string, SCHEDULING_FORECASTING: string, SCIM: string, SCREENSHOTS: string, SHARED_REPORTS: string, SPLIT_TIME_ENTRY: string, SSO: string, SUMMARY_ESTIMATE: string, TARGETS_AND_REMINDERS: string, TASK_RATES: string, TIMESHEET_IMPORT: string, TIME_OFF: string, TIME_TRACKING: string, UNLIMITED_REPORTS: string, UNLIMITED_USER_SEATS: string, USER_CUSTOM_FIELDS: string, USER_IMPORT: string, WEEKLY_OVERTIME_CALCULATION_PERIOD: string, WHO_CAN_CHANGE_TIMEENTRY_BILLABILITY: string, WHO_CAN_SEE_ALL_TIME_ENTRIES: string, WHO_CAN_SEE_PROJECT_STATUS: string, WHO_CAN_SEE_PUBLIC_PROJECTS_ENTRIES: string, WHO_CAN_SEE_TEAMS_DASHBOARD: string, WORKSPACE_LOCK_TIMEENTRIES: string, WORKSPACE_TIME_AUDIT: string, WORKSPACE_TIME_ROUNDING: string, WORKSPACE_TRANSFER: string, XLSX_EXPORT: string>, hourlyRate: record<amount: int, currency: string>, id: string, imageUrl: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, subdomain: record<enabled: bool, name: string>, workspaceSettings: record<activeBillableHours: bool, adminOnlyPages: string, automaticLock: record<changeDay: string, dayOfMonth: int, firstDay: string, olderThanPeriod: string, olderThanValue: int, type: string>, canSeeTimeSheet: bool, canSeeTracker: bool, currencyFormat: string, defaultBillableProjects: bool, durationFormat: string, entityCreationPermissions: record<whoCanCreateProjectsAndClients: record, whoCanCreateTags: record, whoCanCreateTasks: record>, forceDescription: bool, forceProjects: bool, forceTags: bool, forceTasks: bool, isProjectPublicByDefault: bool, lockTimeEntries: string, lockTimeZone: string, multiFactorEnabled: bool, numberFormat: string, onlyAdminsCanChangeBillableStatus: bool, onlyAdminsCreateProject: bool, onlyAdminsCreateTag: bool, onlyAdminsCreateTask: bool, onlyAdminsSeeAllTimeEntries: bool, onlyAdminsSeeBillableRates: bool, onlyAdminsSeeDashboard: bool, onlyAdminsSeePublicProjectsEntries: bool, projectFavorites: bool, projectGroupingLabel: string, projectLabel: string, projectPickerSpecialFilter: bool, round: record<minutes: string, round: string>, taskLabel: string, timeRoundingInReports: bool, timeTrackingMode: string, trackTimeDownToSecond: bool, workingDays: list<string>>> {
@@ -4362,7 +4509,7 @@ export def "workspaces-users-hourly-rate setHourlyRateForUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find user's team manager
@@ -4379,6 +4526,7 @@ export def "workspaces-users-managers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-column: string@sort-column-completer-6 # Sorting column criteria (e.g. ID)
   --sort-order: string@sort-order-completer # Sorting mode (e.g. ASCENDING)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
@@ -4390,7 +4538,7 @@ export def "workspaces-users-managers get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/users/($userId)/managers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user's manager role
@@ -4407,6 +4555,7 @@ export def "workspaces-users-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entityId: string # Represents an entity identifier across the system. (e.g. 60f924bafdaf031696ec6218)
   role: string@role-completer # Represents a valid role. (e.g. TEAM_MANAGER)
   --sourceType: string@sourceType-completer # Optional field used to indicate that the target of the operation is a user group, in which case the value USER_GROUP should be used, alongside a valid user group ID for the entityId field. If omitted, a user ID should be used for the entityId field.  (e.g. USER_GROUP)
@@ -4419,7 +4568,7 @@ export def "workspaces-users-roles delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Give manager role to a user
@@ -4436,6 +4585,7 @@ export def "workspaces-users-roles createUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entityId: string # Represents an entity identifier across the system. (e.g. 60f924bafdaf031696ec6218)
   role: string@role-completer # Represents a valid role. (e.g. TEAM_MANAGER)
   --sourceType: string@sourceType-completer # Optional field used to indicate that the target of the operation is a user group, in which case the value USER_GROUP should be used, alongside a valid user group ID for the entityId field. If omitted, a user ID should be used for the entityId field.  (e.g. USER_GROUP)
@@ -4448,7 +4598,7 @@ export def "workspaces-users-roles createUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks on a workspace
@@ -4464,6 +4614,7 @@ export def "workspaces-webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2 # Represents a webhook type. (e.g. USER_CREATED)
 ]: nothing -> record<webhooks: table<authToken: string, deliveryEnabled: bool, enabled: bool, id: string, name: string, planEnabled: bool, triggerSource: list, triggerSourceType: record, url: string, userId: string, webhookEvent: record, workspaceId: string>, workspaceWebhookCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4472,7 +4623,7 @@ export def "workspaces-webhooks list" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook
@@ -4488,6 +4639,7 @@ export def "workspaces-webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a webhook name. (e.g. stripe)
   triggerSource: list # Represents a list of trigger sources. (e.g. [54a687e29ae1f428e7ebe909, 87p187e29ae1f428e7ebej56])
   triggerSourceType: string@triggerSourceType-completer # Represents a webhook event trigger source type. (e.g. PROJECT_ID)
@@ -4502,7 +4654,7 @@ export def "workspaces-webhooks createWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook
@@ -4519,13 +4671,14 @@ export def "workspaces-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific webhook by id
@@ -4542,13 +4695,14 @@ export def "workspaces-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authToken: string, deliveryEnabled: bool, enabled: bool, id: string, name: string, planEnabled: bool, triggerSource: list<string>, triggerSourceType: record<ASSIGNMENT_ID: string, EXPENSE_ID: string, PROJECT_ID: string, TAG_ID: string, TASK_ID: string, USER_ID: string, WORKSPACE_ID: string, entityType: string>, url: string, userId: string, webhookEvent: record<APPROVAL_REQUEST_STATUS_UPDATED: string, ASSIGNMENT_CREATED: string, ASSIGNMENT_DELETED: string, ASSIGNMENT_PUBLISHED: string, ASSIGNMENT_UPDATED: string, BALANCE_UPDATED: string, BILLABLE_RATE_UPDATED: string, CLIENT_DELETED: string, CLIENT_UPDATED: string, COST_RATE_UPDATED: string, EXPENSE_CREATED: string, EXPENSE_DELETED: string, EXPENSE_RESTORED: string, EXPENSE_UPDATED: string, INVOICE_UPDATED: string, LIMITED_USERS_ADDED_TO_WORKSPACE: string, NEW_APPROVAL_REQUEST: string, NEW_CLIENT: string, NEW_INVOICE: string, NEW_PROJECT: string, NEW_TAG: string, NEW_TASK: string, NEW_TIMER_STARTED: string, NEW_TIME_ENTRY: string, PROJECT_DELETED: string, PROJECT_UPDATED: string, TAG_DELETED: string, TAG_UPDATED: string, TASK_DELETED: string, TASK_UPDATED: string, TIMER_STOPPED: string, TIME_ENTRY_DELETED: string, TIME_ENTRY_RESTORED: string, TIME_ENTRY_SPLIT: string, TIME_ENTRY_UPDATED: string, TIME_OFF_REQUESTED: string, TIME_OFF_REQUEST_APPROVED: string, TIME_OFF_REQUEST_REJECTED: string, TIME_OFF_REQUEST_STARTED: string, TIME_OFF_REQUEST_UPDATED: string, TIME_OFF_REQUEST_WITHDRAWN: string, USERS_INVITED_TO_WORKSPACE: string, USER_ACTIVATED_ON_WORKSPACE: string, USER_DEACTIVATED_ON_WORKSPACE: string, USER_DELETED_FROM_WORKSPACE: string, USER_EMAIL_CHANGED: string, USER_GROUP_CREATED: string, USER_GROUP_DELETED: string, USER_GROUP_UPDATED: string, USER_JOINED_WORKSPACE: string, USER_UPDATED: string, feature: string, payloadType: string, validSourceTypes: list<string>>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -4565,6 +4719,7 @@ export def "workspaces-webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Represents a webhook name. (e.g. Stripe)
   triggerSource: list # Represents a list of trigger sources. (e.g. [54a687e29ae1f428e7ebe909, 87p187e29ae1f428e7ebej56])
   triggerSourceType: string@triggerSourceType-completer # Represents a webhook event trigger source type. (e.g. PROJECT_ID)
@@ -4579,7 +4734,7 @@ export def "workspaces-webhooks updateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get logs for a webhook
@@ -4596,6 +4751,7 @@ export def "workspaces-webhooks-logs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 0, e.g. 1)
   --size: int # Page size. (format: int32, default: 50, e.g. 50)
   --body-from: string # Represents date and time in yyyy-MM-ddThh:mm:ssZ format. If provided, results will include logs which occurred after this value. (format: date-time, e.g. 2023-02-01T13:00:46Z)
@@ -4612,7 +4768,7 @@ export def "workspaces-webhooks-logs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhook event statuses for a webhook
@@ -4629,6 +4785,7 @@ export def "workspaces-webhooks-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (format: int32, default: 0, e.g. 1)
   --size: int # Page size. (format: int32, default: 50, e.g. 50)
   --statuses: string@statuses-completer-1 # Represents a filter for webhook event status. (e.g. FAILED)
@@ -4639,7 +4796,7 @@ export def "workspaces-webhooks-statuses get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/webhooks/($webhookId)/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a new token
@@ -4656,13 +4813,14 @@ export def "workspaces-webhooks-token generateNewToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authToken: string, deliveryEnabled: bool, enabled: bool, id: string, name: string, planEnabled: bool, triggerSource: list<string>, triggerSourceType: record<ASSIGNMENT_ID: string, EXPENSE_ID: string, PROJECT_ID: string, TAG_ID: string, TASK_ID: string, USER_ID: string, WORKSPACE_ID: string, entityType: string>, url: string, userId: string, webhookEvent: record<APPROVAL_REQUEST_STATUS_UPDATED: string, ASSIGNMENT_CREATED: string, ASSIGNMENT_DELETED: string, ASSIGNMENT_PUBLISHED: string, ASSIGNMENT_UPDATED: string, BALANCE_UPDATED: string, BILLABLE_RATE_UPDATED: string, CLIENT_DELETED: string, CLIENT_UPDATED: string, COST_RATE_UPDATED: string, EXPENSE_CREATED: string, EXPENSE_DELETED: string, EXPENSE_RESTORED: string, EXPENSE_UPDATED: string, INVOICE_UPDATED: string, LIMITED_USERS_ADDED_TO_WORKSPACE: string, NEW_APPROVAL_REQUEST: string, NEW_CLIENT: string, NEW_INVOICE: string, NEW_PROJECT: string, NEW_TAG: string, NEW_TASK: string, NEW_TIMER_STARTED: string, NEW_TIME_ENTRY: string, PROJECT_DELETED: string, PROJECT_UPDATED: string, TAG_DELETED: string, TAG_UPDATED: string, TASK_DELETED: string, TASK_UPDATED: string, TIMER_STOPPED: string, TIME_ENTRY_DELETED: string, TIME_ENTRY_RESTORED: string, TIME_ENTRY_SPLIT: string, TIME_ENTRY_UPDATED: string, TIME_OFF_REQUESTED: string, TIME_OFF_REQUEST_APPROVED: string, TIME_OFF_REQUEST_REJECTED: string, TIME_OFF_REQUEST_STARTED: string, TIME_OFF_REQUEST_UPDATED: string, TIME_OFF_REQUEST_WITHDRAWN: string, USERS_INVITED_TO_WORKSPACE: string, USER_ACTIVATED_ON_WORKSPACE: string, USER_DEACTIVATED_ON_WORKSPACE: string, USER_DELETED_FROM_WORKSPACE: string, USER_EMAIL_CHANGED: string, USER_GROUP_CREATED: string, USER_GROUP_DELETED: string, USER_GROUP_UPDATED: string, USER_JOINED_WORKSPACE: string, USER_UPDATED: string, feature: string, payloadType: string, validSourceTypes: list<string>>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/webhooks/($webhookId)/token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate shared report by ID
@@ -4678,6 +4836,7 @@ export def "shared-reports generateSharedReportV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateRangeStart: string # e.g. 2018-11-01T00:00:00
   --dateRangeEnd: string # e.g. 2018-11-30T23:59:59.999
   --sortOrder: string # e.g. ASCENDING
@@ -4692,7 +4851,7 @@ export def "shared-reports generateSharedReportV1" [
   let full_url = (build-url $base $"/v1/shared-reports/($id)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate an attendance report
@@ -4720,6 +4879,7 @@ export def "workspaces-reports-attendance generateAttendanceReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
@@ -4761,7 +4921,7 @@ export def "workspaces-reports-attendance generateAttendanceReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a detailed report
@@ -4790,6 +4950,7 @@ export def "workspaces-reports-detailed generateDetailedReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
@@ -4832,7 +4993,7 @@ export def "workspaces-reports-detailed generateDetailedReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate an expense report
@@ -4855,6 +5016,7 @@ export def "workspaces-reports-expenses-detailed generateDetailedReportV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --approvalState: string@approvalState-completer # Represents an approval state (e.g. APPROVED)
   --billable: oneof<nothing, bool> # Indicates whether report is billable (e.g. true)
   --categories: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -4888,7 +5050,7 @@ export def "workspaces-reports-expenses-detailed generateDetailedReportV1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a summary report
@@ -4917,6 +5079,7 @@ export def "workspaces-reports-summary generateSummaryReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
@@ -4959,7 +5122,7 @@ export def "workspaces-reports-summary generateSummaryReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a weekly report
@@ -4988,6 +5151,7 @@ export def "workspaces-reports-weekly generateWeeklyReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
@@ -5030,7 +5194,7 @@ export def "workspaces-reports-weekly generateWeeklyReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all my shared reports
@@ -5046,6 +5210,7 @@ export def "workspaces-shared-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1, e.g. 2
   --pageSize: int # format: int32, default: 50, e.g. 20
   --sharedReportsFilter: string@sharedReportsFilter-completer # default: ALL, e.g. CREATED_BY_ME
@@ -5056,7 +5221,7 @@ export def "workspaces-shared-reports get" [
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/shared-reports" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a shared report
@@ -5073,6 +5238,7 @@ export def "workspaces-shared-reports saveSharedReportV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # shape: {amountShown?: "EARNED"|"COST"|"PROFIT"|"HIDE_AMOUNT"|"EXPORT", amounts?: list, approvalState?: "APPROVED"|"UNAPPROVED"|"ALL", archived?: bool, attendanceFilter?: record, billable?: bool, clients?: record, currency?: record, customFields?: list, dateFormat?: string, dateRangeEnd: string, dateRangeStart: string, dateRangeType?: "ABSOLUTE"|"TODAY"|"YESTERDAY"|"THIS_WEEK"|"LAST_WEEK"|"PAST_TWO_WEEKS"|"THIS_MONTH"|"LAST_MONTH"|"THIS_YEAR"|"LAST_YEAR", description?: string, detailedFilter?: record, exportType?: "JSON"|"JSON_V1"|"PDF"|"CSV"|"XLSX"|"ZIP", invoicingState?: "INVOICED"|"UNINVOICED"|"ALL", projects?: record, rounding?: bool, sortOrder?: "ASCENDING"|"DESCENDING", summaryFilter?: record, tags?: record, tasks?: record, timeFormat?: string, timeZone?: string, userCustomFields?: list, userGroups?: record, userLocale?: string, users?: record, weekStart?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", weeklyFilter?: record, withoutDescription?: bool, zoomLevel?: "WEEK"|"MONTH"|"YEAR"}
   --fixedDate: oneof<nothing, bool> # Indicates whether the shared report has a fixed date range.
   --isPublic: oneof<nothing, bool> # Indicates whether the shared report is public or not (e.g. false)
@@ -5089,7 +5255,7 @@ export def "workspaces-shared-reports saveSharedReportV1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a shared report
@@ -5106,13 +5272,14 @@ export def "workspaces-shared-reports delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://reports.api.clockify.me")
   let full_url = (build-url $base $"/v1/workspaces/($workspaceId)/shared-reports/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a shared report
@@ -5129,6 +5296,7 @@ export def "workspaces-shared-reports updateSharedReportV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fixedDate: oneof<nothing, bool> # Indicates whether the shared report has a fixed date range. (e.g. false)
   --isPublic: oneof<nothing, bool> # Indicates whether the shared report is public. (e.g. false)
   name: string # Represents a shared reports name. (e.g. Weekly Updated Report)
@@ -5143,7 +5311,7 @@ export def "workspaces-shared-reports updateSharedReportV1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate an audit log report
@@ -5160,6 +5328,7 @@ export def "workspaces-audit-log post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   actions: list # Represents a set of audit log actions. (e.g. [CREATE_TIME_PERSONAL_MANUAL, CREATE_TIME_PERSONAL_TIMER, CREATE_PROJECT])
   authors: record # Represents the audit log author filter. — shape: {authorIds: list, contains: "CONTAINS"|"DOES_NOT_CONTAIN"}
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (default: , e.g. 2025-05-01T23:59:59Z)
@@ -5175,5 +5344,5 @@ export def "workspaces-audit-log post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

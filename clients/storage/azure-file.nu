@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<value: table<properties: record, sku: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -111,7 +113,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/fileServices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all shares.
@@ -129,6 +131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --maxpagesize: string # Optional. Specified maximum number of shares that can be included in the list.
   --filter: string # Optional. When specified, only share names starting with the filter will be listed.
@@ -139,7 +142,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/fileServices/default/shares" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes specified share under its account.
@@ -158,6 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -166,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/fileServices/default/shares/($shareName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets properties of a specified share.
@@ -185,6 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<lastModifiedTime: string, metadata: record, shareQuota: int>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -193,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/fileServices/default/shares/($shareName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates share properties as specified in request body. Properties not mentioned in the request will not be changed. Update fails if the specified share does not already exist. 
@@ -213,6 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of the file share. — shape: {metadata?: record, shareQuota?: int}
 ]: any -> record<properties: record<lastModifiedTime: string, metadata: record, shareQuota: int>, etag: string> {
@@ -225,7 +231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new share under the specified account as described by request body. The share resource includes metadata and properties for that share. It does not include a list of the files contained by the share. 
@@ -245,6 +251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of the file share. — shape: {metadata?: record, shareQuota?: int}
 ]: any -> record<properties: record<lastModifiedTime: string, metadata: record, shareQuota: int>, etag: string> {
@@ -257,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the properties of file services in storage accounts, including CORS (Cross-Origin Resource Sharing) rules.
@@ -276,6 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<cors: record<corsRules: list>, shareDeleteRetentionPolicy: record<days: int, enabled: bool>>, sku: record<name: string, tier: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -284,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/fileServices/($FileServicesName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the properties of file services in storage accounts, including CORS (Cross-Origin Resource Sharing) rules. 
@@ -305,6 +313,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of File services in storage account. — shape: {cors?: any, shareDeleteRetentionPolicy?: any}
   --sku: any # The SKU of the storage account. — shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS"}
@@ -318,5 +327,5 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

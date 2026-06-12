@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -127,7 +128,7 @@ def type-completer-6 [] { ["ai_agent"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize authorize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -160,6 +161,7 @@ export def "authorize authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --response-type: string@response-type-completer # The type of response we'd like to receive. (format: token, e.g. code)
   --client-id: string # The Client ID of the application that is requesting to authenticate the user. To get the Client ID for your application, log in to your Box developer console and click the **Edit Application** link for the application you're working with. In the OAuth 2.0 Parameters section of the configuration page, find the item labelled `client_id`. The text of that item is your application's Client ID. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   --redirect-uri: string # The URI to which Box redirects the browser after the user has granted or denied the application permission. This URI match one of the redirect URIs in the configuration of your application. It must be a valid HTTPS URI and it needs to be able to handle the redirection to complete the next step in the OAuth 2.0 flow. Although this parameter is optional, it must be a part of the authorization URL if you configured multiple redirect URIs for the application in the developer console. A missing parameter causes a `redirect_uri_missing` error after the user grants application access. (format: url, e.g. http://example.com/auth/callback)
@@ -172,7 +174,7 @@ export def "authorize authorize" [
   let full_url = (build-url $base "/authorize" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request access token
@@ -187,6 +189,7 @@ export def "oauth2-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   grant_type: string@grant-type-completer # The type of request being made, either using a client-side obtained authorization code, a refresh token, a JWT assertion, client credentials grant or another access token for the purpose of downscoping a token. (format: urn, e.g. authorization_code)
   --client-id: string # The Client ID of the application requesting an access token.  Used in combination with `authorization_code`, `client_credentials`, or `urn:ietf:params:oauth:grant-type:jwt-bearer` as the `grant_type`. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   --client-secret: string # The client secret of the application requesting an access token.  Used in combination with `authorization_code`, `client_credentials`, or `urn:ietf:params:oauth:grant-type:jwt-bearer` as the `grant_type`. (e.g. hOzsTeFlT6ko0dme22uGbQal04SBPYc1)
@@ -211,7 +214,7 @@ export def "oauth2-token token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refresh access token
@@ -226,6 +229,7 @@ export def "oauth2-tokenrefresh tokenrefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   grant_type: string@grant-type-completer-1 # The type of request being made, in this case a refresh request. (format: urn, e.g. refresh_token)
   client_id: string # The client ID of the application requesting to refresh the token. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   client_secret: string # The client secret of the application requesting to refresh the token. (e.g. hOzsTeFlT6ko0dme22uGbQal04SBPYc1)
@@ -239,7 +243,7 @@ export def "oauth2-tokenrefresh tokenrefresh" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Revoke access token
@@ -254,6 +258,7 @@ export def "oauth2-revoke revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # The Client ID of the application requesting to revoke the access token. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   --client-secret: string # The client secret of the application requesting to revoke an access token. (e.g. hOzsTeFlT6ko0dme22uGbQal04SBPYc1)
   --body-token: string # The access token to revoke. (format: token, e.g. n22JPxrh18m4Y0wIZPIqYZK7VRrsMTWW)
@@ -266,7 +271,7 @@ export def "oauth2-revoke revoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get file information
@@ -282,6 +287,7 @@ export def "files id-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?fields=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # The URL, and optional password, for the shared link of this item.  This header can be used to access items that have not been explicitly shared with a user.  Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`.  This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
@@ -295,7 +301,7 @@ export def "files id-by-file_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore file
@@ -311,6 +317,7 @@ export def "files id-by-file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the file. (e.g. Restored.docx)
   --parent: any
@@ -324,7 +331,7 @@ export def "files id-by-file_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update file
@@ -343,6 +350,7 @@ export def "files id-by-file_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --name: string # An optional different name for the file. This can be used to rename the file.  File names must be unique within their parent folder. The name check is case-insensitive, so a file named `New File` cannot be created in a parent folder that already contains a folder named `new file`. (e.g. NewFile.txt)
@@ -366,7 +374,7 @@ export def "files id-by-file_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete file
@@ -382,6 +390,7 @@ export def "files id-by-file_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -391,7 +400,7 @@ export def "files id-by-file_id-3" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List file app item associations
@@ -407,6 +416,7 @@ export def "files-app-item-associations associations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --application-type: string # If given, only return app items for this application type. (e.g. hubs)
@@ -417,7 +427,7 @@ export def "files-app-item-associations associations" [
   let full_url = (build-url $base $"/files/($file_id)/app_item_associations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download file
@@ -433,6 +443,7 @@ export def "files-content content-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version: string # The file version to download. (e.g. 4)
   --access-token: string # An optional access token that can be used to pre-authenticate this request, which means that a download link can be shared with a browser or a third party service without them needing to know how to handle the authentication. When using this parameter, please make sure that the access token is sufficiently scoped down to only allow read access to that file and no other files or folders. (e.g. c3FIOG9vSGV4VHo4QzAyg5T1JvNnJoZ3ExaVNyQWw6WjRsanRKZG5lQk9qUE1BVQ)
@@ -447,7 +458,7 @@ export def "files-content content-by-file_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload file version
@@ -464,6 +475,7 @@ export def "files-content content-by-file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
@@ -481,7 +493,7 @@ export def "files-content content-by-file_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Preflight check before upload
@@ -496,6 +508,7 @@ export def "files-content content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name for the file. (e.g. File.mp4)
   --size: int # The size of the file in bytes. (format: int32, e.g. 1024)
   --parent: any
@@ -508,7 +521,7 @@ export def "files-content content" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "options" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload file
@@ -524,6 +537,7 @@ export def "files-content content-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
   attributes: record # The additional attributes of the file being uploaded. Mainly the name and the parent folder. These attributes are part of the multi part request body and are in JSON format.  <Message warning>    The `attributes` part of the body must come **before** the   `file` part. Requests that do not follow this format when   uploading the file will receive a HTTP `400` error with a   `metadata_after_file_contents` error code.  </Message> — shape: {name: string, parent: record, content_created_at?: string, content_modified_at?: string}
@@ -540,7 +554,7 @@ export def "files-content content-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create upload session
@@ -555,6 +569,7 @@ export def "files-upload-sessions sessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   folder_id: string # The ID of the folder to upload the new file to. (e.g. 0)
   file_size: int # The total number of bytes of the file to be uploaded. (format: int64, e.g. 104857600)
   file_name: string # The name of new file. (e.g. Project.mov)
@@ -567,7 +582,7 @@ export def "files-upload-sessions sessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create upload session for existing file
@@ -583,6 +598,7 @@ export def "files-upload-sessions sessions-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file_size: int # The total number of bytes of the file to be uploaded. (format: int64, e.g. 104857600)
   --file-name: string # The optional new name of new file. (e.g. Project.mov)
 ]: any -> record<id: string, type: string, session_expires_at: string, part_size: int, total_parts: int, num_parts_processed: int, session_endpoints: record<upload_part: string, commit: string, abort: string, list_parts: string, status: string, log_event: string>> {
@@ -594,7 +610,7 @@ export def "files-upload-sessions sessions-by-file_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get upload session
@@ -610,13 +626,14 @@ export def "files-upload-sessions id-by-upload_session_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, session_expires_at: string, part_size: int, total_parts: int, num_parts_processed: int, session_endpoints: record<upload_part: string, commit: string, abort: string, list_parts: string, status: string, log_event: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://{box-upload-server}/api/2.0")
   let full_url = (build-url $base $"/files/upload_sessions/($upload_session_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload part of file
@@ -632,6 +649,7 @@ export def "files-upload-sessions id-by-upload_session_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --digest: string # The [RFC3230][1] message digest of the chunk uploaded.  Only SHA1 is supported. The SHA1 digest must be base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`.  To get the value for the `SHA` digest, use the openSSL command to encode the file part: `openssl sha1 -binary <FILE_PART_NAME> | base64`.  [1]: https://tools.ietf.org/html/rfc3230 (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
   --content-range: string # The byte range of the chunk.  Must not overlap with the range of a part already uploaded this session. Each part’s size must be exactly equal in size to the part size specified in the upload session that you created. One exception is the last part of the file, as this can be smaller.  When providing the value for `content-range`, remember that:  * The lower bound of each part's byte range   must be a multiple of the part size. * The higher bound must be a multiple of the part size - 1. (e.g. bytes 8388608-16777215/445856194)
   --body: record
@@ -645,7 +663,7 @@ export def "files-upload-sessions id-by-upload_session_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Remove upload session
@@ -661,13 +679,14 @@ export def "files-upload-sessions id-by-upload_session_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://{box-upload-server}/api/2.0")
   let full_url = (build-url $base $"/files/upload_sessions/($upload_session_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List parts
@@ -683,6 +702,7 @@ export def "files-upload-sessions-parts parts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -692,7 +712,7 @@ export def "files-upload-sessions-parts parts" [
   let full_url = (build-url $base $"/files/upload_sessions/($upload_session_id)/parts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit upload session
@@ -709,6 +729,7 @@ export def "files-upload-sessions-commit commit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --digest: string # The [RFC3230][1] message digest of the whole file.  Only SHA1 is supported. The SHA1 digest must be Base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`.  [1]: https://tools.ietf.org/html/rfc3230 (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
@@ -724,7 +745,7 @@ export def "files-upload-sessions-commit commit" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Copy file
@@ -741,6 +762,7 @@ export def "files-copy copy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the copied file.  There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), and protected names like `.` and `..` are automatically sanitized by removing the non-allowed characters. (e.g. FileCopy.txt)
   --version: string # An optional ID of the specific file version to copy. (e.g. 0)
@@ -755,7 +777,7 @@ export def "files-copy copy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get file thumbnail
@@ -772,6 +794,7 @@ export def "files-thumbnail-extension id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --min-height: int # The minimum height of the thumbnail. (e.g. 32)
   --min-width: int # The minimum width of the thumbnail. (e.g. 32)
@@ -784,7 +807,7 @@ export def "files-thumbnail-extension id" [
   let full_url = (build-url $base $"/files/($file_id)/thumbnail.($extension)" $qp)
   let accept_val = ($accept | default "image/jpg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List file collaborations
@@ -800,6 +823,7 @@ export def "files-collaborations collaborations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -810,7 +834,7 @@ export def "files-collaborations collaborations" [
   let full_url = (build-url $base $"/files/($file_id)/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List file comments
@@ -826,6 +850,7 @@ export def "files-comments comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
@@ -836,7 +861,7 @@ export def "files-comments comments" [
   let full_url = (build-url $base $"/files/($file_id)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tasks on file
@@ -852,13 +877,14 @@ export def "files-tasks tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_count: int, entries: table<id: string, type: string, item: record, due_at: string, action: string, message: string, task_assignment_collection: record, is_completed: bool, created_by: record, created_at: string, completion_rule: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/tasks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trashed file
@@ -874,6 +900,7 @@ export def "files-trash trash-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, etag: string, type: string, sequence_id: record, name: string, sha1: string, file_version: record, description: string, size: int, path_collection: record<total_count: int, entries: list<record>>, created_at: string, modified_at: string, trashed_at: string, purged_at: string, content_created_at: string, content_modified_at: string, created_by: record, modified_by: record, owned_by: record, shared_link: string, parent: record, item_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -882,7 +909,7 @@ export def "files-trash trash-by-file_id" [
   let full_url = (build-url $base $"/files/($file_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Permanently remove file
@@ -898,13 +925,14 @@ export def "files-trash trash-by-file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/trash")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all file versions
@@ -920,6 +948,7 @@ export def "files-versions versions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
@@ -930,7 +959,7 @@ export def "files-versions versions" [
   let full_url = (build-url $base $"/files/($file_id)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file version
@@ -947,6 +976,7 @@ export def "files-versions id-by-file_id-file_version_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -955,7 +985,7 @@ export def "files-versions id-by-file_id-file_version_id" [
   let full_url = (build-url $base $"/files/($file_id)/versions/($file_version_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove file version
@@ -972,6 +1002,7 @@ export def "files-versions id-by-file_id-file_version_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -981,7 +1012,7 @@ export def "files-versions id-by-file_id-file_version_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore file version
@@ -998,6 +1029,7 @@ export def "files-versions id-by-file_id-file_version_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trashed-at: string # Set this to `null` to clear the date and restore the file. (nullable)
 ]: any -> record {
   let input = $in
@@ -1008,7 +1040,7 @@ export def "files-versions id-by-file_id-file_version_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Promote file version
@@ -1024,6 +1056,7 @@ export def "files-versions-current current" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --id: string # The file version ID. (e.g. 11446498)
   --type: string@type-completer # The type to promote. (e.g. file_version)
@@ -1037,7 +1070,7 @@ export def "files-versions-current current" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List metadata instances on file
@@ -1053,6 +1086,7 @@ export def "files-metadata metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string # Taxonomy field values are returned in `API view` by default, meaning  the value is represented with a taxonomy node identifier.  To retrieve the `Hydrated view`, where taxonomy values are represented  with the full taxonomy node information, set this parameter to `hydrated`.  This is the only supported value for this parameter. (e.g. hydrated)
 ]: nothing -> record<entries: list<record>, limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1061,7 +1095,7 @@ export def "files-metadata metadata" [
   let full_url = (build-url $base $"/files/($file_id)/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get classification on file
@@ -1077,13 +1111,14 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/metadata/enterprise/securityClassification-6VMVochwUWo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add classification to file
@@ -1099,6 +1134,7 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Box-Security--Classification--Key: string # The name of the classification to apply to this file.  To list the available classifications in an enterprise, use the classification API to retrieve the [classification template](https://developer.box.com/reference/get-metadata-templates-enterprise-securityClassification-6VMVochwUWo-schema) which lists all available classification keys. (e.g. Sensitive)
 ]: any -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let input = $in
@@ -1109,7 +1145,7 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update classification on file
@@ -1125,6 +1161,7 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let input = $in
@@ -1134,7 +1171,7 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove classification from file
@@ -1150,13 +1187,14 @@ export def "files-metadata-enterprise-security-classification-6vm-vochw-u-wo sec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/metadata/enterprise/securityClassification-6VMVochwUWo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadata instance on file
@@ -1174,6 +1212,7 @@ export def "files-metadata id-by-file_id-scope-template_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string # Taxonomy field values are returned in `API view` by default, meaning  the value is represented with a taxonomy node identifier.  To retrieve the `Hydrated view`, where taxonomy values are represented  with the full taxonomy node information, set this parameter to `hydrated`.  This is the only supported value for this parameter. (e.g. hydrated)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1182,7 +1221,7 @@ export def "files-metadata id-by-file_id-scope-template_key" [
   let full_url = (build-url $base $"/files/($file_id)/metadata/($scope)/($template_key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata instance on file
@@ -1200,6 +1239,7 @@ export def "files-metadata id-by-file_id-scope-template_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -1209,7 +1249,7 @@ export def "files-metadata id-by-file_id-scope-template_key-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update metadata instance on file
@@ -1227,6 +1267,7 @@ export def "files-metadata id-by-file_id-scope-template_key-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -1236,7 +1277,7 @@ export def "files-metadata id-by-file_id-scope-template_key-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove metadata instance from file
@@ -1254,13 +1295,14 @@ export def "files-metadata id-by-file_id-scope-template_key-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/metadata/($scope)/($template_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Box Skill cards on file
@@ -1276,13 +1318,14 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/metadata/global/boxSkillsCards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Box Skill cards on file
@@ -1298,6 +1341,7 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cards: list # A list of Box Skill cards to apply to this file.
 ]: any -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<record>> {
   let input = $in
@@ -1308,7 +1352,7 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id-1" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Box Skill cards on file
@@ -1324,6 +1368,7 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id-2" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<record>> {
   let input = $in
@@ -1333,7 +1378,7 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id-2" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove Box Skill cards from file
@@ -1349,13 +1394,14 @@ export def "files-metadata-global-box-skills-cards boxSkillsCards-by-file_id-3" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/metadata/global/boxSkillsCards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get watermark on file
@@ -1371,13 +1417,14 @@ export def "files-watermark watermark-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<watermark: record<created_at: string, modified_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply watermark to file
@@ -1394,6 +1441,7 @@ export def "files-watermark watermark-by-file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   watermark: record # The watermark to imprint on the file. — shape: {imprint: "default"}
 ]: any -> record<watermark: record<created_at: string, modified_at: string>> {
   let input = $in
@@ -1404,7 +1452,7 @@ export def "files-watermark watermark-by-file_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove watermark from file
@@ -1420,13 +1468,14 @@ export def "files-watermark watermark-by-file_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($file_id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file request
@@ -1442,13 +1491,14 @@ export def "file-requests id-by-file_request_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, title: string, description: string, status: string, is_email_required: bool, is_description_required: bool, expires_at: string, folder: record, url: string, etag: string, created_by: record, created_at: string, updated_by: record, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/file_requests/($file_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update file request
@@ -1464,6 +1514,7 @@ export def "file-requests id-by-file_request_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --title: string # An optional new title for the file request. This can be used to change the title of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --description: string # An optional new description for the file request. This can be used to change the description of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
@@ -1482,7 +1533,7 @@ export def "file-requests id-by-file_request_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete file request
@@ -1498,13 +1549,14 @@ export def "file-requests id-by-file_request_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/file_requests/($file_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy file request
@@ -1521,6 +1573,7 @@ export def "file-requests-copy copy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # An optional new title for the file request. This can be used to change the title of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --description: string # An optional new description for the file request. This can be used to change the description of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --status: string@status-completer # An optional new status of the file request.  When the status is set to `inactive`, the file request will no longer accept new submissions, and any visitor to the file request URL will receive a `HTTP 404` status code.  This will default to the value on the existing file request. (e.g. active)
@@ -1537,7 +1590,7 @@ export def "file-requests-copy copy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get folder information
@@ -1553,6 +1606,7 @@ export def "folders id-by-folder_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?fields=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --qp-sort: string@sort-completer # Defines the **second** attribute by which items are sorted.  The folder type affects the way the items are sorted:    * **Standard folder**:   Items are always sorted by   their `type` first, with   folders listed before files,   and files listed   before web links.    * **Root folder**:   This parameter is not supported   for marker-based pagination   on the root folder    (the folder with an `id` of `0`).    * **Shared folder with parent path   to the associated folder visible to   the collaborator**:   Items are always sorted by   their `type` first, with   folders listed before files,   and files listed   before web links. (e.g. id)
   --direction: string@direction-completer # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
@@ -1569,7 +1623,7 @@ export def "folders id-by-folder_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore folder
@@ -1585,6 +1639,7 @@ export def "folders id-by-folder_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the folder. (e.g. Restored Photos)
   --parent: any
@@ -1598,7 +1653,7 @@ export def "folders id-by-folder_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update folder
@@ -1615,6 +1670,7 @@ export def "folders id-by-folder_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --name: string # The optional new name for this folder.  The following restrictions to folder names apply: names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), names with trailing spaces, and names `.` and `..` are not allowed.  Folder names must be unique within their parent folder. The name check is case-insensitive, so a folder named `New Folder` cannot be created in a parent folder that already contains a folder named `new folder`. (e.g. New Folder)
@@ -1640,7 +1696,7 @@ export def "folders id-by-folder_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete folder
@@ -1656,6 +1712,7 @@ export def "folders id-by-folder_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recursive: oneof<nothing, bool> # Delete a folder that is not empty by recursively deleting the folder and all of its content. (e.g. true)
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
@@ -1667,7 +1724,7 @@ export def "folders id-by-folder_id-3" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List folder app item associations
@@ -1683,6 +1740,7 @@ export def "folders-app-item-associations associations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --application-type: string # If given, returns only app items for this application type. (e.g. hubs)
@@ -1693,7 +1751,7 @@ export def "folders-app-item-associations associations" [
   let full_url = (build-url $base $"/folders/($folder_id)/app_item_associations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List items in folder
@@ -1709,6 +1767,7 @@ export def "folders-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?fields=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -1726,7 +1785,7 @@ export def "folders-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create folder
@@ -1742,6 +1801,7 @@ export def "folders folders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   name: string # The name for the new folder.  The following restrictions to folder names apply: names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), names with trailing spaces, and names `.` and `..` are not allowed.  Folder names must be unique within their parent folder. The name check is case-insensitive, so a folder named `New Folder` cannot be created in a parent folder that already contains a folder named `new folder`. (e.g. New Folder)
   parent: record # The parent folder to create the new folder within. — shape: {id: string}
@@ -1757,7 +1817,7 @@ export def "folders folders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Copy folder
@@ -1774,6 +1834,7 @@ export def "folders-copy copy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the copied folder.  There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), as well as names with trailing spaces are prohibited.  Additionally, the names `.` and `..` are not allowed either. (e.g. New Folder)
   parent: record # The destination folder to copy the folder to. — shape: {id: string}
@@ -1787,7 +1848,7 @@ export def "folders-copy copy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List folder collaborations
@@ -1803,6 +1864,7 @@ export def "folders-collaborations collaborations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -1813,7 +1875,7 @@ export def "folders-collaborations collaborations" [
   let full_url = (build-url $base $"/folders/($folder_id)/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trashed folder
@@ -1829,6 +1891,7 @@ export def "folders-trash trash-by-folder_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, etag: string, type: string, sequence_id: record, name: string, created_at: string, modified_at: string, description: record, size: int, path_collection: record<total_count: int, entries: list<record>>, created_by: record, modified_by: record, trashed_at: string, purged_at: string, content_created_at: string, content_modified_at: string, owned_by: record, shared_link: string, folder_upload_email: string, parent: record, item_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1837,7 +1900,7 @@ export def "folders-trash trash-by-folder_id" [
   let full_url = (build-url $base $"/folders/($folder_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Permanently remove folder
@@ -1853,13 +1916,14 @@ export def "folders-trash trash-by-folder_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/trash")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List metadata instances on folder
@@ -1875,6 +1939,7 @@ export def "folders-metadata metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string # Taxonomy field values are returned in `API view` by default, meaning  the value is represented with a taxonomy node identifier.  To retrieve the `Hydrated view`, where taxonomy values are represented  with the full taxonomy node information, set this parameter to `hydrated`.  This is the only supported value for this parameter. (e.g. hydrated)
 ]: nothing -> record<entries: list<record>, limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1883,7 +1948,7 @@ export def "folders-metadata metadata" [
   let full_url = (build-url $base $"/folders/($folder_id)/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get classification on folder
@@ -1899,13 +1964,14 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/metadata/enterprise/securityClassification-6VMVochwUWo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add classification to folder
@@ -1921,6 +1987,7 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Box-Security--Classification--Key: string # The name of the classification to apply to this folder.  To list the available classifications in an enterprise, use the classification API to retrieve the [classification template](https://developer.box.com/reference/get-metadata-templates-enterprise-securityClassification-6VMVochwUWo-schema) which lists all available classification keys. (e.g. Sensitive)
 ]: any -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let input = $in
@@ -1931,7 +1998,7 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update classification on folder
@@ -1947,6 +2014,7 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<Box__Security__Classification__Key: string, _parent: string, _template: string, _scope: string, _version: int, _type: string, _typeVersion: float, _canEdit: bool> {
   let input = $in
@@ -1956,7 +2024,7 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove classification from folder
@@ -1972,13 +2040,14 @@ export def "folders-metadata-enterprise-security-classification-6vm-vochw-u-wo s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/metadata/enterprise/securityClassification-6VMVochwUWo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadata instance on folder
@@ -1996,13 +2065,14 @@ export def "folders-metadata id-by-folder_id-scope-template_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/metadata/($scope)/($template_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata instance on folder
@@ -2020,6 +2090,7 @@ export def "folders-metadata id-by-folder_id-scope-template_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -2029,7 +2100,7 @@ export def "folders-metadata id-by-folder_id-scope-template_key-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update metadata instance on folder
@@ -2047,6 +2118,7 @@ export def "folders-metadata id-by-folder_id-scope-template_key-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -2056,7 +2128,7 @@ export def "folders-metadata id-by-folder_id-scope-template_key-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove metadata instance from folder
@@ -2074,13 +2146,14 @@ export def "folders-metadata id-by-folder_id-scope-template_key-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/metadata/($scope)/($template_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List trashed items
@@ -2095,6 +2168,7 @@ export def "folders-trash-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
@@ -2109,7 +2183,7 @@ export def "folders-trash-items items" [
   let full_url = (build-url $base "/folders/trash/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get watermark for folder
@@ -2125,13 +2199,14 @@ export def "folders-watermark watermark-by-folder_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<watermark: record<created_at: string, modified_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply watermark to folder
@@ -2148,6 +2223,7 @@ export def "folders-watermark watermark-by-folder_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   watermark: record # The watermark to imprint on the folder. — shape: {imprint: "default"}
 ]: any -> record<watermark: record<created_at: string, modified_at: string>> {
   let input = $in
@@ -2158,7 +2234,7 @@ export def "folders-watermark watermark-by-folder_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove watermark from folder
@@ -2174,13 +2250,14 @@ export def "folders-watermark watermark-by-folder_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folders/($folder_id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List folder locks
@@ -2195,6 +2272,7 @@ export def "folder-locks locks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folder-id: string # The unique identifier that represent a folder.  The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`.  The root folder of a Box account is always represented by the ID `0`. (e.g. 12345)
 ]: nothing -> record<entries: table<folder: record, id: string, type: string, created_by: record, created_at: string, locked_operations: record, lock_type: string>, limit: string, next_marker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2203,7 +2281,7 @@ export def "folder-locks locks" [
   let full_url = (build-url $base "/folder_locks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create folder lock
@@ -2220,6 +2298,7 @@ export def "folder-locks locks-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locked-operations: record # The operations to lock for the folder. If `locked_operations` is included in the request, both `move` and `delete` must also be included and both set to `true`. — shape: {move: bool, delete: bool}
   folder: record # The folder to apply the lock to. — shape: {type: string, id: string}
 ]: any -> record<folder: record, id: string, type: string, created_by: record<id: string, type: string>, created_at: string, locked_operations: record<move: bool, delete: bool>, lock_type: string> {
@@ -2231,7 +2310,7 @@ export def "folder-locks locks-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete folder lock
@@ -2247,13 +2326,14 @@ export def "folder-locks id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/folder_locks/($folder_lock_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find metadata template by instance ID
@@ -2268,6 +2348,7 @@ export def "metadata-templates templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-instance-id: string # The ID of an instance of the metadata template to find. (format: uuid, e.g. 01234500-12f1-1234-aa12-b1d234cb567e)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -2278,7 +2359,7 @@ export def "metadata-templates templates" [
   let full_url = (build-url $base "/metadata_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all classifications
@@ -2293,13 +2374,14 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, copyInstanceOnItemCopy: bool, fields: table<id: string, type: string, key: string, displayName: string, hidden: bool, options: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add classification
@@ -2314,6 +2396,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, copyInstanceOnItemCopy: bool, fields: table<id: string, type: string, key: string, displayName: string, hidden: bool, options: list>> {
   let input = $in
@@ -2323,7 +2406,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update classification
@@ -2338,6 +2421,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, copyInstanceOnItemCopy: bool, fields: table<id: string, type: string, key: string, displayName: string, hidden: bool, options: list>> {
   let input = $in
@@ -2347,7 +2431,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Get metadata template by name
@@ -2364,13 +2448,14 @@ export def "metadata-templates-schema schema-by-scope-template_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, fields: list<record>, copyInstanceOnItemCopy: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_templates/($scope)/($template_key)/schema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update metadata template
@@ -2387,6 +2472,7 @@ export def "metadata-templates-schema schema-by-scope-template_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, fields: list<record>, copyInstanceOnItemCopy: bool> {
   let input = $in
@@ -2396,7 +2482,7 @@ export def "metadata-templates-schema schema-by-scope-template_key-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Remove metadata template
@@ -2413,13 +2499,14 @@ export def "metadata-templates-schema schema-by-scope-template_key-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_templates/($scope)/($template_key)/schema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadata template by ID
@@ -2435,13 +2522,14 @@ export def "metadata-templates id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, fields: list<record>, copyInstanceOnItemCopy: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all global metadata templates
@@ -2456,6 +2544,7 @@ export def "metadata-templates-global global" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -2465,7 +2554,7 @@ export def "metadata-templates-global global" [
   let full_url = (build-url $base "/metadata_templates/global" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all metadata templates for enterprise
@@ -2480,6 +2569,7 @@ export def "metadata-templates-enterprise enterprise" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -2489,7 +2579,7 @@ export def "metadata-templates-enterprise enterprise" [
   let full_url = (build-url $base "/metadata_templates/enterprise" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata template
@@ -2505,6 +2595,7 @@ export def "metadata-templates-schema schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: string # The scope of the metadata template to create. Applications can only create templates for use within the authenticated user's enterprise.  This value needs to be set to `enterprise`, as `global` scopes can not be created by applications. (e.g. enterprise)
   --templateKey: string # A unique identifier for the template. This identifier needs to be unique across the enterprise for which the metadata template is being created.  When not provided, the API will create a unique `templateKey` based on the value of the `displayName`. (e.g. productInfo)
   displayName: string # The display name of the template. (e.g. Product Info)
@@ -2520,7 +2611,7 @@ export def "metadata-templates-schema schema" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add initial classifications
@@ -2536,6 +2627,7 @@ export def "metadata-templates-schemaclassifications schemaclassifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: string@scope-completer # The scope in which to create the classifications. This should be `enterprise` or `enterprise_{id}` where `id` is the unique ID of the enterprise. (e.g. enterprise)
   templateKey: string@templateKey-completer # Defines the list of metadata templates. (e.g. securityClassification-6VMVochwUWo)
   displayName: string@displayName-completer # The name of the template as shown in web and mobile interfaces. (e.g. Classification)
@@ -2551,7 +2643,7 @@ export def "metadata-templates-schemaclassifications schemaclassifications" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List metadata cascade policies
@@ -2566,6 +2658,7 @@ export def "metadata-cascade-policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folder-id: string # Specifies which folder to return policies for. This can not be used on the root folder with ID `0`. (e.g. 31232)
   --owner-enterprise-id: string # The ID of the enterprise ID for which to find metadata cascade policies. If not specified, it defaults to the current enterprise. (e.g. 31232)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -2577,7 +2670,7 @@ export def "metadata-cascade-policies policies" [
   let full_url = (build-url $base "/metadata_cascade_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata cascade policy
@@ -2592,6 +2685,7 @@ export def "metadata-cascade-policies policies-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   folder_id: string # The ID of the folder to apply the policy to. This folder will need to already have an instance of the targeted metadata template applied to it. (e.g. 1234567)
   scope: string@scope-completer-1 # The scope of the targeted metadata template. This template will need to already have an instance applied to the targeted folder. (e.g. enterprise)
   templateKey: string # The key of the targeted metadata template. This template will need to already have an instance applied to the targeted folder.  In many cases the template key is automatically derived of its display name, for example `Contract Template` would become `contractTemplate`. In some cases the creator of the template will have provided its own template key.  Please [list the templates for an enterprise][list], or get all instances on a [file][file] or [folder][folder] to inspect a template's key.  [list]: https://developer.box.com/reference/get-metadata-templates-enterprise [file]: https://developer.box.com/reference/get-files-id-metadata [folder]: https://developer.box.com/reference/get-folders-id-metadata (e.g. productInfo)
@@ -2604,7 +2698,7 @@ export def "metadata-cascade-policies policies-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metadata cascade policy
@@ -2620,13 +2714,14 @@ export def "metadata-cascade-policies id-by-metadata_cascade_policy_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, owner_enterprise: record<type: string, id: string>, parent: record<type: string, id: string>, scope: string, templateKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_cascade_policies/($metadata_cascade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove metadata cascade policy
@@ -2642,13 +2737,14 @@ export def "metadata-cascade-policies id-by-metadata_cascade_policy_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_cascade_policies/($metadata_cascade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force-apply metadata cascade policy to folder
@@ -2664,6 +2760,7 @@ export def "metadata-cascade-policies-apply apply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   conflict_resolution: string@conflict-resolution-completer # Describes the desired behavior when dealing with the conflict where a metadata template already has an instance applied to a child.  * `none` will preserve the existing value on the file * `overwrite` will force-apply the templates values over   any existing values. (e.g. none)
 ]: any -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let input = $in
@@ -2674,7 +2771,7 @@ export def "metadata-cascade-policies-apply apply" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query files/folders by metadata
@@ -2690,6 +2787,7 @@ export def "metadata-queries-execute-read read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # Specifies the template used in the query. Must be in the form `scope.templateKey`. Not all templates can be used in this field, most notably the built-in, Box-provided classification templates can not be used in a query. (e.g. enterprise_123456.someTemplate)
   --body-query: string # The query to perform. A query is a logical expression that is very similar to a SQL `SELECT` statement. Values in the search query can be turned into parameters specified in the `query_param` arguments list to prevent having to manually insert search values into the query string.  For example, a value of `:amount` would represent the `amount` value in `query_params` object. (e.g. value >= :amount)
   --query-params: record # Set of arguments corresponding to the parameters specified in the `query`. The type of each parameter used in the `query_params` must match the type of the corresponding metadata template field. (e.g. {amount: 100})
@@ -2707,7 +2805,7 @@ export def "metadata-queries-execute-read read" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get comment
@@ -2723,6 +2821,7 @@ export def "comments id-by-comment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2731,7 +2830,7 @@ export def "comments id-by-comment_id" [
   let full_url = (build-url $base $"/comments/($comment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update comment
@@ -2747,6 +2846,7 @@ export def "comments id-by-comment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --message: string # The text of the comment to update. (e.g. Review completed!)
 ]: any -> record {
@@ -2759,7 +2859,7 @@ export def "comments id-by-comment_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove comment
@@ -2775,13 +2875,14 @@ export def "comments id-by-comment_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create comment
@@ -2797,6 +2898,7 @@ export def "comments comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   message: string # The text of the comment.  To mention a user, use the `tagged_message` parameter instead. (e.g. Review completed!)
   --tagged-message: string # The text of the comment, including `@[user_id:name]` somewhere in the message to mention another user, which will send them an email notification, letting them know they have been mentioned.  The `user_id` is the target user's ID, where the `name` can be any custom phrase. In the Box UI this name will link to the user's profile.  If you are not mentioning another user, use `message` instead. (e.g. @[1234:John] Review completed!)
@@ -2811,7 +2913,7 @@ export def "comments comments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get collaboration
@@ -2827,6 +2929,7 @@ export def "collaborations id-by-collaboration_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, type: string, item: record, app_item: record<id: string, type: string, application_type: string>, accessible_by: record, invite_email: string, role: string, expires_at: string, is_access_only: bool, status: string, acknowledged_at: string, created_by: record, created_at: string, modified_at: string, acceptance_requirements_status: record<terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2835,7 +2938,7 @@ export def "collaborations id-by-collaboration_id" [
   let full_url = (build-url $base $"/collaborations/($collaboration_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update collaboration
@@ -2851,6 +2954,7 @@ export def "collaborations id-by-collaboration_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The level of access granted. (e.g. editor)
   --status: string@status-completer-1 # Set the status of a `pending` collaboration invitation, effectively accepting, or rejecting the invite. (e.g. accepted)
   --expires-at: string # Update the expiration date for the collaboration. At this date, the collaboration will be automatically removed from the item.  This feature will only work if the **Automatically remove invited collaborators: Allow folder owners to extend the expiry date** setting has been enabled in the **Enterprise Settings** of the **Admin Console**. When the setting is not enabled, collaborations can not have an expiry date and a value for this field will be result in an error.  Additionally, a collaboration can only be given an expiration if it was created after the **Automatically remove invited collaborator** setting was enabled. (format: date-time, e.g. 2019-08-29T23:59:00-07:00)
@@ -2864,7 +2968,7 @@ export def "collaborations id-by-collaboration_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove collaboration
@@ -2880,13 +2984,14 @@ export def "collaborations id-by-collaboration_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collaborations/($collaboration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pending collaborations
@@ -2901,6 +3006,7 @@ export def "collaborations collaborations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # The status of the collaborations to retrieve. (e.g. pending)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
@@ -2912,7 +3018,7 @@ export def "collaborations collaborations" [
   let full_url = (build-url $base "/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create collaboration
@@ -2929,6 +3035,7 @@ export def "collaborations collaborations-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   item: record # The item to attach the comment to. — shape: {type?: "file"|"folder", id?: string}
@@ -2947,7 +3054,7 @@ export def "collaborations collaborations-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for content
@@ -2962,6 +3069,7 @@ export def "search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The string to search for. This query is matched against item names, descriptions, text content of files, and various other fields of the different item types.  This parameter supports a variety of operators to further refine the results returns.  * `""` - by wrapping a query in double quotes only exact matches are   returned by the API. Exact searches do not return search matches   based on specific character sequences. Instead, they return   matches based on phrases, that is, word sequences. For example:   A search for `"Blue-Box"` may return search results including   the sequence `"blue.box"`, `"Blue Box"`, and `"Blue-Box"`;   any item containing the words `Blue` and `Box` consecutively, in   the order specified. * `AND` - returns items that contain both the search terms. For   example, a search for `marketing AND BoxWorks` returns items   that have both `marketing` and `BoxWorks` within its text in any order.   It does not return a result that only has `BoxWorks` in its text. * `OR` - returns items that contain either of the search terms. For   example, a search for `marketing OR BoxWorks` returns a result that   has either `marketing` or `BoxWorks` within its text. Using this   operator is not necessary as we implicitly interpret multi-word   queries as `OR` unless another supported boolean term is used. * `NOT` - returns items that do not contain the search term provided.   For example, a search for `marketing AND NOT BoxWorks` returns a result   that has only `marketing` within its text. Results containing   `BoxWorks` are omitted.  We do not support lower case (that is, `and`, `or`, and `not`) or mixed case (that is, `And`, `Or`, and `Not`) operators.  This field is required unless the `mdfilters` parameter is defined. (e.g. sales)
   --scope: string@scope-completer-2 # Limits the search results to either the files that the user has access to, or to files available to the entire enterprise.  The scope defaults to `user_content`, which limits the search results to content that is available to the currently authenticated user.  The `enterprise_content` can be requested by an admin through our support channels. Once this scope has been enabled for a user, it will allow that use to query for content across the entire enterprise and not only the content that they have access to. (default: user_content, e.g. user_content)
   --file-extensions: list # Limits the search results to any files that match any of the provided file extensions. This list is a comma-separated list of file extensions without the dots. (e.g. [pdf, png, gif])
@@ -2990,7 +3098,7 @@ export def "search search" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create task
@@ -3006,6 +3114,7 @@ export def "tasks tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   item: record # The file to attach the task to. — shape: {id?: string, type?: "file"}
   --action: string@action-completer # The action the task assignee will be prompted to do. Must be  * `review` defines an approval task that can be approved or, rejected * `complete` defines a general task which can be completed. (default: review, e.g. review)
   --message: string # An optional message to include with the task. (default: , e.g. Please review)
@@ -3020,7 +3129,7 @@ export def "tasks tasks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get task
@@ -3036,13 +3145,14 @@ export def "tasks id-by-task_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, item: record, due_at: string, action: string, message: string, task_assignment_collection: record<total_count: int, entries: list<record>>, is_completed: bool, created_by: record, created_at: string, completion_rule: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update task
@@ -3058,6 +3168,7 @@ export def "tasks id-by-task_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer # The action the task assignee will be prompted to do. Must be  * `review` defines an approval task that can be approved or rejected, * `complete` defines a general task which can be completed. (e.g. review)
   --message: string # The message included with the task. (e.g. Please review)
   --due-at: string # When the task is due at. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
@@ -3071,7 +3182,7 @@ export def "tasks id-by-task_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove task
@@ -3087,13 +3198,14 @@ export def "tasks id-by-task_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List task assignments
@@ -3109,13 +3221,14 @@ export def "tasks-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_count: int, entries: table<id: string, type: string, item: record, assigned_to: record, message: string, completed_at: string, assigned_at: string, reminded_at: string, resolution_state: string, assigned_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($task_id)/assignments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign task
@@ -3132,6 +3245,7 @@ export def "task-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   task: record # The task to assign to a user. — shape: {id: string, type: "task"}
   assign_to: record # The user to assign the task to. — shape: {id?: string, login?: string}
 ]: any -> record<id: string, type: string, item: record, assigned_to: record, message: string, completed_at: string, assigned_at: string, reminded_at: string, resolution_state: string, assigned_by: record> {
@@ -3143,7 +3257,7 @@ export def "task-assignments assignments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get task assignment
@@ -3159,13 +3273,14 @@ export def "task-assignments id-by-task_assignment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, item: record, assigned_to: record, message: string, completed_at: string, assigned_at: string, reminded_at: string, resolution_state: string, assigned_by: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/task_assignments/($task_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update task assignment
@@ -3181,6 +3296,7 @@ export def "task-assignments id-by-task_assignment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # An optional message by the assignee that can be added to the task. (e.g. Looks good to me)
   --resolution-state: string@resolution-state-completer # The state of the task assigned to the user.  * For a task with an `action` value of `complete` this can be `incomplete` or `completed`. * For a task with an `action` of `review` this can be `incomplete`, `approved`, or `rejected`. (e.g. completed)
 ]: any -> record<id: string, type: string, item: record, assigned_to: record, message: string, completed_at: string, assigned_at: string, reminded_at: string, resolution_state: string, assigned_by: record> {
@@ -3192,7 +3308,7 @@ export def "task-assignments id-by-task_assignment_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign task
@@ -3208,13 +3324,14 @@ export def "task-assignments id-by-task_assignment_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/task_assignments/($task_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find file for shared link
@@ -3229,6 +3346,7 @@ export def "shared-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows:  `shared_link=[link]&shared_link_password=[password]`. (e.g. shared_link=[link]&shared_link_password=[password])
@@ -3241,7 +3359,7 @@ export def "shared-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shared link for file
@@ -3257,6 +3375,7 @@ export def "files link-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3265,7 +3384,7 @@ export def "files link-by-file_id" [
   let full_url = (build-url $base $"/files/($file_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add shared link to file
@@ -3282,6 +3401,7 @@ export def "files link-by-file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the file. Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3294,7 +3414,7 @@ export def "files link-by-file_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update shared link on file
@@ -3311,6 +3431,7 @@ export def "files link-by-file_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3323,7 +3444,7 @@ export def "files link-by-file_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove shared link from file
@@ -3339,6 +3460,7 @@ export def "files link-by-file_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the file. (nullable)
 ]: any -> record {
@@ -3351,7 +3473,7 @@ export def "files link-by-file_id-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find folder for shared link
@@ -3366,6 +3488,7 @@ export def "shared-itemsfolders itemsfolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows:  `shared_link=[link]&shared_link_password=[password]`. (e.g. shared_link=[link]&shared_link_password=[password])
@@ -3378,7 +3501,7 @@ export def "shared-itemsfolders itemsfolders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shared link for folder
@@ -3394,6 +3517,7 @@ export def "folders link-by-folder_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3402,7 +3526,7 @@ export def "folders link-by-folder_id" [
   let full_url = (build-url $base $"/folders/($folder_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add shared link to folder
@@ -3419,6 +3543,7 @@ export def "folders link-by-folder_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the folder.  Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3431,7 +3556,7 @@ export def "folders link-by-folder_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update shared link on folder
@@ -3448,6 +3573,7 @@ export def "folders link-by-folder_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3460,7 +3586,7 @@ export def "folders link-by-folder_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove shared link from folder
@@ -3476,6 +3602,7 @@ export def "folders link-by-folder_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the folder. (nullable)
 ]: any -> record {
@@ -3488,7 +3615,7 @@ export def "folders link-by-folder_id-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create web link
@@ -3504,6 +3631,7 @@ export def "web-links links" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL that this web link links to. Must start with `"http://"` or `"https://"`. (e.g. https://box.com)
   parent: record # The parent folder to create the web link within. — shape: {id: string}
   --name: string # Name of the web link. Defaults to the URL if not set. (e.g. Box Website)
@@ -3517,7 +3645,7 @@ export def "web-links links" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get web link
@@ -3533,6 +3661,7 @@ export def "web-links id-by-web_link_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --boxapi: string # The URL, and optional password, for the shared link of this item.  This header can be used to access items that have not been explicitly shared with a user.  Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`.  This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3542,7 +3671,7 @@ export def "web-links id-by-web_link_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore web link
@@ -3558,6 +3687,7 @@ export def "web-links id-by-web_link_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the web link. (e.g. Restored.docx)
   --parent: any
@@ -3571,7 +3701,7 @@ export def "web-links id-by-web_link_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update web link
@@ -3588,6 +3718,7 @@ export def "web-links id-by-web_link_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The new URL that the web link links to. Must start with `"http://"` or `"https://"`. (e.g. https://box.com)
   --parent: any
   --name: string # A new name for the web link. Defaults to the URL if not set. (e.g. Box Website)
@@ -3602,7 +3733,7 @@ export def "web-links id-by-web_link_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove web link
@@ -3618,13 +3749,14 @@ export def "web-links id-by-web_link_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/web_links/($web_link_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trashed web link
@@ -3640,6 +3772,7 @@ export def "web-links-trash trash-by-web_link_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<type: string, id: string, sequence_id: record, etag: string, name: string, url: string, parent: record, description: string, path_collection: record<total_count: int, entries: list<record>>, created_at: string, modified_at: string, trashed_at: string, purged_at: string, created_by: record, modified_by: record, owned_by: record, shared_link: string, item_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3648,7 +3781,7 @@ export def "web-links-trash trash-by-web_link_id" [
   let full_url = (build-url $base $"/web_links/($web_link_id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Permanently remove web link
@@ -3664,13 +3797,14 @@ export def "web-links-trash trash-by-web_link_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/web_links/($web_link_id)/trash")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find web link for shared link
@@ -3685,6 +3819,7 @@ export def "shared-itemsweb-links links" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is as follows:  `shared_link=[link]&shared_link_password=[password]`. (e.g. shared_link=[link]&shared_link_password=[password])
@@ -3697,7 +3832,7 @@ export def "shared-itemsweb-links links" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shared link for web link
@@ -3713,6 +3848,7 @@ export def "web-links link-by-web_link_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3721,7 +3857,7 @@ export def "web-links link-by-web_link_id" [
   let full_url = (build-url $base $"/web_links/($web_link_id)#get_shared_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add shared link to web link
@@ -3738,6 +3874,7 @@ export def "web-links link-by-web_link_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the web link.  Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3750,7 +3887,7 @@ export def "web-links link-by-web_link_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update shared link on web link
@@ -3767,6 +3904,7 @@ export def "web-links link-by-web_link_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, vanity_name?: string, unshared_at?: string, permissions?: record}
 ]: any -> record {
@@ -3779,7 +3917,7 @@ export def "web-links link-by-web_link_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove shared link from web link
@@ -3795,6 +3933,7 @@ export def "web-links link-by-web_link_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the web link. (nullable)
 ]: any -> record {
@@ -3807,7 +3946,7 @@ export def "web-links link-by-web_link_id-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find app item for shared link
@@ -3822,6 +3961,7 @@ export def "shared-itemsapp-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --boxapi: string # A header containing the shared link and optional password for the shared link.  The format for this header is `shared_link=[link]&shared_link_password=[password]`. (e.g. shared_link=[example.com]&shared_link_password=[xyz123])
 ]: nothing -> record<id: string, type: string, application_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3831,7 +3971,7 @@ export def "shared-itemsapp-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List enterprise users
@@ -3846,6 +3986,7 @@ export def "users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter-term: string # Limits the results to only users who's `name` or `login` start with the search term.  For externally managed users, the search term needs to completely match the in order to find the user, and it will only return one user at a time. (e.g. john)
   --user-type: string@user-type-completer # Limits the results to the kind of user specified.  * `all` returns every kind of user for whom the   `login` or `name` partially matches the   `filter_term`. It will only return an external user   if the login matches the `filter_term` completely,   and in that case it will only return that user. * `managed` returns all managed and app users for whom   the `login` or `name` partially matches the   `filter_term`. * `external` returns all external users for whom the   `login` matches the `filter_term` exactly. (e.g. managed)
   --external-app-user-id: string # Limits the results to app users with the given `external_app_user_id` value.  When creating an app user, an `external_app_user_id` value can be set. This value can then be used in this endpoint to find any users that match that `external_app_user_id` value. (e.g. my-user-1234)
@@ -3861,7 +4002,7 @@ export def "users users" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -3877,6 +4018,7 @@ export def "users users-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   name: string # The name of the user. (e.g. Aaron Levie)
   --login: string # The email address the user uses to log in  Required, unless `is_platform_access_only` is set to `true`. (e.g. boss@box.com)
@@ -3906,7 +4048,7 @@ export def "users users-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get current user
@@ -3921,6 +4063,7 @@ export def "users-me me" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3929,7 +4072,7 @@ export def "users-me me" [
   let full_url = (build-url $base "/users/me" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create jobs to terminate users session
@@ -3944,6 +4087,7 @@ export def "users-terminate-sessions sessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_ids: list # A list of user IDs. (e.g. [123456, 456789])
   user_logins: list # A list of user logins. (e.g. [user@sample.com, user2@sample.com])
 ]: any -> record<message: string> {
@@ -3955,7 +4099,7 @@ export def "users-terminate-sessions sessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user
@@ -3971,6 +4115,7 @@ export def "users id-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3979,7 +4124,7 @@ export def "users id-by-user_id" [
   let full_url = (build-url $base $"/users/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user
@@ -3997,6 +4142,7 @@ export def "users id-by-user_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --enterprise: string # Set this to `null` to roll the user out of the enterprise and make them a free user. (nullable)
   --notify: oneof<nothing, bool> # Whether the user should receive an email when they are rolled out of an enterprise. (e.g. true)
@@ -4029,7 +4175,7 @@ export def "users id-by-user_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user
@@ -4045,6 +4191,7 @@ export def "users id-by-user_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notify: oneof<nothing, bool> # Whether the user will receive email notification of the deletion. (e.g. true)
   --force: oneof<nothing, bool> # Specifies whether to delete the user even if they still own files. (e.g. true)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
@@ -4054,7 +4201,7 @@ export def "users id-by-user_id-2" [
   let full_url = (build-url $base $"/users/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user avatar
@@ -4070,6 +4217,7 @@ export def "users-avatar avatar-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4077,7 +4225,7 @@ export def "users-avatar avatar-by-user_id" [
   let full_url = (build-url $base $"/users/($user_id)/avatar")
   let accept_val = ($accept | default "image/jpg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update user avatar
@@ -4093,6 +4241,7 @@ export def "users-avatar avatar-by-user_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pic: string # The image file to be uploaded to Box. Accepted file extensions are `.jpg` or `.png`. The maximum file size is 1MB. (format: binary)
 ]: any -> record<pic_urls: record<small: string, large: string, preview: string>> {
   let input = $in
@@ -4103,7 +4252,7 @@ export def "users-avatar avatar-by-user_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete user avatar
@@ -4119,13 +4268,14 @@ export def "users-avatar avatar-by-user_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/avatar")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer owned folders
@@ -4142,6 +4292,7 @@ export def "users-folders-0 folders-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   owned_by: record # The user who the folder will be transferred to. — shape: {id: string}
@@ -4155,7 +4306,7 @@ export def "users-folders-0 folders-by-user_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List user's email aliases
@@ -4171,13 +4322,14 @@ export def "users-email-aliases aliases-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_count: int, entries: table<id: string, type: string, email: string, is_confirmed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/email_aliases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create email alias
@@ -4193,6 +4345,7 @@ export def "users-email-aliases aliases-by-user_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address to add to the account as an alias.  Note: The domain of the email alias needs to be registered  to your enterprise. See the [domain verification guide](   https://support.box.com/hc/en-us/articles/4408619650579-Domain-Verification   ) for steps to add a new domain. (e.g. alias@example.com)
 ]: any -> record<id: string, type: string, email: string, is_confirmed: bool> {
   let input = $in
@@ -4203,7 +4356,7 @@ export def "users-email-aliases aliases-by-user_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove email alias
@@ -4220,13 +4373,14 @@ export def "users-email-aliases id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/email_aliases/($email_alias_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's groups
@@ -4242,6 +4396,7 @@ export def "users-memberships memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
@@ -4251,7 +4406,7 @@ export def "users-memberships memberships" [
   let full_url = (build-url $base $"/users/($user_id)/memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user invite
@@ -4268,6 +4423,7 @@ export def "invites invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   enterprise: record # The enterprise to invite the user to. — shape: {id: string}
   actionable_by: record # The user to invite. — shape: {login?: string}
@@ -4281,7 +4437,7 @@ export def "invites invites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user invite status
@@ -4297,6 +4453,7 @@ export def "invites id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, type: string, invited_to: record<id: string, type: string, name: string>, actionable_by: record, invited_by: record, status: string, created_at: string, modified_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4305,7 +4462,7 @@ export def "invites id" [
   let full_url = (build-url $base $"/invites/($invite_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List groups for enterprise
@@ -4320,6 +4477,7 @@ export def "groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter-term: string # Limits the results to only groups whose `name` starts with the search term. (e.g. Engineering)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -4331,7 +4489,7 @@ export def "groups groups" [
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create group
@@ -4346,6 +4504,7 @@ export def "groups groups-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   name: string # The name of the new group to be created. This name must be unique within the enterprise. (e.g. Customer Support)
   --provenance: string # Keeps track of which external source this group is coming, for example `Active Directory`, or `Okta`.  Setting this will also prevent Box admins from editing the group name and its members directly via the Box web application.  This is desirable for one-way syncing of groups. (e.g. Active Directory)
@@ -4363,7 +4522,7 @@ export def "groups groups-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create jobs to terminate user group session
@@ -4378,6 +4537,7 @@ export def "groups-terminate-sessions sessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   group_ids: list # A list of group IDs. (e.g. [123456, 456789])
 ]: any -> record<message: string> {
   let input = $in
@@ -4388,7 +4548,7 @@ export def "groups-terminate-sessions sessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get group
@@ -4404,6 +4564,7 @@ export def "groups id-by-group_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4412,7 +4573,7 @@ export def "groups id-by-group_id" [
   let full_url = (build-url $base $"/groups/($group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group
@@ -4428,6 +4589,7 @@ export def "groups id-by-group_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # The name of the new group to be created. Must be unique within the enterprise. (e.g. Customer Support)
   --provenance: string # Keeps track of which external source this group is coming, for example `Active Directory`, or `Okta`.  Setting this will also prevent Box admins from editing the group name and its members directly via the Box web application.  This is desirable for one-way syncing of groups. (e.g. Active Directory)
@@ -4445,7 +4607,7 @@ export def "groups id-by-group_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove group
@@ -4461,13 +4623,14 @@ export def "groups id-by-group_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List members of group
@@ -4483,6 +4646,7 @@ export def "groups-memberships memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
@@ -4492,7 +4656,7 @@ export def "groups-memberships memberships" [
   let full_url = (build-url $base $"/groups/($group_id)/memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List group collaborations
@@ -4508,6 +4672,7 @@ export def "groups-collaborations collaborations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
 ]: nothing -> record {
@@ -4517,7 +4682,7 @@ export def "groups-collaborations collaborations" [
   let full_url = (build-url $base $"/groups/($group_id)/collaborations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to group
@@ -4534,6 +4699,7 @@ export def "group-memberships memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   user: record # The user to add to the group. — shape: {id: string}
   group: record # The group to add the user to. — shape: {id: string}
@@ -4549,7 +4715,7 @@ export def "group-memberships memberships" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get group membership
@@ -4565,6 +4731,7 @@ export def "group-memberships id-by-group_membership_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, type: string, user: record, group: record, role: string, created_at: string, modified_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4573,7 +4740,7 @@ export def "group-memberships id-by-group_membership_id" [
   let full_url = (build-url $base $"/group_memberships/($group_membership_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group membership
@@ -4589,6 +4756,7 @@ export def "group-memberships id-by-group_membership_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --role: string@role-completer-3 # The role of the user in the group. (e.g. member)
   --configurable-permissions: record # Custom configuration for the permissions an admin if a group will receive. This option has no effect on members with a role of `member`.  Setting these permissions overwrites the default access levels of an admin.  Specifying a value of `null` for this object will disable all configurable permissions. Specifying permissions will set them accordingly, omitted permissions will be enabled by default. (nullable, e.g. {can_run_reports: true})
@@ -4602,7 +4770,7 @@ export def "group-memberships id-by-group_membership_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove user from group
@@ -4618,13 +4786,14 @@ export def "group-memberships id-by-group_membership_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/group_memberships/($group_membership_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all webhooks
@@ -4639,6 +4808,7 @@ export def "webhooks webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -4648,7 +4818,7 @@ export def "webhooks webhooks" [
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -4664,6 +4834,7 @@ export def "webhooks webhooks-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   target: record # The item that will trigger the webhook. — shape: {id?: string, type?: "file"|"folder"}
   address: string # The URL that is notified by this webhook. (e.g. https://example.com/webhooks)
   triggers: list # An array of event names that this webhook is to be triggered for. (e.g. [FILE.UPLOADED])
@@ -4676,7 +4847,7 @@ export def "webhooks webhooks-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhook
@@ -4692,13 +4863,14 @@ export def "webhooks id-by-webhook_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhooks/($webhook_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -4715,6 +4887,7 @@ export def "webhooks id-by-webhook_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target: record # The item that will trigger the webhook. — shape: {id?: string, type?: "file"|"folder"}
   --address: string # The URL that is notified by this webhook. (e.g. https://example.com/webhooks)
   --triggers: list # An array of event names that this webhook is to be triggered for. (e.g. [FILE.UPLOADED])
@@ -4727,7 +4900,7 @@ export def "webhooks id-by-webhook_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove webhook
@@ -4743,13 +4916,14 @@ export def "webhooks id-by-webhook_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhooks/($webhook_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update all Box Skill cards on file
@@ -4769,6 +4943,7 @@ export def "skill-invocations id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-4 # Defines the status of this invocation. Set this to `success` when setting Skill cards. (e.g. success)
   metadata: record # The metadata to set for this skill. This is a list of Box Skills cards. These cards will overwrite any existing Box skill cards on the file. — shape: {cards?: list}
   file: record # The file to assign the cards to. — shape: {type?: "file", id?: string}
@@ -4783,7 +4958,7 @@ export def "skill-invocations id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events long poll endpoint
@@ -4798,13 +4973,14 @@ export def "events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "options" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user and enterprise events
@@ -4819,6 +4995,7 @@ export def "events events-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream-type: string@stream-type-completer # Defines the type of events that are returned  * `all` returns everything for a user and is the default * `changes` returns events that may cause file tree changes   such as file updates or collaborations. * `sync` is similar to `changes` but only applies to synced folders * `admin_logs` returns all events for an entire enterprise and   requires the user making the API call to have admin permissions. This   stream type is for programmatically pulling from a 1 year history of   events across all users within the enterprise and within a   `created_after` and `created_before` time frame. The complete history   of events will be returned in chronological order based on the event   time, but latency will be much higher than `admin_logs_streaming`. * `admin_logs_streaming` returns all events for an entire enterprise and   requires the user making the API call to have admin permissions. This   stream type is for polling for recent events across all users within   the enterprise. Latency will be much lower than `admin_logs`, but   events will not be returned in chronological order and may   contain duplicates. (default: all, e.g. all)
   --stream-position: string # The location in the event stream to start receiving events from.  * `now` will return an empty list events and the latest stream position for initialization. * `0` or `null` will return all events. (e.g. 1348790499819)
   --limit: int # Limits the number of events returned.  Note: Sometimes, the events less than the limit requested can be returned even when there may be more events remaining. This is primarily done in the case where a number of events have already been retrieved and these retrieved events are returned rather than delaying for an unknown amount of time to see if there are any more results. (format: int64, default: 100, e.g. 50)
@@ -4832,7 +5009,7 @@ export def "events events-1" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all collections
@@ -4847,6 +5024,7 @@ export def "collections collections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -4857,7 +5035,7 @@ export def "collections collections" [
   let full_url = (build-url $base "/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List collection items
@@ -4873,6 +5051,7 @@ export def "collections-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -4883,7 +5062,7 @@ export def "collections-items items" [
   let full_url = (build-url $base $"/collections/($collection_id)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get collection by ID
@@ -4899,13 +5078,14 @@ export def "collections id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, name: string, collection_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recently accessed items
@@ -4920,6 +5100,7 @@ export def "recent-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -4930,7 +5111,7 @@ export def "recent-items items" [
   let full_url = (build-url $base "/recent_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List retention policies
@@ -4945,6 +5126,7 @@ export def "retention-policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-name: string # Filters results by a case sensitive prefix of the name of retention policies. (e.g. Sales Policy)
   --policy-type: string@policy-type-completer # Filters results by the type of retention policy. (e.g. finite)
   --created-by-user-id: string # Filters results by the ID of the user who created policy. (e.g. 21312321)
@@ -4958,7 +5140,7 @@ export def "retention-policies policies" [
   let full_url = (build-url $base "/retention_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create retention policy
@@ -4974,6 +5156,7 @@ export def "retention-policies policies-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policy_name: string # The name for the retention policy. (e.g. Some Policy Name)
   --description: string # The additional text description of the retention policy. (e.g. Policy to retain all reports for at least one month)
   policy_type: string@policy-type-completer # The type of the retention policy. A retention policy type can either be `finite`, where a specific amount of time to retain the content is known upfront, or `indefinite`, where the amount of time to retain the content is still unknown. (e.g. finite)
@@ -4993,7 +5176,7 @@ export def "retention-policies policies-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get retention policy
@@ -5009,6 +5192,7 @@ export def "retention-policies id-by-retention_policy_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5017,7 +5201,7 @@ export def "retention-policies id-by-retention_policy_id" [
   let full_url = (build-url $base $"/retention_policies/($retention_policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update retention policy
@@ -5034,6 +5218,7 @@ export def "retention-policies id-by-retention_policy_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-name: string # The name for the retention policy. (nullable, e.g. Some Policy Name)
   --description: string # The additional text description of the retention policy. (nullable, e.g. Policy to retain all reports for at least one month)
   --disposition-action: any # The disposition action of the retention policy. This action can be `permanently_delete`, which will cause the content retained by the policy to be permanently deleted, or `remove_retention`, which will lift the retention policy from the content, allowing it to be deleted by users, once the retention policy has expired. You can use `null` if you don't want to change `disposition_action`. (e.g. permanently_delete)
@@ -5053,7 +5238,7 @@ export def "retention-policies id-by-retention_policy_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete retention policy
@@ -5069,13 +5254,14 @@ export def "retention-policies id-by-retention_policy_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/retention_policies/($retention_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List retention policy assignments
@@ -5091,6 +5277,7 @@ export def "retention-policies-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2 # The type of the retention policy assignment to retrieve. (e.g. metadata_template)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -5102,7 +5289,7 @@ export def "retention-policies-assignments assignments" [
   let full_url = (build-url $base $"/retention_policies/($retention_policy_id)/assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign retention policy
@@ -5119,6 +5306,7 @@ export def "retention-policy-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policy_id: string # The ID of the retention policy to assign. (e.g. 173463)
   assign_to: record # The item to assign the policy to. — shape: {type: "enterprise"|"folder"|"metadata_template", id?: string}
   --filter-fields: list # If the `assign_to` type is `metadata_template`, then optionally add the `filter_fields` parameter which will require an array of objects with a field entry and a value entry. Currently only one object of `field` and `value` is supported. — item shape: {field?: string, value?: string}
@@ -5132,7 +5320,7 @@ export def "retention-policy-assignments assignments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get retention policy assignment
@@ -5148,6 +5336,7 @@ export def "retention-policy-assignments id-by-retention_policy_assignment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
 ]: nothing -> record<id: string, type: string, retention_policy: record, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, assigned_by: record, assigned_at: string, start_date_field: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5156,7 +5345,7 @@ export def "retention-policy-assignments id-by-retention_policy_assignment_id" [
   let full_url = (build-url $base $"/retention_policy_assignments/($retention_policy_assignment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove retention policy assignment
@@ -5172,13 +5361,14 @@ export def "retention-policy-assignments id-by-retention_policy_assignment_id-1"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/retention_policy_assignments/($retention_policy_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get files under retention
@@ -5194,6 +5384,7 @@ export def "retention-policy-assignments-files-under-retention retention" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -5203,7 +5394,7 @@ export def "retention-policy-assignments-files-under-retention retention" [
   let full_url = (build-url $base $"/retention_policy_assignments/($retention_policy_assignment_id)/files_under_retention" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file versions under retention
@@ -5219,6 +5410,7 @@ export def "retention-policy-assignments-file-versions-under-retention retention
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -5228,7 +5420,7 @@ export def "retention-policy-assignments-file-versions-under-retention retention
   let full_url = (build-url $base $"/retention_policy_assignments/($retention_policy_assignment_id)/file_versions_under_retention" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all legal hold policies
@@ -5243,6 +5435,7 @@ export def "legal-hold-policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-name: string # Limits results to policies for which the names start with this search term. This is a case-insensitive prefix. (e.g. Sales Policy)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
@@ -5254,7 +5447,7 @@ export def "legal-hold-policies policies" [
   let full_url = (build-url $base "/legal_hold_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create legal hold policy
@@ -5269,6 +5462,7 @@ export def "legal-hold-policies policies-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policy_name: string # The name of the policy. (e.g. Sales Policy)
   --description: string # A description for the policy. (e.g. A custom policy for the sales team)
   --filter-started-at: string # The filter start date.  When this policy is applied using a `custodian` legal hold assignments, it will only apply to file versions created or uploaded inside of the date range. Other assignment types, such as folders and files, will ignore the date filter.  Required if `is_ongoing` is set to `false`. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
@@ -5283,7 +5477,7 @@ export def "legal-hold-policies policies-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get legal hold policy
@@ -5299,13 +5493,14 @@ export def "legal-hold-policies id-by-legal_hold_policy_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/legal_hold_policies/($legal_hold_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update legal hold policy
@@ -5321,6 +5516,7 @@ export def "legal-hold-policies id-by-legal_hold_policy_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-name: string # The name of the policy. (e.g. Sales Policy)
   --description: string # A description for the policy. (e.g. A custom policy for the sales team)
   --release-notes: string # Notes around why the policy was released. (e.g. Required for GDPR)
@@ -5333,7 +5529,7 @@ export def "legal-hold-policies id-by-legal_hold_policy_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove legal hold policy
@@ -5349,13 +5545,14 @@ export def "legal-hold-policies id-by-legal_hold_policy_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/legal_hold_policies/($legal_hold_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List legal hold policy assignments
@@ -5370,6 +5567,7 @@ export def "legal-hold-policy-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-id: string # The ID of the legal hold policy. (e.g. 324432)
   --assign-to-type: string@assign-to-type-completer # Filters the results by the type of item the policy was applied to. (e.g. file)
   --assign-to-id: string # Filters the results by the ID of item the policy was applied to. (e.g. 1234323)
@@ -5383,7 +5581,7 @@ export def "legal-hold-policy-assignments assignments" [
   let full_url = (build-url $base "/legal_hold_policy_assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign legal hold policy
@@ -5399,6 +5597,7 @@ export def "legal-hold-policy-assignments assignments-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policy_id: string # The ID of the policy to assign. (e.g. 123244)
   assign_to: record # The item to assign the policy to. — shape: {type: "file"|"file_version"|"folder"|"user"|"ownership"|"interactions", id: string}
 ]: any -> record {
@@ -5410,7 +5609,7 @@ export def "legal-hold-policy-assignments assignments-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get legal hold policy assignment
@@ -5426,13 +5625,14 @@ export def "legal-hold-policy-assignments id-by-legal_hold_policy_assignment_id"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unassign legal hold policy
@@ -5448,13 +5648,14 @@ export def "legal-hold-policy-assignments id-by-legal_hold_policy_assignment_id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List files with current file versions for legal hold policy assignment
@@ -5470,6 +5671,7 @@ export def "legal-hold-policy-assignments-files-on-hold hold" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
@@ -5480,7 +5682,7 @@ export def "legal-hold-policy-assignments-files-on-hold hold" [
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)/files_on_hold" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List file version retentions
@@ -5495,6 +5697,7 @@ export def "file-version-retentions retentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: string # Filters results by files with this ID. (e.g. 43123123)
   --file-version-id: string # Filters results by file versions with this ID. (e.g. 1)
   --policy-id: string # Filters results by the retention policy with this ID. (e.g. 982312)
@@ -5510,7 +5713,7 @@ export def "file-version-retentions retentions" [
   let full_url = (build-url $base "/file_version_retentions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List previous file versions for legal hold policy assignment
@@ -5526,6 +5729,7 @@ export def "legal-hold-policy-assignments-file-versions-on-hold hold" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
@@ -5536,7 +5740,7 @@ export def "legal-hold-policy-assignments-file-versions-on-hold hold" [
   let full_url = (build-url $base $"/legal_hold_policy_assignments/($legal_hold_policy_assignment_id)/file_versions_on_hold" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get retention on file
@@ -5552,13 +5756,14 @@ export def "file-version-retentions id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, file_version: record, file: record, applied_at: string, disposition_at: string, winning_retention_policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/file_version_retentions/($file_version_retention_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file version legal hold
@@ -5574,13 +5779,14 @@ export def "file-version-legal-holds id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, file_version: record, file: record, legal_hold_policy_assignments: list<record>, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/file_version_legal_holds/($file_version_legal_hold_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List file version legal holds
@@ -5595,6 +5801,7 @@ export def "file-version-legal-holds holds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --policy-id: string # The ID of the legal hold policy to get the file version legal holds for. (e.g. 133870)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -5605,7 +5812,7 @@ export def "file-version-legal-holds holds" [
   let full_url = (build-url $base "/file_version_legal_holds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shield information barrier with specified ID
@@ -5621,13 +5828,14 @@ export def "shield-information-barriers id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, enterprise: record<id: string, type: string>, status: string, created_at: string, created_by: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barriers/($shield_information_barrier_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add changed status of shield information barrier with specified ID
@@ -5642,6 +5850,7 @@ export def "shield-information-barriers-change-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the shield information barrier. (e.g. 1910967)
   status: string@status-completer-5 # The desired status for the shield information barrier. (e.g. pending)
 ]: any -> record<id: string, type: string, enterprise: record<id: string, type: string>, status: string, created_at: string, created_by: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>> {
@@ -5653,7 +5862,7 @@ export def "shield-information-barriers-change-status status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shield information barriers
@@ -5668,6 +5877,7 @@ export def "shield-information-barriers barriers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -5677,7 +5887,7 @@ export def "shield-information-barriers barriers" [
   let full_url = (build-url $base "/shield_information_barriers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shield information barrier
@@ -5692,6 +5902,7 @@ export def "shield-information-barriers barriers-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   enterprise: any # The `type` and `id` of enterprise this barrier is under.
 ]: any -> record<id: string, type: string, enterprise: record<id: string, type: string>, status: string, created_at: string, created_by: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>> {
   let input = $in
@@ -5702,7 +5913,7 @@ export def "shield-information-barriers barriers-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shield information barrier reports
@@ -5717,6 +5928,7 @@ export def "shield-information-barrier-reports reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier-id: string # The ID of the shield information barrier. (e.g. 1910967)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -5727,7 +5939,7 @@ export def "shield-information-barrier-reports reports" [
   let full_url = (build-url $base "/shield_information_barrier_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shield information barrier report
@@ -5743,6 +5955,7 @@ export def "shield-information-barrier-reports reports-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier: record # A base representation of a shield information barrier object. — shape: {id?: string, type?: "shield_information_barrier"}
 ]: any -> record {
   let input = $in
@@ -5753,7 +5966,7 @@ export def "shield-information-barrier-reports reports-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get shield information barrier report by ID
@@ -5769,13 +5982,14 @@ export def "shield-information-barrier-reports id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_reports/($shield_information_barrier_report_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shield information barrier segment with specified ID
@@ -5791,13 +6005,14 @@ export def "shield-information-barrier-segments id-by-shield_information_barrier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, shield_information_barrier: record<id: string, type: string>, name: string, description: string, created_at: string, created_by: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segments/($shield_information_barrier_segment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete shield information barrier segment
@@ -5813,13 +6028,14 @@ export def "shield-information-barrier-segments id-by-shield_information_barrier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segments/($shield_information_barrier_segment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update shield information barrier segment with specified ID
@@ -5835,6 +6051,7 @@ export def "shield-information-barrier-segments id-by-shield_information_barrier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The updated name for the shield information barrier segment. (e.g. Investment Banking)
   --description: string # The updated description for the shield information barrier segment. (nullable, e.g. 'Corporate division that engages in advisory_based financial transactions on behalf of individuals, corporations, and governments.')
 ]: any -> record<id: string, type: string, shield_information_barrier: record<id: string, type: string>, name: string, description: string, created_at: string, created_by: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>> {
@@ -5846,7 +6063,7 @@ export def "shield-information-barrier-segments id-by-shield_information_barrier
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shield information barrier segments
@@ -5861,6 +6078,7 @@ export def "shield-information-barrier-segments segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier-id: string # The ID of the shield information barrier. (e.g. 1910967)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -5871,7 +6089,7 @@ export def "shield-information-barrier-segments segments" [
   let full_url = (build-url $base "/shield_information_barrier_segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shield information barrier segment
@@ -5887,6 +6105,7 @@ export def "shield-information-barrier-segments segments-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   shield_information_barrier: record # A base representation of a shield information barrier object. — shape: {id?: string, type?: "shield_information_barrier"}
   name: string # Name of the shield information barrier segment. (e.g. Investment Banking)
   --description: string # Description of the shield information barrier segment. (e.g. 'Corporate division that engages in  advisory_based financial transactions on behalf of individuals, corporations, and governments.')
@@ -5899,7 +6118,7 @@ export def "shield-information-barrier-segments segments-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get shield information barrier segment member by ID
@@ -5915,13 +6134,14 @@ export def "shield-information-barrier-segment-members id-by-shield_information_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segment_members/($shield_information_barrier_segment_member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete shield information barrier segment member by ID
@@ -5937,13 +6157,14 @@ export def "shield-information-barrier-segment-members id-by-shield_information_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segment_members/($shield_information_barrier_segment_member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List shield information barrier segment members
@@ -5958,6 +6179,7 @@ export def "shield-information-barrier-segment-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (e.g. 3423)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -5968,7 +6190,7 @@ export def "shield-information-barrier-segment-members members" [
   let full_url = (build-url $base "/shield_information_barrier_segment_members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shield information barrier segment member
@@ -5985,6 +6207,7 @@ export def "shield-information-barrier-segment-members members-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-3 # A type of the shield barrier segment member. (e.g. shield_information_barrier_segment_member)
   --shield-information-barrier: record # A base representation of a shield information barrier object. — shape: {id?: string, type?: "shield_information_barrier"}
   shield_information_barrier_segment: record # The `type` and `id` of the requested shield information barrier segment. — shape: {id?: string, type?: "shield_information_barrier_segment"}
@@ -5998,7 +6221,7 @@ export def "shield-information-barrier-segment-members members-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get shield information barrier segment restriction by ID
@@ -6014,13 +6237,14 @@ export def "shield-information-barrier-segment-restrictions id-by-shield_informa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segment_restrictions/($shield_information_barrier_segment_restriction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete shield information barrier segment restriction by ID
@@ -6036,13 +6260,14 @@ export def "shield-information-barrier-segment-restrictions id-by-shield_informa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shield_information_barrier_segment_restrictions/($shield_information_barrier_segment_restriction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List shield information barrier segment restrictions
@@ -6057,6 +6282,7 @@ export def "shield-information-barrier-segment-restrictions restrictions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (e.g. 3423)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -6067,7 +6293,7 @@ export def "shield-information-barrier-segment-restrictions restrictions" [
   let full_url = (build-url $base "/shield_information_barrier_segment_restrictions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shield information barrier segment restriction
@@ -6085,6 +6311,7 @@ export def "shield-information-barrier-segment-restrictions restrictions-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-4 # The type of the shield barrier segment restriction for this member. (e.g. shield_information_barrier_segment_restriction)
   --shield-information-barrier: record # A base representation of a shield information barrier object. — shape: {id?: string, type?: "shield_information_barrier"}
   shield_information_barrier_segment: record # The `type` and `id` of the requested shield information barrier segment. — shape: {id?: string, type?: "shield_information_barrier_segment"}
@@ -6098,7 +6325,7 @@ export def "shield-information-barrier-segment-restrictions restrictions-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get device pin
@@ -6114,13 +6341,14 @@ export def "device-pinners id-by-device_pinner_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, owned_by: record, product_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/device_pinners/($device_pinner_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove device pin
@@ -6136,13 +6364,14 @@ export def "device-pinners id-by-device_pinner_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/device_pinners/($device_pinner_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List enterprise device pins
@@ -6158,6 +6387,7 @@ export def "enterprises-device-pinners pinners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --direction: string@direction-completer # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
@@ -6168,7 +6398,7 @@ export def "enterprises-device-pinners pinners" [
   let full_url = (build-url $base $"/enterprises/($enterprise_id)/device_pinners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List terms of services
@@ -6183,6 +6413,7 @@ export def "terms-of-services services" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tos-type: string@tos-type-completer # Limits the results to the terms of service of the given type. (e.g. managed)
 ]: nothing -> record<total_count: int, entries: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6191,7 +6422,7 @@ export def "terms-of-services services" [
   let full_url = (build-url $base "/terms_of_services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create terms of service
@@ -6206,6 +6437,7 @@ export def "terms-of-services services-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-6 # Whether this terms of service is active. (e.g. enabled)
   --tos-type: string@tos-type-completer # The type of user to set the terms of service for. (e.g. managed)
   text: string # The terms of service text to display to users.  The text can be set to empty if the `status` is set to `disabled`. (e.g. By collaborating on this file you are accepting...)
@@ -6218,7 +6450,7 @@ export def "terms-of-services services-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get terms of service
@@ -6234,13 +6466,14 @@ export def "terms-of-services id-by-terms_of_service_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/terms_of_services/($terms_of_service_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terms of service
@@ -6256,6 +6489,7 @@ export def "terms-of-services id-by-terms_of_service_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-6 # Whether this terms of service is active. (e.g. enabled)
   text: string # The terms of service text to display to users.  The text can be set to empty if the `status` is set to `disabled`. (e.g. By collaborating on this file you are accepting...)
 ]: any -> record {
@@ -6267,7 +6501,7 @@ export def "terms-of-services id-by-terms_of_service_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List terms of service user statuses
@@ -6282,6 +6516,7 @@ export def "terms-of-service-user-statuses statuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tos-id: string # The ID of the terms of service. (e.g. 324234)
   --user-id: string # Limits results to the given user ID. (e.g. 123334)
 ]: nothing -> record<total_count: int, entries: table<id: string, type: string, tos: record, user: record, is_accepted: bool, created_at: string, modified_at: string>> {
@@ -6291,7 +6526,7 @@ export def "terms-of-service-user-statuses statuses" [
   let full_url = (build-url $base "/terms_of_service_user_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create terms of service status for new user
@@ -6308,6 +6543,7 @@ export def "terms-of-service-user-statuses statuses-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tos: record # The terms of service to set the status for. — shape: {type: "terms_of_service", id: string}
   user: record # The user to set the status for. — shape: {type: "user", id: string}
   --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
@@ -6320,7 +6556,7 @@ export def "terms-of-service-user-statuses statuses-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update terms of service status for existing user
@@ -6336,6 +6572,7 @@ export def "terms-of-service-user-statuses id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
 ]: any -> record<id: string, type: string, tos: record<id: string, type: string>, user: record, is_accepted: bool, created_at: string, modified_at: string> {
   let input = $in
@@ -6346,7 +6583,7 @@ export def "terms-of-service-user-statuses id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List allowed collaboration domains
@@ -6361,6 +6598,7 @@ export def "collaboration-whitelist-entries entries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -6370,7 +6608,7 @@ export def "collaboration-whitelist-entries entries" [
   let full_url = (build-url $base "/collaboration_whitelist_entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add domain to list of allowed collaboration domains
@@ -6385,6 +6623,7 @@ export def "collaboration-whitelist-entries entries-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # The domain to add to the list of allowed domains. (e.g. example.com)
   direction: string@direction-completer-1 # The direction in which to allow collaborations. (e.g. inbound)
 ]: any -> record<id: string, type: string, domain: string, direction: string, enterprise: record<id: string, type: string, name: string>, created_at: string> {
@@ -6396,7 +6635,7 @@ export def "collaboration-whitelist-entries entries-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get allowed collaboration domain
@@ -6412,13 +6651,14 @@ export def "collaboration-whitelist-entries id-by-collaboration_whitelist_entry_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, domain: string, direction: string, enterprise: record<id: string, type: string, name: string>, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collaboration_whitelist_entries/($collaboration_whitelist_entry_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove domain from list of allowed collaboration domains
@@ -6434,13 +6674,14 @@ export def "collaboration-whitelist-entries id-by-collaboration_whitelist_entry_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collaboration_whitelist_entries/($collaboration_whitelist_entry_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users exempt from collaboration domain restrictions
@@ -6455,6 +6696,7 @@ export def "collaboration-whitelist-exempt-targets targets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -6464,7 +6706,7 @@ export def "collaboration-whitelist-exempt-targets targets" [
   let full_url = (build-url $base "/collaboration_whitelist_exempt_targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user exemption from collaboration domain restrictions
@@ -6480,6 +6722,7 @@ export def "collaboration-whitelist-exempt-targets targets-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user: record # The user to exempt. — shape: {id: string}
 ]: any -> record<id: string, type: string, enterprise: record<id: string, type: string, name: string>, user: record, created_at: string, modified_at: string> {
   let input = $in
@@ -6490,7 +6733,7 @@ export def "collaboration-whitelist-exempt-targets targets-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user exempt from collaboration domain restrictions
@@ -6506,13 +6749,14 @@ export def "collaboration-whitelist-exempt-targets id-by-collaboration_whitelist
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, enterprise: record<id: string, type: string, name: string>, user: record, created_at: string, modified_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collaboration_whitelist_exempt_targets/($collaboration_whitelist_exempt_target_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user from list of users exempt from domain restrictions
@@ -6528,13 +6772,14 @@ export def "collaboration-whitelist-exempt-targets id-by-collaboration_whitelist
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collaboration_whitelist_exempt_targets/($collaboration_whitelist_exempt_target_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List storage policies
@@ -6549,6 +6794,7 @@ export def "storage-policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -6559,7 +6805,7 @@ export def "storage-policies policies" [
   let full_url = (build-url $base "/storage_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get storage policy
@@ -6575,13 +6821,14 @@ export def "storage-policies id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storage_policies/($storage_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List storage policy assignments
@@ -6596,6 +6843,7 @@ export def "storage-policy-assignments assignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --resolved-for-type: string@resolved-for-type-completer # The target type to return assignments for. (e.g. user)
   --resolved-for-id: string # The ID of the user or enterprise to return assignments for. (e.g. 984322)
@@ -6606,7 +6854,7 @@ export def "storage-policy-assignments assignments" [
   let full_url = (build-url $base "/storage_policy_assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign storage policy
@@ -6623,6 +6871,7 @@ export def "storage-policy-assignments assignments-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   storage_policy: record # The storage policy to assign to the user or enterprise. — shape: {type: "storage_policy", id: string}
   assigned_to: record # The user or enterprise to assign the storage policy to. — shape: {type: "user"|"enterprise", id: string}
 ]: any -> record<id: string, type: string, storage_policy: record<id: string, type: string>, assigned_to: record<id: string, type: string>> {
@@ -6634,7 +6883,7 @@ export def "storage-policy-assignments assignments-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get storage policy assignment
@@ -6650,13 +6899,14 @@ export def "storage-policy-assignments id-by-storage_policy_assignment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, storage_policy: record<id: string, type: string>, assigned_to: record<id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storage_policy_assignments/($storage_policy_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update storage policy assignment
@@ -6673,6 +6923,7 @@ export def "storage-policy-assignments id-by-storage_policy_assignment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   storage_policy: record # The storage policy to assign to the user or enterprise. — shape: {type: "storage_policy", id: string}
 ]: any -> record<id: string, type: string, storage_policy: record<id: string, type: string>, assigned_to: record<id: string, type: string>> {
   let input = $in
@@ -6683,7 +6934,7 @@ export def "storage-policy-assignments id-by-storage_policy_assignment_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign storage policy
@@ -6699,13 +6950,14 @@ export def "storage-policy-assignments id-by-storage_policy_assignment_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storage_policy_assignments/($storage_policy_assignment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create zip download
@@ -6721,6 +6973,7 @@ export def "zip-downloads downloads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # A list of items to add to the `zip` archive. These can be folders or files. — item shape: {type: "file"|"folder", id: string}
   --download-file-name: string # The optional name of the `zip` archive. This name will be appended by the `.zip` file extension, for example `January Financials.zip`. (e.g. January Financials)
 ]: any -> record<download_url: string, status_url: string, expires_at: string, name_conflicts: list<list<record>>> {
@@ -6732,7 +6985,7 @@ export def "zip-downloads downloads" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download zip archive
@@ -6748,6 +7001,7 @@ export def "zip-downloads-content content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6755,7 +7009,7 @@ export def "zip-downloads-content content" [
   let full_url = (build-url $base $"/zip_downloads/($zip_download_id)/content")
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get zip download status
@@ -6771,13 +7025,14 @@ export def "zip-downloads-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_file_count: int, downloaded_file_count: int, skipped_file_count: int, skipped_folder_count: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zip_downloads/($zip_download_id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Box Sign request
@@ -6793,6 +7048,7 @@ export def "sign-requests-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # An optional reason for cancelling the sign request. (e.g. Project cancelled)
 ]: any -> record {
   let input = $in
@@ -6803,7 +7059,7 @@ export def "sign-requests-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend Box Sign request
@@ -6819,13 +7075,14 @@ export def "sign-requests-resend resend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sign_requests/($sign_request_id)/resend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Box Sign request by ID
@@ -6841,13 +7098,14 @@ export def "sign-requests id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sign_requests/($sign_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Box Sign requests
@@ -6862,6 +7120,7 @@ export def "sign-requests requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --senders: list # A list of sender emails to filter the signature requests by sender. If provided, `shared_requests` must be set to `true`. (e.g. [sender1@boxdemo.com, sender2@boxdemo.com])
@@ -6873,7 +7132,7 @@ export def "sign-requests requests" [
   let full_url = (build-url $base "/sign_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Box Sign request
@@ -6891,6 +7150,7 @@ export def "sign-requests requests-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-document-preparation-needed: oneof<nothing, bool> # Indicates if the sender should receive a `prepare_url` in the response to complete document preparation using the UI. (e.g. true)
   --redirect-url: string # When specified, the signature request will be redirected to this url when a document is signed. (nullable, e.g. https://www.example.com)
   --declined-redirect-url: string # The uri that a signer will be redirected to after declining to sign a document. (nullable, e.g. https://declined-redirect.com)
@@ -6917,7 +7177,7 @@ export def "sign-requests requests-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List workflows
@@ -6932,6 +7192,7 @@ export def "workflows workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folder-id: string # The unique identifier that represent a folder.  The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`.  The root folder of a Box account is always represented by the ID `0`. (e.g. 12345)
   --trigger-type: string # Type of trigger to search for. (e.g. WORKFLOW_MANUAL_START)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -6943,7 +7204,7 @@ export def "workflows workflows" [
   let full_url = (build-url $base "/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts workflow based on request body
@@ -6963,6 +7224,7 @@ export def "workflows-start start" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-5 # The type of the parameters object. (e.g. workflow_parameters)
   flow: record # The flow that will be triggered. — shape: {type?: string, id?: string}
   files: list # The array of files for which the workflow should start. All files must be in the workflow's configured folder. — item shape: {type?: "file", id?: string}
@@ -6977,7 +7239,7 @@ export def "workflows-start start" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Box Sign templates
@@ -6992,6 +7254,7 @@ export def "sign-templates templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -7001,7 +7264,7 @@ export def "sign-templates templates" [
   let full_url = (build-url $base "/sign_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Box Sign template by ID
@@ -7017,13 +7280,14 @@ export def "sign-templates id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sign_templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Slack integration mappings
@@ -7038,6 +7302,7 @@ export def "integration-mappings-slack slack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --partner-item-type: string@partner-item-type-completer # Mapped item type, for which the mapping should be returned. (e.g. channel)
@@ -7052,7 +7317,7 @@ export def "integration-mappings-slack slack" [
   let full_url = (build-url $base "/integration_mappings/slack" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Slack integration mapping
@@ -7067,6 +7332,7 @@ export def "integration-mappings-slack slack-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   partner_item: any
   box_item: any
   --options: any
@@ -7079,7 +7345,7 @@ export def "integration-mappings-slack slack-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Slack integration mapping
@@ -7095,6 +7361,7 @@ export def "integration-mappings-slack id-by-integration_mapping_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --box-item: any
   --options: any
 ]: any -> record {
@@ -7106,7 +7373,7 @@ export def "integration-mappings-slack id-by-integration_mapping_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Slack integration mapping
@@ -7122,13 +7389,14 @@ export def "integration-mappings-slack id-by-integration_mapping_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integration_mappings/slack/($integration_mapping_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Teams integration mappings
@@ -7143,6 +7411,7 @@ export def "integration-mappings-teams teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --partner-item-type: string@partner-item-type-completer-1 # Mapped item type, for which the mapping should be returned. (e.g. channel)
   --partner-item-id: string # ID of the mapped item, for which the mapping should be returned. (e.g. 12345)
   --box-item-id: string # Box item ID, for which the mappings should be returned. (e.g. 12345)
@@ -7154,7 +7423,7 @@ export def "integration-mappings-teams teams" [
   let full_url = (build-url $base "/integration_mappings/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Teams integration mapping
@@ -7169,6 +7438,7 @@ export def "integration-mappings-teams teams-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   partner_item: any
   box_item: any
 ]: any -> record {
@@ -7180,7 +7450,7 @@ export def "integration-mappings-teams teams-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Teams integration mapping
@@ -7196,6 +7466,7 @@ export def "integration-mappings-teams id-by-integration_mapping_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --box-item: any
 ]: any -> record {
   let input = $in
@@ -7206,7 +7477,7 @@ export def "integration-mappings-teams id-by-integration_mapping_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Teams integration mapping
@@ -7222,13 +7493,14 @@ export def "integration-mappings-teams id-by-integration_mapping_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integration_mappings/teams/($integration_mapping_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ask question
@@ -7245,6 +7517,7 @@ export def "ai-ask ask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mode: string@mode-completer # Box AI handles text documents with text representations up to 2MB in size, or a maximum of 25 files, whichever comes first. If the text file size exceeds 2MB, the first 2MB of text representation will be processed. Box AI handles image documents with a resolution of 1024 x 1024 pixels, with a maximum of 5 images or 5 pages for multi-page images. If the number of image or image pages exceeds 5, the first 5 images or pages will be processed. If you set mode parameter to `single_item_qa`, the items array can have one element only. Currently Box AI does not support multi-modal requests. If both images and text are sent Box AI will only process the text. (e.g. multiple_item_qa)
   prompt: string # The prompt provided by the client to be answered by the LLM. The prompt's length is limited to 10000 characters. (e.g. What is the value provided by public APIs based on this document?)
   items: list # The items to be processed by the LLM, often files. — item shape: {id: string, type: "file"|"hubs", content?: string}
@@ -7260,7 +7533,7 @@ export def "ai-ask ask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate text
@@ -7277,6 +7550,7 @@ export def "ai-text-gen gen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   prompt: string # The prompt provided by the client to be answered by the LLM. The prompt's length is limited to 10000 characters. (e.g. Write an email to a client about the importance of public APIs.)
   items: list # The items to be processed by the LLM, often files. The array can include **exactly one** element.  **Note**: Box AI handles documents with text representations up to 2MB in size. If the file size exceeds 2MB, the first 2MB of text representation will be processed. — item shape: {id: string, type: "file", content?: string}
   --dialogue-history: list # The history of prompts and answers previously passed to the LLM. This parameter provides the additional context to the LLM when generating the response. — item shape: {prompt?: string, answer?: string, created_at?: string}
@@ -7290,7 +7564,7 @@ export def "ai-text-gen gen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get AI agent default configuration
@@ -7305,6 +7579,7 @@ export def "ai-agent-default default" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer-1 # The mode to filter the agent config to return. (e.g. ask)
   --language: string # The ISO language code to return the agent config for. If the language is not supported the default agent config is returned. (e.g. ja)
   --model: string # The model to return the default agent config for. (e.g. azure__openai__gpt_4o_mini)
@@ -7315,7 +7590,7 @@ export def "ai-agent-default default" [
   let full_url = (build-url $base "/ai_agent_default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extract metadata (freeform)
@@ -7331,6 +7606,7 @@ export def "ai-extract extract" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   prompt: string # The prompt provided to a Large Language Model (LLM) in the request. The prompt can be up to 10000 characters long and it can be an XML or a JSON schema. (e.g. \"fields\":[{\"type\":\"string\",\"key\":\"name\",\"displayName\":\"Name\",\"description\":\"The customer name\",\"prompt\":\"Name is always the first word in the document\"},{\"type\":\"date\",\"key\":\"last_contacted_at\",\"displayName\":\"Last Contacted At\",\"description\":\"When this customer was last contacted at\"}])
   items: list # The items that LLM will process. Currently, you can use files only. — item shape: {id: string, type: "file", content?: string}
   --ai-agent: any
@@ -7343,7 +7619,7 @@ export def "ai-extract extract" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Extract metadata (structured)
@@ -7361,6 +7637,7 @@ export def "ai-extract-structured structured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # The items to be processed by the LLM. Currently you can use files only. — item shape: {id: string, type: "file", content?: string}
   --metadata-template: record # The metadata template containing the fields to extract. For your request to work, you must provide either `metadata_template` or `fields`, but not both. — shape: {template_key?: string, type?: "metadata_template", scope?: string}
   --body-fields: list # The fields to be extracted from the provided items. For your request to work, you must provide either `metadata_template` or `fields`, but not both. — item shape: {key: string, description?: string, displayName?: string, prompt?: string, type?: string, options?: list, fields?: list, taxonomy_key?: string, namespace?: string, options_rules?: any}
@@ -7377,7 +7654,7 @@ export def "ai-extract-structured structured" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI agents
@@ -7392,6 +7669,7 @@ export def "ai-agents agents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: list # The mode to filter the agent config to return. Possible values are: `ask`, `text_gen`, and `extract`. (e.g. [ask, text_gen, extract])
   --qp-fields: list # The fields to return in the response. (e.g. [ask, text_gen, extract])
   --agent-state: list # The state of the agents to return. Possible values are: `enabled`, `disabled` and `enabled_for_selected_users`. (e.g. [enabled])
@@ -7405,7 +7683,7 @@ export def "ai-agents agents" [
   let full_url = (build-url $base "/ai_agents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create AI agent
@@ -7423,6 +7701,7 @@ export def "ai-agents agents-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6 # The type of agent used to handle queries. (e.g. ai_agent)
   name: string # The name of the AI Agent. (e.g. My AI Agent)
   access_state: string # The state of the AI Agent. Possible values are: `enabled`, `disabled`, and `enabled_for_selected_users`. (e.g. enabled)
@@ -7440,7 +7719,7 @@ export def "ai-agents agents-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update AI agent
@@ -7459,6 +7738,7 @@ export def "ai-agents id-by-agent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6 # The type of agent used to handle queries. (e.g. ai_agent)
   name: string # The name of the AI Agent. (e.g. My AI Agent)
   access_state: string # The state of the AI Agent. Possible values are: `enabled`, `disabled`, and `enabled_for_selected_users`. (e.g. enabled)
@@ -7476,7 +7756,7 @@ export def "ai-agents id-by-agent_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get AI agent by agent ID
@@ -7492,6 +7772,7 @@ export def "ai-agents id-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # The fields to return in the response. (e.g. [ask, text_gen, extract])
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7500,7 +7781,7 @@ export def "ai-agents id-by-agent_id-1" [
   let full_url = (build-url $base $"/ai_agents/($agent_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete AI agent
@@ -7516,13 +7797,14 @@ export def "ai-agents id-by-agent_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ai_agents/($agent_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata taxonomy
@@ -7537,6 +7819,7 @@ export def "metadata-taxonomies taxonomies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The taxonomy key. If it is not provided in the request body, it will be  generated from the `displayName`. The `displayName` would be converted  to lower case, and all spaces and non-alphanumeric characters replaced  with underscores. (e.g. geography)
   displayName: string # The display name of the taxonomy. (e.g. Geography)
   namespace: string # The namespace of the metadata taxonomy to create. (e.g. enterprise_123456)
@@ -7549,7 +7832,7 @@ export def "metadata-taxonomies taxonomies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metadata taxonomies for namespace
@@ -7565,6 +7848,7 @@ export def "metadata-taxonomies id-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -7574,7 +7858,7 @@ export def "metadata-taxonomies id-by-namespace" [
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadata taxonomy by taxonomy key
@@ -7591,13 +7875,14 @@ export def "metadata-taxonomies id-by-namespace-taxonomy_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, key: string, displayName: string, namespace: string, levels: table<displayName: string, description: string, level: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update metadata taxonomy
@@ -7614,6 +7899,7 @@ export def "metadata-taxonomies id-by-namespace-taxonomy_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # The display name of the taxonomy. (e.g. Geography)
 ]: any -> record<id: string, key: string, displayName: string, namespace: string, levels: table<displayName: string, description: string, level: int>> {
   let input = $in
@@ -7624,7 +7910,7 @@ export def "metadata-taxonomies id-by-namespace-taxonomy_key-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove metadata taxonomy
@@ -7641,13 +7927,14 @@ export def "metadata-taxonomies id-by-namespace-taxonomy_key-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata taxonomy levels
@@ -7664,6 +7951,7 @@ export def "metadata-taxonomies-levels levels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -7673,7 +7961,7 @@ export def "metadata-taxonomies-levels levels" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update metadata taxonomy level
@@ -7691,6 +7979,7 @@ export def "metadata-taxonomies-levels id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # The display name of the taxonomy level. (e.g. France)
   --description: string # The description of the taxonomy level. (e.g. French Republic)
 ]: any -> record<displayName: string, description: string, level: int> {
@@ -7702,7 +7991,7 @@ export def "metadata-taxonomies-levels id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add metadata taxonomy level
@@ -7719,6 +8008,7 @@ export def "metadata-taxonomies-levels-append levels:append" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # The display name of the taxonomy level. (e.g. France)
   --description: string # The description of the taxonomy level. (e.g. French Republic)
 ]: any -> record {
@@ -7730,7 +8020,7 @@ export def "metadata-taxonomies-levels-append levels:append" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete metadata taxonomy level
@@ -7747,13 +8037,14 @@ export def "metadata-taxonomies-levels-trim levels:trim" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)/levels:trim")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List metadata taxonomy nodes
@@ -7770,6 +8061,7 @@ export def "metadata-taxonomies-nodes nodes-by-namespace-taxonomy_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --level: list # Filters results by taxonomy level. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [1])
   --parent: list # Node identifier of a direct parent node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905])
   --ancestor: list # Node identifier of any ancestor node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905, bf8b8213-be1f-4011-bd45-533c0713fa0a])
@@ -7784,7 +8076,7 @@ export def "metadata-taxonomies-nodes nodes-by-namespace-taxonomy_key" [
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)/nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create metadata taxonomy node
@@ -7801,6 +8093,7 @@ export def "metadata-taxonomies-nodes nodes-by-namespace-taxonomy_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # The display name of the taxonomy node. (e.g. France)
   level: int # The level of the taxonomy node. (e.g. 1)
   --parentId: string # The identifier of the parent taxonomy node.  Omit this field for root-level nodes. (e.g. 99df4513-7102-4896-8228-94635ee9d330)
@@ -7813,7 +8106,7 @@ export def "metadata-taxonomies-nodes nodes-by-namespace-taxonomy_key-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metadata taxonomy node by ID
@@ -7831,13 +8124,14 @@ export def "metadata-taxonomies-nodes id-by-namespace-taxonomy_key-node_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, displayName: string, level: int, parentId: string, nodePath: list<string>, ancestors: table<id: string, displayName: string, level: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)/nodes/($node_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update metadata taxonomy node
@@ -7855,6 +8149,7 @@ export def "metadata-taxonomies-nodes id-by-namespace-taxonomy_key-node_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --displayName: string # The display name of the taxonomy node. (e.g. France)
 ]: any -> record<id: string, displayName: string, level: int, parentId: string, nodePath: list<string>, ancestors: table<id: string, displayName: string, level: int>> {
   let input = $in
@@ -7865,7 +8160,7 @@ export def "metadata-taxonomies-nodes id-by-namespace-taxonomy_key-node_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove metadata taxonomy node
@@ -7883,13 +8178,14 @@ export def "metadata-taxonomies-nodes id-by-namespace-taxonomy_key-node_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/metadata_taxonomies/($namespace)/($taxonomy_key)/nodes/($node_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List metadata template's options for taxonomy field
@@ -7907,6 +8203,7 @@ export def "metadata-templates-fields-options options" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --level: list # Filters results by taxonomy level. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [1])
   --parent: list # Node identifier of a direct parent node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905])
   --ancestor: list # Node identifier of any ancestor node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905, bf8b8213-be1f-4011-bd45-533c0713fa0a])
@@ -7922,5 +8219,5 @@ export def "metadata-templates-fields-options options" [
   let full_url = (build-url $base $"/metadata_templates/($namespace)/($template_key)/fields/($field_key)/options" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

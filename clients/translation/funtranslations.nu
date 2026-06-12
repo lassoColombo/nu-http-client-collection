@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "translate-braille get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "translate-braille get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -110,7 +112,7 @@ export def "translate-braille get" [
   let full_url = (build-url $base "/translate/braille" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Use this to see which dots are enabled for each Braille letters. This is highly educational (to see which dots are enabled) and can potentially drive a non braille display which works on individual dots.
@@ -124,6 +126,7 @@ export def "translate-braille-dots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -133,7 +136,7 @@ export def "translate-braille-dots get" [
   let full_url = (build-url $base "/translate/braille/dots" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Braille Image characters. This is probably what you want to use if you are displaying braille in a browser.
@@ -147,6 +150,7 @@ export def "translate-braille-html get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -156,7 +160,7 @@ export def "translate-braille-html get" [
   let full_url = (build-url $base "/translate/braille/html" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Braille image characters. This is probably what you want to use if you are displaying braille in a browser.
@@ -170,6 +174,7 @@ export def "translate-braille-image get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -179,7 +184,7 @@ export def "translate-braille-image get" [
   let full_url = (build-url $base "/translate/braille/image" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Braille Unicode characters.
@@ -193,6 +198,7 @@ export def "translate-braille-unicode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -202,7 +208,7 @@ export def "translate-braille-unicode get" [
   let full_url = (build-url $base "/translate/braille/unicode" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Brooklyn Speak.
@@ -216,6 +222,7 @@ export def "translate-brooklyn get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -225,7 +232,7 @@ export def "translate-brooklyn get" [
   let full_url = (build-url $base "/translate/brooklyn" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Swedish Chef speak.
@@ -239,6 +246,7 @@ export def "translate-chef get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -248,7 +256,7 @@ export def "translate-chef get" [
   let full_url = (build-url $base "/translate/chef" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Starwars cheunh.
@@ -262,6 +270,7 @@ export def "translate-cheunh get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -271,7 +280,7 @@ export def "translate-cheunh get" [
   let full_url = (build-url $base "/translate/cheunh" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Cockney Speak.
@@ -285,6 +294,7 @@ export def "translate-cockney get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -294,7 +304,7 @@ export def "translate-cockney get" [
   let full_url = (build-url $base "/translate/cockney" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Dolan Speak.
@@ -308,6 +318,7 @@ export def "translate-dolan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -317,7 +328,7 @@ export def "translate-dolan get" [
   let full_url = (build-url $base "/translate/dolan" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Dothraki.
@@ -331,6 +342,7 @@ export def "translate-dothraki get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -340,7 +352,7 @@ export def "translate-dothraki get" [
   let full_url = (build-url $base "/translate/dothraki" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to ERMAHGERD.
@@ -354,6 +366,7 @@ export def "translate-ermahgerd get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -363,7 +376,7 @@ export def "translate-ermahgerd get" [
   let full_url = (build-url $base "/translate/ermahgerd" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Ferb Latin.
@@ -377,6 +390,7 @@ export def "translate-ferblatin get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -386,7 +400,7 @@ export def "translate-ferblatin get" [
   let full_url = (build-url $base "/translate/ferblatin" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Fudd Speak.
@@ -400,6 +414,7 @@ export def "translate-fudd get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -409,7 +424,7 @@ export def "translate-fudd get" [
   let full_url = (build-url $base "/translate/fudd" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Starwars Gungan Language.
@@ -423,6 +438,7 @@ export def "translate-gungan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -432,7 +448,7 @@ export def "translate-gungan get" [
   let full_url = (build-url $base "/translate/gungan" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Starwars Huttese Language.
@@ -446,6 +462,7 @@ export def "translate-huttese get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -455,7 +472,7 @@ export def "translate-huttese get" [
   let full_url = (build-url $base "/translate/huttese" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from normal English to Jive Speak.
@@ -469,6 +486,7 @@ export def "translate-jive get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -478,7 +496,7 @@ export def "translate-jive get" [
   let full_url = (build-url $base "/translate/jive" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Startrek Klingon Language.
@@ -492,6 +510,7 @@ export def "translate-klingon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -501,7 +520,7 @@ export def "translate-klingon get" [
   let full_url = (build-url $base "/translate/klingon" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Starwars Mandalorian Language.
@@ -515,6 +534,7 @@ export def "translate-mandalorian get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -524,7 +544,7 @@ export def "translate-mandalorian get" [
   let full_url = (build-url $base "/translate/mandalorian" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Minion Speak.
@@ -538,6 +558,7 @@ export def "translate-minion get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -547,7 +568,7 @@ export def "translate-minion get" [
   let full_url = (build-url $base "/translate/minion" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to morse code.
@@ -561,6 +582,7 @@ export def "translate-morse get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -570,7 +592,7 @@ export def "translate-morse get" [
   let full_url = (build-url $base "/translate/morse" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to morse code and get the result as an audio file.
@@ -584,6 +606,7 @@ export def "translate-morse-audio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
   --speed: int # Audio Speed (Words/Minute) (format: integer)
@@ -595,7 +618,7 @@ export def "translate-morse-audio get" [
   let full_url = (build-url $base "/translate/morse/audio" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from Morse code to English.
@@ -609,6 +632,7 @@ export def "translate-morse2english get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -618,7 +642,7 @@ export def "translate-morse2english get" [
   let full_url = (build-url $base "/translate/morse2english" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Old English.
@@ -632,6 +656,7 @@ export def "translate-oldenglish get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -641,7 +666,7 @@ export def "translate-oldenglish get" [
   let full_url = (build-url $base "/translate/oldenglish" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Pig Latin.
@@ -655,6 +680,7 @@ export def "translate-piglatin get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -664,7 +690,7 @@ export def "translate-piglatin get" [
   let full_url = (build-url $base "/translate/piglatin" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Pirate Speak.
@@ -678,6 +704,7 @@ export def "translate-pirate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -687,7 +714,7 @@ export def "translate-pirate get" [
   let full_url = (build-url $base "/translate/pirate" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Elvish Quenya Language.
@@ -701,6 +728,7 @@ export def "translate-quneya get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -710,7 +738,7 @@ export def "translate-quneya get" [
   let full_url = (build-url $base "/translate/quneya" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Shakespeare English.
@@ -724,6 +752,7 @@ export def "translate-shakespeare get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -733,7 +762,7 @@ export def "translate-shakespeare get" [
   let full_url = (build-url $base "/translate/shakespeare" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Elvish Sindarin Language.
@@ -747,6 +776,7 @@ export def "translate-sindarin get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -756,7 +786,7 @@ export def "translate-sindarin get" [
   let full_url = (build-url $base "/translate/sindarin" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Sith Speak.
@@ -770,6 +800,7 @@ export def "translate-sith get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -779,7 +810,7 @@ export def "translate-sith get" [
   let full_url = (build-url $base "/translate/sith" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from UK English to US English.
@@ -793,6 +824,7 @@ export def "translate-uk2us get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -802,7 +834,7 @@ export def "translate-uk2us get" [
   let full_url = (build-url $base "/translate/uk2us" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from US English to UK English.
@@ -816,6 +848,7 @@ export def "translate-us2uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -825,7 +858,7 @@ export def "translate-us2uk get" [
   let full_url = (build-url $base "/translate/us2uk" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Valley Speak.
@@ -839,6 +872,7 @@ export def "translate-valspeak get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -848,7 +882,7 @@ export def "translate-valspeak get" [
   let full_url = (build-url $base "/translate/valspeak" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Valyrian.
@@ -862,6 +896,7 @@ export def "translate-valyrian get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -871,7 +906,7 @@ export def "translate-valyrian get" [
   let full_url = (build-url $base "/translate/valyrian" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Startrek Vulcan Language.
@@ -885,6 +920,7 @@ export def "translate-vulcan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -894,7 +930,7 @@ export def "translate-vulcan get" [
   let full_url = (build-url $base "/translate/vulcan" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate from English to Yoda Speak.
@@ -908,6 +944,7 @@ export def "translate-yoda get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Text to translate (format: string)
 ]: nothing -> any {
@@ -917,5 +954,5 @@ export def "translate-yoda get" [
   let full_url = (build-url $base "/translate/yoda" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

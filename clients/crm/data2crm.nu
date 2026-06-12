@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def entity-completer [] { ["account" "attachment" "call" "campaign" "case" "comm
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "application createApplicationEntity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "application createApplicationEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # API2CRM user key
   --authorization: string # Application authorization
   --credential: record
@@ -125,7 +127,7 @@ export def "application createApplicationEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for application
@@ -140,6 +142,7 @@ export def "application-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> record<total: int> {
@@ -151,7 +154,7 @@ export def "application-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for account
@@ -172,6 +175,7 @@ export def "application-entity-account createAccountEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -207,7 +211,7 @@ export def "application-entity-account createAccountEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for account
@@ -222,6 +226,7 @@ export def "application-entity-account-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -244,7 +249,7 @@ export def "application-entity-account-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for account
@@ -259,6 +264,7 @@ export def "application-entity-account-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -273,7 +279,7 @@ export def "application-entity-account-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for account
@@ -288,6 +294,7 @@ export def "application-entity-account-bulk createAccountEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -304,7 +311,7 @@ export def "application-entity-account-bulk createAccountEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for account
@@ -319,6 +326,7 @@ export def "application-entity-account-bulk updateAccountEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -335,7 +343,7 @@ export def "application-entity-account-bulk updateAccountEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for account
@@ -350,6 +358,7 @@ export def "application-entity-account-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -369,7 +378,7 @@ export def "application-entity-account-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for account
@@ -384,6 +393,7 @@ export def "application-entity-account-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -402,7 +412,7 @@ export def "application-entity-account-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for account
@@ -417,6 +427,7 @@ export def "application-entity-account-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -444,7 +455,7 @@ export def "application-entity-account-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for account
@@ -460,6 +471,7 @@ export def "application-entity-account delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -470,7 +482,7 @@ export def "application-entity-account delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for account
@@ -486,6 +498,7 @@ export def "application-entity-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -508,7 +521,7 @@ export def "application-entity-account get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for account
@@ -530,6 +543,7 @@ export def "application-entity-account updateAccountEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -565,7 +579,7 @@ export def "application-entity-account updateAccountEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for attachment
@@ -581,6 +595,7 @@ export def "application-entity-attachment createAttachmentEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -605,7 +620,7 @@ export def "application-entity-attachment createAttachmentEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for attachment
@@ -620,6 +635,7 @@ export def "application-entity-attachment-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -642,7 +658,7 @@ export def "application-entity-attachment-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for attachment
@@ -657,6 +673,7 @@ export def "application-entity-attachment-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -671,7 +688,7 @@ export def "application-entity-attachment-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for attachment
@@ -686,6 +703,7 @@ export def "application-entity-attachment-bulk createAttachmentEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -702,7 +720,7 @@ export def "application-entity-attachment-bulk createAttachmentEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for attachment
@@ -717,6 +735,7 @@ export def "application-entity-attachment-bulk updateAttachmentEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -733,7 +752,7 @@ export def "application-entity-attachment-bulk updateAttachmentEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for attachment
@@ -748,6 +767,7 @@ export def "application-entity-attachment-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -767,7 +787,7 @@ export def "application-entity-attachment-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for attachment
@@ -782,6 +802,7 @@ export def "application-entity-attachment-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -800,7 +821,7 @@ export def "application-entity-attachment-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for attachment
@@ -815,6 +836,7 @@ export def "application-entity-attachment-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -842,7 +864,7 @@ export def "application-entity-attachment-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for attachment
@@ -858,6 +880,7 @@ export def "application-entity-attachment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -868,7 +891,7 @@ export def "application-entity-attachment delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for attachment
@@ -884,6 +907,7 @@ export def "application-entity-attachment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -906,7 +930,7 @@ export def "application-entity-attachment get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for attachment
@@ -923,6 +947,7 @@ export def "application-entity-attachment updateAttachmentEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -947,7 +972,7 @@ export def "application-entity-attachment updateAttachmentEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for call
@@ -963,6 +988,7 @@ export def "application-entity-call createCallEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -990,7 +1016,7 @@ export def "application-entity-call createCallEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for call
@@ -1005,6 +1031,7 @@ export def "application-entity-call-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -1027,7 +1054,7 @@ export def "application-entity-call-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for call
@@ -1042,6 +1069,7 @@ export def "application-entity-call-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -1056,7 +1084,7 @@ export def "application-entity-call-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for call
@@ -1071,6 +1099,7 @@ export def "application-entity-call-bulk createCallEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1087,7 +1116,7 @@ export def "application-entity-call-bulk createCallEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for call
@@ -1102,6 +1131,7 @@ export def "application-entity-call-bulk updateCallEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1118,7 +1148,7 @@ export def "application-entity-call-bulk updateCallEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for call
@@ -1133,6 +1163,7 @@ export def "application-entity-call-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -1152,7 +1183,7 @@ export def "application-entity-call-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for call
@@ -1167,6 +1198,7 @@ export def "application-entity-call-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -1185,7 +1217,7 @@ export def "application-entity-call-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for call
@@ -1200,6 +1232,7 @@ export def "application-entity-call-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -1227,7 +1260,7 @@ export def "application-entity-call-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for call
@@ -1243,6 +1276,7 @@ export def "application-entity-call delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -1253,7 +1287,7 @@ export def "application-entity-call delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for call
@@ -1269,6 +1303,7 @@ export def "application-entity-call get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -1291,7 +1326,7 @@ export def "application-entity-call get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for call
@@ -1308,6 +1343,7 @@ export def "application-entity-call updateCallEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1335,7 +1371,7 @@ export def "application-entity-call updateCallEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for campaign
@@ -1352,6 +1388,7 @@ export def "application-entity-campaign createCampaignEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1387,7 +1424,7 @@ export def "application-entity-campaign createCampaignEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for campaign
@@ -1402,6 +1439,7 @@ export def "application-entity-campaign-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -1424,7 +1462,7 @@ export def "application-entity-campaign-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for campaign
@@ -1439,6 +1477,7 @@ export def "application-entity-campaign-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -1453,7 +1492,7 @@ export def "application-entity-campaign-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for campaign
@@ -1468,6 +1507,7 @@ export def "application-entity-campaign-bulk createCampaignEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1484,7 +1524,7 @@ export def "application-entity-campaign-bulk createCampaignEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for campaign
@@ -1499,6 +1539,7 @@ export def "application-entity-campaign-bulk updateCampaignEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1515,7 +1556,7 @@ export def "application-entity-campaign-bulk updateCampaignEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for campaign
@@ -1530,6 +1571,7 @@ export def "application-entity-campaign-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -1549,7 +1591,7 @@ export def "application-entity-campaign-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for campaign
@@ -1564,6 +1606,7 @@ export def "application-entity-campaign-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -1582,7 +1625,7 @@ export def "application-entity-campaign-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for campaign
@@ -1597,6 +1640,7 @@ export def "application-entity-campaign-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -1624,7 +1668,7 @@ export def "application-entity-campaign-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for campaign
@@ -1640,6 +1684,7 @@ export def "application-entity-campaign delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -1650,7 +1695,7 @@ export def "application-entity-campaign delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for campaign
@@ -1666,6 +1711,7 @@ export def "application-entity-campaign get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -1688,7 +1734,7 @@ export def "application-entity-campaign get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for campaign
@@ -1706,6 +1752,7 @@ export def "application-entity-campaign updateCampaignEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1741,7 +1788,7 @@ export def "application-entity-campaign updateCampaignEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for case
@@ -1757,6 +1804,7 @@ export def "application-entity-case createCaseEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1793,7 +1841,7 @@ export def "application-entity-case createCaseEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for case
@@ -1808,6 +1856,7 @@ export def "application-entity-case-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -1830,7 +1879,7 @@ export def "application-entity-case-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for case
@@ -1845,6 +1894,7 @@ export def "application-entity-case-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -1859,7 +1909,7 @@ export def "application-entity-case-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for case
@@ -1874,6 +1924,7 @@ export def "application-entity-case-bulk createCaseEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1890,7 +1941,7 @@ export def "application-entity-case-bulk createCaseEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for case
@@ -1905,6 +1956,7 @@ export def "application-entity-case-bulk updateCaseEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -1921,7 +1973,7 @@ export def "application-entity-case-bulk updateCaseEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for case
@@ -1936,6 +1988,7 @@ export def "application-entity-case-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -1955,7 +2008,7 @@ export def "application-entity-case-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for case
@@ -1970,6 +2023,7 @@ export def "application-entity-case-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -1988,7 +2042,7 @@ export def "application-entity-case-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for case
@@ -2003,6 +2057,7 @@ export def "application-entity-case-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -2030,7 +2085,7 @@ export def "application-entity-case-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for case
@@ -2046,6 +2101,7 @@ export def "application-entity-case delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -2056,7 +2112,7 @@ export def "application-entity-case delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for case
@@ -2072,6 +2128,7 @@ export def "application-entity-case get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -2094,7 +2151,7 @@ export def "application-entity-case get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for case
@@ -2111,6 +2168,7 @@ export def "application-entity-case updateCaseEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2147,7 +2205,7 @@ export def "application-entity-case updateCaseEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for comment
@@ -2163,6 +2221,7 @@ export def "application-entity-comment createCommentEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2183,7 +2242,7 @@ export def "application-entity-comment createCommentEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for comment
@@ -2198,6 +2257,7 @@ export def "application-entity-comment-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -2220,7 +2280,7 @@ export def "application-entity-comment-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for comment
@@ -2235,6 +2295,7 @@ export def "application-entity-comment-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -2249,7 +2310,7 @@ export def "application-entity-comment-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for comment
@@ -2264,6 +2325,7 @@ export def "application-entity-comment-bulk createCommentEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2280,7 +2342,7 @@ export def "application-entity-comment-bulk createCommentEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for comment
@@ -2295,6 +2357,7 @@ export def "application-entity-comment-bulk updateCommentEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2311,7 +2374,7 @@ export def "application-entity-comment-bulk updateCommentEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for comment
@@ -2326,6 +2389,7 @@ export def "application-entity-comment-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -2345,7 +2409,7 @@ export def "application-entity-comment-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for comment
@@ -2360,6 +2424,7 @@ export def "application-entity-comment-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -2378,7 +2443,7 @@ export def "application-entity-comment-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for comment
@@ -2393,6 +2458,7 @@ export def "application-entity-comment-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -2420,7 +2486,7 @@ export def "application-entity-comment-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for comment
@@ -2436,6 +2502,7 @@ export def "application-entity-comment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -2446,7 +2513,7 @@ export def "application-entity-comment delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for comment
@@ -2462,6 +2529,7 @@ export def "application-entity-comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -2484,7 +2552,7 @@ export def "application-entity-comment get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for comment
@@ -2501,6 +2569,7 @@ export def "application-entity-comment updateCommentEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2521,7 +2590,7 @@ export def "application-entity-comment updateCommentEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for contact
@@ -2542,6 +2611,7 @@ export def "application-entity-contact createContactEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2579,7 +2649,7 @@ export def "application-entity-contact createContactEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for contact
@@ -2594,6 +2664,7 @@ export def "application-entity-contact-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -2616,7 +2687,7 @@ export def "application-entity-contact-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for contact
@@ -2631,6 +2702,7 @@ export def "application-entity-contact-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -2645,7 +2717,7 @@ export def "application-entity-contact-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for contact
@@ -2660,6 +2732,7 @@ export def "application-entity-contact-bulk createContactEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2676,7 +2749,7 @@ export def "application-entity-contact-bulk createContactEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for contact
@@ -2691,6 +2764,7 @@ export def "application-entity-contact-bulk updateContactEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2707,7 +2781,7 @@ export def "application-entity-contact-bulk updateContactEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for contact
@@ -2722,6 +2796,7 @@ export def "application-entity-contact-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -2741,7 +2816,7 @@ export def "application-entity-contact-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for contact
@@ -2756,6 +2831,7 @@ export def "application-entity-contact-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -2774,7 +2850,7 @@ export def "application-entity-contact-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for contact
@@ -2789,6 +2865,7 @@ export def "application-entity-contact-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -2816,7 +2893,7 @@ export def "application-entity-contact-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for contact
@@ -2832,6 +2909,7 @@ export def "application-entity-contact delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -2842,7 +2920,7 @@ export def "application-entity-contact delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for contact
@@ -2858,6 +2936,7 @@ export def "application-entity-contact get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -2880,7 +2959,7 @@ export def "application-entity-contact get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for contact
@@ -2902,6 +2981,7 @@ export def "application-entity-contact updateContactEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -2939,7 +3019,7 @@ export def "application-entity-contact updateContactEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for entity
@@ -2954,6 +3034,7 @@ export def "application-entity-count list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> record<total: int> {
@@ -2964,7 +3045,7 @@ export def "application-entity-count list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for email
@@ -2980,6 +3061,7 @@ export def "application-entity-email createEmailEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3008,7 +3090,7 @@ export def "application-entity-email createEmailEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for email
@@ -3023,6 +3105,7 @@ export def "application-entity-email-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -3045,7 +3128,7 @@ export def "application-entity-email-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for email
@@ -3060,6 +3143,7 @@ export def "application-entity-email-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -3074,7 +3158,7 @@ export def "application-entity-email-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for email
@@ -3089,6 +3173,7 @@ export def "application-entity-email-bulk createEmailEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3105,7 +3190,7 @@ export def "application-entity-email-bulk createEmailEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for email
@@ -3120,6 +3205,7 @@ export def "application-entity-email-bulk updateEmailEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3136,7 +3222,7 @@ export def "application-entity-email-bulk updateEmailEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for email
@@ -3151,6 +3237,7 @@ export def "application-entity-email-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -3170,7 +3257,7 @@ export def "application-entity-email-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for email
@@ -3185,6 +3272,7 @@ export def "application-entity-email-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -3203,7 +3291,7 @@ export def "application-entity-email-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for email
@@ -3218,6 +3306,7 @@ export def "application-entity-email-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -3245,7 +3334,7 @@ export def "application-entity-email-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for email
@@ -3261,6 +3350,7 @@ export def "application-entity-email delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -3271,7 +3361,7 @@ export def "application-entity-email delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for email
@@ -3287,6 +3377,7 @@ export def "application-entity-email get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -3309,7 +3400,7 @@ export def "application-entity-email get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for email
@@ -3326,6 +3417,7 @@ export def "application-entity-email updateEmailEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3354,7 +3446,7 @@ export def "application-entity-email updateEmailEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for event
@@ -3370,6 +3462,7 @@ export def "application-entity-event createEventEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3396,7 +3489,7 @@ export def "application-entity-event createEventEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for event
@@ -3411,6 +3504,7 @@ export def "application-entity-event-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -3433,7 +3527,7 @@ export def "application-entity-event-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for event
@@ -3448,6 +3542,7 @@ export def "application-entity-event-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -3462,7 +3557,7 @@ export def "application-entity-event-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for event
@@ -3477,6 +3572,7 @@ export def "application-entity-event-bulk createEventEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3493,7 +3589,7 @@ export def "application-entity-event-bulk createEventEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for event
@@ -3508,6 +3604,7 @@ export def "application-entity-event-bulk updateEventEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3524,7 +3621,7 @@ export def "application-entity-event-bulk updateEventEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for event
@@ -3539,6 +3636,7 @@ export def "application-entity-event-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -3558,7 +3656,7 @@ export def "application-entity-event-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for event
@@ -3573,6 +3671,7 @@ export def "application-entity-event-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -3591,7 +3690,7 @@ export def "application-entity-event-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for event
@@ -3606,6 +3705,7 @@ export def "application-entity-event-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -3633,7 +3733,7 @@ export def "application-entity-event-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for event
@@ -3649,6 +3749,7 @@ export def "application-entity-event delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -3659,7 +3760,7 @@ export def "application-entity-event delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for event
@@ -3675,6 +3776,7 @@ export def "application-entity-event get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -3697,7 +3799,7 @@ export def "application-entity-event get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for event
@@ -3714,6 +3816,7 @@ export def "application-entity-event updateEventEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3740,7 +3843,7 @@ export def "application-entity-event updateEventEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for invoice
@@ -3760,6 +3863,7 @@ export def "application-entity-invoice createInvoiceEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3800,7 +3904,7 @@ export def "application-entity-invoice createInvoiceEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for invoice
@@ -3815,6 +3919,7 @@ export def "application-entity-invoice-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -3837,7 +3942,7 @@ export def "application-entity-invoice-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for invoice
@@ -3852,6 +3957,7 @@ export def "application-entity-invoice-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -3866,7 +3972,7 @@ export def "application-entity-invoice-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for invoice
@@ -3881,6 +3987,7 @@ export def "application-entity-invoice-bulk createInvoiceEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3897,7 +4004,7 @@ export def "application-entity-invoice-bulk createInvoiceEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for invoice
@@ -3912,6 +4019,7 @@ export def "application-entity-invoice-bulk updateInvoiceEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -3928,7 +4036,7 @@ export def "application-entity-invoice-bulk updateInvoiceEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for invoice
@@ -3943,6 +4051,7 @@ export def "application-entity-invoice-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -3962,7 +4071,7 @@ export def "application-entity-invoice-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for invoice
@@ -3977,6 +4086,7 @@ export def "application-entity-invoice-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -3995,7 +4105,7 @@ export def "application-entity-invoice-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for invoice
@@ -4010,6 +4120,7 @@ export def "application-entity-invoice-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -4037,7 +4148,7 @@ export def "application-entity-invoice-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for invoice
@@ -4053,6 +4164,7 @@ export def "application-entity-invoice delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -4063,7 +4175,7 @@ export def "application-entity-invoice delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for invoice
@@ -4079,6 +4191,7 @@ export def "application-entity-invoice get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -4101,7 +4214,7 @@ export def "application-entity-invoice get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for invoice
@@ -4122,6 +4235,7 @@ export def "application-entity-invoice updateInvoiceEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4162,7 +4276,7 @@ export def "application-entity-invoice updateInvoiceEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for invoiceItem
@@ -4180,6 +4294,7 @@ export def "application-entity-invoice-item createInvoiceItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4209,7 +4324,7 @@ export def "application-entity-invoice-item createInvoiceItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for invoiceItem
@@ -4224,6 +4339,7 @@ export def "application-entity-invoice-item-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -4246,7 +4362,7 @@ export def "application-entity-invoice-item-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for invoiceItem
@@ -4261,6 +4377,7 @@ export def "application-entity-invoice-item-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -4275,7 +4392,7 @@ export def "application-entity-invoice-item-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for invoiceItem
@@ -4290,6 +4407,7 @@ export def "application-entity-invoice-item-bulk createInvoiceItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4306,7 +4424,7 @@ export def "application-entity-invoice-item-bulk createInvoiceItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for invoiceItem
@@ -4321,6 +4439,7 @@ export def "application-entity-invoice-item-bulk updateInvoiceItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4337,7 +4456,7 @@ export def "application-entity-invoice-item-bulk updateInvoiceItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for invoiceItem
@@ -4352,6 +4471,7 @@ export def "application-entity-invoice-item-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -4371,7 +4491,7 @@ export def "application-entity-invoice-item-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for invoiceItem
@@ -4386,6 +4506,7 @@ export def "application-entity-invoice-item-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -4404,7 +4525,7 @@ export def "application-entity-invoice-item-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for invoiceItem
@@ -4419,6 +4540,7 @@ export def "application-entity-invoice-item-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -4446,7 +4568,7 @@ export def "application-entity-invoice-item-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for invoiceItem
@@ -4462,6 +4584,7 @@ export def "application-entity-invoice-item delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -4472,7 +4595,7 @@ export def "application-entity-invoice-item delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for invoiceItem
@@ -4488,6 +4611,7 @@ export def "application-entity-invoice-item get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -4510,7 +4634,7 @@ export def "application-entity-invoice-item get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for invoiceItem
@@ -4529,6 +4653,7 @@ export def "application-entity-invoice-item updateInvoiceItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4558,7 +4683,7 @@ export def "application-entity-invoice-item updateInvoiceItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for lead
@@ -4579,6 +4704,7 @@ export def "application-entity-lead createLeadEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4622,7 +4748,7 @@ export def "application-entity-lead createLeadEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for lead
@@ -4637,6 +4763,7 @@ export def "application-entity-lead-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -4659,7 +4786,7 @@ export def "application-entity-lead-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for lead
@@ -4674,6 +4801,7 @@ export def "application-entity-lead-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -4688,7 +4816,7 @@ export def "application-entity-lead-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for lead
@@ -4703,6 +4831,7 @@ export def "application-entity-lead-bulk createLeadEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4719,7 +4848,7 @@ export def "application-entity-lead-bulk createLeadEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for lead
@@ -4734,6 +4863,7 @@ export def "application-entity-lead-bulk updateLeadEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4750,7 +4880,7 @@ export def "application-entity-lead-bulk updateLeadEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for lead
@@ -4765,6 +4895,7 @@ export def "application-entity-lead-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -4784,7 +4915,7 @@ export def "application-entity-lead-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for lead
@@ -4799,6 +4930,7 @@ export def "application-entity-lead-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -4817,7 +4949,7 @@ export def "application-entity-lead-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for lead
@@ -4832,6 +4964,7 @@ export def "application-entity-lead-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -4859,7 +4992,7 @@ export def "application-entity-lead-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for lead
@@ -4875,6 +5008,7 @@ export def "application-entity-lead delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -4885,7 +5019,7 @@ export def "application-entity-lead delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for lead
@@ -4901,6 +5035,7 @@ export def "application-entity-lead get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -4923,7 +5058,7 @@ export def "application-entity-lead get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for lead
@@ -4945,6 +5080,7 @@ export def "application-entity-lead updateLeadEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -4988,7 +5124,7 @@ export def "application-entity-lead updateLeadEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET for entity
@@ -5003,6 +5139,7 @@ export def "application-entity-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -5020,7 +5157,7 @@ export def "application-entity-list list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for meeting
@@ -5036,6 +5173,7 @@ export def "application-entity-meeting createMeetingEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5062,7 +5200,7 @@ export def "application-entity-meeting createMeetingEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for meeting
@@ -5077,6 +5215,7 @@ export def "application-entity-meeting-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -5099,7 +5238,7 @@ export def "application-entity-meeting-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for meeting
@@ -5114,6 +5253,7 @@ export def "application-entity-meeting-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -5128,7 +5268,7 @@ export def "application-entity-meeting-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for meeting
@@ -5143,6 +5283,7 @@ export def "application-entity-meeting-bulk createMeetingEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5159,7 +5300,7 @@ export def "application-entity-meeting-bulk createMeetingEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for meeting
@@ -5174,6 +5315,7 @@ export def "application-entity-meeting-bulk updateMeetingEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5190,7 +5332,7 @@ export def "application-entity-meeting-bulk updateMeetingEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for meeting
@@ -5205,6 +5347,7 @@ export def "application-entity-meeting-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -5224,7 +5367,7 @@ export def "application-entity-meeting-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for meeting
@@ -5239,6 +5382,7 @@ export def "application-entity-meeting-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -5257,7 +5401,7 @@ export def "application-entity-meeting-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for meeting
@@ -5272,6 +5416,7 @@ export def "application-entity-meeting-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -5299,7 +5444,7 @@ export def "application-entity-meeting-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for meeting
@@ -5315,6 +5460,7 @@ export def "application-entity-meeting delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -5325,7 +5471,7 @@ export def "application-entity-meeting delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for meeting
@@ -5341,6 +5487,7 @@ export def "application-entity-meeting get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -5363,7 +5510,7 @@ export def "application-entity-meeting get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for meeting
@@ -5380,6 +5527,7 @@ export def "application-entity-meeting updateMeetingEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5406,7 +5554,7 @@ export def "application-entity-meeting updateMeetingEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for note
@@ -5422,6 +5570,7 @@ export def "application-entity-note createNoteEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5443,7 +5592,7 @@ export def "application-entity-note createNoteEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for note
@@ -5458,6 +5607,7 @@ export def "application-entity-note-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -5480,7 +5630,7 @@ export def "application-entity-note-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for note
@@ -5495,6 +5645,7 @@ export def "application-entity-note-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -5509,7 +5660,7 @@ export def "application-entity-note-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for note
@@ -5524,6 +5675,7 @@ export def "application-entity-note-bulk createNoteEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5540,7 +5692,7 @@ export def "application-entity-note-bulk createNoteEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for note
@@ -5555,6 +5707,7 @@ export def "application-entity-note-bulk updateNoteEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5571,7 +5724,7 @@ export def "application-entity-note-bulk updateNoteEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for note
@@ -5586,6 +5739,7 @@ export def "application-entity-note-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -5605,7 +5759,7 @@ export def "application-entity-note-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for note
@@ -5620,6 +5774,7 @@ export def "application-entity-note-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -5638,7 +5793,7 @@ export def "application-entity-note-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for note
@@ -5653,6 +5808,7 @@ export def "application-entity-note-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -5680,7 +5836,7 @@ export def "application-entity-note-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for note
@@ -5696,6 +5852,7 @@ export def "application-entity-note delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -5706,7 +5863,7 @@ export def "application-entity-note delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for note
@@ -5722,6 +5879,7 @@ export def "application-entity-note get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -5744,7 +5902,7 @@ export def "application-entity-note get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for note
@@ -5761,6 +5919,7 @@ export def "application-entity-note updateNoteEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5782,7 +5941,7 @@ export def "application-entity-note updateNoteEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for opportunity
@@ -5799,6 +5958,7 @@ export def "application-entity-opportunity createOpportunityEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5831,7 +5991,7 @@ export def "application-entity-opportunity createOpportunityEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for opportunity
@@ -5846,6 +6006,7 @@ export def "application-entity-opportunity-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -5868,7 +6029,7 @@ export def "application-entity-opportunity-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for opportunity
@@ -5883,6 +6044,7 @@ export def "application-entity-opportunity-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -5897,7 +6059,7 @@ export def "application-entity-opportunity-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for opportunity
@@ -5912,6 +6074,7 @@ export def "application-entity-opportunity-bulk createOpportunityEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5928,7 +6091,7 @@ export def "application-entity-opportunity-bulk createOpportunityEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for opportunity
@@ -5943,6 +6106,7 @@ export def "application-entity-opportunity-bulk updateOpportunityEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -5959,7 +6123,7 @@ export def "application-entity-opportunity-bulk updateOpportunityEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for opportunity
@@ -5974,6 +6138,7 @@ export def "application-entity-opportunity-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -5993,7 +6158,7 @@ export def "application-entity-opportunity-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for opportunity
@@ -6008,6 +6173,7 @@ export def "application-entity-opportunity-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -6026,7 +6192,7 @@ export def "application-entity-opportunity-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for opportunity
@@ -6041,6 +6207,7 @@ export def "application-entity-opportunity-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -6068,7 +6235,7 @@ export def "application-entity-opportunity-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for opportunity
@@ -6084,6 +6251,7 @@ export def "application-entity-opportunity delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -6094,7 +6262,7 @@ export def "application-entity-opportunity delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for opportunity
@@ -6110,6 +6278,7 @@ export def "application-entity-opportunity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -6132,7 +6301,7 @@ export def "application-entity-opportunity get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for opportunity
@@ -6150,6 +6319,7 @@ export def "application-entity-opportunity updateOpportunityEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6182,7 +6352,7 @@ export def "application-entity-opportunity updateOpportunityEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for opportunityProduct
@@ -6201,6 +6371,7 @@ export def "application-entity-opportunity-product createOpportunityProductEntit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6232,7 +6403,7 @@ export def "application-entity-opportunity-product createOpportunityProductEntit
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for opportunityProduct
@@ -6247,6 +6418,7 @@ export def "application-entity-opportunity-product-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -6269,7 +6441,7 @@ export def "application-entity-opportunity-product-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for opportunityProduct
@@ -6284,6 +6456,7 @@ export def "application-entity-opportunity-product-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -6298,7 +6471,7 @@ export def "application-entity-opportunity-product-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for opportunityProduct
@@ -6313,6 +6486,7 @@ export def "application-entity-opportunity-product-bulk createOpportunityProduct
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6329,7 +6503,7 @@ export def "application-entity-opportunity-product-bulk createOpportunityProduct
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for opportunityProduct
@@ -6344,6 +6518,7 @@ export def "application-entity-opportunity-product-bulk updateOpportunityProduct
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6360,7 +6535,7 @@ export def "application-entity-opportunity-product-bulk updateOpportunityProduct
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for opportunityProduct
@@ -6375,6 +6550,7 @@ export def "application-entity-opportunity-product-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -6394,7 +6570,7 @@ export def "application-entity-opportunity-product-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for opportunityProduct
@@ -6409,6 +6585,7 @@ export def "application-entity-opportunity-product-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -6427,7 +6604,7 @@ export def "application-entity-opportunity-product-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for opportunityProduct
@@ -6442,6 +6619,7 @@ export def "application-entity-opportunity-product-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -6469,7 +6647,7 @@ export def "application-entity-opportunity-product-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for opportunityProduct
@@ -6485,6 +6663,7 @@ export def "application-entity-opportunity-product delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -6495,7 +6674,7 @@ export def "application-entity-opportunity-product delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for opportunityProduct
@@ -6511,6 +6690,7 @@ export def "application-entity-opportunity-product get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -6533,7 +6713,7 @@ export def "application-entity-opportunity-product get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for opportunityProduct
@@ -6553,6 +6733,7 @@ export def "application-entity-opportunity-product updateOpportunityProductEntit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6584,7 +6765,7 @@ export def "application-entity-opportunity-product updateOpportunityProductEntit
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for post
@@ -6600,6 +6781,7 @@ export def "application-entity-post createPostEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6620,7 +6802,7 @@ export def "application-entity-post createPostEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for post
@@ -6635,6 +6817,7 @@ export def "application-entity-post-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -6657,7 +6840,7 @@ export def "application-entity-post-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for post
@@ -6672,6 +6855,7 @@ export def "application-entity-post-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -6686,7 +6870,7 @@ export def "application-entity-post-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for post
@@ -6701,6 +6885,7 @@ export def "application-entity-post-bulk createPostEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6717,7 +6902,7 @@ export def "application-entity-post-bulk createPostEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for post
@@ -6732,6 +6917,7 @@ export def "application-entity-post-bulk updatePostEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6748,7 +6934,7 @@ export def "application-entity-post-bulk updatePostEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for post
@@ -6763,6 +6949,7 @@ export def "application-entity-post-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -6782,7 +6969,7 @@ export def "application-entity-post-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for post
@@ -6797,6 +6984,7 @@ export def "application-entity-post-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -6815,7 +7003,7 @@ export def "application-entity-post-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for post
@@ -6830,6 +7018,7 @@ export def "application-entity-post-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -6857,7 +7046,7 @@ export def "application-entity-post-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for post
@@ -6873,6 +7062,7 @@ export def "application-entity-post delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -6883,7 +7073,7 @@ export def "application-entity-post delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for post
@@ -6899,6 +7089,7 @@ export def "application-entity-post get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -6921,7 +7112,7 @@ export def "application-entity-post get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for post
@@ -6938,6 +7129,7 @@ export def "application-entity-post updatePostEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -6958,7 +7150,7 @@ export def "application-entity-post updatePostEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for priceBook
@@ -6975,6 +7167,7 @@ export def "application-entity-price-book createPriceBookEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7000,7 +7193,7 @@ export def "application-entity-price-book createPriceBookEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for priceBook
@@ -7015,6 +7208,7 @@ export def "application-entity-price-book-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -7037,7 +7231,7 @@ export def "application-entity-price-book-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for priceBook
@@ -7052,6 +7246,7 @@ export def "application-entity-price-book-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -7066,7 +7261,7 @@ export def "application-entity-price-book-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for priceBook
@@ -7081,6 +7276,7 @@ export def "application-entity-price-book-bulk createPriceBookEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7097,7 +7293,7 @@ export def "application-entity-price-book-bulk createPriceBookEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for priceBook
@@ -7112,6 +7308,7 @@ export def "application-entity-price-book-bulk updatePriceBookEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7128,7 +7325,7 @@ export def "application-entity-price-book-bulk updatePriceBookEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for priceBook
@@ -7143,6 +7340,7 @@ export def "application-entity-price-book-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -7162,7 +7360,7 @@ export def "application-entity-price-book-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for priceBook
@@ -7177,6 +7375,7 @@ export def "application-entity-price-book-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -7195,7 +7394,7 @@ export def "application-entity-price-book-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for priceBook
@@ -7210,6 +7409,7 @@ export def "application-entity-price-book-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -7237,7 +7437,7 @@ export def "application-entity-price-book-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for priceBook
@@ -7253,6 +7453,7 @@ export def "application-entity-price-book delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -7263,7 +7464,7 @@ export def "application-entity-price-book delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for priceBook
@@ -7279,6 +7480,7 @@ export def "application-entity-price-book get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -7301,7 +7503,7 @@ export def "application-entity-price-book get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for priceBook
@@ -7319,6 +7521,7 @@ export def "application-entity-price-book updatePriceBookEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7344,7 +7547,7 @@ export def "application-entity-price-book updatePriceBookEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for priceBookItem
@@ -7361,6 +7564,7 @@ export def "application-entity-price-book-item createPriceBookItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7385,7 +7589,7 @@ export def "application-entity-price-book-item createPriceBookItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for priceBookItem
@@ -7400,6 +7604,7 @@ export def "application-entity-price-book-item-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -7422,7 +7627,7 @@ export def "application-entity-price-book-item-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for priceBookItem
@@ -7437,6 +7642,7 @@ export def "application-entity-price-book-item-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -7451,7 +7657,7 @@ export def "application-entity-price-book-item-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for priceBookItem
@@ -7466,6 +7672,7 @@ export def "application-entity-price-book-item-bulk createPriceBookItemEntityBul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7482,7 +7689,7 @@ export def "application-entity-price-book-item-bulk createPriceBookItemEntityBul
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for priceBookItem
@@ -7497,6 +7704,7 @@ export def "application-entity-price-book-item-bulk updatePriceBookItemEntityBul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7513,7 +7721,7 @@ export def "application-entity-price-book-item-bulk updatePriceBookItemEntityBul
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for priceBookItem
@@ -7528,6 +7736,7 @@ export def "application-entity-price-book-item-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -7547,7 +7756,7 @@ export def "application-entity-price-book-item-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for priceBookItem
@@ -7562,6 +7771,7 @@ export def "application-entity-price-book-item-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -7580,7 +7790,7 @@ export def "application-entity-price-book-item-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for priceBookItem
@@ -7595,6 +7805,7 @@ export def "application-entity-price-book-item-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -7622,7 +7833,7 @@ export def "application-entity-price-book-item-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for priceBookItem
@@ -7638,6 +7849,7 @@ export def "application-entity-price-book-item delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -7648,7 +7860,7 @@ export def "application-entity-price-book-item delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for priceBookItem
@@ -7664,6 +7876,7 @@ export def "application-entity-price-book-item get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -7686,7 +7899,7 @@ export def "application-entity-price-book-item get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for priceBookItem
@@ -7704,6 +7917,7 @@ export def "application-entity-price-book-item updatePriceBookItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7728,7 +7942,7 @@ export def "application-entity-price-book-item updatePriceBookItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for product
@@ -7747,6 +7961,7 @@ export def "application-entity-product createProductEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7787,7 +8002,7 @@ export def "application-entity-product createProductEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for product
@@ -7802,6 +8017,7 @@ export def "application-entity-product-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -7824,7 +8040,7 @@ export def "application-entity-product-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for product
@@ -7839,6 +8055,7 @@ export def "application-entity-product-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -7853,7 +8070,7 @@ export def "application-entity-product-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for product
@@ -7868,6 +8085,7 @@ export def "application-entity-product-bulk createProductEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7884,7 +8102,7 @@ export def "application-entity-product-bulk createProductEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for product
@@ -7899,6 +8117,7 @@ export def "application-entity-product-bulk updateProductEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -7915,7 +8134,7 @@ export def "application-entity-product-bulk updateProductEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for product
@@ -7930,6 +8149,7 @@ export def "application-entity-product-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -7949,7 +8169,7 @@ export def "application-entity-product-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for product
@@ -7964,6 +8184,7 @@ export def "application-entity-product-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -7982,7 +8203,7 @@ export def "application-entity-product-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for product
@@ -7997,6 +8218,7 @@ export def "application-entity-product-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -8024,7 +8246,7 @@ export def "application-entity-product-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for product
@@ -8040,6 +8262,7 @@ export def "application-entity-product delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -8050,7 +8273,7 @@ export def "application-entity-product delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for product
@@ -8066,6 +8289,7 @@ export def "application-entity-product get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -8088,7 +8312,7 @@ export def "application-entity-product get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for product
@@ -8108,6 +8332,7 @@ export def "application-entity-product updateProductEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8148,7 +8373,7 @@ export def "application-entity-product updateProductEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for project
@@ -8164,6 +8389,7 @@ export def "application-entity-project createProjectEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8191,7 +8417,7 @@ export def "application-entity-project createProjectEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for project
@@ -8206,6 +8432,7 @@ export def "application-entity-project-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -8228,7 +8455,7 @@ export def "application-entity-project-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for project
@@ -8243,6 +8470,7 @@ export def "application-entity-project-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -8257,7 +8485,7 @@ export def "application-entity-project-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for project
@@ -8272,6 +8500,7 @@ export def "application-entity-project-bulk createProjectEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8288,7 +8517,7 @@ export def "application-entity-project-bulk createProjectEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for project
@@ -8303,6 +8532,7 @@ export def "application-entity-project-bulk updateProjectEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8319,7 +8549,7 @@ export def "application-entity-project-bulk updateProjectEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for project
@@ -8334,6 +8564,7 @@ export def "application-entity-project-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -8353,7 +8584,7 @@ export def "application-entity-project-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for project
@@ -8368,6 +8599,7 @@ export def "application-entity-project-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -8386,7 +8618,7 @@ export def "application-entity-project-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for project
@@ -8401,6 +8633,7 @@ export def "application-entity-project-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -8428,7 +8661,7 @@ export def "application-entity-project-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for project
@@ -8444,6 +8677,7 @@ export def "application-entity-project delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -8454,7 +8688,7 @@ export def "application-entity-project delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for project
@@ -8470,6 +8704,7 @@ export def "application-entity-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -8492,7 +8727,7 @@ export def "application-entity-project get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for project
@@ -8509,6 +8744,7 @@ export def "application-entity-project updateProjectEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8536,7 +8772,7 @@ export def "application-entity-project updateProjectEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for quote
@@ -8556,6 +8792,7 @@ export def "application-entity-quote createQuoteEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8592,7 +8829,7 @@ export def "application-entity-quote createQuoteEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for quote
@@ -8607,6 +8844,7 @@ export def "application-entity-quote-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -8629,7 +8867,7 @@ export def "application-entity-quote-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for quote
@@ -8644,6 +8882,7 @@ export def "application-entity-quote-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -8658,7 +8897,7 @@ export def "application-entity-quote-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for quote
@@ -8673,6 +8912,7 @@ export def "application-entity-quote-bulk createQuoteEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8689,7 +8929,7 @@ export def "application-entity-quote-bulk createQuoteEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for quote
@@ -8704,6 +8944,7 @@ export def "application-entity-quote-bulk updateQuoteEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8720,7 +8961,7 @@ export def "application-entity-quote-bulk updateQuoteEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for quote
@@ -8735,6 +8976,7 @@ export def "application-entity-quote-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -8754,7 +8996,7 @@ export def "application-entity-quote-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for quote
@@ -8769,6 +9011,7 @@ export def "application-entity-quote-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -8787,7 +9030,7 @@ export def "application-entity-quote-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for quote
@@ -8802,6 +9045,7 @@ export def "application-entity-quote-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -8829,7 +9073,7 @@ export def "application-entity-quote-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for quote
@@ -8845,6 +9089,7 @@ export def "application-entity-quote delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -8855,7 +9100,7 @@ export def "application-entity-quote delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for quote
@@ -8871,6 +9116,7 @@ export def "application-entity-quote get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -8893,7 +9139,7 @@ export def "application-entity-quote get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for quote
@@ -8914,6 +9160,7 @@ export def "application-entity-quote updateQuoteEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8950,7 +9197,7 @@ export def "application-entity-quote updateQuoteEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for quoteItem
@@ -8968,6 +9215,7 @@ export def "application-entity-quote-item createQuoteItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -8997,7 +9245,7 @@ export def "application-entity-quote-item createQuoteItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for quoteItem
@@ -9012,6 +9260,7 @@ export def "application-entity-quote-item-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -9034,7 +9283,7 @@ export def "application-entity-quote-item-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for quoteItem
@@ -9049,6 +9298,7 @@ export def "application-entity-quote-item-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -9063,7 +9313,7 @@ export def "application-entity-quote-item-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for quoteItem
@@ -9078,6 +9328,7 @@ export def "application-entity-quote-item-bulk createQuoteItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9094,7 +9345,7 @@ export def "application-entity-quote-item-bulk createQuoteItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for quoteItem
@@ -9109,6 +9360,7 @@ export def "application-entity-quote-item-bulk updateQuoteItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9125,7 +9377,7 @@ export def "application-entity-quote-item-bulk updateQuoteItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for quoteItem
@@ -9140,6 +9392,7 @@ export def "application-entity-quote-item-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -9159,7 +9412,7 @@ export def "application-entity-quote-item-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for quoteItem
@@ -9174,6 +9427,7 @@ export def "application-entity-quote-item-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -9192,7 +9446,7 @@ export def "application-entity-quote-item-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for quoteItem
@@ -9207,6 +9461,7 @@ export def "application-entity-quote-item-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -9234,7 +9489,7 @@ export def "application-entity-quote-item-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for quoteItem
@@ -9250,6 +9505,7 @@ export def "application-entity-quote-item delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -9260,7 +9516,7 @@ export def "application-entity-quote-item delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for quoteItem
@@ -9276,6 +9532,7 @@ export def "application-entity-quote-item get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -9298,7 +9555,7 @@ export def "application-entity-quote-item get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for quoteItem
@@ -9317,6 +9574,7 @@ export def "application-entity-quote-item updateQuoteItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9346,7 +9604,7 @@ export def "application-entity-quote-item updateQuoteItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for tag
@@ -9362,6 +9620,7 @@ export def "application-entity-tag createTagEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9384,7 +9643,7 @@ export def "application-entity-tag createTagEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for tag
@@ -9399,6 +9658,7 @@ export def "application-entity-tag-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -9421,7 +9681,7 @@ export def "application-entity-tag-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for tag
@@ -9436,6 +9696,7 @@ export def "application-entity-tag-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -9450,7 +9711,7 @@ export def "application-entity-tag-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for tag
@@ -9465,6 +9726,7 @@ export def "application-entity-tag-bulk createTagEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9481,7 +9743,7 @@ export def "application-entity-tag-bulk createTagEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for tag
@@ -9496,6 +9758,7 @@ export def "application-entity-tag-bulk updateTagEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9512,7 +9775,7 @@ export def "application-entity-tag-bulk updateTagEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for tag
@@ -9527,6 +9790,7 @@ export def "application-entity-tag-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -9546,7 +9810,7 @@ export def "application-entity-tag-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for tag
@@ -9561,6 +9825,7 @@ export def "application-entity-tag-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -9579,7 +9844,7 @@ export def "application-entity-tag-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for tag
@@ -9594,6 +9859,7 @@ export def "application-entity-tag-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -9621,7 +9887,7 @@ export def "application-entity-tag-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for tag
@@ -9637,6 +9903,7 @@ export def "application-entity-tag delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -9647,7 +9914,7 @@ export def "application-entity-tag delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for tag
@@ -9663,6 +9930,7 @@ export def "application-entity-tag get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -9685,7 +9953,7 @@ export def "application-entity-tag get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for tag
@@ -9702,6 +9970,7 @@ export def "application-entity-tag updateTagEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9724,7 +9993,7 @@ export def "application-entity-tag updateTagEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for task
@@ -9740,6 +10009,7 @@ export def "application-entity-task createTaskEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9767,7 +10037,7 @@ export def "application-entity-task createTaskEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for task
@@ -9782,6 +10052,7 @@ export def "application-entity-task-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -9804,7 +10075,7 @@ export def "application-entity-task-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for task
@@ -9819,6 +10090,7 @@ export def "application-entity-task-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -9833,7 +10105,7 @@ export def "application-entity-task-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for task
@@ -9848,6 +10120,7 @@ export def "application-entity-task-bulk createTaskEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9864,7 +10137,7 @@ export def "application-entity-task-bulk createTaskEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for task
@@ -9879,6 +10152,7 @@ export def "application-entity-task-bulk updateTaskEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -9895,7 +10169,7 @@ export def "application-entity-task-bulk updateTaskEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for task
@@ -9910,6 +10184,7 @@ export def "application-entity-task-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -9929,7 +10204,7 @@ export def "application-entity-task-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for task
@@ -9944,6 +10219,7 @@ export def "application-entity-task-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -9962,7 +10238,7 @@ export def "application-entity-task-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for task
@@ -9977,6 +10253,7 @@ export def "application-entity-task-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -10004,7 +10281,7 @@ export def "application-entity-task-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for task
@@ -10020,6 +10297,7 @@ export def "application-entity-task delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -10030,7 +10308,7 @@ export def "application-entity-task delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for task
@@ -10046,6 +10324,7 @@ export def "application-entity-task get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -10068,7 +10347,7 @@ export def "application-entity-task get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for task
@@ -10085,6 +10364,7 @@ export def "application-entity-task updateTaskEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10112,7 +10392,7 @@ export def "application-entity-task updateTaskEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for ticket
@@ -10129,6 +10409,7 @@ export def "application-entity-ticket createTicketEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10159,7 +10440,7 @@ export def "application-entity-ticket createTicketEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for ticket
@@ -10174,6 +10455,7 @@ export def "application-entity-ticket-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -10196,7 +10478,7 @@ export def "application-entity-ticket-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for ticket
@@ -10211,6 +10493,7 @@ export def "application-entity-ticket-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -10225,7 +10508,7 @@ export def "application-entity-ticket-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for ticket
@@ -10240,6 +10523,7 @@ export def "application-entity-ticket-bulk createTicketEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10256,7 +10540,7 @@ export def "application-entity-ticket-bulk createTicketEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for ticket
@@ -10271,6 +10555,7 @@ export def "application-entity-ticket-bulk updateTicketEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10287,7 +10572,7 @@ export def "application-entity-ticket-bulk updateTicketEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for ticket
@@ -10302,6 +10587,7 @@ export def "application-entity-ticket-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -10321,7 +10607,7 @@ export def "application-entity-ticket-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for ticket
@@ -10336,6 +10622,7 @@ export def "application-entity-ticket-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -10354,7 +10641,7 @@ export def "application-entity-ticket-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for ticket
@@ -10369,6 +10656,7 @@ export def "application-entity-ticket-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -10396,7 +10684,7 @@ export def "application-entity-ticket-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for ticket
@@ -10412,6 +10700,7 @@ export def "application-entity-ticket delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -10422,7 +10711,7 @@ export def "application-entity-ticket delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for ticket
@@ -10438,6 +10727,7 @@ export def "application-entity-ticket get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -10460,7 +10750,7 @@ export def "application-entity-ticket get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for ticket
@@ -10478,6 +10768,7 @@ export def "application-entity-ticket updateTicketEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10508,7 +10799,7 @@ export def "application-entity-ticket updateTicketEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST for user
@@ -10529,6 +10820,7 @@ export def "application-entity-user createUserEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10565,7 +10857,7 @@ export def "application-entity-user createUserEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for user
@@ -10580,6 +10872,7 @@ export def "application-entity-user-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -10602,7 +10895,7 @@ export def "application-entity-user-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for user
@@ -10617,6 +10910,7 @@ export def "application-entity-user-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -10631,7 +10925,7 @@ export def "application-entity-user-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for user
@@ -10646,6 +10940,7 @@ export def "application-entity-user-bulk createUserEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10662,7 +10957,7 @@ export def "application-entity-user-bulk createUserEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for user
@@ -10677,6 +10972,7 @@ export def "application-entity-user-bulk updateUserEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10693,7 +10989,7 @@ export def "application-entity-user-bulk updateUserEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for user
@@ -10708,6 +11004,7 @@ export def "application-entity-user-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -10727,7 +11024,7 @@ export def "application-entity-user-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for user
@@ -10742,6 +11039,7 @@ export def "application-entity-user-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -10760,7 +11058,7 @@ export def "application-entity-user-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for user
@@ -10775,6 +11073,7 @@ export def "application-entity-user-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -10802,7 +11101,7 @@ export def "application-entity-user-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for user
@@ -10818,6 +11117,7 @@ export def "application-entity-user delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -10828,7 +11128,7 @@ export def "application-entity-user delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for user
@@ -10844,6 +11144,7 @@ export def "application-entity-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -10866,7 +11167,7 @@ export def "application-entity-user get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for user
@@ -10888,6 +11189,7 @@ export def "application-entity-user updateUserEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10924,7 +11226,7 @@ export def "application-entity-user updateUserEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET for entity
@@ -10940,6 +11242,7 @@ export def "application-entity list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -10954,7 +11257,7 @@ export def "application-entity list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for entityItem
@@ -10971,6 +11274,7 @@ export def "application-entity createEntityItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -10990,7 +11294,7 @@ export def "application-entity createEntityItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AGGREGATE for entityItem
@@ -11006,6 +11310,7 @@ export def "application-entity-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --pipeline: string # Pipeline
   --X-API2CRM-USER-KEY: string # User Key
@@ -11028,7 +11333,7 @@ export def "application-entity-aggregate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE bulk  for entityItem
@@ -11044,6 +11349,7 @@ export def "application-entity-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --item: list # Item
@@ -11058,7 +11364,7 @@ export def "application-entity-bulk delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST bulk  for entityItem
@@ -11074,6 +11380,7 @@ export def "application-entity-bulk createEntityItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11090,7 +11397,7 @@ export def "application-entity-bulk createEntityItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT bulk  for entityItem
@@ -11106,6 +11413,7 @@ export def "application-entity-bulk updateEntityItemEntityBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11122,7 +11430,7 @@ export def "application-entity-bulk updateEntityItemEntityBulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for entityItem
@@ -11138,6 +11446,7 @@ export def "application-entity-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -11157,7 +11466,7 @@ export def "application-entity-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for entityItem
@@ -11173,6 +11482,7 @@ export def "application-entity-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DATA-ENABLE: string@X-API2CRM-DATA-ENABLE-completer # Data Enable
@@ -11191,7 +11501,7 @@ export def "application-entity-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for entityItem
@@ -11207,6 +11517,7 @@ export def "application-entity-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -11234,7 +11545,7 @@ export def "application-entity-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for entityItem
@@ -11251,6 +11562,7 @@ export def "application-entity delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -11261,7 +11573,7 @@ export def "application-entity delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for entityItem
@@ -11278,6 +11590,7 @@ export def "application-entity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand relations
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
@@ -11300,7 +11613,7 @@ export def "application-entity get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for entityItem
@@ -11318,6 +11631,7 @@ export def "application-entity updateEntityItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-NATIVE-ENABLE: string@X-API2CRM-NATIVE-ENABLE-completer # Return native response
@@ -11337,7 +11651,7 @@ export def "application-entity updateEntityItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for field
@@ -11352,6 +11666,7 @@ export def "application-field-count list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> record<total: int> {
@@ -11362,7 +11677,7 @@ export def "application-field-count list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for field
@@ -11377,6 +11692,7 @@ export def "application-field-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -11393,7 +11709,7 @@ export def "application-field-list list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for field
@@ -11409,6 +11725,7 @@ export def "application-field list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -11422,7 +11739,7 @@ export def "application-field list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for fieldItem
@@ -11439,6 +11756,7 @@ export def "application-field createFieldItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
@@ -11461,7 +11779,7 @@ export def "application-field createFieldItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for fieldItem
@@ -11477,6 +11795,7 @@ export def "application-field-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> record<total: int> {
@@ -11487,7 +11806,7 @@ export def "application-field-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DESCRIBE for fieldItem
@@ -11503,6 +11822,7 @@ export def "application-field-describe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
@@ -11514,7 +11834,7 @@ export def "application-field-describe get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for fieldItem
@@ -11530,6 +11850,7 @@ export def "application-field-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --qp-fields: string # Comma-separated list of fields to include in the response
@@ -11545,7 +11866,7 @@ export def "application-field-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for fieldItem
@@ -11562,6 +11883,7 @@ export def "application-field delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
 ]: nothing -> any {
@@ -11572,7 +11894,7 @@ export def "application-field delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for fieldItem
@@ -11589,6 +11911,7 @@ export def "application-field get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
@@ -11602,7 +11925,7 @@ export def "application-field get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for fieldItem
@@ -11620,6 +11943,7 @@ export def "application-field updateFieldItemEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --X-API2CRM-DESCRIBE-LIFETIME: string # Describe lifetime
@@ -11642,7 +11966,7 @@ export def "application-field updateFieldItemEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET for application
@@ -11657,6 +11981,7 @@ export def "application-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -11672,7 +11997,7 @@ export def "application-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for request
@@ -11688,6 +12013,7 @@ export def "application-request createRequestEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --X-API2CRM-APPLICATION-KEY: string # Application Key
   --content: string # Content (in base64 encoding)
@@ -11705,7 +12031,7 @@ export def "application-request createRequestEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE for application
@@ -11721,6 +12047,7 @@ export def "application delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11730,7 +12057,7 @@ export def "application delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for application
@@ -11746,6 +12073,7 @@ export def "application get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> record<authorization: string, company: record<id: string>, created_at: string, description: string, is_authorized: bool, key: string, last_used_at: string, me: record<address: list<record>, created_at: string, department: string, description: string, email: list<record>, first_name: string, id: string, is_admin: bool, is_associable: bool, last_name: string, messenger: list<record>, middle_name: string, name_suffix: string, phone: list<record>, position: string, relation: record<account: list, attachment: list, call: list, campaign: list, case: list, comment: list, contact: list, email: list, event: list, invoice: list, invoiceItem: list, lead: list, meeting: list, note: list, opportunity: list, opportunityProduct: list, post: list, priceBook: list, priceBookItem: list, product: list, project: list, quote: list, quoteItem: list, tag: list, task: list, ticket: list, user: list>, salutation: string, status: string, updated_at: string, username: string, website: list<record>>, plan: string, requests_limit: record<is_exceeded: bool, retry_after: string, type: list<record>>, type: string, updated_at: string, url: string, user_id: int, user_key: string> {
@@ -11757,7 +12085,7 @@ export def "application get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for application
@@ -11773,6 +12101,7 @@ export def "application updateApplicationEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # API2CRM user key
   --authorization: string # Application authorization
   --credential: record
@@ -11789,7 +12118,7 @@ export def "application updateApplicationEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET for platform
@@ -11804,6 +12133,7 @@ export def "platform-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --qp-fields: string # Comma-separated list of fields to include in the response
@@ -11818,7 +12148,7 @@ export def "platform-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for platform
@@ -11834,6 +12164,7 @@ export def "platform get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --X-API2CRM-USER-KEY: string # API2CRM user key
 ]: nothing -> record<authorization: table<description: string, platform_credential: list, type: string>, name: string, resource: record, type: string> {
@@ -11845,7 +12176,7 @@ export def "platform get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST for internalUser
@@ -11860,6 +12191,7 @@ export def "user createInternalUserEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --email: string # Email (e.g. bill.wall@mail.com)
@@ -11884,7 +12216,7 @@ export def "user createInternalUserEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # COUNT for internalUser
@@ -11899,6 +12231,7 @@ export def "user-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter
   --X-API2CRM-USER-KEY: string # User Key
 ]: nothing -> record<total: int> {
@@ -11910,7 +12243,7 @@ export def "user-count get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for internalUser
@@ -11925,6 +12258,7 @@ export def "user-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Amount of results (default: 25) (format: int32)
   --page: int # Page to show (default: 1) (format: int32)
   --filter: string # Filter
@@ -11942,7 +12276,7 @@ export def "user-list get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE for internalUser
@@ -11958,6 +12292,7 @@ export def "user delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11967,7 +12302,7 @@ export def "user delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET for internalUser
@@ -11983,6 +12318,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of fields to include in the response
   --application-request-start: string # All Application Requests from this date (format: date)
   --application-request-end: string # All Application Requests until this date (format: date)
@@ -11996,7 +12332,7 @@ export def "user get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT for internalUser
@@ -12012,6 +12348,7 @@ export def "user updateInternalUserEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-API2CRM-USER-KEY: string # User Key
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --email: string # Email (e.g. bill.wall@mail.com)
@@ -12036,5 +12373,5 @@ export def "user updateInternalUserEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def ip-allowlist-mode-completer [] { ["disabled" "explicit"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps view-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,6 +113,7 @@ export def "apps view-apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> table<id: string, name: string, players: int, messageable_players: int, created_at: string, updated_at: string, organization_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -121,7 +123,7 @@ export def "apps view-apps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an app
@@ -136,6 +138,7 @@ export def "apps create-an-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   name: string # An internal name you set to help organize and track Apps. Maximum 128 characters. (default: NAME_OF_NEW_APP)
@@ -167,7 +170,7 @@ export def "apps create-an-app" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View an app
@@ -183,6 +186,7 @@ export def "apps view-an-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<id: string, name: string, players: int, messageable_players: int, created_at: string, updated_at: string, organization_id: string, fcm_v1_service_account_json: string, fcm_sender_id: string, chrome_web_key: string, chrome_web_origin: string, chrome_web_gcm_sender_id: string, chrome_web_default_notification_icon: string, chrome_web_sub_domain: string, apns_env: string, apns_certificates: string, apns_p8: string, apns_team_id: string, apns_key_id: string, apns_bundle_id: string, site_name: string> {
@@ -193,7 +197,7 @@ export def "apps view-an-app" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an app
@@ -209,6 +213,7 @@ export def "apps update-an-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --name: string # An internal name you set to help organize and track Apps. Maximum 128 characters. (default: NAME_OF_NEW_APP)
@@ -240,7 +245,7 @@ export def "apps update-an-app" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export subscriptions CSV
@@ -255,6 +260,7 @@ export def "players-csv-export csv-export" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --extra-fields: list # Additional properties that you can include in the CSV. (default: [external_user_id, country, timezone_id])
@@ -273,7 +279,7 @@ export def "players-csv-export csv-export" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Message history
@@ -289,6 +295,7 @@ export def "notifications-history message-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   events: string # Specifies the type of event to retrieve. `sent` — retrieves all subscriptions sent the specified message. Note: sent events are not recorded for messages targeting fewer than 1,000 recipients. `clicked` — retrieves all subscriptions that interacted with the message. Note: There isn't a recipient count threshold for tracking clicked event. (default: sent)
@@ -304,7 +311,7 @@ export def "notifications-history message-history" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create segment
@@ -320,6 +327,7 @@ export def "apps-segments create-segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --Content-Type: string
   --id: string # UUID of the segment. If left empty, it will be assigned automatically.
@@ -337,7 +345,7 @@ export def "apps-segments create-segments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View segments
@@ -353,6 +361,7 @@ export def "apps-segments view-segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The index to start returning segments from. Defaults to `0`. Segments are sorted by their creation date (`created_at`) in ascending order. (format: int32, default: 0)
   --limit: int # The maximum number of segments to return. Default/Max: `300`. Ideal for controlling data volume in large-scale applications. (format: int32, default: 300)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
@@ -365,7 +374,7 @@ export def "apps-segments view-segments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View segment
@@ -382,6 +391,7 @@ export def "apps-segments view-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-segment-detail: oneof<nothing, bool> # Set to `true` to include segment metadata and filters in the response. (default: false)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<subscriber_count: int, payload: record<id: string, name: string, description: string, created_at: int, source: string, filters: list<any>>> {
@@ -393,7 +403,7 @@ export def "apps-segments view-segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update segment
@@ -410,6 +420,7 @@ export def "apps-segments update-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --Content-Type: string
   name: string # Required. The segment name. Maximum 128 characters. (default: YOUR_SEGMENT_NAME)
@@ -426,7 +437,7 @@ export def "apps-segments update-segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete segment
@@ -443,6 +454,7 @@ export def "apps-segments delete-segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -452,7 +464,7 @@ export def "apps-segments delete-segments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View outcomes
@@ -472,6 +484,7 @@ export def "apps-outcomes-outcome-names-outcome-names-outcome-time-range-outcome
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --outcome-names: list # The name and aggregation type of the outcome(s) you want to fetch. Example: `my_outcome.count` or `my_outcome.sum`. For clicks, use `os__click.count`. For confirmed deliveries, use `os__confirmed_delivery.count`. For session duration, use `os__session_duration.count`.
   --outcome-time-range: string@outcome-time-range-completer # Time range for the returned data. Available values: `1h` (1 hour), `1d` (1 day), `1mo` (1 month) (default: 1h)
   --outcome-platforms: string # The platforms in which you want to pull the data represented as the `device_type` integer. (default: 0,1,2,5,8,11,14,17)
@@ -486,7 +499,7 @@ export def "apps-outcomes-outcome-names-outcome-names-outcome-time-range-outcome
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update subscription
@@ -504,6 +517,7 @@ export def "apps-subscriptions update-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription: record # The subscription's properties. — shape: {type: "Email"|"SMS"|"iOSPush"|"AndroidPush"|"HuaweiPush"|"FireOSPush"|"WindowsPush"|"macOSPush"|"ChromeExtensionPush"|"ChromePush"|"SafariLegacyPush"|"FirefoxPush"|"SafariPush", token: string, enabled?: bool, notification_types?: int, session_time?: int, session_count?: int, app_version?: string, device_model?: string, device_os?: string, test_type?: int, sdk?: string, web_auth?: string, web_p256?: string}
 ]: any -> record {
   let input = $in
@@ -514,7 +528,7 @@ export def "apps-subscriptions update-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete subscription
@@ -531,13 +545,14 @@ export def "apps-subscriptions delete-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/apps/($app_id)/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update subscription By Token
@@ -556,6 +571,7 @@ export def "apps-subscriptions-by-token update-subscription-by-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --subscription: record # The subscription's properties. — shape: {enabled?: bool, notification_types?: int, session_time?: int, session_count?: int, app_version?: string, device_model?: string, device_os?: string, test_type?: int, sdk?: string, web_auth?: string, web_p256?: string}
 ]: any -> record {
@@ -569,7 +585,7 @@ export def "apps-subscriptions-by-token update-subscription-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Subscription by alias
@@ -588,6 +604,7 @@ export def "apps-users-by-subscriptions create-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   subscription: record # The subscription's properties. — shape: {type: "Email"|"SMS"|"iOSPush"|"AndroidPush"|"HuaweiPush"|"FireOSPush"|"WindowsPush"|"macOSPush"|"ChromeExtensionPush"|"ChromePush"|"SafariLegacyPush"|"FirefoxPush"|"SafariPush", token: string, enabled?: bool, notification_types?: int, session_time?: int, session_count?: int, app_version?: string, device_model?: string, device_os?: string, test_type?: int, sdk?: string, web_auth?: string, web_p256?: string}
 ]: any -> record {
@@ -601,7 +618,7 @@ export def "apps-users-by-subscriptions create-subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update user
@@ -621,6 +638,7 @@ export def "apps-users-by update-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --onesignal-subscription-id: string # Optional. Identifies a specific subscription to update. Some user properties, such as Session Time and Session Count, will update values on both the User and the Subscription.
   --properties: record # Represents user profile data for a given user, including tags, preferences, user activity, and other valuable properties. — shape: {tags?: record, language?: string, timezone_id?: string, lat?: float, long?: float, country?: string, first_active?: int, last_active?: int, ip?: string, test_user_name?: string}
@@ -636,7 +654,7 @@ export def "apps-users-by update-user" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View user
@@ -654,6 +672,7 @@ export def "apps-users-by view-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<properties: record<tags: record<KEY: string>, country: string, first_active: int, last_active: int, test_user_name: string>, identity: record<external_id: string, onesignal_id: string>, subscriptions: table<id: string, app_id: string, type: string, token: string, enabled: bool, notification_types: int, session_time: int, session_count: int, sdk: string, device_model: string, device_os: string, rooted: bool, test_type: int, app_version: string, net_type: int, carrier: string, web_auth: string, web_p256: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -663,7 +682,7 @@ export def "apps-users-by view-user" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user
@@ -681,6 +700,7 @@ export def "apps-users-by delete-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<identity: record<onesignal_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -690,7 +710,7 @@ export def "apps-users-by delete-user" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -709,6 +729,7 @@ export def "apps-users create-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # Represents user profile data for a given user, including tags, preferences, user activity, and other valuable properties. — shape: {tags?: record, language?: string, timezone_id?: string, lat?: float, long?: float, country?: string, first_active?: int, last_active?: int, ip?: string, test_user_name?: string}
   --identity: record # Defines identifiers for the user. The `external_id` must be used and should be unique across users. — shape: {external_id?: string}
   --subscriptions: list # The subscriptions object allows for creating or transferring subscriptions to a specified user. See [Subscriptions](/docs/subscriptions). — item shape: {type: "Email"|"SMS"|"iOSPush"|"AndroidPush"|"HuaweiPush"|"FireOSPush"|"WindowsPush"|"macOSPush"|"ChromePush"|"FirefoxPush"|"SafariPush", token: string, enabled?: bool, notification_types?: int, session_time?: int, session_count?: int, app_version?: string, device_model?: string, device_os?: string, test_type?: int, sdk?: string, web_auth?: string, web_p256?: string}
@@ -721,7 +742,7 @@ export def "apps-users create-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View user identity
@@ -739,6 +760,7 @@ export def "apps-users-by-identity fetch-aliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<identity: record<onesignal_id: string, external_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -748,7 +770,7 @@ export def "apps-users-by-identity fetch-aliases" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update alias
@@ -767,6 +789,7 @@ export def "apps-users-by-identity create-alias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --identity: record # One or more aliases to be created for this user. — shape: {external_id?: string, onesignal_id?: string}
 ]: any -> record<identity: record<onesignal_id: string, custom_alias_label: string>> {
@@ -780,7 +803,7 @@ export def "apps-users-by-identity create-alias" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer subscription
@@ -798,6 +821,7 @@ export def "apps-subscriptions-owner transfer-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: record # Identifies the user that this subscription is moved to. Must contain exactly one alias. — shape: {external_id?: string, onesignal_id?: string}
 ]: any -> record<identity: record<external_id: string, onesignal_id: string>> {
   let input = $in
@@ -808,7 +832,7 @@ export def "apps-subscriptions-owner transfer-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View user identity (by subscription)
@@ -825,13 +849,14 @@ export def "apps-subscriptions-user-identity fetch-identity-by-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<identity: record<onesignal_id: string, external_id: string, custom_alias_label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/apps/($app_id)/subscriptions/($subscription_id)/user/identity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create alias (by subscription)
@@ -849,6 +874,7 @@ export def "apps-subscriptions-user-identity create-alias-by-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: record # One or more aliases to be created for this user. — shape: {external_id?: string, onesignal_id?: string}
 ]: any -> record<identity: record<external_id: string, onesignal_id: string>> {
   let input = $in
@@ -859,7 +885,7 @@ export def "apps-subscriptions-user-identity create-alias-by-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete alias
@@ -878,13 +904,14 @@ export def "apps-users-by-identity delete-alias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<identity: record<onesignal_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/apps/($app_id)/users/by/($alias_label)/($alias_id)/identity/($alias_label_to_delete)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export audience activity CSV
@@ -900,6 +927,7 @@ export def "notifications-export-events export-csv-of-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<csv_file_url: string> {
@@ -911,7 +939,7 @@ export def "notifications-export-events export-csv-of-events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View template
@@ -928,6 +956,7 @@ export def "templates view-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --Content-Type: string
@@ -940,7 +969,7 @@ export def "templates view-template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete template
@@ -957,6 +986,7 @@ export def "templates delete-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your App's API key found in [Settings > Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<success: bool> {
@@ -968,7 +998,7 @@ export def "templates delete-template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template
@@ -986,6 +1016,7 @@ export def "templates update-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   name: string # An internal name you set to help organize and track Templates. Maximum 128 characters. (default: YOUR_TEMPLATE_NAME)
@@ -1006,7 +1037,7 @@ export def "templates update-template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View templates
@@ -1024,6 +1055,7 @@ export def "templates-app-id-app-id-limit-limit-offset-offset view-templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --limit: int # The maximum number of templates returned per request. The default (if omitted) and maximum is 50 templates per request. (format: int32, default: 50)
   --offset: int # The pagination or "starting point" of the templates to be returned. Setting it to 0 with a limit of 50 will retrieve the first 50 templates. Increasing the offset by 50 will return the next set of templates, and so on. (format: int32, default: 0)
@@ -1039,7 +1071,7 @@ export def "templates-app-id-app-id-limit-limit-offset-offset view-templates" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create template
@@ -1055,6 +1087,7 @@ export def "templates create-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --Content-Type: string
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
@@ -1076,7 +1109,7 @@ export def "templates create-template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsubscribe email (with token)
@@ -1094,6 +1127,7 @@ export def "apps-notifications-unsubscribe-token-token unsubscribe-with-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The unsubscribe token that is generated via liquid syntax `{{subscription.unsubscribe_token}}` when personalizing an email. See [Create a Custom Unsubscribe Page](/docs/create-custom-unsubscribe-page) for setup details.
 ]: nothing -> record<success: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1102,7 +1136,7 @@ export def "apps-notifications-unsubscribe-token-token unsubscribe-with-token" [
   let full_url = (build-url $base $"/apps/($app_id)/notifications/($notification_id)/unsubscribe?token=($token)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Email
@@ -1118,6 +1152,7 @@ export def "notifications-cemail email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --include-aliases: record # Target up to 20,000 users by their `external_id`, `onesignal_id`, or your own custom alias. Use with `target_channel` to control the delivery channel. Not compatible with any other targeting parameters like `filters`, `include_subscription_ids`, `included_segments`, or `excluded_segments`. See [Sending messages with the OneSignal API](/reference/create-message#include-aliases). (format: json) — shape: {external_id?: list}
@@ -1155,7 +1190,7 @@ export def "notifications-cemail email" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Push notification
@@ -1177,6 +1212,7 @@ export def "notifications-cpush push-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --include-aliases: record # Target up to 20,000 users by their `external_id`, `onesignal_id`, or your own custom alias. Use with `target_channel` to control the delivery channel. Not compatible with any other targeting parameters like `filters`, `include_subscription_ids`, `included_segments`, or `excluded_segments`. See [Sending messages with the OneSignal API](/reference/create-message#include-aliases). (format: json) — shape: {external_id?: list}
@@ -1265,7 +1301,7 @@ export def "notifications-cpush push-notification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SMS
@@ -1282,6 +1318,7 @@ export def "notifications-csms sms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   contents: record # The main message body with [language-specific values](/docs/en/multi-language-messaging#supported-languages). Too many characters may result in multiple messages and increased costs. See [SMS](/docs/sms-messaging). Required unless using `template_id`. Supports [Message Personalization](/docs/message-personalization). You can add trackable links to your SMS via the API by including liquid syntax in your message contents. For example: {{'your_url' | track_link}} The liquid syntax block will be replaced with a trackable short link in the following format: 1sgnl.co/XXXX. Using trackable links allows you to see the click through rates of your SMS. — shape: {en: string}
@@ -1310,7 +1347,7 @@ export def "notifications-csms sms" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Live Activity
@@ -1328,6 +1365,7 @@ export def "apps-live-activities-notifications update-live-activity-api" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   event: string@event-completer # The action to perform on the Live Activity. Options:`update` - Updates the content of an existing Live Activity without ending it. `end` — Ends the Live Activity and removes it from the user's view. See Apple's developer docs on [Starting and updating Live Activities](https://developer.apple.com/documentation/activitykit/starting-and-updating-live-activities-with-activitykit-push-notifications).
@@ -1350,7 +1388,7 @@ export def "apps-live-activities-notifications update-live-activity-api" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View messages
@@ -1371,6 +1409,7 @@ export def "notifications-app-id-app-id-limit-limit-offset-offset-kind-kind-temp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --limit: int # Specifies the maximum number of messages to return in a single query. The maximum and default is **50** messages per request. (format: int32)
   --offset: int # Controls the starting point for the notifications being returned. Default is **0**. Results are returned and sorted in descending order by `queued_at`. (format: int32)
@@ -1387,7 +1426,7 @@ export def "notifications-app-id-app-id-limit-limit-offset-offset-kind-kind-temp
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View message
@@ -1404,6 +1443,7 @@ export def "notifications view-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --outcome-names: list # The name and aggregation type of the outcome(s) you want to fetch. Example: `my_outcome.count` or `my_outcome.sum`. For clicks, use `os__click.count`. For confirmed deliveries, use `os__confirmed_delivery.count`. For session duration, use `os__session_duration.count`.
   --outcome-time-range: string@outcome-time-range-completer # Time range for the returned data. Available values: `1h` (1 hour), `1d` (1 day), `1mo` (1 month) (default: 1h)
@@ -1419,7 +1459,7 @@ export def "notifications view-message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel message
@@ -1436,6 +1476,7 @@ export def "notifications cancel-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1445,7 +1486,7 @@ export def "notifications cancel-message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start Live Activity
@@ -1466,6 +1507,7 @@ export def "apps-activities-activity start-live-activity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --include-aliases: record # Target up to 20,000 users by their `external_id`, `onesignal_id`, or your own custom alias. Use with `target_channel` to control the delivery channel. Not compatible with any other targeting parameters like `filters`, `include_subscription_ids`, `included_segments`, or `excluded_segments`. See [Sending messages with the OneSignal API](/reference/create-message#include-aliases). (format: json) — shape: {external_id?: list}
   --include-subscription-ids: list # Target users' specific [subscriptions](/docs/subscriptions) by ID. Include up to 20,000 `subscription_id` per API call. Not compatible with any other targeting parameters like `filters`, `include_aliases`, `included_segments`, or `excluded_segments`. See [Sending messages with the OneSignal API](/reference/create-message).
@@ -1495,7 +1537,7 @@ export def "apps-activities-activity start-live-activity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Copy template to another app
@@ -1512,6 +1554,7 @@ export def "templates-copy-to-app-app-id-app-id copy-template-to-another-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   target_app_id: string # Specifies the OneSignal app ID that the template will be copied to. Cannot be the same as the `app_id`. (default: YOUR_OTHER_APP_ID)
@@ -1527,7 +1570,7 @@ export def "templates-copy-to-app-app-id-app-id copy-template-to-another-app" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create inbox broadcast message
@@ -1547,6 +1590,7 @@ export def "apps-inbox create-inbox-broadcast-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --name: string # An internal name you set to help organize and track messages. Not shown to recipients. Maximum 128 characters.
   --img-url: string # The URL to an image that is associated with this message.
@@ -1566,7 +1610,7 @@ export def "apps-inbox create-inbox-broadcast-message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View broadcasts
@@ -1584,6 +1628,7 @@ export def "apps-inbox-last-broadcast-id-broadcast-id-limit-number view-broadcas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --last-broadcast-id: string # The exclusive lower bound of broadcasts to retrieve
   --limit: int # The number of broadcasts to retrieve. (format: int32)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
@@ -1596,7 +1641,7 @@ export def "apps-inbox-last-broadcast-id-broadcast-id-limit-number view-broadcas
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View user broadcasts
@@ -1615,6 +1660,7 @@ export def "apps-users-by-inbox-last-message-id-message-id view-user-inbox-messa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --last-message-id: string # The exclusive lower bound of broadcasts to retrieve.
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> any {
@@ -1626,7 +1672,7 @@ export def "apps-users-by-inbox-last-message-id-message-id view-user-inbox-messa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update or delete message state
@@ -1645,6 +1691,7 @@ export def "apps-users-by-inbox-last-message-id-message-id bulk-update-or-delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --last-message-id: string # The inclusive upper bound of messages to update.
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --is-read: oneof<nothing, bool> # Indicates whether to mark message(s) as read.
@@ -1662,7 +1709,7 @@ export def "apps-users-by-inbox-last-message-id-message-id bulk-update-or-delete
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View user unread message count
@@ -1680,6 +1727,7 @@ export def "apps-users-by-inbox-unread-count view-user-unread-message-count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1689,7 +1737,7 @@ export def "apps-users-by-inbox-unread-count view-user-unread-message-count" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update message state
@@ -1708,6 +1756,7 @@ export def "apps-users-by-inbox update-message-state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   --is-read: oneof<nothing, bool> # Indicates whether to mark message(s) as read.
   --is-deleted: oneof<nothing, bool> # Indicates whether to mark message(s) as deleted.
@@ -1723,7 +1772,7 @@ export def "apps-users-by-inbox update-message-state" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View API keys
@@ -1739,6 +1788,7 @@ export def "apps-auth-tokens view-api-keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<tokens: table<token_id: string, name: string, ip_allowlist_mode: string, ip_allowlist: list, created_at: string, updated_at: string, formatted_token: string>> {
@@ -1749,7 +1799,7 @@ export def "apps-auth-tokens view-api-keys" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create API key
@@ -1765,6 +1815,7 @@ export def "apps-auth-tokens create-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   name: string # An internal name you set to help organize and track API keys (Rich Authentication Tokens). Maximum 128 characters.
@@ -1781,7 +1832,7 @@ export def "apps-auth-tokens create-api-key" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete API key
@@ -1798,6 +1849,7 @@ export def "apps-auth-tokens delete-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record {
@@ -1808,7 +1860,7 @@ export def "apps-auth-tokens delete-api-key" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update API key
@@ -1825,6 +1877,7 @@ export def "apps-auth-tokens update-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization's API key found in [Organizations > Keys & IDs](/docs/en/keys-and-ids).
   --name: string # An internal name you set to help organize and track API keys (Rich Authentication Tokens). Maximum 128 characters.
@@ -1841,7 +1894,7 @@ export def "apps-auth-tokens update-api-key" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotate API key
@@ -1858,6 +1911,7 @@ export def "apps-auth-tokens-rotate rotate-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string
   --Authorization: string # Your Organization API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<token_id: string, name: string, ip_allowlist_mode: string, ip_allowlist: list<string>, created_at: string, updated_at: string, formatted_token: string> {
@@ -1868,7 +1922,7 @@ export def "apps-auth-tokens-rotate rotate-api-key" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Custom Events
@@ -1885,6 +1939,7 @@ export def "apps-custom-events create-custom-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your app API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   events: list # Array of event objects to be recorded. Maximum size for each event is `2024` bytes. Maximum size of request is `1` MB. — item shape: {name: string, external_id?: string, onesignal_id?: string, timestamp?: string, idempotency_key?: string, properties?: record}
 ]: any -> record<errors: table<event_user_id: string, event_id: string, error: record>> {
@@ -1898,7 +1953,7 @@ export def "apps-custom-events create-custom-events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit logs
@@ -1914,6 +1969,7 @@ export def "organizations-audit-logs list-audit-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-time: string # Start of the time range in ISO 8601 format (e.g. `2026-02-01T00:00:00Z`). Required unless `cursor` is provided. Must be within the last 90 days and no earlier than `2026-02-18T00:00:00Z`.
   --end-time: string # End of the time range in ISO 8601 format. Defaults to the current time. Must be after `start_time`.
   --cursor: string # Pagination cursor returned in a previous response as `next_cursor`. When provided, `start_time` and `end_time` are ignored.
@@ -1935,5 +1991,5 @@ export def "organizations-audit-logs list-audit-logs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

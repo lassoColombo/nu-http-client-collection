@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def previewType-completer [] { ["automatic" "checklist" "description" "noPreview
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-planner GetPlanner" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "groups-planner GetPlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, plans: table<id: string, container: record, createdBy: record, createdDateTime: string, owner: string, title: string, buckets: list, details: record, tasks: list>> {
@@ -112,7 +114,7 @@ export def "groups-planner GetPlanner" [
   let full_url = (build-url $base $"/groups/($group_id)/planner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property planner in groups
@@ -129,6 +131,7 @@ export def "groups-planner UpdatePlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --plans: list # Read-only. Nullable. Returns the plannerPlans owned by the group. — item shape: {id?: string, container?: record, createdBy?: record, createdDateTime?: string, owner?: string, title?: string, buckets?: list, details?: any, tasks?: list}
@@ -143,7 +146,7 @@ export def "groups-planner UpdatePlanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property planner for groups
@@ -159,6 +162,7 @@ export def "groups-planner DeletePlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -168,7 +172,7 @@ export def "groups-planner DeletePlanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List plans
@@ -185,6 +189,7 @@ export def "groups-planner-plans ListPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -200,7 +205,7 @@ export def "groups-planner-plans ListPlan" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to plans for groups
@@ -220,6 +225,7 @@ export def "groups-planner-plans CreatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -238,7 +244,7 @@ export def "groups-planner-plans CreatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plans from groups
@@ -255,6 +261,7 @@ export def "groups-planner-plans GetPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, container: record<containerId: string, type: string, url: string>, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, owner: string, title: string, buckets: table<id: string, name: string, orderHint: string, planId: string, tasks: list>, details: record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record>, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -264,7 +271,7 @@ export def "groups-planner-plans GetPlan" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property plans in groups
@@ -285,6 +292,7 @@ export def "groups-planner-plans UpdatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -303,7 +311,7 @@ export def "groups-planner-plans UpdatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property plans for groups
@@ -320,6 +328,7 @@ export def "groups-planner-plans DeletePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -329,7 +338,7 @@ export def "groups-planner-plans DeletePlan" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get buckets from groups
@@ -346,6 +355,7 @@ export def "groups-planner-plans-buckets ListBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -361,7 +371,7 @@ export def "groups-planner-plans-buckets ListBucket" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to buckets for groups
@@ -379,6 +389,7 @@ export def "groups-planner-plans-buckets CreateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -393,7 +404,7 @@ export def "groups-planner-plans-buckets CreateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get buckets from groups
@@ -411,6 +422,7 @@ export def "groups-planner-plans-buckets GetBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, name: string, orderHint: string, planId: string, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -420,7 +432,7 @@ export def "groups-planner-plans-buckets GetBucket" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property buckets in groups
@@ -439,6 +451,7 @@ export def "groups-planner-plans-buckets UpdateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -453,7 +466,7 @@ export def "groups-planner-plans-buckets UpdateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property buckets for groups
@@ -471,6 +484,7 @@ export def "groups-planner-plans-buckets DeleteBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -480,7 +494,7 @@ export def "groups-planner-plans-buckets DeleteBucket" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from groups
@@ -498,6 +512,7 @@ export def "groups-planner-plans-buckets-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -513,7 +528,7 @@ export def "groups-planner-plans-buckets-tasks ListTask" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for groups
@@ -533,6 +548,7 @@ export def "groups-planner-plans-buckets-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -568,7 +584,7 @@ export def "groups-planner-plans-buckets-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from groups
@@ -587,6 +603,7 @@ export def "groups-planner-plans-buckets-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -596,7 +613,7 @@ export def "groups-planner-plans-buckets-tasks GetTask" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in groups
@@ -617,6 +634,7 @@ export def "groups-planner-plans-buckets-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -652,7 +670,7 @@ export def "groups-planner-plans-buckets-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for groups
@@ -671,6 +689,7 @@ export def "groups-planner-plans-buckets-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -680,7 +699,7 @@ export def "groups-planner-plans-buckets-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from groups
@@ -699,6 +718,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -708,7 +728,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Get
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in groups
@@ -727,6 +747,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Upd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -742,7 +763,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Upd
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for groups
@@ -761,6 +782,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Del
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -770,7 +792,7 @@ export def "groups-planner-plans-buckets-tasks-assigned-to-task-board-format Del
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from groups
@@ -789,6 +811,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format GetBucke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -798,7 +821,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format GetBucke
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in groups
@@ -817,6 +840,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format UpdateBu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -831,7 +855,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format UpdateBu
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for groups
@@ -850,6 +874,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format DeleteBu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -859,7 +884,7 @@ export def "groups-planner-plans-buckets-tasks-bucket-task-board-format DeleteBu
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from groups
@@ -878,6 +903,7 @@ export def "groups-planner-plans-buckets-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -887,7 +913,7 @@ export def "groups-planner-plans-buckets-tasks-details GetDetail" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in groups
@@ -906,6 +932,7 @@ export def "groups-planner-plans-buckets-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -923,7 +950,7 @@ export def "groups-planner-plans-buckets-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for groups
@@ -942,6 +969,7 @@ export def "groups-planner-plans-buckets-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -951,7 +979,7 @@ export def "groups-planner-plans-buckets-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from groups
@@ -970,6 +998,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format GetPro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -979,7 +1008,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format GetPro
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in groups
@@ -998,6 +1027,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format Update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -1012,7 +1042,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format Update
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for groups
@@ -1031,6 +1061,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format Delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1040,7 +1071,7 @@ export def "groups-planner-plans-buckets-tasks-progress-task-board-format Delete
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1058,6 +1089,7 @@ export def "groups-planner-plans-buckets-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1067,7 +1099,7 @@ export def "groups-planner-plans-buckets-tasks-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1084,6 +1116,7 @@ export def "groups-planner-plans-buckets-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1093,7 +1126,7 @@ export def "groups-planner-plans-buckets-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/buckets/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from groups
@@ -1110,6 +1143,7 @@ export def "groups-planner-plans-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record> {
@@ -1119,7 +1153,7 @@ export def "groups-planner-plans-details GetDetail" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in groups
@@ -1137,6 +1171,7 @@ export def "groups-planner-plans-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --categoryDescriptions: record # shape: {category1?: string, category10?: string, category11?: string, category12?: string, category13?: string, category14?: string, category15?: string, category16?: string, category17?: string, category18?: string, category19?: string, category2?: string, category20?: string, category21?: string, category22?: string, category23?: string, category24?: string, category25?: string, category3?: string, category4?: string, category5?: string, category6?: string, category7?: string, category8?: string, category9?: string}
@@ -1152,7 +1187,7 @@ export def "groups-planner-plans-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for groups
@@ -1169,6 +1204,7 @@ export def "groups-planner-plans-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1178,7 +1214,7 @@ export def "groups-planner-plans-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from groups
@@ -1195,6 +1231,7 @@ export def "groups-planner-plans-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1210,7 +1247,7 @@ export def "groups-planner-plans-tasks ListTask" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for groups
@@ -1229,6 +1266,7 @@ export def "groups-planner-plans-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -1264,7 +1302,7 @@ export def "groups-planner-plans-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from groups
@@ -1282,6 +1320,7 @@ export def "groups-planner-plans-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -1291,7 +1330,7 @@ export def "groups-planner-plans-tasks GetTask" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in groups
@@ -1311,6 +1350,7 @@ export def "groups-planner-plans-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -1346,7 +1386,7 @@ export def "groups-planner-plans-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for groups
@@ -1364,6 +1404,7 @@ export def "groups-planner-plans-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1373,7 +1414,7 @@ export def "groups-planner-plans-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from groups
@@ -1391,6 +1432,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format GetAssigned
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -1400,7 +1442,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format GetAssigned
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in groups
@@ -1418,6 +1460,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format UpdateAssig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -1433,7 +1476,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format UpdateAssig
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for groups
@@ -1451,6 +1494,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format DeleteAssig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1460,7 +1504,7 @@ export def "groups-planner-plans-tasks-assigned-to-task-board-format DeleteAssig
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from groups
@@ -1478,6 +1522,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format GetBucketTaskBoa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -1487,7 +1532,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format GetBucketTaskBoa
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in groups
@@ -1505,6 +1550,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format UpdateBucketTask
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -1519,7 +1565,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format UpdateBucketTask
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for groups
@@ -1537,6 +1583,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format DeleteBucketTask
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1546,7 +1593,7 @@ export def "groups-planner-plans-tasks-bucket-task-board-format DeleteBucketTask
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from groups
@@ -1564,6 +1611,7 @@ export def "groups-planner-plans-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -1573,7 +1621,7 @@ export def "groups-planner-plans-tasks-details GetDetail" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in groups
@@ -1591,6 +1639,7 @@ export def "groups-planner-plans-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -1608,7 +1657,7 @@ export def "groups-planner-plans-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for groups
@@ -1626,6 +1675,7 @@ export def "groups-planner-plans-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1635,7 +1685,7 @@ export def "groups-planner-plans-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from groups
@@ -1653,6 +1703,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format GetProgressTas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -1662,7 +1713,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format GetProgressTas
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in groups
@@ -1680,6 +1731,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format UpdateProgress
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -1694,7 +1746,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format UpdateProgress
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for groups
@@ -1712,6 +1764,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format DeleteProgress
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1721,7 +1774,7 @@ export def "groups-planner-plans-tasks-progress-task-board-format DeleteProgress
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1738,6 +1791,7 @@ export def "groups-planner-plans-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1747,7 +1801,7 @@ export def "groups-planner-plans-tasks-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/($plannerPlan_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1763,6 +1817,7 @@ export def "groups-planner-plans-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1772,7 +1827,7 @@ export def "groups-planner-plans-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/planner/plans/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get planner
@@ -1787,6 +1842,7 @@ export def "planner GetPlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, buckets: table<id: string, name: string, orderHint: string, planId: string, tasks: list>, plans: table<id: string, container: record, createdBy: record, createdDateTime: string, owner: string, title: string, buckets: list, details: record, tasks: list>, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -1796,7 +1852,7 @@ export def "planner GetPlanner" [
   let full_url = (build-url $base "/planner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update planner
@@ -1814,6 +1870,7 @@ export def "planner UpdatePlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --buckets: list # Read-only. Nullable. Returns a collection of the specified buckets — item shape: {id?: string, name?: string, orderHint?: string, planId?: string, tasks?: list}
   --plans: list # Read-only. Nullable. Returns a collection of the specified plans — item shape: {id?: string, container?: record, createdBy?: record, createdDateTime?: string, owner?: string, title?: string, buckets?: list, details?: any, tasks?: list}
@@ -1827,7 +1884,7 @@ export def "planner UpdatePlanner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List buckets
@@ -1843,6 +1900,7 @@ export def "planner-buckets ListBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1858,7 +1916,7 @@ export def "planner-buckets ListBucket" [
   let full_url = (build-url $base "/planner/buckets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create plannerBucket
@@ -1875,6 +1933,7 @@ export def "planner-buckets CreateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -1889,7 +1948,7 @@ export def "planner-buckets CreateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plannerBucket
@@ -1906,6 +1965,7 @@ export def "planner-buckets GetBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, name: string, orderHint: string, planId: string, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -1915,7 +1975,7 @@ export def "planner-buckets GetBucket" [
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerbucket
@@ -1933,6 +1993,7 @@ export def "planner-buckets UpdateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
@@ -1950,7 +2011,7 @@ export def "planner-buckets UpdateBucket" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete plannerBucket
@@ -1967,6 +2028,7 @@ export def "planner-buckets DeleteBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1976,7 +2038,7 @@ export def "planner-buckets DeleteBucket" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tasks
@@ -1993,6 +2055,7 @@ export def "planner-buckets-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2008,7 +2071,7 @@ export def "planner-buckets-tasks ListTask" [
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for planner
@@ -2026,6 +2089,7 @@ export def "planner-buckets-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -2061,7 +2125,7 @@ export def "planner-buckets-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from planner
@@ -2078,6 +2142,7 @@ export def "planner-buckets-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -2087,7 +2152,7 @@ export def "planner-buckets-tasks GetTask" [
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in planner
@@ -2106,6 +2171,7 @@ export def "planner-buckets-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -2141,7 +2207,7 @@ export def "planner-buckets-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for planner
@@ -2158,6 +2224,7 @@ export def "planner-buckets-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2167,7 +2234,7 @@ export def "planner-buckets-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from planner
@@ -2184,6 +2251,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format GetAssignedToTas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -2193,7 +2261,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format GetAssignedToTas
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in planner
@@ -2210,6 +2278,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format UpdateAssignedTo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -2225,7 +2294,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format UpdateAssignedTo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for planner
@@ -2242,6 +2311,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format DeleteAssignedTo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2251,7 +2321,7 @@ export def "planner-buckets-tasks-assigned-to-task-board-format DeleteAssignedTo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from planner
@@ -2268,6 +2338,7 @@ export def "planner-buckets-tasks-bucket-task-board-format GetBucketTaskBoardFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -2277,7 +2348,7 @@ export def "planner-buckets-tasks-bucket-task-board-format GetBucketTaskBoardFor
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in planner
@@ -2294,6 +2365,7 @@ export def "planner-buckets-tasks-bucket-task-board-format UpdateBucketTaskBoard
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -2308,7 +2380,7 @@ export def "planner-buckets-tasks-bucket-task-board-format UpdateBucketTaskBoard
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for planner
@@ -2325,6 +2397,7 @@ export def "planner-buckets-tasks-bucket-task-board-format DeleteBucketTaskBoard
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2334,7 +2407,7 @@ export def "planner-buckets-tasks-bucket-task-board-format DeleteBucketTaskBoard
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from planner
@@ -2351,6 +2424,7 @@ export def "planner-buckets-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -2360,7 +2434,7 @@ export def "planner-buckets-tasks-details GetDetail" [
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in planner
@@ -2377,6 +2451,7 @@ export def "planner-buckets-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -2394,7 +2469,7 @@ export def "planner-buckets-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for planner
@@ -2411,6 +2486,7 @@ export def "planner-buckets-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2420,7 +2496,7 @@ export def "planner-buckets-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from planner
@@ -2437,6 +2513,7 @@ export def "planner-buckets-tasks-progress-task-board-format GetProgressTaskBoar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -2446,7 +2523,7 @@ export def "planner-buckets-tasks-progress-task-board-format GetProgressTaskBoar
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in planner
@@ -2463,6 +2540,7 @@ export def "planner-buckets-tasks-progress-task-board-format UpdateProgressTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -2477,7 +2555,7 @@ export def "planner-buckets-tasks-progress-task-board-format UpdateProgressTaskB
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for planner
@@ -2494,6 +2572,7 @@ export def "planner-buckets-tasks-progress-task-board-format DeleteProgressTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2503,7 +2582,7 @@ export def "planner-buckets-tasks-progress-task-board-format DeleteProgressTaskB
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2519,6 +2598,7 @@ export def "planner-buckets-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2528,7 +2608,7 @@ export def "planner-buckets-tasks-count GetCount" [
   let full_url = (build-url $base $"/planner/buckets/($plannerBucket_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2543,6 +2623,7 @@ export def "planner-buckets-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2552,7 +2633,7 @@ export def "planner-buckets-count GetCount" [
   let full_url = (build-url $base "/planner/buckets/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List plans
@@ -2568,6 +2649,7 @@ export def "planner-plans ListPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2583,7 +2665,7 @@ export def "planner-plans ListPlan" [
   let full_url = (build-url $base "/planner/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create plannerPlan
@@ -2603,6 +2685,7 @@ export def "planner-plans CreatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -2621,7 +2704,7 @@ export def "planner-plans CreatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plannerPlan
@@ -2638,6 +2721,7 @@ export def "planner-plans GetPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, container: record<containerId: string, type: string, url: string>, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, owner: string, title: string, buckets: table<id: string, name: string, orderHint: string, planId: string, tasks: list>, details: record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record>, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -2647,7 +2731,7 @@ export def "planner-plans GetPlan" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerPlan
@@ -2668,6 +2752,7 @@ export def "planner-plans UpdatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -2686,7 +2771,7 @@ export def "planner-plans UpdatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete plannerPlan
@@ -2703,6 +2788,7 @@ export def "planner-plans DeletePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2712,7 +2798,7 @@ export def "planner-plans DeletePlan" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List buckets
@@ -2729,6 +2815,7 @@ export def "planner-plans-buckets ListBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2744,7 +2831,7 @@ export def "planner-plans-buckets ListBucket" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to buckets for planner
@@ -2761,6 +2848,7 @@ export def "planner-plans-buckets CreateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -2775,7 +2863,7 @@ export def "planner-plans-buckets CreateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get buckets from planner
@@ -2792,6 +2880,7 @@ export def "planner-plans-buckets GetBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, name: string, orderHint: string, planId: string, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -2801,7 +2890,7 @@ export def "planner-plans-buckets GetBucket" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property buckets in planner
@@ -2819,6 +2908,7 @@ export def "planner-plans-buckets UpdateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -2833,7 +2923,7 @@ export def "planner-plans-buckets UpdateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property buckets for planner
@@ -2850,6 +2940,7 @@ export def "planner-plans-buckets DeleteBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2859,7 +2950,7 @@ export def "planner-plans-buckets DeleteBucket" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from planner
@@ -2876,6 +2967,7 @@ export def "planner-plans-buckets-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2891,7 +2983,7 @@ export def "planner-plans-buckets-tasks ListTask" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for planner
@@ -2910,6 +3002,7 @@ export def "planner-plans-buckets-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -2945,7 +3038,7 @@ export def "planner-plans-buckets-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from planner
@@ -2963,6 +3056,7 @@ export def "planner-plans-buckets-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -2972,7 +3066,7 @@ export def "planner-plans-buckets-tasks GetTask" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in planner
@@ -2992,6 +3086,7 @@ export def "planner-plans-buckets-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -3027,7 +3122,7 @@ export def "planner-plans-buckets-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for planner
@@ -3045,6 +3140,7 @@ export def "planner-plans-buckets-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3054,7 +3150,7 @@ export def "planner-plans-buckets-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from planner
@@ -3072,6 +3168,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format GetAssigne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -3081,7 +3178,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format GetAssigne
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in planner
@@ -3099,6 +3196,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format UpdateAssi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -3114,7 +3212,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format UpdateAssi
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for planner
@@ -3132,6 +3230,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format DeleteAssi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3141,7 +3240,7 @@ export def "planner-plans-buckets-tasks-assigned-to-task-board-format DeleteAssi
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from planner
@@ -3159,6 +3258,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format GetBucketTaskBo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -3168,7 +3268,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format GetBucketTaskBo
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in planner
@@ -3186,6 +3286,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format UpdateBucketTas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -3200,7 +3301,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format UpdateBucketTas
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for planner
@@ -3218,6 +3319,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format DeleteBucketTas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3227,7 +3329,7 @@ export def "planner-plans-buckets-tasks-bucket-task-board-format DeleteBucketTas
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from planner
@@ -3245,6 +3347,7 @@ export def "planner-plans-buckets-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -3254,7 +3357,7 @@ export def "planner-plans-buckets-tasks-details GetDetail" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in planner
@@ -3272,6 +3375,7 @@ export def "planner-plans-buckets-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -3289,7 +3393,7 @@ export def "planner-plans-buckets-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for planner
@@ -3307,6 +3411,7 @@ export def "planner-plans-buckets-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3316,7 +3421,7 @@ export def "planner-plans-buckets-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from planner
@@ -3334,6 +3439,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format GetProgressTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -3343,7 +3449,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format GetProgressTa
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in planner
@@ -3361,6 +3467,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format UpdateProgres
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -3375,7 +3482,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format UpdateProgres
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for planner
@@ -3393,6 +3500,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format DeleteProgres
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3402,7 +3510,7 @@ export def "planner-plans-buckets-tasks-progress-task-board-format DeleteProgres
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3419,6 +3527,7 @@ export def "planner-plans-buckets-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3428,7 +3537,7 @@ export def "planner-plans-buckets-tasks-count GetCount" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3444,6 +3553,7 @@ export def "planner-plans-buckets-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3453,7 +3563,7 @@ export def "planner-plans-buckets-count GetCount" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/buckets/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannerPlanDetails
@@ -3470,6 +3580,7 @@ export def "planner-plans-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record> {
@@ -3479,7 +3590,7 @@ export def "planner-plans-details GetDetail" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerplandetails
@@ -3497,6 +3608,7 @@ export def "planner-plans-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --categoryDescriptions: record # shape: {category1?: string, category10?: string, category11?: string, category12?: string, category13?: string, category14?: string, category15?: string, category16?: string, category17?: string, category18?: string, category19?: string, category2?: string, category20?: string, category21?: string, category22?: string, category23?: string, category24?: string, category25?: string, category3?: string, category4?: string, category5?: string, category6?: string, category7?: string, category8?: string, category9?: string}
@@ -3512,7 +3624,7 @@ export def "planner-plans-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for planner
@@ -3528,6 +3640,7 @@ export def "planner-plans-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3537,7 +3650,7 @@ export def "planner-plans-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tasks
@@ -3554,6 +3667,7 @@ export def "planner-plans-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3569,7 +3683,7 @@ export def "planner-plans-tasks ListTask" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for planner
@@ -3587,6 +3701,7 @@ export def "planner-plans-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -3622,7 +3737,7 @@ export def "planner-plans-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from planner
@@ -3639,6 +3754,7 @@ export def "planner-plans-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -3648,7 +3764,7 @@ export def "planner-plans-tasks GetTask" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in planner
@@ -3667,6 +3783,7 @@ export def "planner-plans-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -3702,7 +3819,7 @@ export def "planner-plans-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for planner
@@ -3719,6 +3836,7 @@ export def "planner-plans-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3728,7 +3846,7 @@ export def "planner-plans-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from planner
@@ -3745,6 +3863,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format GetAssignedToTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -3754,7 +3873,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format GetAssignedToTaskB
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in planner
@@ -3771,6 +3890,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format UpdateAssignedToTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -3786,7 +3906,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format UpdateAssignedToTa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for planner
@@ -3803,6 +3923,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format DeleteAssignedToTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3812,7 +3933,7 @@ export def "planner-plans-tasks-assigned-to-task-board-format DeleteAssignedToTa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from planner
@@ -3829,6 +3950,7 @@ export def "planner-plans-tasks-bucket-task-board-format GetBucketTaskBoardForma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -3838,7 +3960,7 @@ export def "planner-plans-tasks-bucket-task-board-format GetBucketTaskBoardForma
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in planner
@@ -3855,6 +3977,7 @@ export def "planner-plans-tasks-bucket-task-board-format UpdateBucketTaskBoardFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -3869,7 +3992,7 @@ export def "planner-plans-tasks-bucket-task-board-format UpdateBucketTaskBoardFo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for planner
@@ -3886,6 +4009,7 @@ export def "planner-plans-tasks-bucket-task-board-format DeleteBucketTaskBoardFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3895,7 +4019,7 @@ export def "planner-plans-tasks-bucket-task-board-format DeleteBucketTaskBoardFo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from planner
@@ -3912,6 +4036,7 @@ export def "planner-plans-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -3921,7 +4046,7 @@ export def "planner-plans-tasks-details GetDetail" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in planner
@@ -3938,6 +4063,7 @@ export def "planner-plans-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -3955,7 +4081,7 @@ export def "planner-plans-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for planner
@@ -3972,6 +4098,7 @@ export def "planner-plans-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3981,7 +4108,7 @@ export def "planner-plans-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from planner
@@ -3998,6 +4125,7 @@ export def "planner-plans-tasks-progress-task-board-format GetProgressTaskBoardF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -4007,7 +4135,7 @@ export def "planner-plans-tasks-progress-task-board-format GetProgressTaskBoardF
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in planner
@@ -4024,6 +4152,7 @@ export def "planner-plans-tasks-progress-task-board-format UpdateProgressTaskBoa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -4038,7 +4167,7 @@ export def "planner-plans-tasks-progress-task-board-format UpdateProgressTaskBoa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for planner
@@ -4055,6 +4184,7 @@ export def "planner-plans-tasks-progress-task-board-format DeleteProgressTaskBoa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4064,7 +4194,7 @@ export def "planner-plans-tasks-progress-task-board-format DeleteProgressTaskBoa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4080,6 +4210,7 @@ export def "planner-plans-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4089,7 +4220,7 @@ export def "planner-plans-tasks-count GetCount" [
   let full_url = (build-url $base $"/planner/plans/($plannerPlan_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4104,6 +4235,7 @@ export def "planner-plans-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4113,7 +4245,7 @@ export def "planner-plans-count GetCount" [
   let full_url = (build-url $base "/planner/plans/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List plannerTask objects
@@ -4129,6 +4261,7 @@ export def "planner-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4144,7 +4277,7 @@ export def "planner-tasks ListTask" [
   let full_url = (build-url $base "/planner/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create plannerTask
@@ -4162,6 +4295,7 @@ export def "planner-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -4197,7 +4331,7 @@ export def "planner-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plannerTask
@@ -4214,6 +4348,7 @@ export def "planner-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -4223,7 +4358,7 @@ export def "planner-tasks GetTask" [
   let full_url = (build-url $base $"/planner/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerTask
@@ -4242,6 +4377,7 @@ export def "planner-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
@@ -4280,7 +4416,7 @@ export def "planner-tasks UpdateTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete plannerTask
@@ -4297,6 +4433,7 @@ export def "planner-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4306,7 +4443,7 @@ export def "planner-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannerAssignedToTaskBoardTaskFormat
@@ -4323,6 +4460,7 @@ export def "planner-tasks-assigned-to-task-board-format GetAssignedToTaskBoardFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -4332,7 +4470,7 @@ export def "planner-tasks-assigned-to-task-board-format GetAssignedToTaskBoardFo
   let full_url = (build-url $base $"/planner/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerAssignedToTaskBoardTaskFormat
@@ -4349,6 +4487,7 @@ export def "planner-tasks-assigned-to-task-board-format UpdateAssignedToTaskBoar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -4364,7 +4503,7 @@ export def "planner-tasks-assigned-to-task-board-format UpdateAssignedToTaskBoar
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for planner
@@ -4380,6 +4519,7 @@ export def "planner-tasks-assigned-to-task-board-format DeleteAssignedToTaskBoar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4389,7 +4529,7 @@ export def "planner-tasks-assigned-to-task-board-format DeleteAssignedToTaskBoar
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannerBucketTaskBoardTaskFormat
@@ -4406,6 +4546,7 @@ export def "planner-tasks-bucket-task-board-format GetBucketTaskBoardFormat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -4415,7 +4556,7 @@ export def "planner-tasks-bucket-task-board-format GetBucketTaskBoardFormat" [
   let full_url = (build-url $base $"/planner/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerBucketTaskBoardTaskFormat
@@ -4432,6 +4573,7 @@ export def "planner-tasks-bucket-task-board-format UpdateBucketTaskBoardFormat" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -4446,7 +4588,7 @@ export def "planner-tasks-bucket-task-board-format UpdateBucketTaskBoardFormat" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for planner
@@ -4462,6 +4604,7 @@ export def "planner-tasks-bucket-task-board-format DeleteBucketTaskBoardFormat" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4471,7 +4614,7 @@ export def "planner-tasks-bucket-task-board-format DeleteBucketTaskBoardFormat" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannerTaskDetails
@@ -4488,6 +4631,7 @@ export def "planner-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -4497,7 +4641,7 @@ export def "planner-tasks-details GetDetail" [
   let full_url = (build-url $base $"/planner/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannertaskdetails
@@ -4514,6 +4658,7 @@ export def "planner-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -4531,7 +4676,7 @@ export def "planner-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for planner
@@ -4547,6 +4692,7 @@ export def "planner-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4556,7 +4702,7 @@ export def "planner-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannerProgressTaskBoardTaskFormat
@@ -4573,6 +4719,7 @@ export def "planner-tasks-progress-task-board-format GetProgressTaskBoardFormat"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -4582,7 +4729,7 @@ export def "planner-tasks-progress-task-board-format GetProgressTaskBoardFormat"
   let full_url = (build-url $base $"/planner/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plannerProgressTaskBoardTaskFormat
@@ -4599,6 +4746,7 @@ export def "planner-tasks-progress-task-board-format UpdateProgressTaskBoardForm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -4613,7 +4761,7 @@ export def "planner-tasks-progress-task-board-format UpdateProgressTaskBoardForm
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for planner
@@ -4629,6 +4777,7 @@ export def "planner-tasks-progress-task-board-format DeleteProgressTaskBoardForm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4638,7 +4787,7 @@ export def "planner-tasks-progress-task-board-format DeleteProgressTaskBoardForm
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4653,6 +4802,7 @@ export def "planner-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4662,7 +4812,7 @@ export def "planner-tasks-count GetCount" [
   let full_url = (build-url $base "/planner/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get planner from users
@@ -4678,6 +4828,7 @@ export def "users-planner GetPlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, plans: table<id: string, container: record, createdBy: record, createdDateTime: string, owner: string, title: string, buckets: list, details: record, tasks: list>, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -4687,7 +4838,7 @@ export def "users-planner GetPlanner" [
   let full_url = (build-url $base $"/users/($user_id)/planner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property planner in users
@@ -4705,6 +4856,7 @@ export def "users-planner UpdatePlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --plans: list # Read-only. Nullable. Returns the plannerTasks assigned to the user. — item shape: {id?: string, container?: record, createdBy?: record, createdDateTime?: string, owner?: string, title?: string, buckets?: list, details?: any, tasks?: list}
@@ -4720,7 +4872,7 @@ export def "users-planner UpdatePlanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property planner for users
@@ -4736,6 +4888,7 @@ export def "users-planner DeletePlanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4745,7 +4898,7 @@ export def "users-planner DeletePlanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plans from users
@@ -4761,6 +4914,7 @@ export def "users-planner-plans ListPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4776,7 +4930,7 @@ export def "users-planner-plans ListPlan" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to plans for users
@@ -4796,6 +4950,7 @@ export def "users-planner-plans CreatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -4814,7 +4969,7 @@ export def "users-planner-plans CreatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plans from users
@@ -4831,6 +4986,7 @@ export def "users-planner-plans GetPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, container: record<containerId: string, type: string, url: string>, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, owner: string, title: string, buckets: table<id: string, name: string, orderHint: string, planId: string, tasks: list>, details: record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record>, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -4840,7 +4996,7 @@ export def "users-planner-plans GetPlan" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property plans in users
@@ -4861,6 +5017,7 @@ export def "users-planner-plans UpdatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --container: record # shape: {containerId?: string, type?: "group"|"unknownFutureValue"|"roster", url?: string}
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
@@ -4879,7 +5036,7 @@ export def "users-planner-plans UpdatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property plans for users
@@ -4896,6 +5053,7 @@ export def "users-planner-plans DeletePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4905,7 +5063,7 @@ export def "users-planner-plans DeletePlan" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get buckets from users
@@ -4922,6 +5080,7 @@ export def "users-planner-plans-buckets ListBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4937,7 +5096,7 @@ export def "users-planner-plans-buckets ListBucket" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to buckets for users
@@ -4955,6 +5114,7 @@ export def "users-planner-plans-buckets CreateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -4969,7 +5129,7 @@ export def "users-planner-plans-buckets CreateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get buckets from users
@@ -4987,6 +5147,7 @@ export def "users-planner-plans-buckets GetBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, name: string, orderHint: string, planId: string, tasks: table<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record, completedDateTime: string, conversationThreadId: string, createdBy: record, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record, bucketTaskBoardFormat: record, details: record, progressTaskBoardFormat: record>> {
@@ -4996,7 +5157,7 @@ export def "users-planner-plans-buckets GetBucket" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property buckets in users
@@ -5015,6 +5176,7 @@ export def "users-planner-plans-buckets UpdateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --name: string # Name of the bucket.
   --orderHint: string # Hint used to order items of this type in a list view. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -5029,7 +5191,7 @@ export def "users-planner-plans-buckets UpdateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property buckets for users
@@ -5047,6 +5209,7 @@ export def "users-planner-plans-buckets DeleteBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5056,7 +5219,7 @@ export def "users-planner-plans-buckets DeleteBucket" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from users
@@ -5074,6 +5237,7 @@ export def "users-planner-plans-buckets-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5089,7 +5253,7 @@ export def "users-planner-plans-buckets-tasks ListTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for users
@@ -5109,6 +5273,7 @@ export def "users-planner-plans-buckets-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -5144,7 +5309,7 @@ export def "users-planner-plans-buckets-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from users
@@ -5163,6 +5328,7 @@ export def "users-planner-plans-buckets-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -5172,7 +5338,7 @@ export def "users-planner-plans-buckets-tasks GetTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in users
@@ -5193,6 +5359,7 @@ export def "users-planner-plans-buckets-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -5228,7 +5395,7 @@ export def "users-planner-plans-buckets-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for users
@@ -5247,6 +5414,7 @@ export def "users-planner-plans-buckets-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5256,7 +5424,7 @@ export def "users-planner-plans-buckets-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from users
@@ -5275,6 +5443,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format GetA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -5284,7 +5453,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format GetA
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in users
@@ -5303,6 +5472,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format Upda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -5318,7 +5488,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format Upda
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for users
@@ -5337,6 +5507,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format Dele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5346,7 +5517,7 @@ export def "users-planner-plans-buckets-tasks-assigned-to-task-board-format Dele
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from users
@@ -5365,6 +5536,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format GetBucket
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -5374,7 +5546,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format GetBucket
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in users
@@ -5393,6 +5565,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format UpdateBuc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -5407,7 +5580,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format UpdateBuc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for users
@@ -5426,6 +5599,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format DeleteBuc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5435,7 +5609,7 @@ export def "users-planner-plans-buckets-tasks-bucket-task-board-format DeleteBuc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from users
@@ -5454,6 +5628,7 @@ export def "users-planner-plans-buckets-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -5463,7 +5638,7 @@ export def "users-planner-plans-buckets-tasks-details GetDetail" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in users
@@ -5482,6 +5657,7 @@ export def "users-planner-plans-buckets-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -5499,7 +5675,7 @@ export def "users-planner-plans-buckets-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for users
@@ -5518,6 +5694,7 @@ export def "users-planner-plans-buckets-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5527,7 +5704,7 @@ export def "users-planner-plans-buckets-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from users
@@ -5546,6 +5723,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format GetProg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -5555,7 +5733,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format GetProg
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in users
@@ -5574,6 +5752,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format UpdateP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -5588,7 +5767,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format UpdateP
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for users
@@ -5607,6 +5786,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format DeleteP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5616,7 +5796,7 @@ export def "users-planner-plans-buckets-tasks-progress-task-board-format DeleteP
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5634,6 +5814,7 @@ export def "users-planner-plans-buckets-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5643,7 +5824,7 @@ export def "users-planner-plans-buckets-tasks-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/($plannerBucket_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5660,6 +5841,7 @@ export def "users-planner-plans-buckets-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5669,7 +5851,7 @@ export def "users-planner-plans-buckets-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/buckets/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from users
@@ -5686,6 +5868,7 @@ export def "users-planner-plans-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, categoryDescriptions: record<category1: string, category10: string, category11: string, category12: string, category13: string, category14: string, category15: string, category16: string, category17: string, category18: string, category19: string, category2: string, category20: string, category21: string, category22: string, category23: string, category24: string, category25: string, category3: string, category4: string, category5: string, category6: string, category7: string, category8: string, category9: string>, sharedWith: record> {
@@ -5695,7 +5878,7 @@ export def "users-planner-plans-details GetDetail" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in users
@@ -5713,6 +5896,7 @@ export def "users-planner-plans-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --categoryDescriptions: record # shape: {category1?: string, category10?: string, category11?: string, category12?: string, category13?: string, category14?: string, category15?: string, category16?: string, category17?: string, category18?: string, category19?: string, category2?: string, category20?: string, category21?: string, category22?: string, category23?: string, category24?: string, category25?: string, category3?: string, category4?: string, category5?: string, category6?: string, category7?: string, category8?: string, category9?: string}
@@ -5728,7 +5912,7 @@ export def "users-planner-plans-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for users
@@ -5745,6 +5929,7 @@ export def "users-planner-plans-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5754,7 +5939,7 @@ export def "users-planner-plans-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from users
@@ -5771,6 +5956,7 @@ export def "users-planner-plans-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5786,7 +5972,7 @@ export def "users-planner-plans-tasks ListTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for users
@@ -5805,6 +5991,7 @@ export def "users-planner-plans-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -5840,7 +6027,7 @@ export def "users-planner-plans-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from users
@@ -5858,6 +6045,7 @@ export def "users-planner-plans-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -5867,7 +6055,7 @@ export def "users-planner-plans-tasks GetTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in users
@@ -5887,6 +6075,7 @@ export def "users-planner-plans-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -5922,7 +6111,7 @@ export def "users-planner-plans-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for users
@@ -5940,6 +6129,7 @@ export def "users-planner-plans-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5949,7 +6139,7 @@ export def "users-planner-plans-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from users
@@ -5967,6 +6157,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format GetAssignedT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -5976,7 +6167,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format GetAssignedT
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in users
@@ -5994,6 +6185,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format UpdateAssign
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -6009,7 +6201,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format UpdateAssign
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for users
@@ -6027,6 +6219,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format DeleteAssign
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6036,7 +6229,7 @@ export def "users-planner-plans-tasks-assigned-to-task-board-format DeleteAssign
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from users
@@ -6054,6 +6247,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format GetBucketTaskBoar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -6063,7 +6257,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format GetBucketTaskBoar
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in users
@@ -6081,6 +6275,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format UpdateBucketTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -6095,7 +6290,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format UpdateBucketTaskB
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for users
@@ -6113,6 +6308,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format DeleteBucketTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6122,7 +6318,7 @@ export def "users-planner-plans-tasks-bucket-task-board-format DeleteBucketTaskB
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from users
@@ -6140,6 +6336,7 @@ export def "users-planner-plans-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -6149,7 +6346,7 @@ export def "users-planner-plans-tasks-details GetDetail" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in users
@@ -6167,6 +6364,7 @@ export def "users-planner-plans-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -6184,7 +6382,7 @@ export def "users-planner-plans-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for users
@@ -6202,6 +6400,7 @@ export def "users-planner-plans-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6211,7 +6410,7 @@ export def "users-planner-plans-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from users
@@ -6229,6 +6428,7 @@ export def "users-planner-plans-tasks-progress-task-board-format GetProgressTask
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -6238,7 +6438,7 @@ export def "users-planner-plans-tasks-progress-task-board-format GetProgressTask
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in users
@@ -6256,6 +6456,7 @@ export def "users-planner-plans-tasks-progress-task-board-format UpdateProgressT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -6270,7 +6471,7 @@ export def "users-planner-plans-tasks-progress-task-board-format UpdateProgressT
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for users
@@ -6288,6 +6489,7 @@ export def "users-planner-plans-tasks-progress-task-board-format DeleteProgressT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6297,7 +6499,7 @@ export def "users-planner-plans-tasks-progress-task-board-format DeleteProgressT
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6314,6 +6516,7 @@ export def "users-planner-plans-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6323,7 +6526,7 @@ export def "users-planner-plans-tasks-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/($plannerPlan_id)/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6339,6 +6542,7 @@ export def "users-planner-plans-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6348,7 +6552,7 @@ export def "users-planner-plans-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/planner/plans/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from users
@@ -6364,6 +6568,7 @@ export def "users-planner-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6379,7 +6584,7 @@ export def "users-planner-tasks ListTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to tasks for users
@@ -6397,6 +6602,7 @@ export def "users-planner-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -6432,7 +6638,7 @@ export def "users-planner-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from users
@@ -6449,6 +6655,7 @@ export def "users-planner-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, activeChecklistItemCount: float, appliedCategories: record, assigneePriority: string, assignments: record, bucketId: string, checklistItemCount: float, completedBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, completedDateTime: string, conversationThreadId: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>>, createdDateTime: string, dueDateTime: string, hasDescription: bool, orderHint: string, percentComplete: float, planId: string, previewType: string, priority: float, referenceCount: float, startDateTime: string, title: string, assignedToTaskBoardFormat: record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string>, bucketTaskBoardFormat: record<id: string, orderHint: string>, details: record<id: string, checklist: record, description: string, previewType: string, references: record>, progressTaskBoardFormat: record<id: string, orderHint: string>> {
@@ -6458,7 +6665,7 @@ export def "users-planner-tasks GetTask" [
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/($plannerTask_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property tasks in users
@@ -6477,6 +6684,7 @@ export def "users-planner-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --activeChecklistItemCount: float # Number of checklist items with value set to false, representing incomplete items. (nullable, format: int32)
   --appliedCategories: record
@@ -6512,7 +6720,7 @@ export def "users-planner-tasks UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property tasks for users
@@ -6529,6 +6737,7 @@ export def "users-planner-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6538,7 +6747,7 @@ export def "users-planner-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assignedToTaskBoardFormat from users
@@ -6555,6 +6764,7 @@ export def "users-planner-tasks-assigned-to-task-board-format GetAssignedToTaskB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHintsByAssignee: record, unassignedOrderHint: string> {
@@ -6564,7 +6774,7 @@ export def "users-planner-tasks-assigned-to-task-board-format GetAssignedToTaskB
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/($plannerTask_id)/assignedToTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property assignedToTaskBoardFormat in users
@@ -6581,6 +6791,7 @@ export def "users-planner-tasks-assigned-to-task-board-format UpdateAssignedToTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHintsByAssignee: record
@@ -6596,7 +6807,7 @@ export def "users-planner-tasks-assigned-to-task-board-format UpdateAssignedToTa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property assignedToTaskBoardFormat for users
@@ -6613,6 +6824,7 @@ export def "users-planner-tasks-assigned-to-task-board-format DeleteAssignedToTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6622,7 +6834,7 @@ export def "users-planner-tasks-assigned-to-task-board-format DeleteAssignedToTa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bucketTaskBoardFormat from users
@@ -6639,6 +6851,7 @@ export def "users-planner-tasks-bucket-task-board-format GetBucketTaskBoardForma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -6648,7 +6861,7 @@ export def "users-planner-tasks-bucket-task-board-format GetBucketTaskBoardForma
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/($plannerTask_id)/bucketTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bucketTaskBoardFormat in users
@@ -6665,6 +6878,7 @@ export def "users-planner-tasks-bucket-task-board-format UpdateBucketTaskBoardFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint used to order tasks in the bucket view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -6679,7 +6893,7 @@ export def "users-planner-tasks-bucket-task-board-format UpdateBucketTaskBoardFo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bucketTaskBoardFormat for users
@@ -6696,6 +6910,7 @@ export def "users-planner-tasks-bucket-task-board-format DeleteBucketTaskBoardFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6705,7 +6920,7 @@ export def "users-planner-tasks-bucket-task-board-format DeleteBucketTaskBoardFo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details from users
@@ -6722,6 +6937,7 @@ export def "users-planner-tasks-details GetDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, checklist: record, description: string, previewType: string, references: record> {
@@ -6731,7 +6947,7 @@ export def "users-planner-tasks-details GetDetail" [
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/($plannerTask_id)/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property details in users
@@ -6748,6 +6964,7 @@ export def "users-planner-tasks-details UpdateDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --checklist: record
@@ -6765,7 +6982,7 @@ export def "users-planner-tasks-details UpdateDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property details for users
@@ -6782,6 +6999,7 @@ export def "users-planner-tasks-details DeleteDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6791,7 +7009,7 @@ export def "users-planner-tasks-details DeleteDetail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get progressTaskBoardFormat from users
@@ -6808,6 +7026,7 @@ export def "users-planner-tasks-progress-task-board-format GetProgressTaskBoardF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, orderHint: string> {
@@ -6817,7 +7036,7 @@ export def "users-planner-tasks-progress-task-board-format GetProgressTaskBoardF
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/($plannerTask_id)/progressTaskBoardFormat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property progressTaskBoardFormat in users
@@ -6834,6 +7053,7 @@ export def "users-planner-tasks-progress-task-board-format UpdateProgressTaskBoa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag value.
   --id: string # The unique identifier for an entity. Read-only.
   --orderHint: string # Hint value used to order the task on the progress view of the task board. For details about the supported format, see Using order hints in Planner. (nullable)
@@ -6848,7 +7068,7 @@ export def "users-planner-tasks-progress-task-board-format UpdateProgressTaskBoa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property progressTaskBoardFormat for users
@@ -6865,6 +7085,7 @@ export def "users-planner-tasks-progress-task-board-format DeleteProgressTaskBoa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6874,7 +7095,7 @@ export def "users-planner-tasks-progress-task-board-format DeleteProgressTaskBoa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6890,6 +7111,7 @@ export def "users-planner-tasks-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6899,5 +7121,5 @@ export def "users-planner-tasks-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/planner/tasks/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

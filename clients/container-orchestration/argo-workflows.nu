@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def type-completer [] { ["CONFIGMAP" "DATABASE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "archived-workflows ListArchivedWorkflows" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "archived-workflows ListArchivedWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -121,7 +123,7 @@ export def "archived-workflows ListArchivedWorkflows" [
   let full_url = (build-url $base "/api/v1/archived-workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/archived-workflows-label-keys
@@ -135,6 +137,7 @@ export def "archived-workflows-label-keys ListArchivedWorkflowLabelKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string
 ]: nothing -> record<items: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -143,7 +146,7 @@ export def "archived-workflows-label-keys ListArchivedWorkflowLabelKeys" [
   let full_url = (build-url $base "/api/v1/archived-workflows-label-keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/archived-workflows-label-values
@@ -157,6 +160,7 @@ export def "archived-workflows-label-values ListArchivedWorkflowLabelValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -175,7 +179,7 @@ export def "archived-workflows-label-values ListArchivedWorkflowLabelValues" [
   let full_url = (build-url $base "/api/v1/archived-workflows-label-values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/archived-workflows/{uid}
@@ -190,6 +194,7 @@ export def "archived-workflows GetArchivedWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string
   --name: string
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>, status: record<artifactGCStatus: record<notSpecified: bool, podsRecouped: record, strategiesProcessed: record>, artifactRepositoryRef: record<artifactRepository: record, configMap: string, default: bool, key: string, namespace: string>, compressedNodes: string, conditions: list<record>, estimatedDuration: int, finishedAt: string, message: string, nodes: record, offloadNodeStatusVersion: string, outputs: record<artifacts: list, exitCode: string, parameters: list, result: string>, persistentVolumeClaims: list<record>, phase: string, progress: string, resourcesDuration: record, startedAt: string, storedTemplates: record, storedWorkflowTemplateSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>, synchronization: record<mutex: record, semaphore: record>, taskResultsCompletionStatus: record>> {
@@ -199,7 +204,7 @@ export def "archived-workflows GetArchivedWorkflow" [
   let full_url = (build-url $base $"/api/v1/archived-workflows/($uid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /api/v1/archived-workflows/{uid}
@@ -214,6 +219,7 @@ export def "archived-workflows DeleteArchivedWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string
   --name: string
 ]: nothing -> record {
@@ -223,7 +229,7 @@ export def "archived-workflows DeleteArchivedWorkflow" [
   let full_url = (build-url $base $"/api/v1/archived-workflows/($uid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/archived-workflows/{uid}/resubmit
@@ -238,6 +244,7 @@ export def "archived-workflows-resubmit ResubmitArchivedWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --memoized: oneof<nothing, bool>
   --name: string
   --namespace: string
@@ -252,7 +259,7 @@ export def "archived-workflows-resubmit ResubmitArchivedWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/archived-workflows/{uid}/retry
@@ -267,6 +274,7 @@ export def "archived-workflows-retry RetryArchivedWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --namespace: string
   --nodeFieldSelector: string
@@ -282,7 +290,7 @@ export def "archived-workflows-retry RetryArchivedWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/cluster-workflow-templates
@@ -296,6 +304,7 @@ export def "cluster-workflow-templates ListClusterWorkflowTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -313,7 +322,7 @@ export def "cluster-workflow-templates ListClusterWorkflowTemplates" [
   let full_url = (build-url $base "/api/v1/cluster-workflow-templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/cluster-workflow-templates
@@ -329,6 +338,7 @@ export def "cluster-workflow-templates CreateClusterWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --template: record # ClusterWorkflowTemplate is the definition of a workflow template resource in cluster scope — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>> {
@@ -340,7 +350,7 @@ export def "cluster-workflow-templates CreateClusterWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/v1/cluster-workflow-templates/lint
@@ -356,6 +366,7 @@ export def "cluster-workflow-templates-lint LintClusterWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --template: record # ClusterWorkflowTemplate is the definition of a workflow template resource in cluster scope — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>> {
@@ -367,7 +378,7 @@ export def "cluster-workflow-templates-lint LintClusterWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/cluster-workflow-templates/{name}
@@ -382,6 +393,7 @@ export def "cluster-workflow-templates GetClusterWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getOptionsresourceVersion: string # resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.  Defaults to unset +optional
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -390,7 +402,7 @@ export def "cluster-workflow-templates GetClusterWorkflowTemplate" [
   let full_url = (build-url $base $"/api/v1/cluster-workflow-templates/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/cluster-workflow-templates/{name}
@@ -406,6 +418,7 @@ export def "cluster-workflow-templates UpdateClusterWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string # DEPRECATED: This field is ignored.
   --template: record # ClusterWorkflowTemplate is the definition of a workflow template resource in cluster scope — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>> {
@@ -417,7 +430,7 @@ export def "cluster-workflow-templates UpdateClusterWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/cluster-workflow-templates/{name}
@@ -432,6 +445,7 @@ export def "cluster-workflow-templates DeleteClusterWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -446,7 +460,7 @@ export def "cluster-workflow-templates DeleteClusterWorkflowTemplate" [
   let full_url = (build-url $base $"/api/v1/cluster-workflow-templates/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/cron-workflows/{namespace}
@@ -461,6 +475,7 @@ export def "cron-workflows ListCronWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -478,7 +493,7 @@ export def "cron-workflows ListCronWorkflows" [
   let full_url = (build-url $base $"/api/v1/cron-workflows/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/cron-workflows/{namespace}
@@ -495,6 +510,7 @@ export def "cron-workflows CreateCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --cronWorkflow: record # CronWorkflow is the definition of a scheduled workflow resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record, status?: record}
   --body-namespace: string
@@ -507,7 +523,7 @@ export def "cron-workflows CreateCronWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/v1/cron-workflows/{namespace}/lint
@@ -523,6 +539,7 @@ export def "cron-workflows-lint LintCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cronWorkflow: record # CronWorkflow is the definition of a scheduled workflow resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record, status?: record}
   --body-namespace: string
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<concurrencyPolicy: string, failedJobsHistoryLimit: int, schedules: list<string>, startingDeadlineSeconds: int, stopStrategy: record<expression: string>, successfulJobsHistoryLimit: int, suspend: bool, timezone: string, when: string, workflowMetadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list, generateName: string, generation: int, labels: record, managedFields: list, name: string, namespace: string, ownerReferences: list, resourceVersion: string, selfLink: string, uid: string>, workflowSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>>, status: record<active: list<record>, conditions: list<record>, failed: int, lastScheduledTime: string, phase: string, succeeded: int>> {
@@ -534,7 +551,7 @@ export def "cron-workflows-lint LintCronWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/cron-workflows/{namespace}/{name}
@@ -550,6 +567,7 @@ export def "cron-workflows GetCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getOptionsresourceVersion: string # resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.  Defaults to unset +optional
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<concurrencyPolicy: string, failedJobsHistoryLimit: int, schedules: list<string>, startingDeadlineSeconds: int, stopStrategy: record<expression: string>, successfulJobsHistoryLimit: int, suspend: bool, timezone: string, when: string, workflowMetadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list, generateName: string, generation: int, labels: record, managedFields: list, name: string, namespace: string, ownerReferences: list, resourceVersion: string, selfLink: string, uid: string>, workflowSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>>, status: record<active: list<record>, conditions: list<record>, failed: int, lastScheduledTime: string, phase: string, succeeded: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -558,7 +576,7 @@ export def "cron-workflows GetCronWorkflow" [
   let full_url = (build-url $base $"/api/v1/cron-workflows/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/cron-workflows/{namespace}/{name}
@@ -575,6 +593,7 @@ export def "cron-workflows UpdateCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cronWorkflow: record # CronWorkflow is the definition of a scheduled workflow resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record, status?: record}
   --body-name: string # DEPRECATED: This field is ignored.
   --body-namespace: string
@@ -587,7 +606,7 @@ export def "cron-workflows UpdateCronWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/cron-workflows/{namespace}/{name}
@@ -603,6 +622,7 @@ export def "cron-workflows DeleteCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -617,7 +637,7 @@ export def "cron-workflows DeleteCronWorkflow" [
   let full_url = (build-url $base $"/api/v1/cron-workflows/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/cron-workflows/{namespace}/{name}/resume
@@ -633,6 +653,7 @@ export def "cron-workflows-resume ResumeCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<concurrencyPolicy: string, failedJobsHistoryLimit: int, schedules: list<string>, startingDeadlineSeconds: int, stopStrategy: record<expression: string>, successfulJobsHistoryLimit: int, suspend: bool, timezone: string, when: string, workflowMetadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list, generateName: string, generation: int, labels: record, managedFields: list, name: string, namespace: string, ownerReferences: list, resourceVersion: string, selfLink: string, uid: string>, workflowSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>>, status: record<active: list<record>, conditions: list<record>, failed: int, lastScheduledTime: string, phase: string, succeeded: int>> {
@@ -644,7 +665,7 @@ export def "cron-workflows-resume ResumeCronWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/cron-workflows/{namespace}/{name}/suspend
@@ -660,6 +681,7 @@ export def "cron-workflows-suspend SuspendCronWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<concurrencyPolicy: string, failedJobsHistoryLimit: int, schedules: list<string>, startingDeadlineSeconds: int, stopStrategy: record<expression: string>, successfulJobsHistoryLimit: int, suspend: bool, timezone: string, when: string, workflowMetadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list, generateName: string, generation: int, labels: record, managedFields: list, name: string, namespace: string, ownerReferences: list, resourceVersion: string, selfLink: string, uid: string>, workflowSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>>, status: record<active: list<record>, conditions: list<record>, failed: int, lastScheduledTime: string, phase: string, succeeded: int>> {
@@ -671,7 +693,7 @@ export def "cron-workflows-suspend SuspendCronWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/event-sources/{namespace}
@@ -686,6 +708,7 @@ export def "event-sources ListEventSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -703,7 +726,7 @@ export def "event-sources ListEventSources" [
   let full_url = (build-url $base $"/api/v1/event-sources/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/event-sources/{namespace}
@@ -719,6 +742,7 @@ export def "event-sources CreateEventSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventSource: record # shape: {metadata?: record, spec?: record, status?: record}
   --body-namespace: string
 ]: any -> record<metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<amqp: record, azureEventsHub: record, azureQueueStorage: record, azureServiceBus: record, bitbucket: record, bitbucketserver: record, calendar: record, emitter: record, eventBusName: string, file: record, generic: record, gerrit: record, github: record, gitlab: record, hdfs: record, kafka: record, minio: record, mns: record, mqtt: record, nats: record, nsq: record, pubSub: record, pulsar: record, redis: record, redisStream: record, replicas: int, resource: record, service: record<clusterIP: string, metadata: record, ports: list>, sftp: record, slack: record, sns: record, sqs: record, storageGrid: record, stripe: record, template: record<affinity: record, container: record, imagePullSecrets: list, metadata: record, nodeSelector: record, priority: int, priorityClassName: string, securityContext: record, serviceAccountName: string, tolerations: list, volumes: list>, webhook: record>, status: record<status: record<conditions: list>>> {
@@ -730,7 +754,7 @@ export def "event-sources CreateEventSource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/event-sources/{namespace}/{name}
@@ -746,13 +770,14 @@ export def "event-sources GetEventSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<amqp: record, azureEventsHub: record, azureQueueStorage: record, azureServiceBus: record, bitbucket: record, bitbucketserver: record, calendar: record, emitter: record, eventBusName: string, file: record, generic: record, gerrit: record, github: record, gitlab: record, hdfs: record, kafka: record, minio: record, mns: record, mqtt: record, nats: record, nsq: record, pubSub: record, pulsar: record, redis: record, redisStream: record, replicas: int, resource: record, service: record<clusterIP: string, metadata: record, ports: list>, sftp: record, slack: record, sns: record, sqs: record, storageGrid: record, stripe: record, template: record<affinity: record, container: record, imagePullSecrets: list, metadata: record, nodeSelector: record, priority: int, priorityClassName: string, securityContext: record, serviceAccountName: string, tolerations: list, volumes: list>, webhook: record>, status: record<status: record<conditions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/event-sources/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/event-sources/{namespace}/{name}
@@ -769,6 +794,7 @@ export def "event-sources UpdateEventSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventSource: record # shape: {metadata?: record, spec?: record, status?: record}
   --body-name: string
   --body-namespace: string
@@ -781,7 +807,7 @@ export def "event-sources UpdateEventSource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/event-sources/{namespace}/{name}
@@ -797,6 +823,7 @@ export def "event-sources DeleteEventSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -811,7 +838,7 @@ export def "event-sources DeleteEventSource" [
   let full_url = (build-url $base $"/api/v1/event-sources/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/events/{namespace}/{discriminator}
@@ -827,6 +854,7 @@ export def "events ReceiveEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -836,7 +864,7 @@ export def "events ReceiveEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/info
@@ -850,13 +878,14 @@ export def "info GetInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<columns: table<key: string, name: string, type: string>, links: table<name: string, scope: string, target: string, url: string>, managedNamespace: string, modals: record, navColor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/sensors/{namespace}
@@ -871,6 +900,7 @@ export def "sensors ListSensors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -888,7 +918,7 @@ export def "sensors ListSensors" [
   let full_url = (build-url $base $"/api/v1/sensors/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/sensors/{namespace}
@@ -905,6 +935,7 @@ export def "sensors CreateSensor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --body-namespace: string
   --sensor: record # shape: {metadata?: record, spec?: record, status?: record}
@@ -917,7 +948,7 @@ export def "sensors CreateSensor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/sensors/{namespace}/{name}
@@ -933,6 +964,7 @@ export def "sensors GetSensor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getOptionsresourceVersion: string # resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.  Defaults to unset +optional
 ]: nothing -> record<metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<dependencies: list<record>, errorOnFailedRound: bool, eventBusName: string, loggingFields: record, replicas: int, revisionHistoryLimit: int, template: record<affinity: record, container: record, imagePullSecrets: list, metadata: record, nodeSelector: record, priority: int, priorityClassName: string, securityContext: record, serviceAccountName: string, tolerations: list, volumes: list>, triggers: list<record>>, status: record<status: record<conditions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -941,7 +973,7 @@ export def "sensors GetSensor" [
   let full_url = (build-url $base $"/api/v1/sensors/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/sensors/{namespace}/{name}
@@ -958,6 +990,7 @@ export def "sensors UpdateSensor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
   --sensor: record # shape: {metadata?: record, spec?: record, status?: record}
@@ -970,7 +1003,7 @@ export def "sensors UpdateSensor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/sensors/{namespace}/{name}
@@ -986,6 +1019,7 @@ export def "sensors DeleteSensor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -1000,7 +1034,7 @@ export def "sensors DeleteSensor" [
   let full_url = (build-url $base $"/api/v1/sensors/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/stream/event-sources/{namespace}
@@ -1015,6 +1049,7 @@ export def "stream-event-sources WatchEventSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1032,7 +1067,7 @@ export def "stream-event-sources WatchEventSources" [
   let full_url = (build-url $base $"/api/v1/stream/event-sources/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/stream/event-sources/{namespace}/logs
@@ -1047,6 +1082,7 @@ export def "stream-event-sources-logs EventSourcesLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # optional - only return entries for this event source.
   --eventSourceType: string # optional - only return entries for this event source type (e.g. `webhook`).
   --eventName: string # optional - only return entries for this event name (e.g. `example`).
@@ -1069,7 +1105,7 @@ export def "stream-event-sources-logs EventSourcesLogs" [
   let full_url = (build-url $base $"/api/v1/stream/event-sources/($namespace)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/stream/events/{namespace}
@@ -1084,6 +1120,7 @@ export def "stream-events WatchEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1101,7 +1138,7 @@ export def "stream-events WatchEvents" [
   let full_url = (build-url $base $"/api/v1/stream/events/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/stream/sensors/{namespace}
@@ -1116,6 +1153,7 @@ export def "stream-sensors WatchSensors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1133,7 +1171,7 @@ export def "stream-sensors WatchSensors" [
   let full_url = (build-url $base $"/api/v1/stream/sensors/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/stream/sensors/{namespace}/logs
@@ -1148,6 +1186,7 @@ export def "stream-sensors-logs SensorsLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # optional - only return entries for this sensor name.
   --triggerName: string # optional - only return entries for this trigger.
   --grep: string # option - only return entries where `msg` contains this regular expressions.
@@ -1169,7 +1208,7 @@ export def "stream-sensors-logs SensorsLogs" [
   let full_url = (build-url $base $"/api/v1/stream/sensors/($namespace)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/sync/{namespace}
@@ -1184,6 +1223,7 @@ export def "sync CreateSyncLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cmName: string
   --key: string
   --limit: int
@@ -1198,7 +1238,7 @@ export def "sync CreateSyncLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/sync/{namespace}/{key}
@@ -1214,6 +1254,7 @@ export def "sync GetSyncLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # default: CONFIGMAP
   --cmName: string
 ]: nothing -> record<cmName: string, key: string, limit: int, namespace: string, type: string> {
@@ -1223,7 +1264,7 @@ export def "sync GetSyncLimit" [
   let full_url = (build-url $base $"/api/v1/sync/($namespace)/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/sync/{namespace}/{key}
@@ -1239,6 +1280,7 @@ export def "sync UpdateSyncLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cmName: string
   --body-key: string
   --limit: int
@@ -1253,7 +1295,7 @@ export def "sync UpdateSyncLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/sync/{namespace}/{key}
@@ -1269,6 +1311,7 @@ export def "sync DeleteSyncLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # default: CONFIGMAP
   --cmName: string
 ]: nothing -> record {
@@ -1278,7 +1321,7 @@ export def "sync DeleteSyncLimit" [
   let full_url = (build-url $base $"/api/v1/sync/($namespace)/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/tracking/event
@@ -1292,6 +1335,7 @@ export def "tracking-event CollectEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
 ]: any -> record {
   let input = $in
@@ -1302,7 +1346,7 @@ export def "tracking-event CollectEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/userinfo
@@ -1316,13 +1360,14 @@ export def "userinfo GetUserInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, emailVerified: bool, groups: list<string>, issuer: string, name: string, serviceAccountName: string, serviceAccountNamespace: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/version
@@ -1336,13 +1381,14 @@ export def "version GetVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<buildDate: string, compiler: string, gitCommit: string, gitTag: string, gitTreeState: string, goVersion: string, platform: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/workflow-event-bindings/{namespace}
@@ -1357,6 +1403,7 @@ export def "workflow-event-bindings ListWorkflowEventBindings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1374,7 +1421,7 @@ export def "workflow-event-bindings ListWorkflowEventBindings" [
   let full_url = (build-url $base $"/api/v1/workflow-event-bindings/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/workflow-events/{namespace}
@@ -1389,6 +1436,7 @@ export def "workflow-events WatchWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1407,7 +1455,7 @@ export def "workflow-events WatchWorkflows" [
   let full_url = (build-url $base $"/api/v1/workflow-events/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/workflow-templates/{namespace}
@@ -1422,6 +1470,7 @@ export def "workflow-templates ListWorkflowTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namePattern: string
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
@@ -1440,7 +1489,7 @@ export def "workflow-templates ListWorkflowTemplates" [
   let full_url = (build-url $base $"/api/v1/workflow-templates/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/workflow-templates/{namespace}
@@ -1457,6 +1506,7 @@ export def "workflow-templates CreateWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --body-namespace: string
   --template: record # WorkflowTemplate is the definition of a workflow template resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
@@ -1469,7 +1519,7 @@ export def "workflow-templates CreateWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/v1/workflow-templates/{namespace}/lint
@@ -1486,6 +1536,7 @@ export def "workflow-templates-lint LintWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --body-namespace: string
   --template: record # WorkflowTemplate is the definition of a workflow template resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
@@ -1498,7 +1549,7 @@ export def "workflow-templates-lint LintWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/workflow-templates/{namespace}/{name}
@@ -1514,6 +1565,7 @@ export def "workflow-templates GetWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getOptionsresourceVersion: string # resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.  Defaults to unset +optional
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1522,7 +1574,7 @@ export def "workflow-templates GetWorkflowTemplate" [
   let full_url = (build-url $base $"/api/v1/workflow-templates/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/workflow-templates/{namespace}/{name}
@@ -1539,6 +1591,7 @@ export def "workflow-templates UpdateWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string # DEPRECATED: This field is ignored.
   --body-namespace: string
   --template: record # WorkflowTemplate is the definition of a workflow template resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record}
@@ -1551,7 +1604,7 @@ export def "workflow-templates UpdateWorkflowTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /api/v1/workflow-templates/{namespace}/{name}
@@ -1567,6 +1620,7 @@ export def "workflow-templates DeleteWorkflowTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -1581,7 +1635,7 @@ export def "workflow-templates DeleteWorkflowTemplate" [
   let full_url = (build-url $base $"/api/v1/workflow-templates/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/workflows/{namespace}
@@ -1596,6 +1650,7 @@ export def "workflows ListWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listOptionslabelSelector: string # A selector to restrict the list of returned objects by their labels. Defaults to everything. +optional.
   --listOptionsfieldSelector: string # A selector to restrict the list of returned objects by their fields. Defaults to everything. +optional.
   --listOptionswatch: oneof<nothing, bool> # Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion. +optional.
@@ -1617,7 +1672,7 @@ export def "workflows ListWorkflows" [
   let full_url = (build-url $base $"/api/v1/workflows/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/workflows/{namespace}
@@ -1634,6 +1689,7 @@ export def "workflows CreateWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createOptions: record # CreateOptions may be provided when creating an API object. — shape: {dryRun?: list, fieldManager?: string, fieldValidation?: string}
   --instanceID: string # This field is no longer used.
   --body-namespace: string
@@ -1648,7 +1704,7 @@ export def "workflows CreateWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/v1/workflows/{namespace}/lint
@@ -1664,6 +1720,7 @@ export def "workflows-lint LintWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflow: record # Workflow is the definition of a workflow resource — shape: {apiVersion?: string, kind?: string, metadata: record, spec: record, status?: record}
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>, status: record<artifactGCStatus: record<notSpecified: bool, podsRecouped: record, strategiesProcessed: record>, artifactRepositoryRef: record<artifactRepository: record, configMap: string, default: bool, key: string, namespace: string>, compressedNodes: string, conditions: list<record>, estimatedDuration: int, finishedAt: string, message: string, nodes: record, offloadNodeStatusVersion: string, outputs: record<artifacts: list, exitCode: string, parameters: list, result: string>, persistentVolumeClaims: list<record>, phase: string, progress: string, resourcesDuration: record, startedAt: string, storedTemplates: record, storedWorkflowTemplateSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>, synchronization: record<mutex: record, semaphore: record>, taskResultsCompletionStatus: record>> {
@@ -1675,7 +1732,7 @@ export def "workflows-lint LintWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/v1/workflows/{namespace}/submit
@@ -1691,6 +1748,7 @@ export def "workflows-submit SubmitWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --resourceKind: string
   --resourceName: string
@@ -1704,7 +1762,7 @@ export def "workflows-submit SubmitWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/workflows/{namespace}/{name}
@@ -1720,6 +1778,7 @@ export def "workflows GetWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getOptionsresourceVersion: string # resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.  Defaults to unset +optional
   --qp-fields: string # Fields to be included or excluded in the response. e.g. "spec,status.phase", "-status.nodes".
   --uid: string # Optional UID to retrieve a specific workflow (useful for archived workflows with the same name).
@@ -1730,7 +1789,7 @@ export def "workflows GetWorkflow" [
   let full_url = (build-url $base $"/api/v1/workflows/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /api/v1/workflows/{namespace}/{name}
@@ -1746,6 +1805,7 @@ export def "workflows DeleteWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteOptionsgracePeriodSeconds: string # The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately. +optional. (format: int64)
   --deleteOptionspreconditionsuid: string # Specifies the target UID. +optional.
   --deleteOptionspreconditionsresourceVersion: string # Specifies the target ResourceVersion +optional.
@@ -1761,7 +1821,7 @@ export def "workflows DeleteWorkflow" [
   let full_url = (build-url $base $"/api/v1/workflows/($namespace)/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/workflows/{namespace}/{name}/log
@@ -1777,6 +1837,7 @@ export def "workflows-log WorkflowLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --podName: string
   --logOptionscontainer: string # The container for which to stream logs. Defaults to only container if there is one container in the pod. +optional.
   --logOptionsfollow: oneof<nothing, bool> # Follow the log stream of the pod. Defaults to false. +optional.
@@ -1798,7 +1859,7 @@ export def "workflows-log WorkflowLogs" [
   let full_url = (build-url $base $"/api/v1/workflows/($namespace)/($name)/log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/resubmit
@@ -1814,6 +1875,7 @@ export def "workflows-resubmit ResubmitWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --memoized: oneof<nothing, bool>
   --body-name: string
   --body-namespace: string
@@ -1827,7 +1889,7 @@ export def "workflows-resubmit ResubmitWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/resume
@@ -1843,6 +1905,7 @@ export def "workflows-resume ResumeWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
   --nodeFieldSelector: string
@@ -1855,7 +1918,7 @@ export def "workflows-resume ResumeWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/retry
@@ -1871,6 +1934,7 @@ export def "workflows-retry RetryWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
   --nodeFieldSelector: string
@@ -1885,7 +1949,7 @@ export def "workflows-retry RetryWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/set
@@ -1901,6 +1965,7 @@ export def "workflows-set SetWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string
   --body-name: string
   --body-namespace: string
@@ -1916,7 +1981,7 @@ export def "workflows-set SetWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/stop
@@ -1932,6 +1997,7 @@ export def "workflows-stop StopWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string
   --body-name: string
   --body-namespace: string
@@ -1945,7 +2011,7 @@ export def "workflows-stop StopWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/suspend
@@ -1961,6 +2027,7 @@ export def "workflows-suspend SuspendWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>, status: record<artifactGCStatus: record<notSpecified: bool, podsRecouped: record, strategiesProcessed: record>, artifactRepositoryRef: record<artifactRepository: record, configMap: string, default: bool, key: string, namespace: string>, compressedNodes: string, conditions: list<record>, estimatedDuration: int, finishedAt: string, message: string, nodes: record, offloadNodeStatusVersion: string, outputs: record<artifacts: list, exitCode: string, parameters: list, result: string>, persistentVolumeClaims: list<record>, phase: string, progress: string, resourcesDuration: record, startedAt: string, storedTemplates: record, storedWorkflowTemplateSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>, synchronization: record<mutex: record, semaphore: record>, taskResultsCompletionStatus: record>> {
@@ -1972,7 +2039,7 @@ export def "workflows-suspend SuspendWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/workflows/{namespace}/{name}/terminate
@@ -1988,6 +2055,7 @@ export def "workflows-terminate TerminateWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<activeDeadlineSeconds: int, affinity: record<nodeAffinity: record, podAffinity: record, podAntiAffinity: record>, archiveLogs: bool, arguments: record<artifacts: list, parameters: list>, artifactGC: record<forceFinalizerRemoval: bool, podMetadata: record, podSpecPatch: string, serviceAccountName: string, strategy: string>, artifactRepositoryRef: record<configMap: string, key: string>, automountServiceAccountToken: bool, dnsConfig: record<nameservers: list, options: list, searches: list>, dnsPolicy: string, entrypoint: string, executor: record<serviceAccountName: string>, hooks: record, hostAliases: list<record>, hostNetwork: bool, imagePullSecrets: list<record>, metrics: record<prometheus: list>, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record<maxUnavailable: string, minAvailable: string, selector: record, unhealthyPodEvictionPolicy: string>, podGC: record<deleteDelayDuration: string, labelSelector: record, strategy: string>, podMetadata: record<annotations: record, labels: record>, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record<affinity: record, backoff: record, expression: string, limit: string, retryPolicy: string>, schedulerName: string, securityContext: record<appArmorProfile: record, fsGroup: int, fsGroupChangePolicy: string, runAsGroup: int, runAsNonRoot: bool, runAsUser: int, seLinuxChangePolicy: string, seLinuxOptions: record, seccompProfile: record, supplementalGroups: list, supplementalGroupsPolicy: string, sysctls: list, windowsOptions: record>, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record<mutexes: list, semaphores: list>, templateDefaults: record<activeDeadlineSeconds: string, affinity: record, annotations: record, archiveLocation: record, automountServiceAccountToken: bool, container: record, containerSet: record, daemon: bool, dag: record, data: record, executor: record, failFast: bool, hostAliases: list, http: record, initContainers: list, inputs: record, memoize: record, metadata: record, metrics: record, name: string, nodeSelector: record, outputs: record, parallelism: int, plugin: record, podSpecPatch: string, priorityClassName: string, resource: record, retryStrategy: record, schedulerName: string, script: record, securityContext: record, serviceAccountName: string, sidecars: list, steps: list, suspend: record, synchronization: record, timeout: string, tolerations: list, volumes: list>, templates: list<record>, tolerations: list<record>, ttlStrategy: record<secondsAfterCompletion: int, secondsAfterFailure: int, secondsAfterSuccess: int>, volumeClaimGC: record<strategy: string>, volumeClaimTemplates: list<record>, volumes: list<record>, workflowMetadata: record<annotations: record, labels: record, labelsFrom: record>, workflowTemplateRef: record<clusterScope: bool, name: string>>, status: record<artifactGCStatus: record<notSpecified: bool, podsRecouped: record, strategiesProcessed: record>, artifactRepositoryRef: record<artifactRepository: record, configMap: string, default: bool, key: string, namespace: string>, compressedNodes: string, conditions: list<record>, estimatedDuration: int, finishedAt: string, message: string, nodes: record, offloadNodeStatusVersion: string, outputs: record<artifacts: list, exitCode: string, parameters: list, result: string>, persistentVolumeClaims: list<record>, phase: string, progress: string, resourcesDuration: record, startedAt: string, storedTemplates: record, storedWorkflowTemplateSpec: record<activeDeadlineSeconds: int, affinity: record, archiveLogs: bool, arguments: record, artifactGC: record, artifactRepositoryRef: record, automountServiceAccountToken: bool, dnsConfig: record, dnsPolicy: string, entrypoint: string, executor: record, hooks: record, hostAliases: list, hostNetwork: bool, imagePullSecrets: list, metrics: record, nodeSelector: record, onExit: string, parallelism: int, podDisruptionBudget: record, podGC: record, podMetadata: record, podPriorityClassName: string, podSpecPatch: string, priority: int, retryStrategy: record, schedulerName: string, securityContext: record, serviceAccountName: string, shutdown: string, suspend: bool, synchronization: record, templateDefaults: record, templates: list, tolerations: list, ttlStrategy: record, volumeClaimGC: record, volumeClaimTemplates: list, volumes: list, workflowMetadata: record, workflowTemplateRef: record>, synchronization: record<mutex: record, semaphore: record>, taskResultsCompletionStatus: record>> {
@@ -1999,7 +2067,7 @@ export def "workflows-terminate TerminateWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DEPRECATED: Cannot work via HTTP if podName is an empty string. Use WorkflowLogs.
@@ -2017,6 +2085,7 @@ export def "workflows-log PodLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logOptionscontainer: string # The container for which to stream logs. Defaults to only container if there is one container in the pod. +optional.
   --logOptionsfollow: oneof<nothing, bool> # Follow the log stream of the pod. Defaults to false. +optional.
   --logOptionsprevious: oneof<nothing, bool> # Return previous terminated container logs. Defaults to false. +optional.
@@ -2037,7 +2106,7 @@ export def "workflows-log PodLogs" [
   let full_url = (build-url $base $"/api/v1/workflows/($namespace)/($name)/($podName)/log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an artifact.
@@ -2058,13 +2127,14 @@ export def "artifact-files GetArtifactFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/artifact-files/($namespace)/($idDiscriminator)/($id)/($nodeId)/($artifactDiscriminator)/($artifactName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an output artifact by UID.
@@ -2082,13 +2152,14 @@ export def "artifacts-by-uid GetOutputArtifactByUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/artifacts-by-uid/($uid)/($nodeId)/($artifactName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an output artifact.
@@ -2107,13 +2178,14 @@ export def "artifacts GetOutputArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/artifacts/($namespace)/($name)/($nodeId)/($artifactName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an input artifact by UID.
@@ -2131,13 +2203,14 @@ export def "input-artifacts-by-uid GetInputArtifactByUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/input-artifacts-by-uid/($uid)/($nodeId)/($artifactName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an input artifact.
@@ -2156,11 +2229,12 @@ export def "input-artifacts GetInputArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/input-artifacts/($namespace)/($name)/($nodeId)/($artifactName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "shipment-create-from-shipping-quote createFromShippingQuote" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "shipment-create-from-shipping-quote createFromShippingQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additionalOptions: list # Supply a list of one or more shipping options that the seller wants to purchase for this shipment.  <br><br>The <b>baseShippingCost</b> field that's associated with the selected shipping rate is the cost of the base service offered in the rate. In addition to the base service, sellers can add additional shipping services to the base service. Shipping options include things such as shipping insurance or a recipient's signature upon delivery. The cost of any added services is summed with the base shipping cost to determine the final cost for the shipment. All options added to the shipment must be chosen from the set of shipping options offered with the selected rate. — item shape: {additionalCost?: record, optionType?: string}
   --labelCustomMessage: string # Optional text to be printed on the shipping label if the selected shipping carrier supports custom messages on their labels.
   --labelSize: string # The seller's desired label size. Any supplied value is applied only if the shipping carrier supports multiple label sizes, otherwise the carrier's default label size is used.  <br><brCurrently, the only valid value is: <code>4"x6"</code>
@@ -117,7 +119,7 @@ export def "shipment-create-from-shipping-quote createFromShippingQuote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # This method retrieves the shipment details for the specified shipment ID. Call <b>createFromShippingQuote</b> to generate a shipment ID.
@@ -133,13 +135,14 @@ export def "shipment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipment/($shipmentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This method cancels the shipment associated with the specified shipment ID and the associated shipping label is deleted. When you cancel a shipment, the <b>totalShippingCost</b> of the canceled shipment is refunded to the account established by the user's billing agreement.  <br><br>Note that you cannot cancel a shipment if you have used the associated shipping label.
@@ -155,13 +158,14 @@ export def "shipment-cancel cancelShipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipment/($shipmentId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This method returns the shipping label file that was generated for the <b>shipmentId</b> value specified in the request. Call <b>createFromShippingQuote</b> to generate a shipment ID.  <br><br>Use the <code>Accept</code> HTTP header to specify the format of the returned file. The default file format is a PDF file. <!-- Are other options available? -->
@@ -177,13 +181,14 @@ export def "shipment-download-label-file downloadLabelFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipment/($shipmentId)/download_label_file")
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The <b>createShippingQuote</b> method returns a <i>shipping quote </i> that contains a list of live "rates."  <br><br>Each rate represents an offer made by a shipping carrier for a specific service and each offer has a live quote for the base service cost. Rates have a time window in which they are "live," and rates expire when their purchase window ends. If offered by the carrier, rates can include shipping options (and their associated prices), and users can add any offered shipping option to the base service should they desire.  Also, depending on the services required, rates can also include pickup and delivery windows.  <br><br>Each rate is for a single package and is based on the following information: <ul><li>The shipping origin</li> <li>The shipping destination</li> <li>The package size (weight and dimensions)</li></ul>  Rates are identified by a unique eBay-assigned <b>rateId</b> and rates are based on price points, pickup and delivery time frames, and other user requirements. Because each rate offered must be compliant with the eBay shipping program, all rates reflect eBay-negotiated prices.  <br><br>The various rates returned in a shipping quote offer the user a choice from which they can choose a shipping service that best fits their needs. Select the rate for your shipment and using the associated <b>rateId</b>, call <b>createFromShippingQuote</b> to create a shipment and generate a shipping label that you can use to ship the package.
@@ -202,6 +207,7 @@ export def "shipping-quote createShippingQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EBAY-C-MARKETPLACE-ID: string # This header parameter specifies the eBay marketplace for the shipping quote that is being created. For a list of valid values, refer to the section <a href="/api-docs/static/rest-request-components.html#marketpl" target="_blank">Marketplace ID Values</a> in the <b>Using eBay RESTful APIs</b> guide.
   --orders: list # A seller-defined list that contains information about the orders in the package. This allows sellers to include information about the line items in the package with the shipment information.  <br><br>A package can contain any number of line items from one or more orders, providing they all ship in the same package.  <br><br><b>Maximum list size:</b> 10 — item shape: {channel?: string, orderId?: string}
   --packageSpecification: record # This complex type specifies the dimensions and weight of a package. — shape: {dimensions?: record, weight?: record}
@@ -218,7 +224,7 @@ export def "shipping-quote createShippingQuote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # This method retrieves the complete details of the shipping quote associated with the specified <b>shippingQuoteId</b> value.  <br><br>A "shipping quote" pertains to a single specific package and contains a set of shipping "rates" that quote the cost to ship the package by different shipping carriers and services. The quotes are based on the package's origin, destination, and size.  <br><br>Call <b>createShippingQuote</b> to create a <b>shippingQuoteId</b>.
@@ -234,11 +240,12 @@ export def "shipping-quote get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creationDate: string, expirationDate: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rates: table<additionalOptions: list, baseShippingCost: record, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list, pickupSlots: list, pickupType: string, rateId: string, rateRecommendation: list, shippingCarrierCode: string, shippingCarrierName: string, shippingServiceCode: string, shippingServiceName: string>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shippingQuoteId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipping_quote/($shippingQuoteId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

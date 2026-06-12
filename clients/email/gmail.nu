@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -82,7 +83,7 @@ def labelFilterAction-completer [] { ["exclude" "include"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts gmailusersdraftslist" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -116,6 +117,7 @@ export def "gmail-users-drafts gmailusersdraftslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -138,7 +140,7 @@ export def "gmail-users-drafts gmailusersdraftslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/drafts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new draft with the `DRAFT` label.
@@ -154,6 +156,7 @@ export def "gmail-users-drafts gmailusersdraftscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -175,7 +178,7 @@ export def "gmail-users-drafts gmailusersdraftscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Sends the specified, existing draft to the recipients in the `To`, `Cc`, and `Bcc` headers.
@@ -191,6 +194,7 @@ export def "gmail-users-drafts-send gmailusersdraftssend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -212,7 +216,7 @@ export def "gmail-users-drafts-send gmailusersdraftssend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Immediately and permanently deletes the specified draft. Does not simply trash it.
@@ -229,6 +233,7 @@ export def "gmail-users-drafts gmailusersdraftsdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -247,7 +252,7 @@ export def "gmail-users-drafts gmailusersdraftsdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/drafts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified draft.
@@ -264,6 +269,7 @@ export def "gmail-users-drafts gmailusersdraftsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -283,7 +289,7 @@ export def "gmail-users-drafts gmailusersdraftsget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/drafts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replaces a draft's content.
@@ -300,6 +306,7 @@ export def "gmail-users-drafts gmailusersdraftsupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -321,7 +328,7 @@ export def "gmail-users-drafts gmailusersdraftsupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Lists the history of all changes to the given mailbox. History results are returned in chronological order (increasing `historyId`).
@@ -337,6 +344,7 @@ export def "gmail-users-history gmailusershistorylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -360,7 +368,7 @@ export def "gmail-users-history gmailusershistorylist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all labels in the user's mailbox.
@@ -376,6 +384,7 @@ export def "gmail-users-labels gmailuserslabelslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -394,7 +403,7 @@ export def "gmail-users-labels gmailuserslabelslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new label.
@@ -411,6 +420,7 @@ export def "gmail-users-labels gmailuserslabelscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -442,7 +452,7 @@ export def "gmail-users-labels gmailuserslabelscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Immediately and permanently deletes the specified label and removes it from any messages and threads that it is applied to.
@@ -459,6 +469,7 @@ export def "gmail-users-labels gmailuserslabelsdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -477,7 +488,7 @@ export def "gmail-users-labels gmailuserslabelsdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/labels/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified label.
@@ -494,6 +505,7 @@ export def "gmail-users-labels gmailuserslabelsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -512,7 +524,7 @@ export def "gmail-users-labels gmailuserslabelsget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/labels/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch the specified label.
@@ -530,6 +542,7 @@ export def "gmail-users-labels gmailuserslabelspatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -561,7 +574,7 @@ export def "gmail-users-labels gmailuserslabelspatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the specified label.
@@ -579,6 +592,7 @@ export def "gmail-users-labels gmailuserslabelsupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -610,7 +624,7 @@ export def "gmail-users-labels gmailuserslabelsupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the messages in the user's mailbox.
@@ -626,6 +640,7 @@ export def "gmail-users-messages gmailusersmessageslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -649,7 +664,7 @@ export def "gmail-users-messages gmailusersmessageslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Directly inserts a message into only this user's mailbox similar to `IMAP APPEND`, bypassing most scanning and classification. Does not send a message.
@@ -665,6 +680,7 @@ export def "gmail-users-messages gmailusersmessagesinsert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -688,7 +704,7 @@ export def "gmail-users-messages gmailusersmessagesinsert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Deletes many messages by message ID. Provides no guarantees that messages were not already deleted or even existed at all.
@@ -704,6 +720,7 @@ export def "gmail-users-messages-batch-delete gmailusersmessagesbatchDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -726,7 +743,7 @@ export def "gmail-users-messages-batch-delete gmailusersmessagesbatchDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Modifies the labels on the specified messages.
@@ -742,6 +759,7 @@ export def "gmail-users-messages-batch-modify gmailusersmessagesbatchModify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -766,7 +784,7 @@ export def "gmail-users-messages-batch-modify gmailusersmessagesbatchModify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Imports a message into only this user's mailbox, with standard email delivery scanning and classification similar to receiving via SMTP. This method doesn't perform SPF checks, so it might not work for some spam messages, such as those attempting to perform domain spoofing. This method does not send a message. Note: This function doesn't trigger forwarding rules or filters set up by the user.
@@ -782,6 +800,7 @@ export def "gmail-users-messages-import gmailusersmessagesimport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -807,7 +826,7 @@ export def "gmail-users-messages-import gmailusersmessagesimport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers. For example usage, see [Sending email](https://developers.google.com/gmail/api/guides/sending).
@@ -823,6 +842,7 @@ export def "gmail-users-messages-send gmailusersmessagessend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -844,7 +864,7 @@ export def "gmail-users-messages-send gmailusersmessagessend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
 }
 
 # Immediately and permanently deletes the specified message. This operation cannot be undone. Prefer `messages.trash` instead.
@@ -861,6 +881,7 @@ export def "gmail-users-messages gmailusersmessagesdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -879,7 +900,7 @@ export def "gmail-users-messages gmailusersmessagesdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified message.
@@ -896,6 +917,7 @@ export def "gmail-users-messages gmailusersmessagesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -916,7 +938,7 @@ export def "gmail-users-messages gmailusersmessagesget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modifies the labels on the specified message.
@@ -933,6 +955,7 @@ export def "gmail-users-messages-modify gmailusersmessagesmodify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -956,7 +979,7 @@ export def "gmail-users-messages-modify gmailusersmessagesmodify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Moves the specified message to the trash.
@@ -973,6 +996,7 @@ export def "gmail-users-messages-trash gmailusersmessagestrash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -991,7 +1015,7 @@ export def "gmail-users-messages-trash gmailusersmessagestrash" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages/($id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes the specified message from the trash.
@@ -1008,6 +1032,7 @@ export def "gmail-users-messages-untrash gmailusersmessagesuntrash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1026,7 +1051,7 @@ export def "gmail-users-messages-untrash gmailusersmessagesuntrash" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages/($id)/untrash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified message attachment.
@@ -1044,6 +1069,7 @@ export def "gmail-users-messages-attachments gmailusersmessagesattachmentsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1062,7 +1088,7 @@ export def "gmail-users-messages-attachments gmailusersmessagesattachmentsget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/messages/($messageId)/attachments/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the current user's Gmail profile.
@@ -1078,6 +1104,7 @@ export def "gmail-users-profile gmailusersgetProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1096,7 +1123,7 @@ export def "gmail-users-profile gmailusersgetProfile" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the auto-forwarding setting for the specified account.
@@ -1112,6 +1139,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsgetAutoForwar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1130,7 +1158,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsgetAutoForwar
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/autoForwarding" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the auto-forwarding setting for the specified account. A verified forwarding address must be specified when auto-forwarding is enabled. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1146,6 +1174,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsupdateAutoFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1170,7 +1199,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsupdateAutoFor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the client-side encrypted identities for an authenticated user.
@@ -1186,6 +1215,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1206,7 +1236,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesl
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/cse/identities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates and configures a client-side encryption identity that's authorized to send mail from the user account. Google publishes the S/MIME certificate to a shared domain-wide directory so that people within a Google Workspace organization can encrypt and send mail to the identity.
@@ -1222,6 +1252,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1245,7 +1276,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a client-side encryption identity. The authenticated user can no longer use the identity to send encrypted messages. You cannot restore the identity after you delete it. Instead, use the CreateCseIdentity method to create another identity with the same configuration.
@@ -1262,6 +1293,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1280,7 +1312,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesd
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/cse/identities/($cseEmailAddress)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a client-side encryption identity configuration.
@@ -1297,6 +1329,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1315,7 +1348,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesg
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/cse/identities/($cseEmailAddress)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associates a different key pair with an existing client-side encryption identity. The updated key pair must validate against Google's [S/MIME certificate profiles](https://support.google.com/a/answer/7300887).
@@ -1332,6 +1365,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1355,7 +1389,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists client-side encryption key pairs for an authenticated user.
@@ -1371,6 +1405,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairslist"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1391,7 +1426,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairslist"
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/cse/keypairs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates and uploads a client-side encryption S/MIME public key certificate chain and private key metadata for the authenticated user.
@@ -1408,6 +1443,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairscreat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1431,7 +1467,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairscreat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves an existing client-side encryption key pair.
@@ -1448,6 +1484,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsget" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1466,7 +1503,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsget" 
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/cse/keypairs/($keyPairId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Turns off a client-side encryption key pair. The authenticated user can no longer use the key pair to decrypt incoming CSE message texts or sign outgoing CSE mail. To regain access, use the EnableCseKeyPair to turn on the key pair. After 30 days, you can permanently delete the key pair by using the ObliterateCseKeyPair method.
@@ -1483,6 +1520,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsdisab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1504,7 +1542,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsdisab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Turns on a client-side encryption key pair that was turned off. The key pair becomes active again for any associated client-side encryption identities.
@@ -1521,6 +1559,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsenabl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1542,7 +1581,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsenabl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a client-side encryption key pair permanently and immediately. You can only permanently delete key pairs that have been turned off for more than 30 days. To turn off a key pair, use the DisableCseKeyPair method. Gmail can't restore or decrypt any messages that were encrypted by an obliterated key. Authenticated users and Google Workspace administrators lose access to reading the encrypted messages.
@@ -1559,6 +1598,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsoblit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1580,7 +1620,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsoblit
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the delegates for the specified account. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1596,6 +1636,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegateslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1614,7 +1655,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegateslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/delegates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a delegate with its verification status set directly to `accepted`, without sending any verification email. The delegate user must be a member of the same Google Workspace organization as the delegator user. Gmail imposes limitations on the number of delegates and delegators each user in a Google Workspace organization can have. These limits depend on your organization, but in general each user can have up to 25 delegates and up to 10 delegators. Note that a delegate user must be referred to by their primary email address, and not an email alias. Also note that when a new delegate is created, there may be up to a one minute delay before the new delegate is available for use. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1630,6 +1671,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1653,7 +1695,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatescreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes the specified delegate (which can be of any verification status), and revokes any verification that may have been required for using it. Note that a delegate user must be referred to by their primary email address, and not an email alias. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1670,6 +1712,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1688,7 +1731,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/delegates/($delegateEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified delegate. Note that a delegate user must be referred to by their primary email address, and not an email alias. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1705,6 +1748,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1723,7 +1767,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/delegates/($delegateEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the message filters of a Gmail user.
@@ -1739,6 +1783,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1757,7 +1802,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/filters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a filter. Note: you can only create a maximum of 1,000 filters.
@@ -1775,6 +1820,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1799,7 +1845,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Immediately and permanently deletes the specified filter.
@@ -1816,6 +1862,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1834,7 +1881,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/filters/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a filter.
@@ -1851,6 +1898,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1869,7 +1917,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/filters/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the forwarding addresses for the specified account.
@@ -1885,6 +1933,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1903,7 +1952,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/forwardingAddresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a forwarding address. If ownership verification is required, a message will be sent to the recipient and the resource's verification status will be set to `pending`; otherwise, the resource will be created with verification status set to `accepted`. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1919,6 +1968,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1942,7 +1992,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified forwarding address and revokes any verification that may have been required. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -1959,6 +2009,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -1977,7 +2028,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/forwardingAddresses/($forwardingEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified forwarding address.
@@ -1994,6 +2045,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2012,7 +2064,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/forwardingAddresses/($forwardingEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets IMAP settings.
@@ -2028,6 +2080,7 @@ export def "gmail-users-settings-imap gmailuserssettingsgetImap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2046,7 +2099,7 @@ export def "gmail-users-settings-imap gmailuserssettingsgetImap" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/imap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates IMAP settings.
@@ -2062,6 +2115,7 @@ export def "gmail-users-settings-imap gmailuserssettingsupdateImap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2087,7 +2141,7 @@ export def "gmail-users-settings-imap gmailuserssettingsupdateImap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets language settings.
@@ -2103,6 +2157,7 @@ export def "gmail-users-settings-language gmailuserssettingsgetLanguage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2121,7 +2176,7 @@ export def "gmail-users-settings-language gmailuserssettingsgetLanguage" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/language" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates language settings. If successful, the return object contains the `displayLanguage` that was saved for the user, which may differ from the value passed into the request. This is because the requested `displayLanguage` may not be directly supported by Gmail but have a close variant that is, and so the variant may be chosen and saved instead.
@@ -2137,6 +2192,7 @@ export def "gmail-users-settings-language gmailuserssettingsupdateLanguage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2159,7 +2215,7 @@ export def "gmail-users-settings-language gmailuserssettingsupdateLanguage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets POP settings.
@@ -2175,6 +2231,7 @@ export def "gmail-users-settings-pop gmailuserssettingsgetPop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2193,7 +2250,7 @@ export def "gmail-users-settings-pop gmailuserssettingsgetPop" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/pop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates POP settings.
@@ -2209,6 +2266,7 @@ export def "gmail-users-settings-pop gmailuserssettingsupdatePop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2232,7 +2290,7 @@ export def "gmail-users-settings-pop gmailuserssettingsupdatePop" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the send-as aliases for the specified account. The result includes the primary send-as address associated with the account as well as any custom "from" aliases.
@@ -2248,6 +2306,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2266,7 +2325,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a custom "from" send-as alias. If an SMTP MSA is specified, Gmail will attempt to connect to the SMTP service to validate the configuration before creating the alias. If ownership verification is required for the alias, a message will be sent to the email address and the resource's verification status will be set to `pending`; otherwise, the resource will be created with verification status set to `accepted`. If a signature is provided, Gmail will sanitize the HTML before saving it with the alias. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -2283,6 +2342,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2313,7 +2373,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified send-as alias. Revokes any verification that may have been required for using it. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -2330,6 +2390,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2348,7 +2409,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified send-as alias. Fails with an HTTP 404 error if the specified address is not a member of the collection.
@@ -2365,6 +2426,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2383,7 +2445,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch the specified send-as alias.
@@ -2401,6 +2463,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAspatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2431,7 +2494,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAspatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a send-as alias. If a signature is provided, Gmail will sanitize the HTML before saving it with the alias. Addresses other than the primary address for the account can only be updated by service account clients that have been delegated domain-wide authority.
@@ -2449,6 +2512,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2479,7 +2543,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists S/MIME configs for the specified send-as alias.
@@ -2496,6 +2560,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2514,7 +2579,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)/smimeInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Insert (upload) the given S/MIME config for the specified send-as alias. Note that pkcs12 format is required for the key.
@@ -2531,6 +2596,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2559,7 +2625,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified S/MIME config for the specified send-as alias.
@@ -2577,6 +2643,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2595,7 +2662,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)/smimeInfo/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified S/MIME config for the specified send-as alias.
@@ -2613,6 +2680,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2631,7 +2699,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)/smimeInfo/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the default S/MIME config for the specified send-as alias.
@@ -2649,6 +2717,7 @@ export def "gmail-users-settings-send-as-smime-info-set-default gmailuserssettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2667,7 +2736,7 @@ export def "gmail-users-settings-send-as-smime-info-set-default gmailuserssettin
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)/smimeInfo/($id)/setDefault" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends a verification email to the specified send-as alias address. The verification status must be `pending`. This method is only available to service account clients that have been delegated domain-wide authority.
@@ -2684,6 +2753,7 @@ export def "gmail-users-settings-send-as-verify gmailuserssettingssendAsverify" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2702,7 +2772,7 @@ export def "gmail-users-settings-send-as-verify gmailuserssettingssendAsverify" 
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/sendAs/($sendAsEmail)/verify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets vacation responder settings.
@@ -2718,6 +2788,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsgetVacation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2736,7 +2807,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsgetVacation" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/settings/vacation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates vacation responder settings.
@@ -2752,6 +2823,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsupdateVacation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2781,7 +2853,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsupdateVacation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stop receiving push notifications for the given user mailbox.
@@ -2797,6 +2869,7 @@ export def "gmail-users-stop gmailusersstop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2815,7 +2888,7 @@ export def "gmail-users-stop gmailusersstop" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the threads in the user's mailbox.
@@ -2831,6 +2904,7 @@ export def "gmail-users-threads gmailusersthreadslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2854,7 +2928,7 @@ export def "gmail-users-threads gmailusersthreadslist" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Immediately and permanently deletes the specified thread. Any messages that belong to the thread are also deleted. This operation cannot be undone. Prefer `threads.trash` instead.
@@ -2871,6 +2945,7 @@ export def "gmail-users-threads gmailusersthreadsdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2889,7 +2964,7 @@ export def "gmail-users-threads gmailusersthreadsdelete" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/threads/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified thread.
@@ -2906,6 +2981,7 @@ export def "gmail-users-threads gmailusersthreadsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2926,7 +3002,7 @@ export def "gmail-users-threads gmailusersthreadsget" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/threads/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modifies the labels applied to the thread. This applies to all messages in the thread.
@@ -2943,6 +3019,7 @@ export def "gmail-users-threads-modify gmailusersthreadsmodify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -2966,7 +3043,7 @@ export def "gmail-users-threads-modify gmailusersthreadsmodify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Moves the specified thread to the trash. Any messages that belong to the thread are also moved to the trash.
@@ -2983,6 +3060,7 @@ export def "gmail-users-threads-trash gmailusersthreadstrash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -3001,7 +3079,7 @@ export def "gmail-users-threads-trash gmailusersthreadstrash" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/threads/($id)/trash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes the specified thread from the trash. Any messages that belong to the thread are also removed from the trash.
@@ -3018,6 +3096,7 @@ export def "gmail-users-threads-untrash gmailusersthreadsuntrash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -3036,7 +3115,7 @@ export def "gmail-users-threads-untrash gmailusersthreadsuntrash" [
   let full_url = (build-url $base $"/gmail/v1/users/($userId)/threads/($id)/untrash" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set up or update a push notification watch on the given user mailbox.
@@ -3052,6 +3131,7 @@ export def "gmail-users-watch gmailuserswatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
@@ -3076,5 +3156,5 @@ export def "gmail-users-watch gmailuserswatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

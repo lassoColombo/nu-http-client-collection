@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -106,7 +107,7 @@ def request-body-template-format-completer [] { ["0" "1" "2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "audit-log list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -140,6 +141,7 @@ export def "audit-log list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --qp-query: string # A search term for querying events, actors, or timestamps of log records.
@@ -150,7 +152,7 @@ export def "audit-log list" [
   let full_url = (build-url $base $"/audit-log/($owner)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists audit log entries for a specific repository.
@@ -167,6 +169,7 @@ export def "audit-log list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --qp-query: string # A search term for querying events, actors, or timestamps of log records.
@@ -177,7 +180,7 @@ export def "audit-log list-1" [
   let full_url = (build-url $base $"/audit-log/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest package version for a package or package group.
@@ -198,6 +201,7 @@ export def "badges-version list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --badge-token: string # Badge token to authenticate for private packages (default: )
   --cacheSeconds: string # Override the shields.io badge cacheSeconds value. (default: 300)
   --color: string # Override the shields.io badge color value. (default: 12577E)
@@ -216,7 +220,7 @@ export def "badges-version list" [
   let full_url = (build-url $base $"/badges/version/($owner)/($repo)/($package_format)/($package_name)/($package_version)/($package_identifiers)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a broadcast token.
@@ -232,6 +236,7 @@ export def "broadcasts-broadcast-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entitlement_token: string # Repository entitlement token used to authorize the creation of a broadcast token
   --expires-in: int # Token expiry time in seconds (optional, defaults to 3600 seconds)
 ]: any -> record<expires_at: string, token: string> {
@@ -243,7 +248,7 @@ export def "broadcasts-broadcast-token token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Perform bulk operations on multiple packages within a repository or across all accessible repositories. If 'repository' is provided, actions are limited to that repository. If 'repository' is omitted, actions are performed across all repositories the user has access to within the workspace. Returns a list of successfully actioned packages and any packages that failed with error details. 
@@ -259,6 +264,7 @@ export def "bulk-action action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer # The action to perform on the packages.
   identifiers: list # A list of package identifiers to apply the action to.
   --repository: string # The repository name to filter packages to. If not provided, the action will be performed across all accessible repositories in the workspace.
@@ -272,7 +278,7 @@ export def "bulk-action action" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of all supported distributions.
@@ -287,13 +293,14 @@ export def "distros list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<format: string, format_url: string, name: string, self_url: string, slug: string, variants: string, versions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distros/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View for viewing/listing distributions.
@@ -309,13 +316,14 @@ export def "distros read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<format: string, format_url: string, name: string, self_url: string, slug: string, variants: string, versions: table<name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/distros/($slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all entitlements in a repository.
@@ -332,6 +340,7 @@ export def "entitlements list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
@@ -346,7 +355,7 @@ export def "entitlements list" [
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a specific entitlement in a repository.
@@ -363,6 +372,7 @@ export def "entitlements create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
   --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
@@ -389,7 +399,7 @@ export def "entitlements create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Synchronise tokens from a source repository.
@@ -406,6 +416,7 @@ export def "entitlements-sync sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --body-source: string # The source repository slug (in the same owner namespace).
 ]: any -> record<tokens: table<access_private_broadcasts: bool, clients: int, created_at: string, created_by: string, created_by_url: string, default: bool, disable_url: string, downloads: int, enable_url: string, eula_accepted: record, eula_accepted_at: string, eula_accepted_from: string, eula_required: bool, has_limits: bool, identifier: int, is_active: bool, is_limited: bool, limit_bandwidth: int, limit_bandwidth_unit: string, limit_date_range_from: string, limit_date_range_to: string, limit_num_clients: int, limit_num_downloads: int, limit_package_query: string, limit_path_query: string, metadata: record, name: string, refresh_url: string, reset_url: string, scheduled_reset_at: string, scheduled_reset_period: string, self_url: string, slug_perm: string, token: string, updated_at: string, updated_by: string, updated_by_url: string, usage: string, user: string, user_url: string>> {
@@ -418,7 +429,7 @@ export def "entitlements-sync sync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a specific entitlement in a repository.
@@ -436,6 +447,7 @@ export def "entitlements read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fuzzy: oneof<nothing, bool> # If true, entitlement identifiers including name will be fuzzy matched. (default: false)
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
 ]: nothing -> record<access_private_broadcasts: bool, clients: int, created_at: string, created_by: string, created_by_url: string, default: bool, disable_url: string, downloads: int, enable_url: string, eula_accepted: record<identifier: string, number: int>, eula_accepted_at: string, eula_accepted_from: string, eula_required: bool, has_limits: bool, identifier: int, is_active: bool, is_limited: bool, limit_bandwidth: int, limit_bandwidth_unit: string, limit_date_range_from: string, limit_date_range_to: string, limit_num_clients: int, limit_num_downloads: int, limit_package_query: string, limit_path_query: string, metadata: record, name: string, refresh_url: string, reset_url: string, scheduled_reset_at: string, scheduled_reset_period: string, self_url: string, slug_perm: string, token: string, updated_at: string, updated_by: string, updated_by_url: string, usage: string, user: string, user_url: string> {
@@ -445,7 +457,7 @@ export def "entitlements read" [
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/($identifier)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a specific entitlement in a repository.
@@ -463,6 +475,7 @@ export def "entitlements patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
   --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
@@ -489,7 +502,7 @@ export def "entitlements patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific entitlement in a repository.
@@ -507,13 +520,14 @@ export def "entitlements delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable an entitlement token in a repository.
@@ -531,13 +545,14 @@ export def "entitlements-disable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/($identifier)/disable/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable an entitlement token in a repository.
@@ -555,13 +570,14 @@ export def "entitlements-enable enable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/($identifier)/enable/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh an entitlement token in a repository.
@@ -579,6 +595,7 @@ export def "entitlements-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
   --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
@@ -604,7 +621,7 @@ export def "entitlements-refresh refresh" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset the statistics for an entitlement token in a repository.
@@ -622,6 +639,7 @@ export def "entitlements-reset reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -630,7 +648,7 @@ export def "entitlements-reset reset" [
   let full_url = (build-url $base $"/entitlements/($owner)/($repo)/($identifier)/reset/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set private broadcast access for an entitlement token in a repository.
@@ -648,6 +666,7 @@ export def "entitlements-toggle-private-broadcasts broadcasts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-private-broadcasts: oneof<nothing, bool> # Whether the token should have access to private broadcasts.
 ]: any -> any {
   let input = $in
@@ -658,7 +677,7 @@ export def "entitlements-toggle-private-broadcasts broadcasts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request URL(s) to upload new package file upload(s) to.
@@ -675,6 +694,7 @@ export def "files create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filename: string # Filename for the package file upload.
   --md5-checksum: string # MD5 checksum for a POST-based package file upload.
   --method: string@method-completer # The method to use for package file upload. (default: post)
@@ -688,7 +708,7 @@ export def "files create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters used for create.
@@ -705,6 +725,7 @@ export def "files-validate validate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filename: string # Filename for the package file upload.
   --md5-checksum: string # MD5 checksum for a POST-based package file upload.
   --method: string@method-completer # The method to use for package file upload. (default: post)
@@ -718,7 +739,7 @@ export def "files-validate validate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Abort a multipart file upload.
@@ -736,6 +757,7 @@ export def "files-abort abort" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filename: string # Filename for the package file upload.
   --md5-checksum: string # MD5 checksum for a POST-based package file upload.
   --method: string@method-completer # The method to use for package file upload. (default: post)
@@ -749,7 +771,7 @@ export def "files-abort abort" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete a multipart file upload.
@@ -767,6 +789,7 @@ export def "files-complete complete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filename: string # Filename for the package file upload.
   --md5-checksum: string # MD5 checksum for a POST-based package file upload.
   --method: string@method-completer # The method to use for package file upload. (default: post)
@@ -780,7 +803,7 @@ export def "files-complete complete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get upload information to perform a multipart file upload.
@@ -798,6 +821,7 @@ export def "files-info info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string # The filename of the file being uploaded
   --part-number: int # The part number to be uploaded next
 ]: nothing -> record<identifier: string, upload_querystring: string, upload_url: string> {
@@ -807,7 +831,7 @@ export def "files-info info" [
   let full_url = (build-url $base $"/files/($owner)/($repo)/($identifier)/info/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all supported package formats.
@@ -822,13 +846,14 @@ export def "formats list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, distributions: list<record>, extensions: list<string>, name: string, premium: bool, premium_plan_id: string, premium_plan_name: string, slug: string, supports: record<dependencies: bool, distributions: bool, file_lists: bool, filepaths: bool, metadata: bool, upstreams: record, versioning: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/formats/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific supported package format.
@@ -844,13 +869,14 @@ export def "formats read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, distributions: table<name: string, self_url: string, slug: string, variants: string>, extensions: list<string>, name: string, premium: bool, premium_plan_id: string, premium_plan_name: string, slug: string, supports: record<dependencies: bool, distributions: bool, file_lists: bool, filepaths: bool, metadata: bool, upstreams: record<auth_modes: list, caching: bool, indexing: bool, indexing_behavior: string, proxying: bool, signature_verification: string, trust: bool>, versioning: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/formats/($slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View for listing entitlement token metrics, across an account.
@@ -866,6 +892,7 @@ export def "metrics-entitlements list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --finish: string # Include metrics upto and including this UTC date or UTC datetime. For example '2020-12-31' or '2021-12-13T00:00:00Z'.
@@ -878,7 +905,7 @@ export def "metrics-entitlements list" [
   let full_url = (build-url $base $"/metrics/entitlements/($owner)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View for listing entitlement token metrics, for a repository.
@@ -895,6 +922,7 @@ export def "metrics-entitlements list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --finish: string # Include metrics upto and including this UTC date or UTC datetime. For example '2020-12-31' or '2021-12-13T00:00:00Z'.
@@ -907,7 +935,7 @@ export def "metrics-entitlements list-1" [
   let full_url = (build-url $base $"/metrics/entitlements/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View for listing package usage metrics, for a repository.
@@ -924,6 +952,7 @@ export def "metrics-packages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --finish: string # Include metrics upto and including this UTC date or UTC datetime. For example '2020-12-31' or '2021-12-13T00:00:00Z'.
@@ -936,7 +965,7 @@ export def "metrics-packages list" [
   let full_url = (build-url $base $"/metrics/packages/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all namespaces the user belongs to.
@@ -951,6 +980,7 @@ export def "namespaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<name: string, slug: string, slug_perm: string, type_name: string> {
@@ -960,7 +990,7 @@ export def "namespaces list" [
   let full_url = (build-url $base "/namespaces/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific namespace that the user belongs to.
@@ -976,13 +1006,14 @@ export def "namespaces read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, slug: string, slug_perm: string, type_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all the organizations you are associated with.
@@ -997,6 +1028,7 @@ export def "orgs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<country: string, created_at: string, location: string, name: string, slug: string, slug_perm: string, tagline: string> {
@@ -1006,7 +1038,7 @@ export def "orgs list" [
   let full_url = (build-url $base "/orgs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details for the specific organization.
@@ -1022,13 +1054,14 @@ export def "orgs read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<country: string, created_at: string, location: string, name: string, slug: string, slug_perm: string, tagline: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specified organization.
@@ -1044,13 +1077,14 @@ export def "orgs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details for all custom domains.
@@ -1066,6 +1100,7 @@ export def "orgs-custom-domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<backend_kind: int, created_at: string, created_by: int, dns_alias_value: string, dns_cert_name: string, dns_cert_value: string, domain_type: int, enabled: bool, host: string, namespace: int, primary: bool, redirect_root: bool, redirect_root_url: string, repository: record<name: string, slug: string>, repository_only: bool, slug_perm: string, validated: bool, validated_at: string> {
@@ -1075,7 +1110,7 @@ export def "orgs-custom-domains list" [
   let full_url = (build-url $base $"/orgs/($org)/custom-domains/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all package deny policies.
@@ -1091,6 +1126,7 @@ export def "orgs-deny-policy list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<action: string, created_at: string, description: string, enabled: bool, name: string, package_query_string: string, slug_perm: string, status: string, updated_at: string> {
@@ -1100,7 +1136,7 @@ export def "orgs-deny-policy list" [
   let full_url = (build-url $base $"/orgs/($org)/deny-policy/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a package deny policy.
@@ -1116,6 +1152,7 @@ export def "orgs-deny-policy create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
@@ -1129,7 +1166,7 @@ export def "orgs-deny-policy create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a package deny policy.
@@ -1146,13 +1183,14 @@ export def "orgs-deny-policy read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<action: string, created_at: string, description: string, enabled: bool, name: string, package_query_string: string, slug_perm: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/deny-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a package deny policy.
@@ -1169,6 +1207,7 @@ export def "orgs-deny-policy update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
@@ -1182,7 +1221,7 @@ export def "orgs-deny-policy update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a package deny policy.
@@ -1199,6 +1238,7 @@ export def "orgs-deny-policy patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
@@ -1212,7 +1252,7 @@ export def "orgs-deny-policy patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a package deny policy.
@@ -1229,13 +1269,14 @@ export def "orgs-deny-policy delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/deny-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all invites for an organization.
@@ -1251,6 +1292,7 @@ export def "orgs-invites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<email: string, expires_at: string, inviter: string, inviter_url: string, org: string, role: string, slug_perm: string, teams: list<record>, user: string, user_url: string> {
@@ -1260,7 +1302,7 @@ export def "orgs-invites list" [
   let full_url = (build-url $base $"/orgs/($org)/invites/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an organization invite for a specific user
@@ -1277,6 +1319,7 @@ export def "orgs-invites create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the user to be invited. (format: email)
   --role: string@role-completer # The role to be assigned to the invited user. (default: Member)
   --teams: list # item shape: {role?: "Manager"|"Member", team: string}
@@ -1290,7 +1333,7 @@ export def "orgs-invites create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a specific organization invite.
@@ -1307,6 +1350,7 @@ export def "orgs-invites patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The role to be assigned to the invited user. (default: Member)
 ]: any -> record<email: string, expires_at: string, inviter: string, inviter_url: string, org: string, role: string, slug_perm: string, teams: table<role: string, team: string>, user: string, user_url: string> {
   let input = $in
@@ -1317,7 +1361,7 @@ export def "orgs-invites patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific organization invite
@@ -1334,13 +1378,14 @@ export def "orgs-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/invites/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extend an organization invite.
@@ -1357,13 +1402,14 @@ export def "orgs-invites-extend extend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, expires_at: string, inviter: string, inviter_url: string, org: string, role: string, slug_perm: string, teams: table<role: string, team: string>, user: string, user_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/invites/($slug_perm)/extend/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend an organization invite.
@@ -1380,13 +1426,14 @@ export def "orgs-invites-resend resend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, expires_at: string, inviter: string, inviter_url: string, org: string, role: string, slug_perm: string, teams: table<role: string, team: string>, user: string, user_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/invites/($slug_perm)/resend/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all current license policy violations for this Organization.
@@ -1402,6 +1449,7 @@ export def "orgs-license-policy-violation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor value.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<next: string, previous: string, results: table<event_at: string, package: record, policy: record, reasons: list>> {
@@ -1411,7 +1459,7 @@ export def "orgs-license-policy-violation list" [
   let full_url = (build-url $base $"/orgs/($org)/license-policy-violation/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all package license policies.
@@ -1427,6 +1475,7 @@ export def "orgs-license-policy list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string> {
@@ -1436,7 +1485,7 @@ export def "orgs-license-policy list" [
   let full_url = (build-url $base $"/orgs/($org)/license-policy/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a package license policy.
@@ -1452,6 +1501,7 @@ export def "orgs-license-policy create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   name: string
@@ -1467,7 +1517,7 @@ export def "orgs-license-policy create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List evaluation requests for this policy.
@@ -1484,6 +1534,7 @@ export def "orgs-license-policy-evaluation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, evaluation_count: int, policy: record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
@@ -1493,7 +1544,7 @@ export def "orgs-license-policy-evaluation list" [
   let full_url = (build-url $base $"/orgs/($org)/license-policy/($policy_slug_perm)/evaluation/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an evaluation request for this policy.
@@ -1510,6 +1561,7 @@ export def "orgs-license-policy-evaluation create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<created_at: string, evaluation_count: int, policy: record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
   let input = $in
@@ -1519,7 +1571,7 @@ export def "orgs-license-policy-evaluation create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an evaluation request for this policy.
@@ -1537,13 +1589,14 @@ export def "orgs-license-policy-evaluation read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, evaluation_count: int, policy: record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/license-policy/($policy_slug_perm)/evaluation/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a package license policy.
@@ -1560,13 +1613,14 @@ export def "orgs-license-policy read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/license-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a package license policy.
@@ -1583,6 +1637,7 @@ export def "orgs-license-policy update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   name: string
@@ -1598,7 +1653,7 @@ export def "orgs-license-policy update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a package license policy.
@@ -1615,6 +1670,7 @@ export def "orgs-license-policy patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   --name: string
@@ -1630,7 +1686,7 @@ export def "orgs-license-policy patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a package license policy.
@@ -1647,13 +1703,14 @@ export def "orgs-license-policy delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/license-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details for all organization members.
@@ -1669,6 +1726,7 @@ export def "orgs-members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --is-active: oneof<nothing, bool> # Filter for active/inactive users. (default: false)
@@ -1681,7 +1739,7 @@ export def "orgs-members list" [
   let full_url = (build-url $base $"/orgs/($org)/members/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details for a specific organization member.
@@ -1698,13 +1756,14 @@ export def "orgs-members read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, has_two_factor: bool, is_active: bool, joined_at: string, last_login_at: string, last_login_method: string, role: string, teams: table<name: string, role: string, slug: string>, user: string, user_id: string, user_name: string, user_url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/members/($member)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Views for working with organization members.
@@ -1721,6 +1780,7 @@ export def "orgs-members patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<email: string, has_two_factor: bool, is_active: bool, joined_at: string, last_login_at: string, last_login_method: string, role: string, teams: table<name: string, role: string, slug: string>, user: string, user_id: string, user_name: string, user_url: string, visibility: string> {
   let input = $in
@@ -1730,7 +1790,7 @@ export def "orgs-members patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a member from the organization.
@@ -1747,13 +1807,14 @@ export def "orgs-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/members/($member)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh a member of the organization's API key.
@@ -1770,13 +1831,14 @@ export def "orgs-members-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/members/($member)/refresh/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a member from the organization (deprecated, use DELETE instead).
@@ -1793,13 +1855,14 @@ export def "orgs-members-remove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/members/($member)/remove/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a member's role in the organization.
@@ -1816,6 +1879,7 @@ export def "orgs-members-update-role role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # default: Owner
 ]: any -> record<email: string, has_two_factor: bool, joined_at: string, last_login_at: string, last_login_method: string, role: string, user: string, user_id: string, user_name: string, user_url: string, visibility: string> {
   let input = $in
@@ -1826,7 +1890,7 @@ export def "orgs-members-update-role role" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a member's visibility in the organization.
@@ -1843,6 +1907,7 @@ export def "orgs-members-update-visibility visibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer # default: Public
 ]: any -> record<email: string, has_two_factor: bool, joined_at: string, last_login_at: string, last_login_method: string, role: string, user: string, user_id: string, user_name: string, user_url: string, visibility: string> {
   let input = $in
@@ -1853,7 +1918,7 @@ export def "orgs-members-update-visibility visibility" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the list of OpenID Connect provider settings for the org.
@@ -1869,6 +1934,7 @@ export def "orgs-openid-connect list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --qp-query: string # A search term for querying of OpenID Connect (OIDC) provider settings.Available options are: name, provider_url, service_account (default: )
@@ -1880,7 +1946,7 @@ export def "orgs-openid-connect list" [
   let full_url = (build-url $base $"/orgs/($org)/openid-connect/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create the OpenID Connect provider settings for the org.
@@ -1897,6 +1963,7 @@ export def "orgs-openid-connect create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
   --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
@@ -1913,7 +1980,7 @@ export def "orgs-openid-connect create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the list of OpenID Connect dynamic mappings for the provider setting.
@@ -1930,6 +1997,7 @@ export def "orgs-openid-connect-dynamic-mappings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<claim_value: string, service_account: string> {
@@ -1939,7 +2007,7 @@ export def "orgs-openid-connect-dynamic-mappings list" [
   let full_url = (build-url $base $"/orgs/($org)/openid-connect/($provider_setting)/dynamic-mappings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a specific OpenID Connect dynamic mapping for the provider setting.
@@ -1957,13 +2025,14 @@ export def "orgs-openid-connect-dynamic-mappings read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<claim_value: string, service_account: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/openid-connect/($provider_setting)/dynamic-mappings/($claim_value)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a specific OpenID Connect provider setting for the org.
@@ -1980,13 +2049,14 @@ export def "orgs-openid-connect read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<claims: record, enabled: bool, mapping_claim: string, name: string, provider_url: string, service_accounts: list<string>, slug: string, slug_perm: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/openid-connect/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a specific OpenID Connect provider setting for the org.
@@ -2004,6 +2074,7 @@ export def "orgs-openid-connect update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
   --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
@@ -2020,7 +2091,7 @@ export def "orgs-openid-connect update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a specific OpenID Connect provider setting for the org.
@@ -2038,6 +2109,7 @@ export def "orgs-openid-connect patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
   --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
@@ -2054,7 +2126,7 @@ export def "orgs-openid-connect patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific OpenID Connect provider setting for the org.
@@ -2071,13 +2143,14 @@ export def "orgs-openid-connect delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/openid-connect/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the SAML Authentication settings for this Organization.
@@ -2093,13 +2166,14 @@ export def "orgs-saml-authentication read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<saml_auth_enabled: bool, saml_auth_enforced: bool, saml_metadata_inline: string, saml_metadata_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/saml-authentication")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the SAML Authentication settings for this Organization.
@@ -2115,6 +2189,7 @@ export def "orgs-saml-authentication patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --saml-auth-enabled: oneof<nothing, bool>
   --saml-auth-enforced: oneof<nothing, bool>
   --saml-metadata-inline: string # If configured, SAML metadata will be used as entered instead of retrieved from a remote URL.
@@ -2128,7 +2203,7 @@ export def "orgs-saml-authentication patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the details of all SAML Group Sync mapping within an organization.
@@ -2144,6 +2219,7 @@ export def "orgs-saml-group-sync list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<idp_key: string, idp_value: string, role: string, slug_perm: string, team: string> {
@@ -2153,7 +2229,7 @@ export def "orgs-saml-group-sync list" [
   let full_url = (build-url $base $"/orgs/($org)/saml-group-sync/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new SAML Group Sync mapping within an organization.
@@ -2169,6 +2245,7 @@ export def "orgs-saml-group-sync create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idp_key: string
   idp_value: string
   organization: string
@@ -2183,7 +2260,7 @@ export def "orgs-saml-group-sync create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Disable SAML Group Sync for this organization.
@@ -2199,13 +2276,14 @@ export def "orgs-saml-group-sync-disable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/saml-group-sync/disable/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable SAML Group Sync for this organization.
@@ -2221,13 +2299,14 @@ export def "orgs-saml-group-sync-enable enable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/saml-group-sync/enable/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the SAML Group Sync status for this organization.
@@ -2243,13 +2322,14 @@ export def "orgs-saml-group-sync-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<saml_group_sync_status: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/saml-group-sync/status/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a SAML Group Sync mapping from an organization.
@@ -2266,13 +2346,14 @@ export def "orgs-saml-group-sync delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/saml-group-sync/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all services within an organization.
@@ -2288,6 +2369,7 @@ export def "orgs-services list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --qp-query: string # A search term for querying of services within an Organization.Available options are: name, role (default: )
@@ -2299,7 +2381,7 @@ export def "orgs-services list" [
   let full_url = (build-url $base $"/orgs/($org)/services/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service within an organization.
@@ -2316,6 +2398,7 @@ export def "orgs-services create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the service
   name: string # The name of the service
   --role: string@role-completer-1 # The role of the service. (default: Member)
@@ -2329,7 +2412,7 @@ export def "orgs-services create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve details of a single service within an organization.
@@ -2346,13 +2429,14 @@ export def "orgs-services read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, created_by: string, created_by_url: string, description: string, key: string, key_expires_at: string, name: string, role: string, slug: string, teams: table<name: string, role: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/services/($service)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a service within an organization.
@@ -2370,6 +2454,7 @@ export def "orgs-services patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the service
   --name: string # The name of the service
   --role: string@role-completer-1 # The role of the service. (default: Member)
@@ -2383,7 +2468,7 @@ export def "orgs-services patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific service
@@ -2400,13 +2485,14 @@ export def "orgs-services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/services/($service)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh service API token.
@@ -2423,13 +2509,14 @@ export def "orgs-services-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, created_by: string, created_by_url: string, description: string, key: string, key_expires_at: string, name: string, role: string, slug: string, teams: table<name: string, role: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/services/($service)/refresh/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details of all teams within an organization.
@@ -2445,6 +2532,7 @@ export def "orgs-teams list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --for-user: oneof<nothing, bool> # Filter for teams that you are a member of. (default: false)
@@ -2457,7 +2545,7 @@ export def "orgs-teams list" [
   let full_url = (build-url $base $"/orgs/($org)/teams/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a team for this organization.
@@ -2473,6 +2561,7 @@ export def "orgs-teams create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A detailed description of the team.
   name: string # A descriptive name for the team.
   --slug: string # format: slug
@@ -2486,7 +2575,7 @@ export def "orgs-teams create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the details of a specific team within an organization.
@@ -2503,13 +2592,14 @@ export def "orgs-teams read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, name: string, slug: string, slug_perm: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/teams/($team)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a specific team in a organization.
@@ -2526,6 +2616,7 @@ export def "orgs-teams patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A detailed description of the team.
   --name: string # A descriptive name for the team.
   --slug: string # format: slug
@@ -2539,7 +2630,7 @@ export def "orgs-teams patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific team in a organization.
@@ -2556,13 +2647,14 @@ export def "orgs-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/teams/($team)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all members for the team.
@@ -2579,6 +2671,7 @@ export def "orgs-teams-members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-kind: string # Filter accounts by type. Possible values are 'user' and 'service'. If not provided, only users are returned. (default: )
 ]: nothing -> record<members: table<role: string, user: string, user_kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2587,7 +2680,7 @@ export def "orgs-teams-members list" [
   let full_url = (build-url $base $"/orgs/($org)/teams/($team)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add users to a team.
@@ -2605,6 +2698,7 @@ export def "orgs-teams-members create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # The team members — item shape: {role: "Manager"|"Member", user: string, user_kind?: "User"|"Service"}
 ]: any -> record<members: table<role: string, user: string, user_kind: string>> {
   let input = $in
@@ -2615,7 +2709,7 @@ export def "orgs-teams-members create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace all team members.
@@ -2633,6 +2727,7 @@ export def "orgs-teams-members update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # The team members — item shape: {role: "Manager"|"Member", user: string, user_kind?: "User"|"Service"}
 ]: any -> any {
   let input = $in
@@ -2643,7 +2738,7 @@ export def "orgs-teams-members update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all current vulnerability policy violations for this Organization.
@@ -2659,6 +2754,7 @@ export def "orgs-vulnerability-policy-violation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor value.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<next: string, previous: string, results: table<event_at: string, package: record, policy: record, reasons: list, vulnerability_scan_results: record>> {
@@ -2668,7 +2764,7 @@ export def "orgs-vulnerability-policy-violation list" [
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy-violation/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all package vulnerability policies.
@@ -2684,6 +2780,7 @@ export def "orgs-vulnerability-policy list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string> {
@@ -2693,7 +2790,7 @@ export def "orgs-vulnerability-policy list" [
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a package vulnerability policy.
@@ -2709,6 +2806,7 @@ export def "orgs-vulnerability-policy create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
@@ -2724,7 +2822,7 @@ export def "orgs-vulnerability-policy create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List evaluation requests for this policy.
@@ -2741,6 +2839,7 @@ export def "orgs-vulnerability-policy-evaluation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, evaluation_count: int, policy: record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
@@ -2750,7 +2849,7 @@ export def "orgs-vulnerability-policy-evaluation list" [
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy/($policy_slug_perm)/evaluation/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an evaluation request for this policy.
@@ -2767,6 +2866,7 @@ export def "orgs-vulnerability-policy-evaluation create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<created_at: string, evaluation_count: int, policy: record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
   let input = $in
@@ -2776,7 +2876,7 @@ export def "orgs-vulnerability-policy-evaluation create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an evaluation request for this policy.
@@ -2794,13 +2894,14 @@ export def "orgs-vulnerability-policy-evaluation read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, evaluation_count: int, policy: record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string, url: string>, slug_perm: string, status: string, updated_at: string, violation_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy/($policy_slug_perm)/evaluation/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a package vulnerability policy.
@@ -2817,13 +2918,14 @@ export def "orgs-vulnerability-policy read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a package vulnerability policy.
@@ -2840,6 +2942,7 @@ export def "orgs-vulnerability-policy update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
@@ -2855,7 +2958,7 @@ export def "orgs-vulnerability-policy update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a package vulnerability policy.
@@ -2872,6 +2975,7 @@ export def "orgs-vulnerability-policy patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
@@ -2887,7 +2991,7 @@ export def "orgs-vulnerability-policy patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a package vulnerability policy.
@@ -2904,13 +3008,14 @@ export def "orgs-vulnerability-policy delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($org)/vulnerability-policy/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all packages associated with repository.
@@ -2927,6 +3032,7 @@ export def "packages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
@@ -2939,7 +3045,7 @@ export def "packages list" [
   let full_url = (build-url $base $"/packages/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of Package Groups in a repository.
@@ -2956,6 +3062,7 @@ export def "packages-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --group-by: string # A field to group packages by. Available options: name, backend_kind. (default: name)
@@ -2970,7 +3077,7 @@ export def "packages-groups list" [
   let full_url = (build-url $base $"/packages/($owner)/($repo)/groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Alpine package
@@ -2987,6 +3094,7 @@ export def "packages-upload-alpine alpine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -3000,7 +3108,7 @@ export def "packages-upload-alpine alpine" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Cargo package
@@ -3017,6 +3125,7 @@ export def "packages-upload-cargo cargo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3029,7 +3138,7 @@ export def "packages-upload-cargo cargo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new CocoaPods package
@@ -3046,6 +3155,7 @@ export def "packages-upload-cocoapods cocoapods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3058,7 +3168,7 @@ export def "packages-upload-cocoapods cocoapods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Composer package
@@ -3075,6 +3185,7 @@ export def "packages-upload-composer composer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3088,7 +3199,7 @@ export def "packages-upload-composer composer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Conan package
@@ -3105,6 +3216,7 @@ export def "packages-upload-conan conan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conan-channel: string # Conan channel.
   --conan-prefix: string # Conan prefix (User).
   info_file: string # The info file is an python file containing the package metadata.
@@ -3124,7 +3236,7 @@ export def "packages-upload-conan conan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Conda package
@@ -3141,6 +3253,7 @@ export def "packages-upload-conda conda" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3153,7 +3266,7 @@ export def "packages-upload-conda conda" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new CRAN package
@@ -3170,6 +3283,7 @@ export def "packages-upload-cran cran" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --architecture: string # Binary package uploads for macOS should specify the architecture they were built for.
   package_file: string # The primary file for the package.
   --r-version: string # Binary package uploads should specify the version of R they were built for.
@@ -3184,7 +3298,7 @@ export def "packages-upload-cran cran" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Dart package
@@ -3201,6 +3315,7 @@ export def "packages-upload-dart dart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3213,7 +3328,7 @@ export def "packages-upload-dart dart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Debian package
@@ -3230,6 +3345,7 @@ export def "packages-upload-deb deb" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --changes-file: string # The changes archive containing the changes made to the source and debian packaging files
   --component: string # The component (channel) for the package (e.g. 'main', 'unstable', etc.) (default: main)
   distribution: string # The distribution to store the package for.
@@ -3246,7 +3362,7 @@ export def "packages-upload-deb deb" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Docker package
@@ -3263,6 +3379,7 @@ export def "packages-upload-docker docker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3275,7 +3392,7 @@ export def "packages-upload-docker docker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Generic package
@@ -3292,6 +3409,7 @@ export def "packages-upload-generic generic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filepath: string # The full filepath of the package including filename.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
@@ -3307,7 +3425,7 @@ export def "packages-upload-generic generic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Go package
@@ -3324,6 +3442,7 @@ export def "packages-upload-go go" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3336,7 +3455,7 @@ export def "packages-upload-go go" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Helm package
@@ -3353,6 +3472,7 @@ export def "packages-upload-helm helm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --provenance-file: string # The provenance file containing the signature for the chart. If one is not provided, it will be generated automatically.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -3366,7 +3486,7 @@ export def "packages-upload-helm helm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Hex package
@@ -3383,6 +3503,7 @@ export def "packages-upload-hex hex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3395,7 +3516,7 @@ export def "packages-upload-hex hex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new HuggingFace package
@@ -3412,6 +3533,7 @@ export def "packages-upload-huggingface huggingface" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3424,7 +3546,7 @@ export def "packages-upload-huggingface huggingface" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new LuaRocks package
@@ -3441,6 +3563,7 @@ export def "packages-upload-luarocks luarocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3453,7 +3576,7 @@ export def "packages-upload-luarocks luarocks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Maven package
@@ -3470,6 +3593,7 @@ export def "packages-upload-maven maven" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --artifact-id: string # The ID of the artifact.
   --extra-files: list # Extra files to include in the package. This can be a single file or multiple files.
   --group-id: string # Artifact's group ID.
@@ -3494,7 +3618,7 @@ export def "packages-upload-maven maven" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new MCP package
@@ -3511,6 +3635,7 @@ export def "packages-upload-mcp mcp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3524,7 +3649,7 @@ export def "packages-upload-mcp mcp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new npm package
@@ -3541,6 +3666,7 @@ export def "packages-upload-npm npm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --npm-dist-tag: string # The default npm dist-tag for this package/version - This will replace any other package/version if they are using the same tag. (default: latest)
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -3554,7 +3680,7 @@ export def "packages-upload-npm npm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new NuGet package
@@ -3571,6 +3697,7 @@ export def "packages-upload-nuget nuget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --symbols-file: string # Uploads a symbols file as a separate package
@@ -3584,7 +3711,7 @@ export def "packages-upload-nuget nuget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new P2 package
@@ -3601,6 +3728,7 @@ export def "packages-upload-p2 p2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3613,7 +3741,7 @@ export def "packages-upload-p2 p2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Python package
@@ -3630,6 +3758,7 @@ export def "packages-upload-python python" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3642,7 +3771,7 @@ export def "packages-upload-python python" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Raw package
@@ -3659,6 +3788,7 @@ export def "packages-upload-raw raw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # A custom content/media (also known as MIME) type to be sent when downloading this file. By default Cloudsmith will attempt to detect the type, but if you need to override it, you can specify it here.
   --description: string # A textual description of this package.
   --name: string # The name of this package.
@@ -3676,7 +3806,7 @@ export def "packages-upload-raw raw" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new RedHat package
@@ -3693,6 +3823,7 @@ export def "packages-upload-rpm rpm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -3706,7 +3837,7 @@ export def "packages-upload-rpm rpm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Ruby package
@@ -3723,6 +3854,7 @@ export def "packages-upload-ruby ruby" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3735,7 +3867,7 @@ export def "packages-upload-ruby ruby" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Swift package
@@ -3752,6 +3884,7 @@ export def "packages-upload-swift swift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --author-name: string # The name of the author of the package.
   --author-org: string # The organization of the author.
   --license-url: string # The license URL of this package. (format: uri)
@@ -3772,7 +3905,7 @@ export def "packages-upload-swift swift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Terraform package
@@ -3789,6 +3922,7 @@ export def "packages-upload-terraform terraform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3801,7 +3935,7 @@ export def "packages-upload-terraform terraform" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Vagrant package
@@ -3818,6 +3952,7 @@ export def "packages-upload-vagrant vagrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of this package.
   package_file: string # The primary file for the package.
   provider: string # The virtual machine provider for the box.
@@ -3833,7 +3968,7 @@ export def "packages-upload-vagrant vagrant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new VSX package
@@ -3850,6 +3985,7 @@ export def "packages-upload-vsx vsx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3862,7 +3998,7 @@ export def "packages-upload-vsx vsx" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Alpine package
@@ -3879,6 +4015,7 @@ export def "packages-validate-upload-alpine alpine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -3892,7 +4029,7 @@ export def "packages-validate-upload-alpine alpine" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Cargo package
@@ -3909,6 +4046,7 @@ export def "packages-validate-upload-cargo cargo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3921,7 +4059,7 @@ export def "packages-validate-upload-cargo cargo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create CocoaPods package
@@ -3938,6 +4076,7 @@ export def "packages-validate-upload-cocoapods cocoapods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3950,7 +4089,7 @@ export def "packages-validate-upload-cocoapods cocoapods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Composer package
@@ -3967,6 +4106,7 @@ export def "packages-validate-upload-composer composer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -3980,7 +4120,7 @@ export def "packages-validate-upload-composer composer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Conan package
@@ -3997,6 +4137,7 @@ export def "packages-validate-upload-conan conan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conan-channel: string # Conan channel.
   --conan-prefix: string # Conan prefix (User).
   info_file: string # The info file is an python file containing the package metadata.
@@ -4016,7 +4157,7 @@ export def "packages-validate-upload-conan conan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Conda package
@@ -4033,6 +4174,7 @@ export def "packages-validate-upload-conda conda" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4045,7 +4187,7 @@ export def "packages-validate-upload-conda conda" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create CRAN package
@@ -4062,6 +4204,7 @@ export def "packages-validate-upload-cran cran" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --architecture: string # Binary package uploads for macOS should specify the architecture they were built for.
   package_file: string # The primary file for the package.
   --r-version: string # Binary package uploads should specify the version of R they were built for.
@@ -4076,7 +4219,7 @@ export def "packages-validate-upload-cran cran" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Dart package
@@ -4093,6 +4236,7 @@ export def "packages-validate-upload-dart dart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4105,7 +4249,7 @@ export def "packages-validate-upload-dart dart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Debian package
@@ -4122,6 +4266,7 @@ export def "packages-validate-upload-deb deb" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --changes-file: string # The changes archive containing the changes made to the source and debian packaging files
   --component: string # The component (channel) for the package (e.g. 'main', 'unstable', etc.) (default: main)
   distribution: string # The distribution to store the package for.
@@ -4138,7 +4283,7 @@ export def "packages-validate-upload-deb deb" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Docker package
@@ -4155,6 +4300,7 @@ export def "packages-validate-upload-docker docker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4167,7 +4313,7 @@ export def "packages-validate-upload-docker docker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Generic package
@@ -4184,6 +4330,7 @@ export def "packages-validate-upload-generic generic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filepath: string # The full filepath of the package including filename.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
@@ -4199,7 +4346,7 @@ export def "packages-validate-upload-generic generic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Go package
@@ -4216,6 +4363,7 @@ export def "packages-validate-upload-go go" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4228,7 +4376,7 @@ export def "packages-validate-upload-go go" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Helm package
@@ -4245,6 +4393,7 @@ export def "packages-validate-upload-helm helm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --provenance-file: string # The provenance file containing the signature for the chart. If one is not provided, it will be generated automatically.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -4258,7 +4407,7 @@ export def "packages-validate-upload-helm helm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Hex package
@@ -4275,6 +4424,7 @@ export def "packages-validate-upload-hex hex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4287,7 +4437,7 @@ export def "packages-validate-upload-hex hex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create HuggingFace package
@@ -4304,6 +4454,7 @@ export def "packages-validate-upload-huggingface huggingface" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4316,7 +4467,7 @@ export def "packages-validate-upload-huggingface huggingface" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create LuaRocks package
@@ -4333,6 +4484,7 @@ export def "packages-validate-upload-luarocks luarocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4345,7 +4497,7 @@ export def "packages-validate-upload-luarocks luarocks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Maven package
@@ -4362,6 +4514,7 @@ export def "packages-validate-upload-maven maven" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --artifact-id: string # The ID of the artifact.
   --extra-files: list # Extra files to include in the package. This can be a single file or multiple files.
   --group-id: string # Artifact's group ID.
@@ -4386,7 +4539,7 @@ export def "packages-validate-upload-maven maven" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create MCP package
@@ -4403,6 +4556,7 @@ export def "packages-validate-upload-mcp mcp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4416,7 +4570,7 @@ export def "packages-validate-upload-mcp mcp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create npm package
@@ -4433,6 +4587,7 @@ export def "packages-validate-upload-npm npm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --npm-dist-tag: string # The default npm dist-tag for this package/version - This will replace any other package/version if they are using the same tag. (default: latest)
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -4446,7 +4601,7 @@ export def "packages-validate-upload-npm npm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create NuGet package
@@ -4463,6 +4618,7 @@ export def "packages-validate-upload-nuget nuget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --symbols-file: string # Uploads a symbols file as a separate package
@@ -4476,7 +4632,7 @@ export def "packages-validate-upload-nuget nuget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create P2 package
@@ -4493,6 +4649,7 @@ export def "packages-validate-upload-p2 p2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4505,7 +4662,7 @@ export def "packages-validate-upload-p2 p2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Python package
@@ -4522,6 +4679,7 @@ export def "packages-validate-upload-python python" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4534,7 +4692,7 @@ export def "packages-validate-upload-python python" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Raw package
@@ -4551,6 +4709,7 @@ export def "packages-validate-upload-raw raw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # A custom content/media (also known as MIME) type to be sent when downloading this file. By default Cloudsmith will attempt to detect the type, but if you need to override it, you can specify it here.
   --description: string # A textual description of this package.
   --name: string # The name of this package.
@@ -4568,7 +4727,7 @@ export def "packages-validate-upload-raw raw" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create RedHat package
@@ -4585,6 +4744,7 @@ export def "packages-validate-upload-rpm rpm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
@@ -4598,7 +4758,7 @@ export def "packages-validate-upload-rpm rpm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Ruby package
@@ -4615,6 +4775,7 @@ export def "packages-validate-upload-ruby ruby" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4627,7 +4788,7 @@ export def "packages-validate-upload-ruby ruby" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Swift package
@@ -4644,6 +4805,7 @@ export def "packages-validate-upload-swift swift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --author-name: string # The name of the author of the package.
   --author-org: string # The organization of the author.
   --license-url: string # The license URL of this package. (format: uri)
@@ -4664,7 +4826,7 @@ export def "packages-validate-upload-swift swift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Terraform package
@@ -4681,6 +4843,7 @@ export def "packages-validate-upload-terraform terraform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4693,7 +4856,7 @@ export def "packages-validate-upload-terraform terraform" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create Vagrant package
@@ -4710,6 +4873,7 @@ export def "packages-validate-upload-vagrant vagrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of this package.
   package_file: string # The primary file for the package.
   provider: string # The virtual machine provider for the box.
@@ -4725,7 +4889,7 @@ export def "packages-validate-upload-vagrant vagrant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate parameters for create VSX package
@@ -4742,6 +4906,7 @@ export def "packages-validate-upload-vsx vsx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   package_file: string # The primary file for the package.
   --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
@@ -4754,7 +4919,7 @@ export def "packages-validate-upload-vsx vsx" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a specific package in a repository.
@@ -4772,6 +4937,7 @@ export def "packages read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4780,7 +4946,7 @@ export def "packages read" [
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a specific package in a repository.
@@ -4798,13 +4964,14 @@ export def "packages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy a package to another repository.
@@ -4822,6 +4989,7 @@ export def "packages-copy copy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # The name of the destination repository without the namespace.
   --republish: oneof<nothing, bool> # If true, the package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -4833,7 +5001,7 @@ export def "packages-copy copy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of dependencies for a package. Transitive dependencies are included where supported.
@@ -4851,6 +5019,7 @@ export def "packages-dependencies dependencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<dependencies: table<dep_type: string, name: string, operator: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4859,7 +5028,7 @@ export def "packages-dependencies dependencies" [
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/dependencies/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move a package to another repository.
@@ -4877,6 +5046,7 @@ export def "packages-move move" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # The name of the destination repository without the namespace.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -4887,7 +5057,7 @@ export def "packages-move move" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Quarantine or release a package.
@@ -4905,6 +5075,7 @@ export def "packages-quarantine quarantine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --release: oneof<nothing, bool> # If true, the package is released from quarantine.
   --restore: oneof<nothing, bool> # If true, the package is released from quarantine. Note: This field is deprecated, please use 'release' instead.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -4916,7 +5087,7 @@ export def "packages-quarantine quarantine" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Schedule a package for resynchronisation.
@@ -4934,13 +5105,14 @@ export def "packages-resync resync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/resync/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Schedule a package for scanning.
@@ -4958,13 +5130,14 @@ export def "packages-scan scan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/scan/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the synchronization status for a package.
@@ -4982,6 +5155,7 @@ export def "packages-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, self_url: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, sync_finished_at: string, sync_progress: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4990,7 +5164,7 @@ export def "packages-status status" [
   let full_url = (build-url $base $"/packages/($owner)/($repo)/($identifier)/status/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add/Replace/Remove tags for a package.
@@ -5008,6 +5182,7 @@ export def "packages-tag tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-1 # default: Add
   --is-immutable: oneof<nothing, bool> # If true, created tags will be immutable. An immutable flag is a tag that cannot be removed from a package. (default: false)
   --tags: list # A list of tags to apply the action to. Not required for clears. (default: [])
@@ -5020,7 +5195,7 @@ export def "packages-tag tag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the license for a package.
@@ -5038,6 +5213,7 @@ export def "packages-update-license license" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-2 # default: Update
   --license-notes: string
   --license-override: string@license-override-completer # default: None
@@ -5052,7 +5228,7 @@ export def "packages-update-license license" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Quota history for a given namespace.
@@ -5068,13 +5244,14 @@ export def "quota-history read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<history: table<days: int, display: record, end: string, plan: string, raw: record, start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/quota/history/($owner)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Open-source Quota history for a given namespace.
@@ -5090,13 +5267,14 @@ export def "quota-oss-history read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<history: table<days: int, display: record, end: string, plan: string, raw: record, start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/quota/oss/history/($owner)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Open-source Quota usage for a given namespace.
@@ -5112,13 +5290,14 @@ export def "quota-oss read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: record<display: record<bandwidth: record, storage: record>, raw: record<bandwidth: record, storage: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/quota/oss/($owner)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Quota usage for a given namespace.
@@ -5134,13 +5313,14 @@ export def "quota read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: record<display: record<bandwidth: record, storage: record>, raw: record<bandwidth: record, storage: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/quota/($owner)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Endpoint to check rate limits for current user.
@@ -5155,13 +5335,14 @@ export def "rates-limits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<resources: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rates/limits/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List soft-deleted packages in recycle bin
@@ -5177,6 +5358,7 @@ export def "recycle-bin list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --repository: string # Filter packages by repository slug
@@ -5187,7 +5369,7 @@ export def "recycle-bin list" [
   let full_url = (build-url $base $"/recycle-bin/($owner)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform actions on soft-deleted packages in the recycle bin. Supported actions: permanently delete (hard delete), restore. Returns a list of successfully actioned packages and any packages that failed with error details. 
@@ -5203,6 +5385,7 @@ export def "recycle-bin-action action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer-3 # The action to perform on soft-deleted packages.
   identifiers: list # A list of soft-deleted package identifiers to action.
   --repository: string # The repository name to filter packages to. If not provided, the action will be performed across all accessible repositories in the workspace.
@@ -5215,7 +5398,7 @@ export def "recycle-bin-action action" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of all repositories associated with current user.
@@ -5230,6 +5413,7 @@ export def "repos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<active_connection_count: int, broadcast_state: string, cdn_url: string, content_kind: string, contextual_auth_realm: bool, copy_own: bool, copy_packages: string, cosign_signing_enabled: bool, created_at: string, default_privilege: string, delete_own: bool, delete_packages: string, deleted_at: string, description: string, distributes: list<string>, docker_refresh_tokens_enabled: bool, ecdsa_keys: list<record>, enforce_eula: bool, generic_package_index_enabled: bool, gpg_keys: list<record>, index_files: bool, is_open_source: bool, is_private: bool, is_public: bool, is_public_hidden: bool, manage_entitlements_privilege: string, move_own: bool, move_packages: string, name: string, namespace: string, namespace_url: string, npm_upstream_tags_take_precedence: bool, nuget_native_signing_enabled: bool, num_downloads: int, num_policy_violated_packages: int, num_quarantined_packages: int, open_source_license: string, open_source_project_url: string, package_count: int, package_count_excl_subcomponents: int, package_group_count: int, proxy_npmjs: bool, proxy_pypi: bool, raw_package_index_enabled: bool, raw_package_index_signatures_enabled: bool, replace_packages: string, replace_packages_by_default: bool, repository_type: int, repository_type_str: string, resync_own: bool, resync_packages: string, scan_own: bool, scan_packages: string, self_html_url: string, self_url: string, self_webapp_url: string, show_setup_all: bool, size: int, size_str: string, slug: string, slug_perm: string, storage_region: string, strict_npm_validation: bool, tag_pre_releases_as_latest: bool, use_debian_labels: bool, use_default_cargo_upstream: bool, use_entitlements_privilege: string, use_noarch_packages: bool, use_source_packages: bool, use_vulnerability_scanning: bool, user_entitlements_enabled: bool, view_statistics: string> {
@@ -5239,7 +5423,7 @@ export def "repos list" [
   let full_url = (build-url $base "/repos/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all repositories within a namespace.
@@ -5255,6 +5439,7 @@ export def "repos list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --qp-query: string # A search term for querying repositories. Available options are: name, slug. Explicit filters: broadcast_state, repository_type. (default: )
@@ -5266,7 +5451,7 @@ export def "repos list-1" [
   let full_url = (build-url $base $"/repos/($owner)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new repository in a given namespace.
@@ -5282,6 +5467,7 @@ export def "repos create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcast-state: string@broadcast-state-completer # Broadcasting status of a repository. (default: Off)
   --content-kind: string@content-kind-completer # The repository content kind determines whether this repository contains packages, or provides a distribution of packages from other repositories. You can only select the content kind at repository creation time. (default: Standard)
   --contextual-auth-realm: oneof<nothing, bool> # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
@@ -5339,7 +5525,7 @@ export def "repos create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a specific repository.
@@ -5356,13 +5542,14 @@ export def "repos read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active_connection_count: int, broadcast_state: string, cdn_url: string, content_kind: string, contextual_auth_realm: bool, copy_own: bool, copy_packages: string, cosign_signing_enabled: bool, created_at: string, default_privilege: string, delete_own: bool, delete_packages: string, deleted_at: string, description: string, distributes: list<string>, docker_refresh_tokens_enabled: bool, ecdsa_keys: table<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string>, enforce_eula: bool, generic_package_index_enabled: bool, gpg_keys: table<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string>, index_files: bool, is_open_source: bool, is_private: bool, is_public: bool, is_public_hidden: bool, manage_entitlements_privilege: string, move_own: bool, move_packages: string, name: string, namespace: string, namespace_url: string, npm_upstream_tags_take_precedence: bool, nuget_native_signing_enabled: bool, num_downloads: int, num_policy_violated_packages: int, num_quarantined_packages: int, open_source_license: string, open_source_project_url: string, package_count: int, package_count_excl_subcomponents: int, package_group_count: int, proxy_npmjs: bool, proxy_pypi: bool, raw_package_index_enabled: bool, raw_package_index_signatures_enabled: bool, replace_packages: string, replace_packages_by_default: bool, repository_type: int, repository_type_str: string, resync_own: bool, resync_packages: string, scan_own: bool, scan_packages: string, self_html_url: string, self_url: string, self_webapp_url: string, show_setup_all: bool, size: int, size_str: string, slug: string, slug_perm: string, storage_region: string, strict_npm_validation: bool, tag_pre_releases_as_latest: bool, use_debian_labels: bool, use_default_cargo_upstream: bool, use_entitlements_privilege: string, use_noarch_packages: bool, use_source_packages: bool, use_vulnerability_scanning: bool, user_entitlements_enabled: bool, view_statistics: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update details about a repository in a given namespace.
@@ -5379,6 +5566,7 @@ export def "repos patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcast-state: string@broadcast-state-completer # Broadcasting status of a repository. (default: Off)
   --content-kind: string@content-kind-completer # The repository content kind determines whether this repository contains packages, or provides a distribution of packages from other repositories. You can only select the content kind at repository creation time. (default: Standard)
   --contextual-auth-realm: oneof<nothing, bool> # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
@@ -5435,7 +5623,7 @@ export def "repos patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a repository in a given namespace.  Note: Repositories are soft-deleted and can be restored within a retention period. During this time, the repository's slug remains reserved and cannot be reused for new repositories.
@@ -5452,13 +5640,14 @@ export def "repos delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List connected repositories for this repository.
@@ -5475,6 +5664,7 @@ export def "repos-connected list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<results: table<created_at: string, is_active: bool, priority: int, slug_perm: string, target_repository: string>> {
@@ -5484,7 +5674,7 @@ export def "repos-connected list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/connected/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a connected repository for this repository.
@@ -5501,6 +5691,7 @@ export def "repos-connected create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   target_repository: string # The slug of the target repository to connect to. (format: slug)
@@ -5513,7 +5704,7 @@ export def "repos-connected create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a connected repository for this repository.
@@ -5531,13 +5722,14 @@ export def "repos-connected read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, is_active: bool, priority: int, slug_perm: string, target_repository: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/connected/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a connected repository for this repository.
@@ -5555,6 +5747,7 @@ export def "repos-connected update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   target_repository: string # The slug of the target repository to connect to. (format: slug)
@@ -5567,7 +5760,7 @@ export def "repos-connected update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a connected repository for this repository.
@@ -5585,6 +5778,7 @@ export def "repos-connected patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   --target-repository: string # The slug of the target repository to connect to. (format: slug)
@@ -5597,7 +5791,7 @@ export def "repos-connected patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a connected repository for this repository.
@@ -5615,13 +5809,14 @@ export def "repos-connected delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/connected/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the active ECDSA key for the Repository.
@@ -5638,13 +5833,14 @@ export def "repos-ecdsa list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ecdsa/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the active ECDSA key for the Repository.
@@ -5661,6 +5857,7 @@ export def "repos-ecdsa create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ecdsa-passphrase: string # The ECDSA passphrase used for signing.
   ecdsa_private_key: string # The ECDSA private key.
 ]: any -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
@@ -5672,7 +5869,7 @@ export def "repos-ecdsa create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Regenerate ECDSA Key for the Repository.
@@ -5689,13 +5886,14 @@ export def "repos-ecdsa-regenerate regenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ecdsa/regenerate/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the active Ed25519 key for the Repository.
@@ -5712,13 +5910,14 @@ export def "repos-ed25519 list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ed25519/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the active Ed25519 key for the Repository.
@@ -5735,6 +5934,7 @@ export def "repos-ed25519 create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ed25519-passphrase: string # The Ed25519 passphrase used for signing.
   ed25519_private_key: string # The Ed25519 private key.
 ]: any -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
@@ -5746,7 +5946,7 @@ export def "repos-ed25519 create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Regenerate Ed25519 Key for the Repository.
@@ -5763,13 +5963,14 @@ export def "repos-ed25519-regenerate regenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ed25519/regenerate/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all repository geoip rules.
@@ -5786,13 +5987,14 @@ export def "repos-geoip read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cidr: record<allow: list<string>, deny: list<string>>, country_code: record<allow: list<string>, deny: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/geoip")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace repository geoip rules.
@@ -5811,6 +6013,7 @@ export def "repos-geoip update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cidr: record # shape: {allow: list, deny: list}
   country_code: record # shape: {allow: list, deny: list}
 ]: any -> record<cidr: record<allow: list<string>, deny: list<string>>, country_code: record<allow: list<string>, deny: list<string>>> {
@@ -5822,7 +6025,7 @@ export def "repos-geoip update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update repository geoip rules.
@@ -5841,6 +6044,7 @@ export def "repos-geoip patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cidr: record # shape: {allow: list, deny: list}
   --country-code: record # shape: {allow: list, deny: list}
 ]: any -> record<cidr: record<allow: list<string>, deny: list<string>>, country_code: record<allow: list<string>, deny: list<string>>> {
@@ -5852,7 +6056,7 @@ export def "repos-geoip patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Disable GeoIP for this repository.
@@ -5869,6 +6073,7 @@ export def "repos-geoip-disable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5878,7 +6083,7 @@ export def "repos-geoip-disable disable" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Enable GeoIP for this repository.
@@ -5895,6 +6100,7 @@ export def "repos-geoip-enable enable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5904,7 +6110,7 @@ export def "repos-geoip-enable enable" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the GeoIP status for this repository.
@@ -5921,13 +6127,14 @@ export def "repos-geoip-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<geoip_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/geoip/status/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test a list of IP addresses against the repository's current GeoIP rules.
@@ -5944,6 +6151,7 @@ export def "repos-geoip-test test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   addresses: list # The IP addresses to test against this repository
 ]: any -> record<addresses: table<allowed: bool, country_code: string, ip_address: string, reason: string>> {
   let input = $in
@@ -5954,7 +6162,7 @@ export def "repos-geoip-test test" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the active GPG key for the Repository.
@@ -5971,13 +6179,14 @@ export def "repos-gpg list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/gpg/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the active GPG key for the Repository.
@@ -5994,6 +6203,7 @@ export def "repos-gpg create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gpg-passphrase: string # The GPG passphrase used for signing.
   gpg_private_key: string # The GPG private key.
 ]: any -> record<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
@@ -6005,7 +6215,7 @@ export def "repos-gpg create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Regenerate GPG Key for the Repository.
@@ -6022,13 +6232,14 @@ export def "repos-gpg-regenerate regenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/gpg/regenerate/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all explicity created privileges for the repository.
@@ -6045,6 +6256,7 @@ export def "repos-privileges list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<privileges: table<privilege: string, service: string, team: string, user: string>> {
@@ -6054,7 +6266,7 @@ export def "repos-privileges list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/privileges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace all existing repository privileges with those specified.
@@ -6072,6 +6284,7 @@ export def "repos-privileges update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   privileges: list # List of objects with explicit privileges to the repository. — item shape: {privilege: "Admin"|"Write"|"Read", service?: string, team?: string, user?: string}
 ]: any -> any {
   let input = $in
@@ -6082,7 +6295,7 @@ export def "repos-privileges update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Modify privileges for the repository.
@@ -6100,6 +6313,7 @@ export def "repos-privileges patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --privileges: list # List of objects with explicit privileges to the repository. — item shape: {privilege: "Admin"|"Write"|"Read", service?: string, team?: string, user?: string}
 ]: any -> any {
   let input = $in
@@ -6110,7 +6324,7 @@ export def "repos-privileges patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the active RSA key for the Repository.
@@ -6127,13 +6341,14 @@ export def "repos-rsa list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/rsa/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the active RSA key for the Repository.
@@ -6150,6 +6365,7 @@ export def "repos-rsa create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsa-passphrase: string # The RSA passphrase used for signing.
   rsa_private_key: string # The RSA private key.
 ]: any -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
@@ -6161,7 +6377,7 @@ export def "repos-rsa create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Regenerate RSA Key for the Repository.
@@ -6178,13 +6394,14 @@ export def "repos-rsa-regenerate regenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/rsa/regenerate/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Alpine upstream configs for this repository.
@@ -6201,6 +6418,7 @@ export def "repos-upstream-alpine list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, rsa_key_inline: string, rsa_key_url: string, rsa_verification: string, rsa_verification_status: string, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -6210,7 +6428,7 @@ export def "repos-upstream-alpine list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/alpine/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Alpine upstream config for this repository.
@@ -6227,6 +6445,7 @@ export def "repos-upstream-alpine create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6251,7 +6470,7 @@ export def "repos-upstream-alpine create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an Alpine upstream config for this repository.
@@ -6269,13 +6488,14 @@ export def "repos-upstream-alpine read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, rsa_key_inline: string, rsa_key_url: string, rsa_verification: string, rsa_verification_status: string, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/alpine/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Alpine upstream config for this repository.
@@ -6293,6 +6513,7 @@ export def "repos-upstream-alpine update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6317,7 +6538,7 @@ export def "repos-upstream-alpine update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update an Alpine upstream config for this repository.
@@ -6335,6 +6556,7 @@ export def "repos-upstream-alpine patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6359,7 +6581,7 @@ export def "repos-upstream-alpine patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Alpine upstream config for this repository.
@@ -6377,13 +6599,14 @@ export def "repos-upstream-alpine delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/alpine/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Cargo upstream configs for this repository.
@@ -6400,6 +6623,7 @@ export def "repos-upstream-cargo list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -6409,7 +6633,7 @@ export def "repos-upstream-cargo list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cargo/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Cargo upstream config for this repository.
@@ -6426,6 +6650,7 @@ export def "repos-upstream-cargo create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6448,7 +6673,7 @@ export def "repos-upstream-cargo create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Cargo upstream config for this repository.
@@ -6466,13 +6691,14 @@ export def "repos-upstream-cargo read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cargo/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Cargo upstream config for this repository.
@@ -6490,6 +6716,7 @@ export def "repos-upstream-cargo update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6512,7 +6739,7 @@ export def "repos-upstream-cargo update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Cargo upstream config for this repository.
@@ -6530,6 +6757,7 @@ export def "repos-upstream-cargo patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6552,7 +6780,7 @@ export def "repos-upstream-cargo patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Cargo upstream config for this repository.
@@ -6570,13 +6798,14 @@ export def "repos-upstream-cargo delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cargo/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Composer upstream configs for this repository.
@@ -6593,6 +6822,7 @@ export def "repos-upstream-composer list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -6602,7 +6832,7 @@ export def "repos-upstream-composer list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/composer/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Composer upstream config for this repository.
@@ -6619,6 +6849,7 @@ export def "repos-upstream-composer create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6641,7 +6872,7 @@ export def "repos-upstream-composer create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Composer upstream config for this repository.
@@ -6659,13 +6890,14 @@ export def "repos-upstream-composer read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/composer/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Composer upstream config for this repository.
@@ -6683,6 +6915,7 @@ export def "repos-upstream-composer update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6705,7 +6938,7 @@ export def "repos-upstream-composer update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Composer upstream config for this repository.
@@ -6723,6 +6956,7 @@ export def "repos-upstream-composer patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6745,7 +6979,7 @@ export def "repos-upstream-composer patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Composer upstream config for this repository.
@@ -6763,13 +6997,14 @@ export def "repos-upstream-composer delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/composer/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Conda upstream configs for this repository.
@@ -6786,6 +7021,7 @@ export def "repos-upstream-conda list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -6795,7 +7031,7 @@ export def "repos-upstream-conda list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/conda/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Conda upstream config for this repository.
@@ -6812,6 +7048,7 @@ export def "repos-upstream-conda create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6834,7 +7071,7 @@ export def "repos-upstream-conda create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Conda upstream config for this repository.
@@ -6852,13 +7089,14 @@ export def "repos-upstream-conda read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/conda/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Conda upstream config for this repository.
@@ -6876,6 +7114,7 @@ export def "repos-upstream-conda update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6898,7 +7137,7 @@ export def "repos-upstream-conda update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Conda upstream config for this repository.
@@ -6916,6 +7155,7 @@ export def "repos-upstream-conda patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -6938,7 +7178,7 @@ export def "repos-upstream-conda patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Conda upstream config for this repository.
@@ -6956,13 +7196,14 @@ export def "repos-upstream-conda delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/conda/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List CRAN upstream configs for this repository.
@@ -6979,6 +7220,7 @@ export def "repos-upstream-cran list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -6988,7 +7230,7 @@ export def "repos-upstream-cran list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cran/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a CRAN upstream config for this repository.
@@ -7005,6 +7247,7 @@ export def "repos-upstream-cran create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7027,7 +7270,7 @@ export def "repos-upstream-cran create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a CRAN upstream config for this repository.
@@ -7045,13 +7288,14 @@ export def "repos-upstream-cran read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cran/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a CRAN upstream config for this repository.
@@ -7069,6 +7313,7 @@ export def "repos-upstream-cran update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7091,7 +7336,7 @@ export def "repos-upstream-cran update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a CRAN upstream config for this repository.
@@ -7109,6 +7354,7 @@ export def "repos-upstream-cran patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7131,7 +7377,7 @@ export def "repos-upstream-cran patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a CRAN upstream config for this repository.
@@ -7149,13 +7395,14 @@ export def "repos-upstream-cran delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/cran/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Dart upstream configs for this repository.
@@ -7172,6 +7419,7 @@ export def "repos-upstream-dart list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -7181,7 +7429,7 @@ export def "repos-upstream-dart list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/dart/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Dart upstream config for this repository.
@@ -7198,6 +7446,7 @@ export def "repos-upstream-dart create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7220,7 +7469,7 @@ export def "repos-upstream-dart create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Dart upstream config for this repository.
@@ -7238,13 +7487,14 @@ export def "repos-upstream-dart read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/dart/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Dart upstream config for this repository.
@@ -7262,6 +7512,7 @@ export def "repos-upstream-dart update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7284,7 +7535,7 @@ export def "repos-upstream-dart update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Dart upstream config for this repository.
@@ -7302,6 +7553,7 @@ export def "repos-upstream-dart patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7324,7 +7576,7 @@ export def "repos-upstream-dart patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Dart upstream config for this repository.
@@ -7342,13 +7594,14 @@ export def "repos-upstream-dart delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/dart/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Debian upstream configs for this repository.
@@ -7365,6 +7618,7 @@ export def "repos-upstream-deb list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, component: string, created_at: string, disable_reason: string, disable_reason_text: string, distro_versions: list<string>, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_distribution: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
@@ -7374,7 +7628,7 @@ export def "repos-upstream-deb list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/deb/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Debian upstream config for this repository.
@@ -7391,6 +7645,7 @@ export def "repos-upstream-deb create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7420,7 +7675,7 @@ export def "repos-upstream-deb create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Debian upstream config for this repository.
@@ -7438,13 +7693,14 @@ export def "repos-upstream-deb read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, component: string, created_at: string, disable_reason: string, disable_reason_text: string, distro_versions: list<string>, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_distribution: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/deb/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Debian upstream config for this repository.
@@ -7462,6 +7718,7 @@ export def "repos-upstream-deb update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7491,7 +7748,7 @@ export def "repos-upstream-deb update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Debian upstream config for this repository.
@@ -7509,6 +7766,7 @@ export def "repos-upstream-deb patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7538,7 +7796,7 @@ export def "repos-upstream-deb patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Debian upstream config for this repository.
@@ -7556,13 +7814,14 @@ export def "repos-upstream-deb delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/deb/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Docker upstream configs for this repository.
@@ -7579,6 +7838,7 @@ export def "repos-upstream-docker list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, is_active: bool, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -7588,7 +7848,7 @@ export def "repos-upstream-docker list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/docker/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Docker upstream config for this repository.
@@ -7605,6 +7865,7 @@ export def "repos-upstream-docker create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-certificate: string # X.509 Certificate to use for mTLS authentication against the upstream
   --auth-certificate-key: string # Certificate key to use for mTLS authentication against the upstream
   --auth-mode: string@auth-mode-completer-1 # The authentication mode to use when accessing this upstream.  (default: None)
@@ -7629,7 +7890,7 @@ export def "repos-upstream-docker create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Docker upstream config for this repository.
@@ -7647,13 +7908,14 @@ export def "repos-upstream-docker read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, is_active: bool, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/docker/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Docker upstream config for this repository.
@@ -7671,6 +7933,7 @@ export def "repos-upstream-docker update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-certificate: string # X.509 Certificate to use for mTLS authentication against the upstream
   --auth-certificate-key: string # Certificate key to use for mTLS authentication against the upstream
   --auth-mode: string@auth-mode-completer-1 # The authentication mode to use when accessing this upstream.  (default: None)
@@ -7695,7 +7958,7 @@ export def "repos-upstream-docker update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Docker upstream config for this repository.
@@ -7713,6 +7976,7 @@ export def "repos-upstream-docker patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-certificate: string # X.509 Certificate to use for mTLS authentication against the upstream
   --auth-certificate-key: string # Certificate key to use for mTLS authentication against the upstream
   --auth-mode: string@auth-mode-completer-1 # The authentication mode to use when accessing this upstream.  (default: None)
@@ -7737,7 +8001,7 @@ export def "repos-upstream-docker patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Docker upstream config for this repository.
@@ -7755,13 +8019,14 @@ export def "repos-upstream-docker delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/docker/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Generic upstream configs for this repository.
@@ -7778,6 +8043,7 @@ export def "repos-upstream-generic list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_prefix: string, upstream_url: string, verify_ssl: bool> {
@@ -7787,7 +8053,7 @@ export def "repos-upstream-generic list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/generic/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Generic upstream config for this repository.
@@ -7804,6 +8070,7 @@ export def "repos-upstream-generic create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7827,7 +8094,7 @@ export def "repos-upstream-generic create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Generic upstream config for this repository.
@@ -7845,13 +8112,14 @@ export def "repos-upstream-generic read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_prefix: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/generic/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Generic upstream config for this repository.
@@ -7869,6 +8137,7 @@ export def "repos-upstream-generic update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7892,7 +8161,7 @@ export def "repos-upstream-generic update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Generic upstream config for this repository.
@@ -7910,6 +8179,7 @@ export def "repos-upstream-generic patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -7933,7 +8203,7 @@ export def "repos-upstream-generic patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Generic upstream config for this repository.
@@ -7951,13 +8221,14 @@ export def "repos-upstream-generic delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/generic/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Go upstream configs for this repository.
@@ -7974,6 +8245,7 @@ export def "repos-upstream-go list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -7983,7 +8255,7 @@ export def "repos-upstream-go list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/go/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Go upstream config for this repository.
@@ -8000,6 +8272,7 @@ export def "repos-upstream-go create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8022,7 +8295,7 @@ export def "repos-upstream-go create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Go upstream config for this repository.
@@ -8040,13 +8313,14 @@ export def "repos-upstream-go read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/go/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Go upstream config for this repository.
@@ -8064,6 +8338,7 @@ export def "repos-upstream-go update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8086,7 +8361,7 @@ export def "repos-upstream-go update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Go upstream config for this repository.
@@ -8104,6 +8379,7 @@ export def "repos-upstream-go patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8126,7 +8402,7 @@ export def "repos-upstream-go patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Go upstream config for this repository.
@@ -8144,13 +8420,14 @@ export def "repos-upstream-go delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/go/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Helm upstream configs for this repository.
@@ -8167,6 +8444,7 @@ export def "repos-upstream-helm list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -8176,7 +8454,7 @@ export def "repos-upstream-helm list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/helm/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Helm upstream config for this repository.
@@ -8193,6 +8471,7 @@ export def "repos-upstream-helm create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8215,7 +8494,7 @@ export def "repos-upstream-helm create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Helm upstream config for this repository.
@@ -8233,13 +8512,14 @@ export def "repos-upstream-helm read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/helm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Helm upstream config for this repository.
@@ -8257,6 +8537,7 @@ export def "repos-upstream-helm update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8279,7 +8560,7 @@ export def "repos-upstream-helm update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Helm upstream config for this repository.
@@ -8297,6 +8578,7 @@ export def "repos-upstream-helm patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8319,7 +8601,7 @@ export def "repos-upstream-helm patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Helm upstream config for this repository.
@@ -8337,13 +8619,14 @@ export def "repos-upstream-helm delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/helm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Hex upstream configs for this repository.
@@ -8360,6 +8643,7 @@ export def "repos-upstream-hex list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -8369,7 +8653,7 @@ export def "repos-upstream-hex list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/hex/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Hex upstream config for this repository.
@@ -8386,6 +8670,7 @@ export def "repos-upstream-hex create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8408,7 +8693,7 @@ export def "repos-upstream-hex create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Hex upstream config for this repository.
@@ -8426,13 +8711,14 @@ export def "repos-upstream-hex read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/hex/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Hex upstream config for this repository.
@@ -8450,6 +8736,7 @@ export def "repos-upstream-hex update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8472,7 +8759,7 @@ export def "repos-upstream-hex update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Hex upstream config for this repository.
@@ -8490,6 +8777,7 @@ export def "repos-upstream-hex patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8512,7 +8800,7 @@ export def "repos-upstream-hex patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Hex upstream config for this repository.
@@ -8530,13 +8818,14 @@ export def "repos-upstream-hex delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/hex/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List HuggingFace upstream configs for this repository.
@@ -8553,6 +8842,7 @@ export def "repos-upstream-huggingface list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -8562,7 +8852,7 @@ export def "repos-upstream-huggingface list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/huggingface/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a HuggingFace upstream config for this repository.
@@ -8579,6 +8869,7 @@ export def "repos-upstream-huggingface create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-3 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8601,7 +8892,7 @@ export def "repos-upstream-huggingface create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a HuggingFace upstream config for this repository.
@@ -8619,13 +8910,14 @@ export def "repos-upstream-huggingface read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/huggingface/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a HuggingFace upstream config for this repository.
@@ -8643,6 +8935,7 @@ export def "repos-upstream-huggingface update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-3 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8665,7 +8958,7 @@ export def "repos-upstream-huggingface update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a HuggingFace upstream config for this repository.
@@ -8683,6 +8976,7 @@ export def "repos-upstream-huggingface patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-3 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8705,7 +8999,7 @@ export def "repos-upstream-huggingface patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a HuggingFace upstream config for this repository.
@@ -8723,13 +9017,14 @@ export def "repos-upstream-huggingface delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/huggingface/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Maven upstream configs for this repository.
@@ -8746,6 +9041,7 @@ export def "repos-upstream-maven list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
@@ -8755,7 +9051,7 @@ export def "repos-upstream-maven list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/maven/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Maven upstream config for this repository.
@@ -8772,6 +9068,7 @@ export def "repos-upstream-maven create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8798,7 +9095,7 @@ export def "repos-upstream-maven create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Maven upstream config for this repository.
@@ -8816,13 +9113,14 @@ export def "repos-upstream-maven read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/maven/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Maven upstream config for this repository.
@@ -8840,6 +9138,7 @@ export def "repos-upstream-maven update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8866,7 +9165,7 @@ export def "repos-upstream-maven update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Maven upstream config for this repository.
@@ -8884,6 +9183,7 @@ export def "repos-upstream-maven patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -8910,7 +9210,7 @@ export def "repos-upstream-maven patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Maven upstream config for this repository.
@@ -8928,13 +9228,14 @@ export def "repos-upstream-maven delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/maven/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List npm upstream configs for this repository.
@@ -8951,6 +9252,7 @@ export def "repos-upstream-npm list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -8960,7 +9262,7 @@ export def "repos-upstream-npm list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/npm/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a npm upstream config for this repository.
@@ -8977,6 +9279,7 @@ export def "repos-upstream-npm create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9000,7 +9303,7 @@ export def "repos-upstream-npm create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a npm upstream config for this repository.
@@ -9018,13 +9321,14 @@ export def "repos-upstream-npm read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/npm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a npm upstream config for this repository.
@@ -9042,6 +9346,7 @@ export def "repos-upstream-npm update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9065,7 +9370,7 @@ export def "repos-upstream-npm update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a npm upstream config for this repository.
@@ -9083,6 +9388,7 @@ export def "repos-upstream-npm patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer-2 # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9106,7 +9412,7 @@ export def "repos-upstream-npm patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a npm upstream config for this repository.
@@ -9124,13 +9430,14 @@ export def "repos-upstream-npm delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/npm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List NuGet upstream configs for this repository.
@@ -9147,6 +9454,7 @@ export def "repos-upstream-nuget list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -9156,7 +9464,7 @@ export def "repos-upstream-nuget list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/nuget/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a NuGet upstream config for this repository.
@@ -9173,6 +9481,7 @@ export def "repos-upstream-nuget create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9195,7 +9504,7 @@ export def "repos-upstream-nuget create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a NuGet upstream config for this repository.
@@ -9213,13 +9522,14 @@ export def "repos-upstream-nuget read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/nuget/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a NuGet upstream config for this repository.
@@ -9237,6 +9547,7 @@ export def "repos-upstream-nuget update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9259,7 +9570,7 @@ export def "repos-upstream-nuget update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a NuGet upstream config for this repository.
@@ -9277,6 +9588,7 @@ export def "repos-upstream-nuget patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9299,7 +9611,7 @@ export def "repos-upstream-nuget patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a NuGet upstream config for this repository.
@@ -9317,13 +9629,14 @@ export def "repos-upstream-nuget delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/nuget/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Python upstream configs for this repository.
@@ -9340,6 +9653,7 @@ export def "repos-upstream-python list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -9349,7 +9663,7 @@ export def "repos-upstream-python list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/python/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Python upstream config for this repository.
@@ -9366,6 +9680,7 @@ export def "repos-upstream-python create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9389,7 +9704,7 @@ export def "repos-upstream-python create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Python upstream config for this repository.
@@ -9407,13 +9722,14 @@ export def "repos-upstream-python read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/python/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Python upstream config for this repository.
@@ -9431,6 +9747,7 @@ export def "repos-upstream-python update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9454,7 +9771,7 @@ export def "repos-upstream-python update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Python upstream config for this repository.
@@ -9472,6 +9789,7 @@ export def "repos-upstream-python patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9495,7 +9813,7 @@ export def "repos-upstream-python patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Python upstream config for this repository.
@@ -9513,13 +9831,14 @@ export def "repos-upstream-python delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/python/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List RedHat upstream configs for this repository.
@@ -9536,6 +9855,7 @@ export def "repos-upstream-rpm list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, distro_version: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
@@ -9545,7 +9865,7 @@ export def "repos-upstream-rpm list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/rpm/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a RedHat upstream config for this repository.
@@ -9562,6 +9882,7 @@ export def "repos-upstream-rpm create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9589,7 +9910,7 @@ export def "repos-upstream-rpm create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a RedHat upstream config for this repository.
@@ -9607,13 +9928,14 @@ export def "repos-upstream-rpm read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, distro_version: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/rpm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a RedHat upstream config for this repository.
@@ -9631,6 +9953,7 @@ export def "repos-upstream-rpm update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9658,7 +9981,7 @@ export def "repos-upstream-rpm update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a RedHat upstream config for this repository.
@@ -9676,6 +9999,7 @@ export def "repos-upstream-rpm patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9703,7 +10027,7 @@ export def "repos-upstream-rpm patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a RedHat upstream config for this repository.
@@ -9721,13 +10045,14 @@ export def "repos-upstream-rpm delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/rpm/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Ruby upstream configs for this repository.
@@ -9744,6 +10069,7 @@ export def "repos-upstream-ruby list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -9753,7 +10079,7 @@ export def "repos-upstream-ruby list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/ruby/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Ruby upstream config for this repository.
@@ -9770,6 +10096,7 @@ export def "repos-upstream-ruby create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9792,7 +10119,7 @@ export def "repos-upstream-ruby create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Ruby upstream config for this repository.
@@ -9810,13 +10137,14 @@ export def "repos-upstream-ruby read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/ruby/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Ruby upstream config for this repository.
@@ -9834,6 +10162,7 @@ export def "repos-upstream-ruby update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9856,7 +10185,7 @@ export def "repos-upstream-ruby update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Ruby upstream config for this repository.
@@ -9874,6 +10203,7 @@ export def "repos-upstream-ruby patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9896,7 +10226,7 @@ export def "repos-upstream-ruby patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Ruby upstream config for this repository.
@@ -9914,13 +10244,14 @@ export def "repos-upstream-ruby delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/ruby/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Swift upstream configs for this repository.
@@ -9937,6 +10268,7 @@ export def "repos-upstream-swift list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
@@ -9946,7 +10278,7 @@ export def "repos-upstream-swift list" [
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/swift/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Swift upstream config for this repository.
@@ -9963,6 +10295,7 @@ export def "repos-upstream-swift create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -9985,7 +10318,7 @@ export def "repos-upstream-swift create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Swift upstream config for this repository.
@@ -10003,13 +10336,14 @@ export def "repos-upstream-swift read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/swift/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Swift upstream config for this repository.
@@ -10027,6 +10361,7 @@ export def "repos-upstream-swift update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -10049,7 +10384,7 @@ export def "repos-upstream-swift update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partially update a Swift upstream config for this repository.
@@ -10067,6 +10402,7 @@ export def "repos-upstream-swift patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-mode: string@auth-mode-completer # The authentication mode to use when accessing this upstream.  (default: None)
   --auth-secret: string # Secret to provide with requests to upstream.
   --auth-username: string # Username to provide with requests to upstream.
@@ -10089,7 +10425,7 @@ export def "repos-upstream-swift patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Swift upstream config for this repository.
@@ -10107,13 +10443,14 @@ export def "repos-upstream-swift delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/upstream/swift/($slug_perm)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the active X.509 ECDSA certificate for the Repository.
@@ -10130,13 +10467,14 @@ export def "repos-x509-ecdsa list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, certificate: string, certificate_chain: string, certificate_chain_fingerprint: string, certificate_chain_fingerprint_short: string, certificate_fingerprint: string, certificate_fingerprint_short: string, created_at: string, default: bool, issuing_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/x509-ecdsa/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the active X.509 RSA certificate for the Repository.
@@ -10153,13 +10491,14 @@ export def "repos-x509-rsa list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, certificate: string, certificate_chain: string, certificate_chain_fingerprint: string, certificate_chain_fingerprint_short: string, certificate_fingerprint: string, certificate_fingerprint_short: string, created_at: string, default: bool, issuing_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/x509-rsa/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the retention rules for the repository.
@@ -10176,13 +10515,14 @@ export def "repos-retention read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<retention_count_limit: int, retention_days_limit: int, retention_enabled: bool, retention_group_by_format: bool, retention_group_by_name: bool, retention_group_by_package_type: bool, retention_package_query_string: string, retention_size_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repo)/retention/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the retention rules for the repository.
@@ -10199,6 +10539,7 @@ export def "repos-retention patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --retention-count-limit: int # The maximum X number of packages to retain.
   --retention-days-limit: int # The X number of days of packages to retain.
   --retention-enabled: oneof<nothing, bool> # If checked, the retention lifecycle rules will be activated for the repository. Any packages that don't match will be deleted automatically, and the rest are retained.
@@ -10216,7 +10557,7 @@ export def "repos-retention patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer a repository to a different region.
@@ -10233,6 +10574,7 @@ export def "repos-transfer-region region" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storage-region: string # The Cloudsmith region in which package files are stored. (default: default)
 ]: any -> any {
   let input = $in
@@ -10243,7 +10585,7 @@ export def "repos-transfer-region region" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Endpoint to check basic API connectivity.
@@ -10258,13 +10600,14 @@ export def "status-check-basic basic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<detail: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status/check/basic/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all available storage regions.
@@ -10279,13 +10622,14 @@ export def "storage-regions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<label: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/storage-regions/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific storage region.
@@ -10301,13 +10645,14 @@ export def "storage-regions read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<label: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storage-regions/($slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provide a brief for the current user (if any).
@@ -10322,13 +10667,14 @@ export def "user-self self" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authenticated: bool, email: string, name: string, profile_url: string, self_url: string, slug: string, slug_perm: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/self/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or retrieve API token for a user.
@@ -10343,6 +10689,7 @@ export def "user-token create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email address to authenticate with (format: email)
   --password: string # Password to authenticate with
   --totp-token: string # Two-factor authentication code
@@ -10355,7 +10702,7 @@ export def "user-token create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the API key assigned to the user that is currently authenticated.
@@ -10370,6 +10717,7 @@ export def "user-tokens list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<results: table<created: string, key: string, slug_perm: string>> {
@@ -10379,7 +10727,7 @@ export def "user-tokens list" [
   let full_url = (build-url $base "/user/tokens/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API key for the user that is currently authenticated.
@@ -10394,13 +10742,14 @@ export def "user-tokens create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, key: string, slug_perm: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/tokens/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh the specified API key for the user that is currently authenticated.
@@ -10416,13 +10765,14 @@ export def "user-tokens-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, key: string, slug_perm: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/tokens/($slug_perm)/refresh/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provide a brief for the specified user (if any).
@@ -10438,13 +10788,14 @@ export def "users-profile read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<company: string, first_name: string, job_title: string, joined_at: string, last_name: string, name: string, slug: string, slug_perm: string, tagline: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/profile/($slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists scan results for a specific namespace.
@@ -10460,6 +10811,7 @@ export def "vulnerabilities list-by-owner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, has_vulnerabilities: bool, identifier: string, max_severity: string, num_vulnerabilities: int, package: record<identifier: string, name: string, url: string, version: string>, scan_id: int> {
@@ -10469,7 +10821,7 @@ export def "vulnerabilities list-by-owner" [
   let full_url = (build-url $base $"/vulnerabilities/($owner)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists scan results for a specific repository.
@@ -10486,6 +10838,7 @@ export def "vulnerabilities list-by-owner-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, has_vulnerabilities: bool, identifier: string, max_severity: string, num_vulnerabilities: int, package: record<identifier: string, name: string, url: string, version: string>, scan_id: int> {
@@ -10495,7 +10848,7 @@ export def "vulnerabilities list-by-owner-repo" [
   let full_url = (build-url $base $"/vulnerabilities/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists scan results for a specific package.
@@ -10513,6 +10866,7 @@ export def "vulnerabilities list-by-owner-repo-package" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, has_vulnerabilities: bool, identifier: string, max_severity: string, num_vulnerabilities: int, package: record<identifier: string, name: string, url: string, version: string>, scan_id: int> {
@@ -10522,7 +10876,7 @@ export def "vulnerabilities list-by-owner-repo-package" [
   let full_url = (build-url $base $"/vulnerabilities/($owner)/($repo)/($package)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a scan result.
@@ -10541,13 +10895,14 @@ export def "vulnerabilities read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, has_vulnerabilities: bool, identifier: string, max_severity: string, num_vulnerabilities: int, package: record<identifier: string, name: string, url: string, version: string>, scan_id: int, scans: table<results: list, target: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vulnerabilities/($owner)/($repo)/($package)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all webhooks in a repository.
@@ -10564,6 +10919,7 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> table<created_at: string, created_by: string, created_by_url: string, disable_reason: int, disable_reason_str: string, events: list<string>, identifier: int, is_active: bool, is_last_response_bad: bool, last_response_status: int, last_response_status_str: string, num_sent: int, package_query: string, request_body_format: int, request_body_format_str: string, request_body_template_format: int, request_body_template_format_str: string, request_content_type: string, secret_header: string, self_url: string, slug_perm: string, target_url: string, templates: list<record>, updated_at: string, updated_by: string, updated_by_url: string, verify_ssl: bool> {
@@ -10573,7 +10929,7 @@ export def "webhooks list" [
   let full_url = (build-url $base $"/webhooks/($owner)/($repo)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a specific webhook in a repository.
@@ -10591,6 +10947,7 @@ export def "webhooks create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list
   --is-active: oneof<nothing, bool> # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
   --package-query: string # The package-based search query for webhooks to fire. This uses the same syntax as the standard search used for repositories, and also supports boolean logic operators such as OR/AND/NOT and parentheses for grouping. If a package does not match, the webhook will not fire.
@@ -10612,7 +10969,7 @@ export def "webhooks create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Views for working with repository webhooks.
@@ -10630,13 +10987,14 @@ export def "webhooks read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, created_by: string, created_by_url: string, disable_reason: int, disable_reason_str: string, events: list<string>, identifier: int, is_active: bool, is_last_response_bad: bool, last_response_status: int, last_response_status_str: string, num_sent: int, package_query: string, request_body_format: int, request_body_format_str: string, request_body_template_format: int, request_body_template_format_str: string, request_content_type: string, secret_header: string, self_url: string, slug_perm: string, target_url: string, templates: table<event: string, template: string>, updated_at: string, updated_by: string, updated_by_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhooks/($owner)/($repo)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a specific webhook in a repository.
@@ -10655,6 +11013,7 @@ export def "webhooks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --events: list
   --is-active: oneof<nothing, bool> # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
   --package-query: string # The package-based search query for webhooks to fire. This uses the same syntax as the standard search used for repositories, and also supports boolean logic operators such as OR/AND/NOT and parentheses for grouping. If a package does not match, the webhook will not fire.
@@ -10676,7 +11035,7 @@ export def "webhooks patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific webhook in a repository.
@@ -10694,11 +11053,12 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhooks/($owner)/($repo)/($identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

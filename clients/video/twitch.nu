@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -91,7 +92,7 @@ def type-completer-3 [] { ["all" "archive" "highlight" "upload"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels-commercial start-commercial" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -125,6 +126,7 @@ export def "channels-commercial start-commercial" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the partner or affiliate broadcaster that wants to run the commercial. This ID must match the user ID found in the OAuth token.
   length: int # The length of the commercial to run, in seconds. Twitch tries to serve a commercial that’s the requested length, but it may be shorter or longer. The maximum length you should request is 180 seconds. (format: int32)
 ]: any -> record<data: table<length: int, message: string, retry_after: int>> {
@@ -136,7 +138,7 @@ export def "channels-commercial start-commercial" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns ad schedule related information.
@@ -152,6 +154,7 @@ export def "channels-ads get-ad-schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # Provided `broadcaster_id` must match the `user_id` in the auth token.
 ]: nothing -> record<data: table<snooze_count: int, snooze_refresh_at: int, next_ad_at: int, duration: int, last_ad_at: int, preroll_free_time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -160,7 +163,7 @@ export def "channels-ads get-ad-schedule" [
   let full_url = (build-url $base "/channels/ads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pushes back the timestamp of the upcoming automatic mid-roll ad by 5 minutes.
@@ -176,6 +179,7 @@ export def "channels-ads-schedule-snooze snooze-next-ad" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # Provided `broadcaster_id` must match the `user_id` in the auth token.
 ]: nothing -> record<data: table<snooze_count: int, snooze_refresh_at: int, next_ad_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -184,7 +188,7 @@ export def "channels-ads-schedule-snooze snooze-next-ad" [
   let full_url = (build-url $base "/channels/ads/schedule/snooze" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an analytics report for one or more extensions.
@@ -200,6 +204,7 @@ export def "analytics-extensions get-extension-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The extension's client ID. If specified, the response contains a report for the specified extension. If not specified, the response includes a report for each extension that the authenticated user owns.
   --type: string@type-completer # The type of analytics report to get. Possible values are:      * overview\_v2
   --started-at: string # The reporting window's start date, in RFC3339 format. Set the time portion to zeroes (for example, 2021-10-22T00:00:00Z).      The start date must be on or after January 31, 2018\. If you specify an earlier date, the API ignores it and uses January 31, 2018\. If you specify a start date, you must specify an end date. If you don't specify a start and end date, the report includes all available data since January 31, 2018.      The report contains one row of data for each day in the reporting window. (format: date-time)
@@ -213,7 +218,7 @@ export def "analytics-extensions get-extension-analytics" [
   let full_url = (build-url $base "/analytics/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an analytics report for one or more games.
@@ -229,6 +234,7 @@ export def "analytics-games get-game-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --game-id: string # The game’s client ID. If specified, the response contains a report for the specified game. If not specified, the response includes a report for each of the authenticated user’s games.
   --type: string@type-completer # The type of analytics report to get. Possible values are:      * overview\_v2
   --started-at: string # The reporting window’s start date, in RFC3339 format. Set the time portion to zeroes (for example, 2021-10-22T00:00:00Z). If you specify a start date, you must specify an end date.      The start date must be within one year of today’s date. If you specify an earlier date, the API ignores it and uses a date that’s one year prior to today’s date. If you don’t specify a start and end date, the report includes all available data for the last 365 days from today.      The report contains one row of data for each day in the reporting window. (format: date-time)
@@ -242,7 +248,7 @@ export def "analytics-games get-game-analytics" [
   let full_url = (build-url $base "/analytics/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the Bits leaderboard for the authenticated broadcaster.
@@ -258,6 +264,7 @@ export def "bits-leaderboard get-bits-leaderboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # The number of results to return. The minimum count is 1 and the maximum is 100\. The default is 10. (format: int32)
   --period: string@period-completer # The time period over which data is aggregated (uses the PST time zone). Possible values are:      * day — A day spans from 00:00:00 on the day specified in _started\_at_ and runs through 00:00:00 of the next day. * week — A week spans from 00:00:00 on the Monday of the week specified in _started\_at_ and runs through 00:00:00 of the next Monday. * month — A month spans from 00:00:00 on the first day of the month specified in _started\_at_ and runs through 00:00:00 of the first day of the next month. * year — A year spans from 00:00:00 on the first day of the year specified in _started\_at_ and runs through 00:00:00 of the first day of the next year. * all — Default. The lifetime of the broadcaster's channel.
   --started-at: string # The start date, in RFC3339 format, used for determining the aggregation period. Specify this parameter only if you specify the _period_ query parameter. The start date is ignored if _period_ is all.      Note that the date is converted to PST before being used, so if you set the start time to `2022-01-01T00:00:00.0Z` and _period_ to month, the actual reporting period is December 2021, not January 2022\. If you want the reporting period to be January 2022, you must set the start time to `2022-01-01T08:00:00.0Z` or `2022-01-01T00:00:00.0-08:00`.      If your start date uses the ‘+’ offset operator (for example, `2022-01-01T00:00:00.0+05:00`), you must URL encode the start date. (format: date-time)
@@ -269,7 +276,7 @@ export def "bits-leaderboard get-bits-leaderboard" [
   let full_url = (build-url $base "/bits/leaderboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of Cheermotes that users can use to cheer Bits.
@@ -285,6 +292,7 @@ export def "bits-cheermotes get-cheermotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose custom Cheermotes you want to get. Specify the broadcaster’s ID if you want to include the broadcaster’s Cheermotes in the response (not all broadcasters upload Cheermotes). If not specified, the response contains only global Cheermotes.      If the broadcaster uploaded Cheermotes, the `type` field in the response is set to **channel\_custom**.
 ]: nothing -> record<data: table<prefix: string, tiers: list, type: string, order: int, last_updated: string, is_charitable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -293,7 +301,7 @@ export def "bits-cheermotes get-cheermotes" [
   let full_url = (build-url $base "/bits/cheermotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an extension’s list of transactions.
@@ -309,6 +317,7 @@ export def "extensions-transactions get-extension-transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The ID of the extension whose list of transactions you want to get.
   --id: list # A transaction ID used to filter the list of transactions. Specify this parameter for each transaction you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 100 IDs.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
@@ -320,7 +329,7 @@ export def "extensions-transactions get-extension-transactions" [
   let full_url = (build-url $base "/extensions/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about one or more channels.
@@ -336,6 +345,7 @@ export def "channels get-channel-information" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: list # The ID of the broadcaster whose channel you want to get. To specify more than one ID, include this parameter for each broadcaster you want to get. For example, `broadcaster_id=1234&broadcaster_id=5678`. You may specify a maximum of 100 IDs. The API ignores duplicate IDs and IDs that are not found.
 ]: nothing -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, broadcaster_language: string, game_name: string, game_id: string, title: string, delay: int, tags: list, content_classification_labels: list, is_branded_content: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -344,7 +354,7 @@ export def "channels get-channel-information" [
   let full_url = (build-url $base "/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a channel’s properties.
@@ -361,6 +371,7 @@ export def "channels modify-channel-information" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose channel you want to update. This ID must match the user ID in the user access token.
   --game-id: string # The ID of the game that the user plays. The game is not updated if the ID isn’t a game ID that Twitch recognizes. To unset this field, use “0” or “” (an empty string).
   --broadcaster-language: string # The user’s preferred language. Set the value to an ISO 639-1 two-letter language code (for example, _en_ for English). Set to “other” if the user’s preferred language is not a Twitch supported language. The language isn’t updated if the language code isn’t a Twitch supported language.
@@ -379,7 +390,7 @@ export def "channels modify-channel-information" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the broadcaster’s list editors.
@@ -395,6 +406,7 @@ export def "channels-editors get-channel-editors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the channel. This ID must match the user ID in the access token.
 ]: nothing -> record<data: table<user_id: string, user_name: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -403,7 +415,7 @@ export def "channels-editors get-channel-editors" [
   let full_url = (build-url $base "/channels/editors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of broadcasters that the specified user follows. You can also use this endpoint to see whether a user follows a specific broadcaster.
@@ -419,6 +431,7 @@ export def "channels-followed get-followed-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # A user’s ID. Returns the list of broadcasters that this user follows. This ID must match the user ID in the user OAuth token.
   --broadcaster-id: string # A broadcaster’s ID. Use this parameter to see whether the user follows this broadcaster. If specified, the response contains this broadcaster if the user follows them. If not specified, the response contains all broadcasters that the user follows.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
@@ -430,7 +443,7 @@ export def "channels-followed get-followed-channels" [
   let full_url = (build-url $base "/channels/followed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users that follow the specified broadcaster. You can also use this endpoint to see whether a specific user follows the broadcaster.
@@ -446,6 +459,7 @@ export def "channels-followers get-channel-followers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # A user’s ID. Use this parameter to see whether the user follows this broadcaster. If specified, the response contains this user if they follow the broadcaster. If not specified, the response contains all users that follow the broadcaster.      Using this parameter requires both a user access token with the **moderator:read:followers** scope and the user ID in the access token match the broadcaster\_id or be the user ID for a moderator of the specified broadcaster.
   --broadcaster-id: string # The broadcaster’s ID. Returns the list of users that follow this broadcaster.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
@@ -457,7 +471,7 @@ export def "channels-followers get-channel-followers" [
   let full_url = (build-url $base "/channels/followers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a Custom Reward in the broadcaster’s channel.
@@ -473,6 +487,7 @@ export def "channel-points-custom-rewards create-custom-rewards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster to add the custom reward to. This ID must match the user ID found in the OAuth token.
   title: string # The custom reward’s title. The title may contain a maximum of 45 characters and it must be unique amongst all of the broadcaster’s custom rewards.
   cost: int # The cost of the reward, in Channel Points. The minimum is 1 point. (format: int64)
@@ -497,7 +512,7 @@ export def "channel-points-custom-rewards create-custom-rewards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a custom reward that the broadcaster created.
@@ -513,6 +528,7 @@ export def "channel-points-custom-rewards delete-custom-reward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that created the custom reward. This ID must match the user ID found in the OAuth token.
   --id: string # The ID of the custom reward to delete.
 ]: nothing -> any {
@@ -522,7 +538,7 @@ export def "channel-points-custom-rewards delete-custom-reward" [
   let full_url = (build-url $base "/channel_points/custom_rewards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of custom rewards that the specified broadcaster created.
@@ -538,6 +554,7 @@ export def "channel-points-custom-rewards get-custom-reward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose custom rewards you want to get. This ID must match the user ID found in the OAuth token.
   --id: list # A list of IDs to filter the rewards by. To specify more than one ID, include this parameter for each reward you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 50 IDs.      Duplicate IDs are ignored. The response contains only the IDs that were found. If none of the IDs were found, the response is 404 Not Found.
   --only-manageable-rewards: oneof<nothing, bool> # A Boolean value that determines whether the response contains only the custom rewards that the app may manage (the app is identified by the ID in the Client-Id header). Set to **true** to get only the custom rewards that the app may manage. The default is **false**.
@@ -548,7 +565,7 @@ export def "channel-points-custom-rewards get-custom-reward" [
   let full_url = (build-url $base "/channel_points/custom_rewards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a custom reward.
@@ -564,6 +581,7 @@ export def "channel-points-custom-rewards update-custom-reward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that’s updating the reward. This ID must match the user ID found in the OAuth token.
   --id: string # The ID of the reward to update.
   --title: string # The reward’s title. The title may contain a maximum of 45 characters and it must be unique amongst all of the broadcaster’s custom rewards.
@@ -590,7 +608,7 @@ export def "channel-points-custom-rewards update-custom-reward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of redemptions for a custom reward.
@@ -606,6 +624,7 @@ export def "channel-points-custom-rewards-redemptions get-custom-reward-redempti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the custom reward. This ID must match the user ID found in the user OAuth token.
   --reward-id: string # The ID that identifies the custom reward whose redemptions you want to get.
   --status: string@status-completer # The status of the redemptions to return. The possible case-sensitive values are:      * CANCELED * FULFILLED * UNFULFILLED    **NOTE**: This field is required only if you don’t specify the _id_ query parameter.      **NOTE**: Canceled and fulfilled redemptions are returned for only a few days after they’re canceled or fulfilled.
@@ -620,7 +639,7 @@ export def "channel-points-custom-rewards-redemptions get-custom-reward-redempti
   let full_url = (build-url $base "/channel_points/custom_rewards/redemptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a redemption’s status.
@@ -636,6 +655,7 @@ export def "channel-points-custom-rewards-redemptions update-redemption-status" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # A list of IDs that identify the redemptions to update. To specify more than one ID, include this parameter for each redemption you want to update. For example, `id=1234&id=5678`. You may specify a maximum of 50 IDs.
   --broadcaster-id: string # The ID of the broadcaster that’s updating the redemption. This ID must match the user ID in the user access token.
   --reward-id: string # The ID that identifies the reward that’s been redeemed.
@@ -650,7 +670,7 @@ export def "channel-points-custom-rewards-redemptions update-redemption-status" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about the broadcaster’s active charity campaign.
@@ -666,6 +686,7 @@ export def "charity-campaigns get-charity-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that’s currently running a charity campaign. This ID must match the user ID in the access token.
 ]: nothing -> record<data: table<id: string, broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, charity_name: string, charity_description: string, charity_logo: string, charity_website: string, current_amount: record, target_amount: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -674,7 +695,7 @@ export def "charity-campaigns get-charity-campaign" [
   let full_url = (build-url $base "/charity/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of donations that users have made to the broadcaster’s active charity campaign.
@@ -690,6 +711,7 @@ export def "charity-donations get-charity-campaign-donations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that’s currently running a charity campaign. This ID must match the user ID in the access token.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -700,7 +722,7 @@ export def "charity-donations get-charity-campaign-donations" [
   let full_url = (build-url $base "/charity/donations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of users that are connected to the broadcaster’s chat session.
@@ -716,6 +738,7 @@ export def "chat-chatters get-chatters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose list of chatters you want to get.
   --moderator-id: string # The ID of the broadcaster or one of the broadcaster’s moderators. This ID must match the user ID in the user access token.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 1,000\. The default is 100. (format: int32)
@@ -727,7 +750,7 @@ export def "chat-chatters get-chatters" [
   let full_url = (build-url $base "/chat/chatters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s list of custom emotes.
@@ -743,6 +766,7 @@ export def "chat-emotes get-channel-emotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # An ID that identifies the broadcaster whose emotes you want to get.
 ]: nothing -> record<data: table<id: string, name: string, images: record, tier: string, emote_type: string, emote_set_id: string, format: list, scale: list, theme_mode: list>, template: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -751,7 +775,7 @@ export def "chat-emotes get-channel-emotes" [
   let full_url = (build-url $base "/chat/emotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all global emotes.
@@ -767,13 +791,14 @@ export def "chat-emotes-global get-global-emotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: string, name: string, images: record, format: list, scale: list, theme_mode: list>, template: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat/emotes/global")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets emotes for one or more specified emote sets.
@@ -789,6 +814,7 @@ export def "chat-emotes-set get-emote-sets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emote-set-id: list # An ID that identifies the emote set to get. Include this parameter for each emote set you want to get. For example, `emote_set_id=1234&emote_set_id=5678`. You may specify a maximum of 25 IDs. The response contains only the IDs that were found and ignores duplicate IDs.      To get emote set IDs, use the [Get Channel Emotes](https://dev.twitch.tv/docs/api/reference#get-channel-emotes) API.
 ]: nothing -> record<data: table<id: string, name: string, images: record, emote_type: string, emote_set_id: string, owner_id: string, format: list, scale: list, theme_mode: list>, template: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -797,7 +823,7 @@ export def "chat-emotes-set get-emote-sets" [
   let full_url = (build-url $base "/chat/emotes/set" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s list of custom chat badges.
@@ -813,6 +839,7 @@ export def "chat-badges get-channel-chat-badges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose chat badges you want to get.
 ]: nothing -> record<data: table<set_id: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -821,7 +848,7 @@ export def "chat-badges get-channel-chat-badges" [
   let full_url = (build-url $base "/chat/badges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets Twitch’s list of chat badges.
@@ -837,13 +864,14 @@ export def "chat-badges-global get-global-chat-badges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<set_id: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat/badges/global")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s chat settings.
@@ -859,6 +887,7 @@ export def "chat-settings get-chat-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose chat settings you want to get.
   --moderator-id: string # The ID of the broadcaster or one of the broadcaster’s moderators.      This field is required only if you want to include the `non_moderator_chat_delay` and `non_moderator_chat_delay_duration` settings in the response.      If you specify this field, this ID must match the user ID in the user access token.
 ]: nothing -> record<data: table<broadcaster_id: string, emote_mode: bool, follower_mode: bool, follower_mode_duration: int, moderator_id: string, non_moderator_chat_delay: bool, non_moderator_chat_delay_duration: int, slow_mode: bool, slow_mode_wait_time: int, subscriber_mode: bool, unique_chat_mode: bool>> {
@@ -868,7 +897,7 @@ export def "chat-settings get-chat-settings" [
   let full_url = (build-url $base "/chat/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the broadcaster’s chat settings.
@@ -884,6 +913,7 @@ export def "chat-settings update-chat-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose chat settings you want to update.
   --moderator-id: string # The ID of a user that has permission to moderate the broadcaster’s chat room, or the broadcaster’s ID if they’re making the update. This ID must match the user ID in the user access token.
   --emote-mode: oneof<nothing, bool> # A Boolean value that determines whether chat messages must contain only emotes.      Set to **true** if only emotes are allowed; otherwise, **false**. The default is **false**.
@@ -905,7 +935,7 @@ export def "chat-settings update-chat-settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # NEW Retrieves the active shared chat session for a channel.
@@ -921,6 +951,7 @@ export def "shared-chat-session get-shared-chat-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The User ID of the channel broadcaster.
 ]: nothing -> record<data: table<session_id: string, host_broadcaster_id: string, participants: list, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -929,7 +960,7 @@ export def "shared-chat-session get-shared-chat-session" [
   let full_url = (build-url $base "/shared_chat/session" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves emotes available to the user across all channels.
@@ -945,6 +976,7 @@ export def "chat-emotes-user get-user-emotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user. This ID must match the user ID in the user access token.
   --after: string # The cursor used to get the next page of results. The Pagination object in the response contains the cursor’s value.
   --broadcaster-id: string # The User ID of a broadcaster you wish to get follower emotes of. Using this query parameter will guarantee inclusion of the broadcaster’s follower emotes in the response body.       **Note:** If the user specified in `user_id` is subscribed to the broadcaster specified, their follower emotes will appear in the response body regardless if this query parameter is used.
@@ -955,7 +987,7 @@ export def "chat-emotes-user get-user-emotes" [
   let full_url = (build-url $base "/chat/emotes/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends an announcement to the broadcaster’s chat room.
@@ -971,6 +1003,7 @@ export def "chat-announcements send-chat-announcement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the chat room to send the announcement to.
   --moderator-id: string # The ID of a user who has permission to moderate the broadcaster’s chat room, or the broadcaster’s ID if they’re sending the announcement. This ID must match the user ID in the user access token.
   message: string # The announcement to make in the broadcaster’s chat room. Announcements are limited to a maximum of 500 characters; announcements longer than 500 characters are truncated.
@@ -986,7 +1019,7 @@ export def "chat-announcements send-chat-announcement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sends a Shoutout to the specified broadcaster.
@@ -1002,6 +1035,7 @@ export def "chat-shoutouts send-a-shoutout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-broadcaster-id: string # The ID of the broadcaster that’s sending the Shoutout.
   --to-broadcaster-id: string # The ID of the broadcaster that’s receiving the Shoutout.
   --moderator-id: string # The ID of the broadcaster or a user that is one of the broadcaster’s moderators. This ID must match the user ID in the access token.
@@ -1012,7 +1046,7 @@ export def "chat-shoutouts send-a-shoutout" [
   let full_url = (build-url $base "/chat/shoutouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends a message to the broadcaster’s chat room.
@@ -1028,6 +1062,7 @@ export def "chat-messages send-chat-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the broadcaster whose chat room the message will be sent to.
   sender_id: string # The ID of the user sending the message. This ID must match the user ID in the user access token.
   message: string # The message to send. The message is limited to a maximum of 500 characters. Chat messages can also include emoticons. To include emoticons, use the name of the emote. The names are case sensitive. Don’t include colons around the name (e.g., :bleedPurple:). If Twitch recognizes the name, Twitch converts the name to the emote before writing the chat message to the chat room
@@ -1042,7 +1077,7 @@ export def "chat-messages send-chat-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the color used for the user’s name in chat.
@@ -1058,6 +1093,7 @@ export def "chat-color get-user-chat-color" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: list # The ID of the user whose username color you want to get. To specify more than one user, include the _user\_id_ parameter for each user to get. For example, `&user_id=1234&user_id=5678`. The maximum number of IDs that you may specify is 100.      The API ignores duplicate IDs and IDs that weren’t found.
 ]: nothing -> record<data: table<user_id: string, user_login: string, user_name: string, color: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1066,7 +1102,7 @@ export def "chat-color get-user-chat-color" [
   let full_url = (build-url $base "/chat/color" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the color used for the user’s name in chat.
@@ -1082,6 +1118,7 @@ export def "chat-color update-user-chat-color" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user whose chat color you want to update. This ID must match the user ID in the access token.
   --color: string@color-completer-1 # The color to use for the user's name in chat. All users may specify one of the following named color values.      * blue * blue\_violet * cadet\_blue * chocolate * coral * dodger\_blue * firebrick * golden\_rod * green * hot\_pink * orange\_red * red * sea\_green * spring\_green * yellow\_green    Turbo and Prime users may specify a named color or a Hex color code like #9146FF. If you use a Hex color code, remember to URL encode it.
 ]: nothing -> any {
@@ -1091,7 +1128,7 @@ export def "chat-color update-user-chat-color" [
   let full_url = (build-url $base "/chat/color" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a clip from the broadcaster’s stream.
@@ -1107,6 +1144,7 @@ export def "clips create-clip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose stream you want to create a clip from.
   --title: string # The title of the clip.
   --duration: float # The length of the clip in seconds. Possible values range from 5 to 60 inclusively with a precision of 0.1\. The default is 30. (format: float)
@@ -1117,7 +1155,7 @@ export def "clips create-clip" [
   let full_url = (build-url $base "/clips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets one or more video clips.
@@ -1133,6 +1171,7 @@ export def "clips get-clips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # An ID that identifies the broadcaster whose video clips you want to get. Use this parameter to get clips that were captured from the broadcaster’s streams.
   --game-id: string # An ID that identifies the game whose clips you want to get. Use this parameter to get clips that were captured from streams that were playing this game.
   --id: list # An ID that identifies the clip to get. To specify more than one ID, include this parameter for each clip you want to get. For example, `id=foo&id=bar`. You may specify a maximum of 100 IDs. The API ignores duplicate IDs and IDs that aren’t found.
@@ -1149,7 +1188,7 @@ export def "clips get-clips" [
   let full_url = (build-url $base "/clips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NEW  Creates a clip from the broadcaster’s VOD.
@@ -1165,6 +1204,7 @@ export def "videos-clips create-clip-from-vod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --editor-id: string # The user ID of the editor for the channel you want to create a clip for. If using the broadcaster’s auth token, this is the same as broadcaster\_id. This must match the user\_id in the user access token.
   --broadcaster-id: string # The user ID for the channel you want to create a clip for.
   --vod-id: string # ID of the VOD the user wants to clip.
@@ -1178,7 +1218,7 @@ export def "videos-clips create-clip-from-vod" [
   let full_url = (build-url $base "/videos/clips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NEW Provides URLs to download the video file(s) for the specified clips.
@@ -1194,6 +1234,7 @@ export def "clips-downloads get-clips-download" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --editor-id: string # The User ID of the editor for the channel you want to download a clip for. If using the broadcaster’s auth token, this is the same as `broadcaster_id`. This must match the `user_id` in the user access token.
   --broadcaster-id: string # The ID of the broadcaster you want to download clips for.
   --clip-id: list # The ID that identifies the clip you want to download. Include this parameter for each clip you want to download, up to a maximum of 10 clips. For example, `clip_id=SleepyGiftedPeppermintNerfRedBlaster-KbkBXYt3lOk3jy8-&clip_id=WimpyAltruisticKleeKeyboardCat-EiY5yMrEwZ4i4gwC`.
@@ -1204,7 +1245,7 @@ export def "clips-downloads get-clips-download" [
   let full_url = (build-url $base "/clips/downloads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the conduits for a client ID.
@@ -1220,13 +1261,14 @@ export def "eventsub-conduits get-conduits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: string, shard_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/eventsub/conduits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new conduit.
@@ -1242,6 +1284,7 @@ export def "eventsub-conduits create-conduits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   shard_count: int # The number of shards to create for this conduit. (format: int32)
 ]: any -> record<data: table<id: string, shard_count: int>> {
   let input = $in
@@ -1252,7 +1295,7 @@ export def "eventsub-conduits create-conduits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a conduit’s shard count.
@@ -1268,6 +1311,7 @@ export def "eventsub-conduits update-conduits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # Conduit ID.
   shard_count: int # The new number of shards for this conduit. (format: int32)
 ]: any -> record<data: table<id: string, shard_count: int>> {
@@ -1279,7 +1323,7 @@ export def "eventsub-conduits update-conduits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a specified conduit.
@@ -1295,6 +1339,7 @@ export def "eventsub-conduits delete-conduit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Conduit ID.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1303,7 +1348,7 @@ export def "eventsub-conduits delete-conduit" [
   let full_url = (build-url $base "/eventsub/conduits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a lists of all shards for a conduit.
@@ -1319,6 +1364,7 @@ export def "eventsub-conduits-shards get-conduit-shards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conduit-id: string # Conduit ID.
   --status: string # Status to filter by.
   --after: string # The cursor used to get the next page of results. The pagination object in the response contains the cursor’s value.
@@ -1329,7 +1375,7 @@ export def "eventsub-conduits-shards get-conduit-shards" [
   let full_url = (build-url $base "/eventsub/conduits/shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates shard(s) for a conduit.
@@ -1346,6 +1392,7 @@ export def "eventsub-conduits-shards update-conduit-shards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   conduit_id: string # Conduit ID.
   shards: list # List of shards to update. — item shape: {id: string, transport: record}
 ]: any -> record<data: table<id: string, status: string, transport: record>, errors: table<id: string, message: string, code: string>> {
@@ -1357,7 +1404,7 @@ export def "eventsub-conduits-shards update-conduit-shards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about Twitch content classification labels.
@@ -1373,6 +1420,7 @@ export def "content-classification-labels get-content-classification-labels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale for the Content Classification Labels. You may specify a maximum of 1 locale. Default: `“en-US”`   Supported locales: `"bg-BG", "cs-CZ", "da-DK", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es-ES", "es-MX", "fi-FI", "fr-FR", "hu-HU", "it-IT", "ja-JP", "ko-KR", "nl-NL", "no-NO", "pl-PL", "pt-BT", "pt-PT", "ro-RO", "ru-RU", "sk-SK", "sv-SE", "th-TH", "tr-TR", "vi-VN", "zh-CN", "zh-TW"`
 ]: nothing -> record<data: table<id: string, description: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1381,7 +1429,7 @@ export def "content-classification-labels get-content-classification-labels" [
   let full_url = (build-url $base "/content_classification_labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an organization’s list of entitlements that have been granted to a game, a user, or both.
@@ -1397,6 +1445,7 @@ export def "entitlements-drops get-drops-entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # An ID that identifies the entitlement to get. Include this parameter for each entitlement you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 100 IDs.
   --user-id: string # An ID that identifies a user that was granted entitlements.
   --game-id: string # An ID that identifies a game that offered entitlements.
@@ -1410,7 +1459,7 @@ export def "entitlements-drops get-drops-entitlements" [
   let full_url = (build-url $base "/entitlements/drops" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the Drop entitlement’s fulfillment status.
@@ -1426,6 +1475,7 @@ export def "entitlements-drops update-drops-entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entitlement-ids: list # A list of IDs that identify the entitlements to update. You may specify a maximum of 100 IDs.
   --fulfillment-status: string@fulfillment-status-completer # The fulfillment status to set the entitlements to. Possible values are:      * CLAIMED — The user claimed the benefit. * FULFILLED — The developer granted the benefit that the user claimed.
 ]: any -> record<data: table<status: string, ids: list>> {
@@ -1437,7 +1487,7 @@ export def "entitlements-drops update-drops-entitlements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the specified configuration segment from the specified extension.
@@ -1453,6 +1503,7 @@ export def "extensions-configurations get-extension-configuration-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that installed the extension. This parameter is required if you set the _segment_ parameter to broadcaster or developer. Do not specify this parameter if you set _segment_ to global.
   --extension-id: string # The ID of the extension that contains the configuration segment you want to get.
   --segment: string@segment-completer # The type of configuration segment to get. Possible case-sensitive values are:       * broadcaster * developer * global    You may specify one or more segments. To specify multiple segments, include the `segment` parameter for each segment to get. For example, `segment=broadcaster&segment=developer`. Ignores duplicate segments.
@@ -1463,7 +1514,7 @@ export def "extensions-configurations get-extension-configuration-segment" [
   let full_url = (build-url $base "/extensions/configurations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a configuration segment.
@@ -1479,6 +1530,7 @@ export def "extensions-configurations set-extension-configuration-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   extension_id: string # The ID of the extension to update.
   segment: string@segment-completer # The configuration segment to update. Possible case-sensitive values are:      * broadcaster * developer * global
   --broadcaster-id: string # The ID of the broadcaster that installed the extension. Include this field only if the `segment` is set to developer or broadcaster.
@@ -1493,7 +1545,7 @@ export def "extensions-configurations set-extension-configuration-segment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the extension’s required_configuration string.
@@ -1509,6 +1561,7 @@ export def "extensions-required-configuration set-extension-required-configurati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that installed the extension on their channel.
   extension_id: string # The ID of the extension to update.
   extension_version: string # The version of the extension to update.
@@ -1523,7 +1576,7 @@ export def "extensions-required-configuration set-extension-required-configurati
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sends a message to one or more viewers.
@@ -1539,6 +1592,7 @@ export def "extensions-pubsub send-extension-pubsub-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   target: list # The target of the message. Possible values are:      * broadcast * global * whisper-<user-id>    If `is_global_broadcast` is **true**, you must set this field to global. The broadcast and global values are mutually exclusive; specify only one of them.
   broadcaster_id: string # The ID of the broadcaster to send the message to. Don’t include this field if `is_global_broadcast` is set to **true**.
   --is-global-broadcast: oneof<nothing, bool> # A Boolean value that determines whether the message should be sent to all channels where your extension is active. Set to **true** if the message should be sent to all channels. The default is **false**.
@@ -1552,7 +1606,7 @@ export def "extensions-pubsub send-extension-pubsub-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of broadcasters that are streaming live and have installed or activated the extension.
@@ -1568,6 +1622,7 @@ export def "extensions-live get-extension-live-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The ID of the extension to get. Returns the list of broadcasters that are live and that have installed or activated this extension.
   --first: int # The specific maximum number of items per page in the response. The actual number returned may be less than this limit. [Read More](https://dev.twitch.tv/docs/api/guide#pagination) (format: int32)
   --after: string # The cursor used to get the next page of results. The `pagination` field in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -1578,7 +1633,7 @@ export def "extensions-live get-extension-live-channels" [
   let full_url = (build-url $base "/extensions/live" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an extension’s list of shared secrets.
@@ -1594,13 +1649,14 @@ export def "extensions-jwt-secrets get-extension-secrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<format_version: int, secrets: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extensions/jwt/secrets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a shared secret used to sign and verify JWT tokens.
@@ -1616,6 +1672,7 @@ export def "extensions-jwt-secrets create-extension-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The ID of the extension to apply the shared secret to.
   --delay: int # The amount of time, in seconds, to delay activating the secret. The delay should provide enough time for instances of the extension to gracefully switch over to the new secret. The minimum delay is 300 seconds (5 minutes). The default is 300 seconds. (format: int32)
 ]: nothing -> record<data: table<format_version: int, secrets: list>> {
@@ -1625,7 +1682,7 @@ export def "extensions-jwt-secrets create-extension-secret" [
   let full_url = (build-url $base "/extensions/jwt/secrets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends a message to the specified broadcaster’s chat room.
@@ -1641,6 +1698,7 @@ export def "extensions-chat send-extension-chat-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that has activated the extension.
   text: string # The message. The message may contain a maximum of 280 characters.
   extension_id: string # The ID of the extension that’s sending the chat message.
@@ -1655,7 +1713,7 @@ export def "extensions-chat send-extension-chat-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about an extension.
@@ -1671,6 +1729,7 @@ export def "extensions get-extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The ID of the extension to get.
   --extension-version: string # The version of the extension to get. If not specified, it returns the latest, released version. If you don’t have a released version, you must specify a version; otherwise, the list is empty.
 ]: nothing -> record<data: table<author_name: string, bits_enabled: bool, can_install: bool, configuration_location: string, description: string, eula_tos_url: string, has_chat_support: bool, icon_url: string, icon_urls: record, id: string, name: string, privacy_policy_url: string, request_identity_link: bool, screenshot_urls: list, state: string, subscriptions_support_level: string, summary: string, support_email: string, version: string, viewer_summary: string, views: record, allowlisted_config_urls: list, allowlisted_panel_urls: list>> {
@@ -1680,7 +1739,7 @@ export def "extensions get-extensions" [
   let full_url = (build-url $base "/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about a released extension.
@@ -1696,6 +1755,7 @@ export def "extensions-released get-released-extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extension-id: string # The ID of the extension to get.
   --extension-version: string # The version of the extension to get. If not specified, it returns the latest version.
 ]: nothing -> record<data: table<author_name: string, bits_enabled: bool, can_install: bool, configuration_location: string, description: string, eula_tos_url: string, has_chat_support: bool, icon_url: string, icon_urls: record, id: string, name: string, privacy_policy_url: string, request_identity_link: bool, screenshot_urls: list, state: string, subscriptions_support_level: string, summary: string, support_email: string, version: string, viewer_summary: string, views: record, allowlisted_config_urls: list, allowlisted_panel_urls: list>> {
@@ -1705,7 +1765,7 @@ export def "extensions-released get-released-extensions" [
   let full_url = (build-url $base "/extensions/released" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of Bits products that belongs to the extension.
@@ -1721,6 +1781,7 @@ export def "bits-extensions get-extension-bits-products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --should-include-all: oneof<nothing, bool> # A Boolean value that determines whether to include disabled or expired Bits products in the response. The default is **false**.
 ]: nothing -> record<data: table<sku: string, cost: record, in_development: bool, display_name: string, expiration: string, is_broadcast: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1729,7 +1790,7 @@ export def "bits-extensions get-extension-bits-products" [
   let full_url = (build-url $base "/bits/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds or updates a Bits product that the extension created.
@@ -1746,6 +1807,7 @@ export def "bits-extensions update-extension-bits-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sku: string # The product's SKU. The SKU must be unique within an extension. The product's SKU cannot be changed. The SKU may contain only alphanumeric characters, dashes (-), underscores (\_), and periods (.) and is limited to a maximum of 255 characters. No spaces.
   cost: record # An object that contains the product's cost information. — shape: {amount: int, type: "bits"}
   display_name: string # The product's name as displayed in the extension. The maximum length is 255 characters.
@@ -1761,7 +1823,7 @@ export def "bits-extensions update-extension-bits-product" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an EventSub subscription.
@@ -1778,6 +1840,7 @@ export def "eventsub-subscriptions create-eventsub-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-1 # The type of subscription to create. For a list of subscriptions that you can create, see [Subscription Types](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types#subscription-types). Set this field to the value in the **Name** column of the Subscription Types table.
   version: string # The version number that identifies the definition of the subscription type that you want the response to use.
   condition: record # A JSON object that contains the parameter values that are specific to the specified subscription type. For the object’s required and optional fields, see the subscription type’s documentation.
@@ -1791,7 +1854,7 @@ export def "eventsub-subscriptions create-eventsub-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an EventSub subscription.
@@ -1807,6 +1870,7 @@ export def "eventsub-subscriptions delete-eventsub-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the subscription to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1815,7 +1879,7 @@ export def "eventsub-subscriptions delete-eventsub-subscription" [
   let full_url = (build-url $base "/eventsub/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of EventSub subscriptions that the client in the access token created.
@@ -1831,6 +1895,7 @@ export def "eventsub-subscriptions get-eventsub-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # Filter subscriptions by its status. Possible values are:      * enabled — The subscription is enabled. * webhook\_callback\_verification\_pending — The subscription is pending verification of the specified callback URL. * webhook\_callback\_verification\_failed — The specified callback URL failed verification. * notification\_failures\_exceeded — The notification delivery failure rate was too high. * authorization\_revoked — The authorization was revoked for one or more users specified in the **Condition** object. * moderator\_removed — The moderator that authorized the subscription is no longer one of the broadcaster's moderators. * user\_removed — One of the users specified in the **Condition** object was removed. * chat\_user\_banned - The user specified in the **Condition** object was banned from the broadcaster's chat. * version\_removed — The subscription to subscription type and version is no longer supported. * beta\_maintenance — The subscription to the beta subscription type was removed due to maintenance. * websocket\_disconnected — The client closed the connection. * websocket\_failed\_ping\_pong — The client failed to respond to a ping message. * websocket\_received\_inbound\_traffic — The client sent a non-pong message. Clients may only send pong messages (and only in response to a ping message). * websocket\_connection\_unused — The client failed to subscribe to events within the required time. * websocket\_internal\_error — The Twitch WebSocket server experienced an unexpected error. * websocket\_network\_timeout — The Twitch WebSocket server timed out writing the message to the client. * websocket\_network\_error — The Twitch WebSocket server experienced a network error writing the message to the client. * websocket\_failed\_to\_reconnect - The client failed to reconnect to the Twitch WebSocket server within the required time after a Reconnect Message.
   --type: string@type-completer-1 # Filter subscriptions by subscription type. For a list of subscription types, see [Subscription Types](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types#subscription-types).
   --user-id: string # Filter subscriptions by user ID. The response contains subscriptions where this ID matches a user ID that you specified in the **Condition** object when you [created the subscription](https://dev.twitch.tv/docs/api/reference#create-eventsub-subscription).
@@ -1843,7 +1908,7 @@ export def "eventsub-subscriptions get-eventsub-subscriptions" [
   let full_url = (build-url $base "/eventsub/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about all broadcasts on Twitch.
@@ -1859,6 +1924,7 @@ export def "games-top get-top-games" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
   --before: string # The cursor used to get the previous page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -1869,7 +1935,7 @@ export def "games-top get-top-games" [
   let full_url = (build-url $base "/games/top" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about specified games.
@@ -1885,6 +1951,7 @@ export def "games get-games" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The ID of the category or game to get. Include this parameter for each category or game you want to get. For example, `&id=1234&id=5678`. You may specify a maximum of 100 IDs. The endpoint ignores duplicate and invalid IDs or IDs that weren’t found.
   --name: list # The name of the category or game to get. The name must exactly match the category’s or game’s title. Include this parameter for each category or game you want to get. For example, `&name=foo&name=bar`. You may specify a maximum of 100 names. The endpoint ignores duplicate names and names that weren’t found.
   --igdb-id: list # The [IGDB](https://www.igdb.com/) ID of the game to get. Include this parameter for each game you want to get. For example, `&igdb_id=1234&igdb_id=5678`. You may specify a maximum of 100 IDs. The endpoint ignores duplicate and invalid IDs or IDs that weren’t found.
@@ -1895,7 +1962,7 @@ export def "games get-games" [
   let full_url = (build-url $base "/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s list of active goals.
@@ -1911,6 +1978,7 @@ export def "goals get-creator-goals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that created the goals. This ID must match the user ID in the user access token.
 ]: nothing -> record<data: table<id: string, broadcaster_id: string, broadcaster_name: string, broadcaster_login: string, type: string, description: string, current_amount: int, target_amount: int, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1919,7 +1987,7 @@ export def "goals get-creator-goals" [
   let full_url = (build-url $base "/goals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Gets the channel settings for configuration of the Guest Star feature for a particular host.
@@ -1935,6 +2003,7 @@ export def "guest-star-channel-settings get-channel-guest-star-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster you want to get guest star settings for.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
 ]: nothing -> record<is_moderator_send_live_enabled: bool, slot_count: int, is_browser_source_audio_enabled: bool, group_layout: string, browser_source_token: string> {
@@ -1944,7 +2013,7 @@ export def "guest-star-channel-settings get-channel-guest-star-settings" [
   let full_url = (build-url $base "/guest_star/channel_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Mutates the channel settings for configuration of the Guest Star feature for a particular host.
@@ -1960,6 +2029,7 @@ export def "guest-star-channel-settings update-channel-guest-star-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster you want to update Guest Star settings for.
   --is-moderator-send-live-enabled: oneof<nothing, bool> # Flag determining if Guest Star moderators have access to control whether a guest is live once assigned to a slot.
   --slot-count: int # Number of slots the Guest Star call interface will allow the host to add to a call. Required to be between 1 and 6. (format: int32)
@@ -1976,7 +2046,7 @@ export def "guest-star-channel-settings update-channel-guest-star-settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BETA Gets information about an ongoing Guest Star session for a particular channel.
@@ -1992,6 +2062,7 @@ export def "guest-star-session get-guest-star-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # ID for the user hosting the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
 ]: nothing -> record<data: table<id: string, guests: list>> {
@@ -2001,7 +2072,7 @@ export def "guest-star-session get-guest-star-session" [
   let full_url = (build-url $base "/guest_star/session" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Programmatically creates a Guest Star session on behalf of the broadcaster.
@@ -2017,6 +2088,7 @@ export def "guest-star-session create-guest-star-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster you want to create a Guest Star session for. Provided `broadcaster_id` must match the `user_id` in the auth token.
 ]: nothing -> record<data: table<id: string, guests: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2025,7 +2097,7 @@ export def "guest-star-session create-guest-star-session" [
   let full_url = (build-url $base "/guest_star/session" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Programmatically ends a Guest Star session on behalf of the broadcaster.
@@ -2041,6 +2113,7 @@ export def "guest-star-session end-guest-star-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster you want to end a Guest Star session for. Provided `broadcaster_id` must match the `user_id` in the auth token.
   --session-id: string # ID for the session to end on behalf of the broadcaster.
 ]: nothing -> record<data: table<id: string, guests: list>> {
@@ -2050,7 +2123,7 @@ export def "guest-star-session end-guest-star-session" [
   let full_url = (build-url $base "/guest_star/session" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Provides the caller with a list of pending invites to a Guest Star session.
@@ -2066,6 +2139,7 @@ export def "guest-star-invites get-guest-star-invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the `user_id` in the user access token.
   --session-id: string # The session ID to query for invite status.
@@ -2076,7 +2150,7 @@ export def "guest-star-invites get-guest-star-invites" [
   let full_url = (build-url $base "/guest_star/invites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Sends an invite to a specified guest on behalf of the broadcaster for a Guest Star session in progress.
@@ -2092,6 +2166,7 @@ export def "guest-star-invites send-guest-star-invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the `user_id` in the user access token.
   --session-id: string # The session ID for the invite to be sent on behalf of the broadcaster.
@@ -2103,7 +2178,7 @@ export def "guest-star-invites send-guest-star-invite" [
   let full_url = (build-url $base "/guest_star/invites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Revokes a previously sent invite for a Guest Star session.
@@ -2119,6 +2194,7 @@ export def "guest-star-invites delete-guest-star-invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the `user_id` in the user access token.
   --session-id: string # The ID of the session for the invite to be revoked on behalf of the broadcaster.
@@ -2130,7 +2206,7 @@ export def "guest-star-invites delete-guest-star-invite" [
   let full_url = (build-url $base "/guest_star/invites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Allows a previously invited user to be assigned a slot within the active Guest Star session.
@@ -2146,6 +2222,7 @@ export def "guest-star-slot assign-guest-star-slot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the `user_id` in the user access token.
   --session-id: string # The ID of the Guest Star session in which to assign the slot.
@@ -2158,7 +2235,7 @@ export def "guest-star-slot assign-guest-star-slot" [
   let full_url = (build-url $base "/guest_star/slot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Allows a user to update the assigned slot for a particular user within the active Guest Star session.
@@ -2174,6 +2251,7 @@ export def "guest-star-slot update-guest-star-slot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the `user_id` in the user access token.
   --session-id: string # The ID of the Guest Star session in which to update slot settings.
@@ -2186,7 +2264,7 @@ export def "guest-star-slot update-guest-star-slot" [
   let full_url = (build-url $base "/guest_star/slot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Allows a caller to remove a slot assignment from a user participating in an active Guest Star session.
@@ -2202,6 +2280,7 @@ export def "guest-star-slot delete-guest-star-slot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --session-id: string # The ID of the Guest Star session in which to remove the slot assignment.
@@ -2215,7 +2294,7 @@ export def "guest-star-slot delete-guest-star-slot" [
   let full_url = (build-url $base "/guest_star/slot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BETA Allows a user to update slot settings for a particular guest within a Guest Star session.
@@ -2231,6 +2310,7 @@ export def "guest-star-slot-settings update-guest-star-slot-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster running the Guest Star session.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --session-id: string # The ID of the Guest Star session in which to update a slot’s settings.
@@ -2246,7 +2326,7 @@ export def "guest-star-slot-settings update-guest-star-slot-settings" [
   let full_url = (build-url $base "/guest_star/slot_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NEW Gets the status of a Hype Train for the specified broadcaster.
@@ -2262,6 +2342,7 @@ export def "hypetrain-status get-hype-train-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The User ID of the channel broadcaster.
 ]: nothing -> record<data: table<current: record>, all_time_high: record<level: int, total: int, achieved_at: string>, shared_all_time_high: record<level: int, total: int, achieved_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2270,7 +2351,7 @@ export def "hypetrain-status get-hype-train-status" [
   let full_url = (build-url $base "/hypetrain/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks whether AutoMod would flag the specified message for review.
@@ -2287,6 +2368,7 @@ export def "moderation-enforcements-status check-automod-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose AutoMod settings and list of blocked terms are used to check the message. This ID must match the user ID in the access token.
   data: list # The list of messages to check. The list must contain at least one message and may contain up to a maximum of 100 messages. — item shape: {msg_id: string, msg_text: string}
 ]: any -> record<data: table<msg_id: string, is_permitted: bool>> {
@@ -2299,7 +2381,7 @@ export def "moderation-enforcements-status check-automod-status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allow or deny the message that AutoMod flagged for review.
@@ -2315,6 +2397,7 @@ export def "moderation-automod-message manage-held-automod-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The moderator who is approving or denying the held message. This ID must match the user ID in the access token.
   msg_id: string # The ID of the message to allow or deny.
   action: string@action-completer # The action to take for the message. Possible values are:      * ALLOW * DENY
@@ -2327,7 +2410,7 @@ export def "moderation-automod-message manage-held-automod-messages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the broadcaster’s AutoMod settings.
@@ -2343,6 +2426,7 @@ export def "moderation-automod-settings get-automod-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose AutoMod settings you want to get.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
 ]: nothing -> record<data: table<broadcaster_id: string, moderator_id: string, overall_level: int, disability: int, aggression: int, sexuality_sex_or_gender: int, misogyny: int, bullying: int, swearing: int, race_ethnicity_or_religion: int, sex_based_terms: int>> {
@@ -2352,7 +2436,7 @@ export def "moderation-automod-settings get-automod-settings" [
   let full_url = (build-url $base "/moderation/automod/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the broadcaster’s AutoMod settings.
@@ -2368,6 +2452,7 @@ export def "moderation-automod-settings update-automod-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose AutoMod settings you want to update.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --aggression: int # The Automod level for hostility involving aggression. (format: int32)
@@ -2389,7 +2474,7 @@ export def "moderation-automod-settings update-automod-settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all users that the broadcaster banned or put in a timeout.
@@ -2405,6 +2490,7 @@ export def "moderation-banned get-banned-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose list of banned users you want to get. This ID must match the user ID in the access token.
   --user-id: list # A list of user IDs used to filter the results. To specify more than one ID, include this parameter for each user you want to get. For example, `user_id=1234&user_id=5678`. You may specify a maximum of 100 IDs.      The returned list includes only those users that were banned or put in a timeout. The list is returned in the same order that you specified the IDs.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
@@ -2417,7 +2503,7 @@ export def "moderation-banned get-banned-users" [
   let full_url = (build-url $base "/moderation/banned" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bans a user from participating in a broadcaster’s chat room or puts them in a timeout.
@@ -2434,6 +2520,7 @@ export def "moderation-bans ban-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose chat room the user is being banned from.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   data: record # Identifies the user and type of ban. — shape: {user_id: string, duration?: int, reason?: string}
@@ -2447,7 +2534,7 @@ export def "moderation-bans ban-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes the ban or timeout that was placed on the specified user.
@@ -2463,6 +2550,7 @@ export def "moderation-bans unban-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose chat room the user is banned from chatting in.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --user-id: string # The ID of the user to remove the ban or timeout from.
@@ -2473,7 +2561,7 @@ export def "moderation-bans unban-user" [
   let full_url = (build-url $base "/moderation/bans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of unban requests for a broadcaster’s channel.
@@ -2489,6 +2577,7 @@ export def "moderation-unban-requests get-unban-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose channel is receiving unban requests.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s unban requests. This ID must match the user ID in the user access token.
   --status: string # Filter by a status.      * pending * approved * denied * acknowledged * canceled
@@ -2502,7 +2591,7 @@ export def "moderation-unban-requests get-unban-requests" [
   let full_url = (build-url $base "/moderation/unban_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolves an unban request by approving or denying it.
@@ -2518,6 +2607,7 @@ export def "moderation-unban-requests resolve-unban-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose channel is approving or denying the unban request.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s unban requests. This ID must match the user ID in the user access token.
   --unban-request-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s unban requests. This ID must match the user ID in the user access token.
@@ -2530,7 +2620,7 @@ export def "moderation-unban-requests resolve-unban-requests" [
   let full_url = (build-url $base "/moderation/unban_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s list of non-private, blocked words or phrases.
@@ -2546,6 +2636,7 @@ export def "moderation-blocked-terms get-blocked-terms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose blocked terms you’re getting.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
@@ -2557,7 +2648,7 @@ export def "moderation-blocked-terms get-blocked-terms" [
   let full_url = (build-url $base "/moderation/blocked_terms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a word or phrase to the broadcaster’s list of blocked terms.
@@ -2573,6 +2664,7 @@ export def "moderation-blocked-terms add-blocked-term" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the list of blocked terms.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   text: string # The word or phrase to block from being used in the broadcaster’s chat room. The term must contain a minimum of 2 characters and may contain up to a maximum of 500 characters.      Terms may include a wildcard character (\*). The wildcard character must appear at the beginning or end of a word or set of characters. For example, \*foo or foo\*.      If the blocked term already exists, the response contains the existing blocked term.
@@ -2586,7 +2678,7 @@ export def "moderation-blocked-terms add-blocked-term" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes the word or phrase from the broadcaster’s list of blocked terms.
@@ -2602,6 +2694,7 @@ export def "moderation-blocked-terms remove-blocked-term" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the list of blocked terms.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --id: string # The ID of the blocked term to remove from the broadcaster’s list of blocked terms.
@@ -2612,7 +2705,7 @@ export def "moderation-blocked-terms remove-blocked-term" [
   let full_url = (build-url $base "/moderation/blocked_terms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a single chat message or all chat messages from the broadcaster’s chat room.
@@ -2628,6 +2721,7 @@ export def "moderation-chat delete-chat-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the chat room to remove messages from.
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --message-id: string # The ID of the message to remove. The `id` tag in the [PRIVMSG](https://dev.twitch.tv/docs/irc/tags#privmsg-tags) tag contains the message’s ID. Restrictions:      * The message must have been created within the last 6 hours. * The message must not belong to the broadcaster. * The message must not belong to another moderator.    If not specified, the request removes all messages in the broadcaster’s chat room.
@@ -2638,7 +2732,7 @@ export def "moderation-chat delete-chat-messages" [
   let full_url = (build-url $base "/moderation/chat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of channels that the specified user has moderator privileges in.
@@ -2654,6 +2748,7 @@ export def "moderation-channels get-moderated-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # A user’s ID. Returns the list of channels that this user has moderator privileges in. This ID must match the user ID in the user OAuth token
   --after: string # The cursor used to get the next page of results. The Pagination object in the response contains the cursor’s value.
   --first: int # The maximum number of items to return per page in the response.      Minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
@@ -2664,7 +2759,7 @@ export def "moderation-channels get-moderated-channels" [
   let full_url = (build-url $base "/moderation/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all users allowed to moderate the broadcaster’s chat room.
@@ -2680,6 +2775,7 @@ export def "moderation-moderators get-moderators" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose list of moderators you want to get. This ID must match the user ID in the access token.
   --user-id: list # A list of user IDs used to filter the results. To specify more than one ID, include this parameter for each moderator you want to get. For example, `user_id=1234&user_id=5678`. You may specify a maximum of 100 IDs.      The returned list includes only the users from the list who are moderators in the broadcaster’s channel. The list is returned in the same order as you specified the IDs.
   --first: string # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20.
@@ -2691,7 +2787,7 @@ export def "moderation-moderators get-moderators" [
   let full_url = (build-url $base "/moderation/moderators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a moderator to the broadcaster’s chat room.
@@ -2707,6 +2803,7 @@ export def "moderation-moderators add-channel-moderator" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the chat room. This ID must match the user ID in the access token.
   --user-id: string # The ID of the user to add as a moderator in the broadcaster’s chat room.
 ]: nothing -> any {
@@ -2716,7 +2813,7 @@ export def "moderation-moderators add-channel-moderator" [
   let full_url = (build-url $base "/moderation/moderators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a moderator from the broadcaster’s chat room.
@@ -2732,6 +2829,7 @@ export def "moderation-moderators remove-channel-moderator" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the chat room. This ID must match the user ID in the access token.
   --user-id: string # The ID of the user to remove as a moderator from the broadcaster’s chat room.
 ]: nothing -> any {
@@ -2741,7 +2839,7 @@ export def "moderation-moderators remove-channel-moderator" [
   let full_url = (build-url $base "/moderation/moderators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of the broadcaster’s VIPs.
@@ -2757,6 +2855,7 @@ export def "channels-vips get-vips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: list # Filters the list for specific VIPs. To specify more than one user, include the _user\_id_ parameter for each user to get. For example, `&user_id=1234&user_id=5678`. The maximum number of IDs that you may specify is 100\. Ignores the ID of those users in the list that aren’t VIPs.
   --broadcaster-id: string # The ID of the broadcaster whose list of VIPs you want to get. This ID must match the user ID in the access token.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
@@ -2768,7 +2867,7 @@ export def "channels-vips get-vips" [
   let full_url = (build-url $base "/channels/vips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds the specified user as a VIP in the broadcaster’s channel.
@@ -2784,6 +2883,7 @@ export def "channels-vips add-channel-vip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user to give VIP status to.
   --broadcaster-id: string # The ID of the broadcaster that’s adding the user as a VIP. This ID must match the user ID in the access token.
 ]: nothing -> any {
@@ -2793,7 +2893,7 @@ export def "channels-vips add-channel-vip" [
   let full_url = (build-url $base "/channels/vips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes the specified user as a VIP in the broadcaster’s channel.
@@ -2809,6 +2909,7 @@ export def "channels-vips remove-channel-vip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user to remove VIP status from.
   --broadcaster-id: string # The ID of the broadcaster who owns the channel where the user has VIP status.
 ]: nothing -> any {
@@ -2818,7 +2919,7 @@ export def "channels-vips remove-channel-vip" [
   let full_url = (build-url $base "/channels/vips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activates or deactivates the broadcaster’s Shield Mode.
@@ -2834,6 +2935,7 @@ export def "moderation-shield-mode update-shield-mode-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose Shield Mode you want to activate or deactivate.
   --moderator-id: string # The ID of the broadcaster or a user that is one of the broadcaster’s moderators. This ID must match the user ID in the access token.
   --is-active: oneof<nothing, bool> # A Boolean value that determines whether to activate Shield Mode. Set to **true** to activate Shield Mode; otherwise, **false** to deactivate Shield Mode.
@@ -2847,7 +2949,7 @@ export def "moderation-shield-mode update-shield-mode-status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the broadcaster’s Shield Mode activation status.
@@ -2863,6 +2965,7 @@ export def "moderation-shield-mode get-shield-mode-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose Shield Mode activation status you want to get.
   --moderator-id: string # The ID of the broadcaster or a user that is one of the broadcaster’s moderators. This ID must match the user ID in the access token.
 ]: nothing -> record<data: table<is_active: bool, moderator_id: string, moderator_login: string, moderator_name: string, last_activated_at: string>> {
@@ -2872,7 +2975,7 @@ export def "moderation-shield-mode get-shield-mode-status" [
   let full_url = (build-url $base "/moderation/shield_mode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Warns a user in the specified broadcaster’s chat room, preventing them from chat interaction until the warning is acknowledged.
@@ -2889,6 +2992,7 @@ export def "moderation-warnings warn-chat-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the channel in which the warning will take effect.
   --moderator-id: string # The ID of the twitch user who requested the warning.
   data: record # A list that contains information about the warning. — shape: {user_id: string, reason: string}
@@ -2902,7 +3006,7 @@ export def "moderation-warnings warn-chat-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # NEW Adds a suspicious user status to a chatter on the broadcaster’s channel.
@@ -2918,6 +3022,7 @@ export def "moderation-suspicious-users add-suspicious-status-to-chat-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The user ID of the broadcaster, indicating the channel where the status is being applied.
   --moderator-id: string # The user ID of the moderator who is applying the status.
   user_id: string # The ID of the user being given the suspicious status.
@@ -2932,7 +3037,7 @@ export def "moderation-suspicious-users add-suspicious-status-to-chat-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # NEW Remove a suspicious user status from a chatter on broadcaster’s channel.
@@ -2948,6 +3053,7 @@ export def "moderation-suspicious-users remove-suspicious-status-from-chat-user"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The user ID of the broadcaster, indicating the channel where the status is being removed.
   --moderator-id: string # The user ID of the moderator who is removing the status.
   --user-id: string # The ID of the user having the suspicious status removed.
@@ -2958,7 +3064,7 @@ export def "moderation-suspicious-users remove-suspicious-status-from-chat-user"
   let full_url = (build-url $base "/moderation/suspicious_users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of polls that the broadcaster created.
@@ -2974,6 +3080,7 @@ export def "polls get-polls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that created the polls. This ID must match the user ID in the user access token.
   --id: list # A list of IDs that identify the polls to return. To specify more than one ID, include this parameter for each poll you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 20 IDs.      Specify this parameter only if you want to filter the list that the request returns. The endpoint ignores duplicate IDs and those not owned by this broadcaster.
   --first: string # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 20 items per page. The default is 20.
@@ -2985,7 +3092,7 @@ export def "polls get-polls" [
   let full_url = (build-url $base "/polls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a poll that viewers in the broadcaster’s channel can vote on.
@@ -3002,6 +3109,7 @@ export def "polls create-poll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the broadcaster that’s running the poll. This ID must match the user ID in the user access token.
   title: string # The question that viewers will vote on. For example, _What game should I play next?_ The question may contain a maximum of 60 characters.
   choices: list # A list of choices that viewers may choose from. The list must contain a minimum of 2 choices and up to a maximum of 5 choices. — item shape: {title: string}
@@ -3017,7 +3125,7 @@ export def "polls create-poll" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # End an active poll.
@@ -3033,6 +3141,7 @@ export def "polls end-poll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the broadcaster that’s running the poll. This ID must match the user ID in the user access token.
   id: string # The ID of the poll to update.
   status: string@status-completer-4 # The status to set the poll to. Possible case-sensitive values are:      * TERMINATED — Ends the poll before the poll is scheduled to end. The poll remains publicly visible. * ARCHIVED — Ends the poll before the poll is scheduled to end, and then archives it so it's no longer publicly visible.
@@ -3045,7 +3154,7 @@ export def "polls end-poll" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of Channel Points Predictions that the broadcaster created.
@@ -3061,6 +3170,7 @@ export def "predictions get-predictions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose predictions you want to get. This ID must match the user ID in the user access token.
   --id: list # The ID of the prediction to get. To specify more than one ID, include this parameter for each prediction you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 25 IDs. The endpoint ignores duplicate IDs and those not owned by the broadcaster.
   --first: string # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 25 items per page. The default is 20.
@@ -3072,7 +3182,7 @@ export def "predictions get-predictions" [
   let full_url = (build-url $base "/predictions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Channel Points Prediction.
@@ -3089,6 +3199,7 @@ export def "predictions create-prediction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the broadcaster that’s running the prediction. This ID must match the user ID in the user access token.
   title: string # The question that the broadcaster is asking. For example, _Will I finish this entire pizza?_ The title is limited to a maximum of 45 characters.
   outcomes: list # The list of possible outcomes that the viewers may choose from. The list must contain a minimum of 2 choices and up to a maximum of 10 choices. — item shape: {title: string}
@@ -3102,7 +3213,7 @@ export def "predictions create-prediction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Locks, resolves, or cancels a Channel Points Prediction.
@@ -3118,6 +3229,7 @@ export def "predictions end-prediction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   broadcaster_id: string # The ID of the broadcaster that’s running the prediction. This ID must match the user ID in the user access token.
   id: string # The ID of the prediction to update.
   status: string@status-completer-5 # The status to set the prediction to. Possible case-sensitive values are:      * RESOLVED — The winning outcome is determined and the Channel Points are distributed to the viewers who predicted the correct outcome. * CANCELED — The broadcaster is canceling the prediction and sending refunds to the participants. * LOCKED — The broadcaster is locking the prediction, which means viewers may no longer make predictions.    The broadcaster can update an active prediction to LOCKED, RESOLVED, or CANCELED; and update a locked prediction to RESOLVED or CANCELED.      The broadcaster has up to 24 hours after the prediction window closes to resolve the prediction. If not, Twitch sets the status to CANCELED and returns the points.
@@ -3131,7 +3243,7 @@ export def "predictions end-prediction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Raid another channel by sending the broadcaster’s viewers to the targeted channel.
@@ -3147,6 +3259,7 @@ export def "raids start-a-raid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-broadcaster-id: string # The ID of the broadcaster that’s sending the raiding party. This ID must match the user ID in the user access token.
   --to-broadcaster-id: string # The ID of the broadcaster to raid.
 ]: nothing -> record<data: table<created_at: string, is_mature: bool>> {
@@ -3156,7 +3269,7 @@ export def "raids start-a-raid" [
   let full_url = (build-url $base "/raids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a pending raid.
@@ -3172,6 +3285,7 @@ export def "raids cancel-a-raid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that initiated the raid. This ID must match the user ID in the user access token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3180,7 +3294,7 @@ export def "raids cancel-a-raid" [
   let full_url = (build-url $base "/raids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s streaming schedule.
@@ -3196,6 +3310,7 @@ export def "schedule get-channel-stream-schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the streaming schedule you want to get.
   --id: list # The ID of the scheduled segment to return. To specify more than one segment, include the ID of each segment you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 100 IDs.
   --start-time: string # The UTC date and time that identifies when in the broadcaster’s schedule to start returning segments. If not specified, the request returns segments starting after the current UTC date and time. Specify the date and time in RFC3339 format (for example, `2022-09-01T00:00:00Z`). (format: date-time)
@@ -3209,7 +3324,7 @@ export def "schedule get-channel-stream-schedule" [
   let full_url = (build-url $base "/schedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the broadcaster’s streaming schedule as an iCalendar.
@@ -3225,6 +3340,7 @@ export def "schedule-icalendar get-channel-icalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the streaming schedule you want to get.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3233,7 +3349,7 @@ export def "schedule-icalendar get-channel-icalendar" [
   let full_url = (build-url $base "/schedule/icalendar" $qp)
   let accept_val = "text/calendar"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the broadcaster’s schedule settings, such as scheduling a vacation.
@@ -3249,6 +3365,7 @@ export def "schedule-settings update-channel-stream-schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose schedule settings you want to update. The ID must match the user ID in the user access token.
   --is-vacation-enabled: oneof<nothing, bool> # A Boolean value that indicates whether the broadcaster has scheduled a vacation. Set to **true** to enable Vacation Mode and add vacation dates, or **false** to cancel a previously scheduled vacation.
   --vacation-start-time: string # The UTC date and time of when the broadcaster’s vacation starts. Specify the date and time in RFC3339 format (for example, 2021-05-16T00:00:00Z). Required if _is\_vacation\_enabled_ is **true**. (format: date-time)
@@ -3261,7 +3378,7 @@ export def "schedule-settings update-channel-stream-schedule" [
   let full_url = (build-url $base "/schedule/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a single or recurring broadcast to the broadcaster’s streaming schedule.
@@ -3277,6 +3394,7 @@ export def "schedule-segment create-channel-stream-schedule-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the schedule to add the broadcast segment to. This ID must match the user ID in the user access token.
   start_time: string # The date and time that the broadcast segment starts. Specify the date and time in RFC3339 format (for example, 2021-07-01T18:00:00Z). (format: date-time)
   timezone: string # The time zone where the broadcast takes place. Specify the time zone using [IANA time zone database](https://www.iana.org/time-zones) format (for example, America/New\_York).
@@ -3294,7 +3412,7 @@ export def "schedule-segment create-channel-stream-schedule-segment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a scheduled broadcast segment.
@@ -3310,6 +3428,7 @@ export def "schedule-segment update-channel-stream-schedule-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster who owns the broadcast segment to update. This ID must match the user ID in the user access token.
   --id: string # The ID of the broadcast segment to update.
   --start-time: string # The date and time that the broadcast segment starts. Specify the date and time in RFC3339 format (for example, 2022-08-02T06:00:00Z).      **NOTE**: Only partners and affiliates may update a broadcast’s start time and only for non-recurring segments. (format: date-time)
@@ -3328,7 +3447,7 @@ export def "schedule-segment update-channel-stream-schedule-segment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a broadcast from the broadcaster’s streaming schedule.
@@ -3344,6 +3463,7 @@ export def "schedule-segment delete-channel-stream-schedule-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the streaming schedule. This ID must match the user ID in the user access token.
   --id: string # The ID of the broadcast segment to remove.
 ]: nothing -> any {
@@ -3353,7 +3473,7 @@ export def "schedule-segment delete-channel-stream-schedule-segment" [
   let full_url = (build-url $base "/schedule/segment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the games or categories that match the specified query.
@@ -3369,6 +3489,7 @@ export def "search-categories search-categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The URI-encoded search string. For example, encode _#archery_ as `%23archery` and search strings like _angel of death_ as `angel%20of%20death`.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -3379,7 +3500,7 @@ export def "search-categories search-categories" [
   let full_url = (build-url $base "/search/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the channels that match the specified query and have streamed content within the past 6 months.
@@ -3395,6 +3516,7 @@ export def "search-channels search-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The URI-encoded search string. For example, encode search strings like _angel of death_ as `angel%20of%20death`.
   --live-only: oneof<nothing, bool> # A Boolean value that determines whether the response includes only channels that are currently streaming live. Set to **true** to get only channels that are streaming live; otherwise, **false** to get live and offline channels. The default is **false**.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
@@ -3406,7 +3528,7 @@ export def "search-channels search-channels" [
   let full_url = (build-url $base "/search/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the channel’s stream key.
@@ -3422,6 +3544,7 @@ export def "streams-key get-stream-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster that owns the channel. The ID must match the user ID in the access token.
 ]: nothing -> record<data: table<stream_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3430,7 +3553,7 @@ export def "streams-key get-stream-key" [
   let full_url = (build-url $base "/streams/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all streams.
@@ -3446,6 +3569,7 @@ export def "streams get-streams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: list # A user ID used to filter the list of streams. Returns only the streams of those users that are broadcasting. You may specify a maximum of 100 IDs. To specify multiple IDs, include the _user\_id_ parameter for each user. For example, `&user_id=1234&user_id=5678`.
   --user-login: list # A user login name used to filter the list of streams. Returns only the streams of those users that are broadcasting. You may specify a maximum of 100 login names. To specify multiple names, include the _user\_login_ parameter for each user. For example, `&user_login=foo&user_login=bar`.
   --game-id: list # A game (category) ID used to filter the list of streams. Returns only the streams that are broadcasting the game (category). You may specify a maximum of 100 IDs. To specify multiple IDs, include the _game\_id_ parameter for each game. For example, `&game_id=9876&game_id=5432`.
@@ -3461,7 +3585,7 @@ export def "streams get-streams" [
   let full_url = (build-url $base "/streams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of broadcasters that the user follows and that are streaming live.
@@ -3477,6 +3601,7 @@ export def "streams-followed get-followed-streams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user whose list of followed streams you want to get. This ID must match the user ID in the access token.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 100. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -3487,7 +3612,7 @@ export def "streams-followed get-followed-streams" [
   let full_url = (build-url $base "/streams/followed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a marker to a live stream.
@@ -3503,6 +3628,7 @@ export def "streams-markers create-stream-marker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The ID of the broadcaster that’s streaming content. This ID must match the user ID in the access token or the user in the access token must be one of the broadcaster’s editors.
   --description: string # A short description of the marker to help the user remember why they marked the location. The maximum length of the description is 140 characters.
 ]: any -> record<data: table<id: string, created_at: string, position_seconds: int, description: string>> {
@@ -3514,7 +3640,7 @@ export def "streams-markers create-stream-marker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of markers from the user’s most recent stream or from the specified VOD/video.
@@ -3530,6 +3656,7 @@ export def "streams-markers get-stream-markers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # A user ID. The request returns the markers from this user’s most recent video. This ID must match the user ID in the access token or the user in the access token must be one of the broadcaster’s editors.      This parameter and the _video\_id_ query parameter are mutually exclusive.
   --video-id: string # A video on demand (VOD)/video ID. The request returns the markers from this VOD/video. The user in the access token must own the video or the user must be one of the broadcaster’s editors.      This parameter and the _user\_id_ query parameter are mutually exclusive.
   --first: string # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20.
@@ -3542,7 +3669,7 @@ export def "streams-markers get-stream-markers" [
   let full_url = (build-url $base "/streams/markers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users that subscribe to the specified broadcaster.
@@ -3558,6 +3685,7 @@ export def "subscriptions get-broadcaster-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The broadcaster’s ID. This ID must match the user ID in the access token.
   --user-id: list # Filters the list to include only the specified subscribers. To specify more than one subscriber, include this parameter for each subscriber. For example, `&user_id=1234&user_id=5678`. You may specify a maximum of 100 subscribers.
   --first: string # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20.
@@ -3570,7 +3698,7 @@ export def "subscriptions get-broadcaster-subscriptions" [
   let full_url = (build-url $base "/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks whether the user subscribes to the broadcaster’s channel.
@@ -3586,6 +3714,7 @@ export def "subscriptions-user check-user-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of a partner or affiliate broadcaster.
   --user-id: string # The ID of the user that you’re checking to see whether they subscribe to the broadcaster in _broadcaster\_id_. This ID must match the user ID in the access Token.
 ]: nothing -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, gifter_id: string, gifter_login: string, gifter_name: string, is_gift: bool, tier: string>> {
@@ -3595,7 +3724,7 @@ export def "subscriptions-user check-user-subscription" [
   let full_url = (build-url $base "/subscriptions/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of all stream tags that Twitch defines. You can also filter the list by one or more tag IDs.
@@ -3613,6 +3742,7 @@ export def "tags-streams get-all-stream-tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag-id: list # The ID of the tag to get. Used to filter the list of tags. To specify more than one tag, include the _tag\_id_ parameter for each tag to get. For example, `tag_id=1234&tag_id=5678`. The maximum number of IDs you may specify is 100\. Ignores invalid IDs but not duplicate IDs.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -3623,7 +3753,7 @@ export def "tags-streams get-all-stream-tags" [
   let full_url = (build-url $base "/tags/streams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of stream tags that the broadcaster or Twitch added to their channel.
@@ -3641,6 +3771,7 @@ export def "streams-tags get-stream-tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose stream tags you want to get.
 ]: nothing -> record<data: table<tag_id: string, is_auto: bool, localization_names: record, localization_descriptions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3649,7 +3780,7 @@ export def "streams-tags get-stream-tags" [
   let full_url = (build-url $base "/streams/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of Twitch teams that the broadcaster is a member of.
@@ -3665,6 +3796,7 @@ export def "teams-channel get-channel-teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose teams you want to get.
 ]: nothing -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, background_image_url: string, banner: string, created_at: string, updated_at: string, info: string, thumbnail_url: string, team_name: string, team_display_name: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3673,7 +3805,7 @@ export def "teams-channel get-channel-teams" [
   let full_url = (build-url $base "/teams/channel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the specified Twitch team.
@@ -3689,6 +3821,7 @@ export def "teams get-teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the team to get. This parameter and the _id_ parameter are mutually exclusive; you must specify the team’s name or ID but not both.
   --id: string # The ID of the team to get. This parameter and the _name_ parameter are mutually exclusive; you must specify the team’s name or ID but not both.
 ]: nothing -> record<data: table<users: list, background_image_url: string, banner: string, created_at: string, updated_at: string, info: string, thumbnail_url: string, team_name: string, team_display_name: string, id: string>> {
@@ -3698,7 +3831,7 @@ export def "teams get-teams" [
   let full_url = (build-url $base "/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about one or more users.
@@ -3714,6 +3847,7 @@ export def "users get-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The ID of the user to get. To specify more than one user, include the _id_ parameter for each user to get. For example, `id=1234&id=5678`. The maximum number of IDs you may specify is 100.
   --login: list # The login name of the user to get. To specify more than one user, include the _login_ parameter for each user to get. For example, `login=foo&login=bar`. The maximum number of login names you may specify is 100.
 ]: nothing -> record<data: table<id: string, login: string, display_name: string, type: string, broadcaster_type: string, description: string, profile_image_url: string, offline_image_url: string, view_count: int, email: string, created_at: string>> {
@@ -3723,7 +3857,7 @@ export def "users get-users" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the user’s information.
@@ -3739,6 +3873,7 @@ export def "users update-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The string to update the channel’s description to. The description is limited to a maximum of 300 characters.      To remove the description, specify this parameter but don’t set it’s value (for example, `?description=`).
 ]: nothing -> record<data: table<id: string, login: string, display_name: string, type: string, broadcaster_type: string, description: string, profile_image_url: string, offline_image_url: string, view_count: int, email: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3747,7 +3882,7 @@ export def "users update-user" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NEW Gets the authorization scopes that the specified user has granted the application.
@@ -3763,6 +3898,7 @@ export def "authorization-users get-authorization-by-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: list # The ID of the user(s) you want to check authorization for. To specify more than one user, include the user\_id parameter for each user to get. For example, `user_id=1234&user_id=5678`. The maximum number of IDs you may specify is 10.
 ]: nothing -> record<data: table<user_id: string, user_name: string, user_login: string, scopes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3771,7 +3907,7 @@ export def "authorization-users get-authorization-by-user" [
   let full_url = (build-url $base "/authorization/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of users that the broadcaster has blocked.
@@ -3787,6 +3923,7 @@ export def "users-blocks get-user-block-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --broadcaster-id: string # The ID of the broadcaster whose list of blocked users you want to get.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100\. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
@@ -3797,7 +3934,7 @@ export def "users-blocks get-user-block-list" [
   let full_url = (build-url $base "/users/blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Blocks the specified user from interacting with or having contact with the broadcaster.
@@ -3813,6 +3950,7 @@ export def "users-blocks block-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target-user-id: string # The ID of the user to block. The API ignores the request if the broadcaster has already blocked the user.
   --source-context: string@source-context-completer # The location where the harassment took place that is causing the brodcaster to block the user. Possible values are:      * chat * whisper    .
   --reason: string@reason-completer # The reason that the broadcaster is blocking the user. Possible values are:      * harassment * spam * other
@@ -3823,7 +3961,7 @@ export def "users-blocks block-user" [
   let full_url = (build-url $base "/users/blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes the user from the broadcaster’s list of blocked users.
@@ -3839,6 +3977,7 @@ export def "users-blocks unblock-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target-user-id: string # The ID of the user to remove from the broadcaster’s list of blocked users. The API ignores the request if the broadcaster hasn’t blocked the user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3847,7 +3986,7 @@ export def "users-blocks unblock-user" [
   let full_url = (build-url $base "/users/blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all extensions (both active and inactive) that the broadcaster has installed.
@@ -3863,13 +4002,14 @@ export def "users-extensions-list get-user-extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: string, version: string, name: string, can_activate: bool, type: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/extensions/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the active extensions that the broadcaster has installed for each configuration.
@@ -3885,6 +4025,7 @@ export def "users-extensions get-user-active-extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the broadcaster whose active extensions you want to get.      This parameter is required if you specify an app access token and is optional if you specify a user access token. If you specify a user access token and don’t specify this parameter, the API uses the user ID from the access token.
 ]: nothing -> record<data: record<panel: record, overlay: record, component: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3893,7 +4034,7 @@ export def "users-extensions get-user-active-extensions" [
   let full_url = (build-url $base "/users/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an installed extension’s information.
@@ -3910,6 +4051,7 @@ export def "users-extensions update-user-extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: any # The extensions to update. The `data` field is a dictionary of extension types. The dictionary’s possible keys are: panel, overlay, or component. The key’s value is a dictionary of extensions.      For the extension’s dictionary, the key is a sequential number beginning with 1\. For panel and overlay extensions, the key’s value is an object that contains the following fields: `active` (true/false), `id` (the extension’s ID), and `version` (the extension’s version).      For component extensions, the key’s value includes the above fields plus the `x` and `y` fields, which identify the coordinate where the extension is placed. — shape: {panel?: record, overlay?: record, component?: record}
 ]: any -> record<data: record<panel: record, overlay: record, component: record>> {
   let input = $in
@@ -3920,7 +4062,7 @@ export def "users-extensions update-user-extensions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about one or more published videos.
@@ -3936,6 +4078,7 @@ export def "videos get-videos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # A list of IDs that identify the videos you want to get. To get more than one video, include this parameter for each video you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 100 IDs. The endpoint ignores duplicate IDs and IDs that weren't found (if there's at least one valid ID).      The _id_, _user\_id_, and _game\_id_ parameters are mutually exclusive.
   --user-id: string # The ID of the user whose list of videos you want to get.      The _id_, _user\_id_, and _game\_id_ parameters are mutually exclusive.
   --game-id: string # A category or game ID. The response contains a maximum of 500 videos that show this content. To get category/game IDs, use the [Search Categories](https://dev.twitch.tv/docs/api/reference#search-categories) endpoint.      The _id_, _user\_id_, and _game\_id_ parameters are mutually exclusive.
@@ -3953,7 +4096,7 @@ export def "videos get-videos" [
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes one or more videos.
@@ -3969,6 +4112,7 @@ export def "videos delete-videos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of videos to delete. To specify more than one video, include the _id_ parameter for each video to delete. For example, `id=1234&id=5678`. You can delete a maximum of 5 videos per request. Ignores invalid video IDs.      If the user doesn’t have permission to delete one of the videos in the list, none of the videos are deleted.
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3977,7 +4121,7 @@ export def "videos delete-videos" [
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends a whisper message to the specified user.
@@ -3993,6 +4137,7 @@ export def "whispers send-whisper" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-user-id: string # The ID of the user sending the whisper. This user must have a verified phone number. This ID must match the user ID in the user access token.
   --to-user-id: string # The ID of the user to receive the whisper.
   message: string # The whisper message to send. The message must not be empty.      The maximum message lengths are:      * 500 characters if the user you're sending the message to hasn't whispered you before. * 10,000 characters if the user you're sending the message to has whispered you before.    Messages that exceed the maximum length are truncated.
@@ -4006,5 +4151,5 @@ export def "whispers send-whisper" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

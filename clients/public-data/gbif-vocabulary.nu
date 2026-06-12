@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def language-completer [] { ["" "aa-ER" "ach-UG" "ae-IR" "af-ZA" "ak-GH" "am-ET"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "vocabularies-concepts listConcepts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "vocabularies-concepts listConcepts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arg1: record
   --tags: string # Tags of the concept
   --parentKey: int # The key of the parent concept. (format: int64)
@@ -129,7 +131,7 @@ export def "vocabularies-concepts listConcepts" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new concept
@@ -148,6 +150,7 @@ export def "vocabularies-concepts createConcept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   name: string
   --externalDefinitions: list
@@ -174,7 +177,7 @@ export def "vocabularies-concepts createConcept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all languages
@@ -189,13 +192,14 @@ export def "vocabulary-language listLanguages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vocabularyLanguage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all tags
@@ -210,6 +214,7 @@ export def "vocabulary-tags listTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for full-text search.
   --name: string # The name of the tag. Useful to use with the isInUse parameter.
   --isInUse: oneof<nothing, bool> # If true it searches for tags that are currently being used in at least one concept.
@@ -223,7 +228,7 @@ export def "vocabulary-tags listTags" [
   let full_url = (build-url $base "/vocabularyTags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new tag
@@ -238,6 +243,7 @@ export def "vocabulary-tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int32
   name: string
   --description: string
@@ -255,7 +261,7 @@ export def "vocabulary-tags createTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all vocabularies
@@ -270,6 +276,7 @@ export def "vocabularies listVocabularies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arg0: record
   --name: string # The name of the vocabulary.
   --namespace: string # The namespace of the vocabulary.
@@ -286,7 +293,7 @@ export def "vocabularies listVocabularies" [
   let full_url = (build-url $base "/vocabularies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new vocabulary
@@ -303,6 +310,7 @@ export def "vocabularies createVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   name: string
   --externalDefinitions: list
@@ -326,7 +334,7 @@ export def "vocabularies createVocabulary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a single concept
@@ -343,6 +351,7 @@ export def "vocabularies-concepts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeParents: oneof<nothing, bool>
   --includeChildren: oneof<nothing, bool>
 ]: nothing -> record<key: int, name: string, externalDefinitions: list<string>, editorialNotes: list<string>, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string>, label: table<key: int, language: string, value: string, createdBy: string, created: string>, parentKey: int, sameAsUris: list<string>, tags: table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string>, vocabularyName: string, parents: list<string>, childrenCount: int, children: list<string>, alternativeLabelsLink: string, hiddenLabelsLink: string> {
@@ -352,7 +361,7 @@ export def "vocabularies-concepts get" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing concept
@@ -372,6 +381,7 @@ export def "vocabularies-concepts updateConcept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   --body-name: string
   --externalDefinitions: list
@@ -398,7 +408,7 @@ export def "vocabularies-concepts updateConcept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a single tag
@@ -414,13 +424,14 @@ export def "vocabulary-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularyTags/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing tag
@@ -436,6 +447,7 @@ export def "vocabulary-tags updateTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int32
   --body-name: string
   --description: string
@@ -453,7 +465,7 @@ export def "vocabulary-tags updateTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing tag
@@ -469,13 +481,14 @@ export def "vocabulary-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularyTags/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single vocabulary
@@ -491,13 +504,14 @@ export def "vocabularies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, name: string, externalDefinitions: list<string>, editorialNotes: list<string>, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, namespace: string, definition: table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string>, label: table<key: int, language: string, value: string, createdBy: string, created: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing vocabulary
@@ -515,6 +529,7 @@ export def "vocabularies updateVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   --body-name: string
   --externalDefinitions: list
@@ -538,7 +553,7 @@ export def "vocabularies updateVocabulary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Suggest concepts.
@@ -554,6 +569,7 @@ export def "vocabularies-concepts-suggest suggestConcepts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --locale: string@locale-completer # Locale to filter by
   --fallbackLocale: string@fallbackLocale-completer # The locale to fall back when there are no results in the locale specified.
@@ -565,7 +581,7 @@ export def "vocabularies-concepts-suggest suggestConcepts" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest vocabularies.
@@ -580,6 +596,7 @@ export def "vocabularies-suggest suggestVocabularies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --locale: string@locale-completer # Locale to filter by
   --fallbackLocale: string@fallbackLocale-completer # The locale to fall back when there are no results in the locale specified.
@@ -591,7 +608,7 @@ export def "vocabularies-suggest suggestVocabularies" [
   let full_url = (build-url $base "/vocabularies/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deprecate an existing concept
@@ -608,6 +625,7 @@ export def "vocabularies-concepts-deprecate deprecateConcept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replacementKey: int # format: int64
   --deprecateChildren: oneof<nothing, bool>
   --deprecatedBy: string
@@ -620,7 +638,7 @@ export def "vocabularies-concepts-deprecate deprecateConcept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restores a deprecated concept
@@ -637,6 +655,7 @@ export def "vocabularies-concepts-deprecate restoreDeprecatedConcept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --restoreDeprecatedChildren: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -645,7 +664,7 @@ export def "vocabularies-concepts-deprecate restoreDeprecatedConcept" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/deprecate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deprecate an existing vocabulary
@@ -661,6 +680,7 @@ export def "vocabularies-deprecate deprecateVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replacementKey: int # format: int64
   --deprecateConcepts: oneof<nothing, bool>
   --deprecatedBy: string
@@ -673,7 +693,7 @@ export def "vocabularies-deprecate deprecateVocabulary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restores a deprecated vocabulary
@@ -689,6 +709,7 @@ export def "vocabularies-deprecate restoreDeprecatedVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --restoreDeprecatedConcepts: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -697,7 +718,7 @@ export def "vocabularies-deprecate restoreDeprecatedVocabulary" [
   let full_url = (build-url $base $"/vocabularies/($name)/deprecate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exports a vocabulary
@@ -713,13 +734,14 @@ export def "vocabularies-export exportVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/export")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the definitions of the concept
@@ -736,6 +758,7 @@ export def "vocabularies-concepts-definition listConceptDefinitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -744,7 +767,7 @@ export def "vocabularies-concepts-definition listConceptDefinitions" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/definition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a definition to a concept
@@ -761,6 +784,7 @@ export def "vocabularies-concepts-definition addConceptDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   language: string@language-completer
   value: string
@@ -777,7 +801,7 @@ export def "vocabularies-concepts-definition addConceptDefinition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the definition of a concept
@@ -795,13 +819,14 @@ export def "vocabularies-concepts-definition get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/definition/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a definition
@@ -819,6 +844,7 @@ export def "vocabularies-concepts-definition updateConceptDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: int # format: int64
   language: string@language-completer
   value: string
@@ -835,7 +861,7 @@ export def "vocabularies-concepts-definition updateConceptDefinition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a definition from a concept
@@ -853,13 +879,14 @@ export def "vocabularies-concepts-definition delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/definition/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the releases of a vocabulary
@@ -875,6 +902,7 @@ export def "vocabularies-releases listVocabularyReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The version to filter by. To get the latest one you can specify 'latest'.
   --arg2: string
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -886,7 +914,7 @@ export def "vocabularies-releases listVocabularyReleases" [
   let full_url = (build-url $base $"/vocabularies/($name)/releases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single vocabulary release
@@ -903,13 +931,14 @@ export def "vocabularies-releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, vocabularyKey: int, version: string, exportUrl: string, created: string, createdBy: string, comment: string, exportFile: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/releases/($version)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the exported release
@@ -926,13 +955,14 @@ export def "vocabularies-releases-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/releases/($version)/export")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the tags of the concept
@@ -949,13 +979,14 @@ export def "vocabularies-concepts-tags listConceptTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Links a tag to a concept
@@ -972,6 +1003,7 @@ export def "vocabularies-concepts-tags addConceptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tagName: string
 ]: any -> any {
   let input = $in
@@ -982,7 +1014,7 @@ export def "vocabularies-concepts-tags addConceptTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all the definitions of the vocabulary
@@ -998,6 +1030,7 @@ export def "vocabularies-definition listVocabularyDefinitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1006,7 +1039,7 @@ export def "vocabularies-definition listVocabularyDefinitions" [
   let full_url = (build-url $base $"/vocabularies/($name)/definition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a definition to a vocabulary
@@ -1022,6 +1055,7 @@ export def "vocabularies-definition addVocabularyDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   language: string@language-completer
   value: string
@@ -1038,7 +1072,7 @@ export def "vocabularies-definition addVocabularyDefinition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the definition of a vocabulary
@@ -1055,13 +1089,14 @@ export def "vocabularies-definition get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/definition/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a definition
@@ -1078,6 +1113,7 @@ export def "vocabularies-definition updateVocabularyDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: int # format: int64
   language: string@language-completer
   value: string
@@ -1094,7 +1130,7 @@ export def "vocabularies-definition updateVocabularyDefinition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a definition from a vocabulary
@@ -1111,13 +1147,14 @@ export def "vocabularies-definition delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/definition/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlinks a tag from a concept
@@ -1135,13 +1172,14 @@ export def "vocabularies-concepts-tags removeConceptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/tags/($tagName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the labels of the concept
@@ -1158,6 +1196,7 @@ export def "vocabularies-concepts-label listConceptLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,7 +1205,7 @@ export def "vocabularies-concepts-label listConceptLabels" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a label to a concept
@@ -1183,6 +1222,7 @@ export def "vocabularies-concepts-label addConceptLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   language: string@language-completer
   value: string
@@ -1197,7 +1237,7 @@ export def "vocabularies-concepts-label addConceptLabel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all the labels of the vocabulary
@@ -1213,6 +1253,7 @@ export def "vocabularies-label listVocabularyLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1221,7 +1262,7 @@ export def "vocabularies-label listVocabularyLabels" [
   let full_url = (build-url $base $"/vocabularies/($name)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a label to a vocabulary
@@ -1237,6 +1278,7 @@ export def "vocabularies-label addVocabularyLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   language: string@language-completer
   value: string
@@ -1251,7 +1293,7 @@ export def "vocabularies-label addVocabularyLabel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a label from a concept
@@ -1269,13 +1311,14 @@ export def "vocabularies-concepts-label delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/label/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a label from a vocabulary
@@ -1292,13 +1335,14 @@ export def "vocabularies-label delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($name)/label/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the alternative labels of the concept
@@ -1315,6 +1359,7 @@ export def "vocabularies-concepts-alternative-labels listConceptAlternativeLabel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
   --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1326,7 +1371,7 @@ export def "vocabularies-concepts-alternative-labels listConceptAlternativeLabel
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/alternativeLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds an alternative label to a concept
@@ -1343,6 +1388,7 @@ export def "vocabularies-concepts-alternative-labels addConceptAlternativeLabel"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   language: string@language-completer
   value: string
@@ -1357,7 +1403,7 @@ export def "vocabularies-concepts-alternative-labels addConceptAlternativeLabel"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an alternative label from a concept
@@ -1375,13 +1421,14 @@ export def "vocabularies-concepts-alternative-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/alternativeLabels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the hidden labels of the concept
@@ -1398,6 +1445,7 @@ export def "vocabularies-concepts-hidden-labels listConceptHiddenLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term to filter hidden labels
   --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1409,7 +1457,7 @@ export def "vocabularies-concepts-hidden-labels listConceptHiddenLabels" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/hiddenLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a hidden label to a concept
@@ -1426,6 +1474,7 @@ export def "vocabularies-concepts-hidden-labels addConceptHiddenLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: int # format: int64
   value: string
   --createdBy: string
@@ -1439,7 +1488,7 @@ export def "vocabularies-concepts-hidden-labels addConceptHiddenLabel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a hidden label from a concept
@@ -1457,13 +1506,14 @@ export def "vocabularies-concepts-hidden-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/hiddenLabels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all concepts of the vocabulary from its latest release
@@ -1479,6 +1529,7 @@ export def "vocabularies-concepts-latest-release listConceptsFromLatestRelease" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arg1: record
   --parentKey: int # The key of the parent concept. (format: int64)
   --parent: string # The name of the parent concept.
@@ -1502,7 +1553,7 @@ export def "vocabularies-concepts-latest-release listConceptsFromLatestRelease" 
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest concepts from the latest release of the vocabulary.
@@ -1518,6 +1569,7 @@ export def "vocabularies-concepts-latest-release-suggest suggestConceptsFromLate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --locale: string@locale-completer # Locale to filter by
   --fallbackLocale: string@fallbackLocale-completer # The locale to fall back when there are no results in the locale specified.
@@ -1529,7 +1581,7 @@ export def "vocabularies-concepts-latest-release-suggest suggestConceptsFromLate
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single concept from the latest release of the vocabulary
@@ -1546,6 +1598,7 @@ export def "vocabularies-concepts-latest-release get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeParents: oneof<nothing, bool>
   --includeChildren: oneof<nothing, bool>
 ]: nothing -> record<key: int, name: string, externalDefinitions: list<string>, editorialNotes: list<string>, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string>, label: table<key: int, language: string, value: string, createdBy: string, created: string>, parentKey: int, sameAsUris: list<string>, tags: table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string>, vocabularyName: string, parents: list<string>, childrenCount: int, children: list<string>, alternativeLabelsLink: string, hiddenLabelsLink: string> {
@@ -1555,7 +1608,7 @@ export def "vocabularies-concepts-latest-release get" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the definitions of the concept from the latest release of the vocabulary
@@ -1572,6 +1625,7 @@ export def "vocabularies-concepts-latest-release-definition listConceptDefinitio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1580,7 +1634,7 @@ export def "vocabularies-concepts-latest-release-definition listConceptDefinitio
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/definition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the labels of the concept from the latest release of the vocabulary
@@ -1597,6 +1651,7 @@ export def "vocabularies-concepts-latest-release-label listConceptLabelsFromLate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
 ]: nothing -> table<key: int, language: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1605,7 +1660,7 @@ export def "vocabularies-concepts-latest-release-label listConceptLabelsFromLate
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the alternative labels of the concept from the latest release of the vocabulary
@@ -1622,6 +1677,7 @@ export def "vocabularies-concepts-latest-release-alternative-labels listConceptA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Languages to filter by
   --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1633,7 +1689,7 @@ export def "vocabularies-concepts-latest-release-alternative-labels listConceptA
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/alternativeLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all the hidden labels of the concept from the latest release of the vocabulary
@@ -1650,6 +1706,7 @@ export def "vocabularies-concepts-latest-release-hidden-labels listConceptHidden
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
   --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1661,7 +1718,7 @@ export def "vocabularies-concepts-latest-release-hidden-labels listConceptHidden
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/hiddenLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Concept lookup
@@ -1677,6 +1734,7 @@ export def "vocabularies-concepts-lookup lookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Value to do the lookup against to
   --lang: string@lang-completer # Lang to discriminate the lookup
 ]: nothing -> table<conceptName: string, conceptLink: string, matchedLabel: string, matchedLabelLanguage: string, matchedAlternativeLabel: string, matchedAlternativeLabelLanguage: string, matchedHiddenLabel: string> {
@@ -1686,7 +1744,7 @@ export def "vocabularies-concepts-lookup lookup" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Concept lookup in the latest release
@@ -1702,6 +1760,7 @@ export def "vocabularies-concepts-latest-release-lookup lookupLatestRelease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Value to do the lookup against to
   --lang: string@lang-completer # Lang to discriminate the lookup
 ]: nothing -> table<conceptName: string, conceptLink: string, matchedLabel: string, matchedLabelLanguage: string, matchedAlternativeLabel: string, matchedAlternativeLabelLanguage: string, matchedHiddenLabel: string> {
@@ -1711,5 +1770,5 @@ export def "vocabularies-concepts-latest-release-lookup lookupLatestRelease" [
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

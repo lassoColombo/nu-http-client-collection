@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def category-completer [] { ["API_CREDENTIAL" "BANK_ACCOUNT" "CREDIT_CARD" "CUST
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity GetApiActivity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "activity GetApiActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # How many API Events should be retrieved in a single request. (default: 50, e.g. 10)
   --offset: int # How far into the collection of API Events should the response start (default: 0, e.g. 50)
 ]: nothing -> table<requestId: string, timestamp: string, action: string, result: string, actor: record<id: string, account: string, jti: string, userAgent: string, requestIp: string>, resource: record<type: string, vault: record, item: record, itemVersion: int>> {
@@ -111,7 +113,7 @@ export def "activity GetApiActivity" [
   let full_url = (build-url $base "/activity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Vaults
@@ -126,6 +128,7 @@ export def "vaults GetVaults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter the Vault collection based on Vault name using SCIM eq filter (e.g. name eq "Some Vault Name")
 ]: nothing -> table<id: string, name: string, description: string, attributeVersion: int, contentVersion: int, items: int, type: string, createdAt: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -134,7 +137,7 @@ export def "vaults GetVaults" [
   let full_url = (build-url $base "/vaults" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Vault details and metadata
@@ -150,13 +153,14 @@ export def "vaults GetVaultById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, description: string, attributeVersion: int, contentVersion: int, items: int, type: string, createdAt: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all items for inside a Vault
@@ -172,6 +176,7 @@ export def "vaults-items GetVaultItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter the Item collection based on Item name using SCIM eq filter (e.g. title eq "Some Item Name")
 ]: nothing -> table<id: string, title: string, vault: record<id: string>, category: string, urls: list<record>, favorite: bool, tags: list<string>, version: int, state: string, createdAt: string, updatedAt: string, lastEditedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -180,7 +185,7 @@ export def "vaults-items GetVaultItems" [
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Item
@@ -201,6 +206,7 @@ export def "vaults-items CreateVaultItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --title: string
   vault: record # shape: {id: string}
@@ -221,7 +227,7 @@ export def "vaults-items CreateVaultItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the details of an Item
@@ -238,13 +244,14 @@ export def "vaults-items GetVaultItemById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, title: string, vault: record<id: string>, category: string, urls: table<label: string, primary: bool, href: string>, favorite: bool, tags: list<string>, version: int, state: string, createdAt: string, updatedAt: string, lastEditedBy: string, sections: table<id: string, label: string>, fields: table<id: string, section: record, type: string, purpose: string, label: string, value: string, generate: bool, recipe: record, entropy: float>, files: table<id: string, name: string, size: int, content_path: string, section: record, content: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Item
@@ -266,6 +273,7 @@ export def "vaults-items UpdateVaultItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --title: string
   vault: record # shape: {id: string}
@@ -286,7 +294,7 @@ export def "vaults-items UpdateVaultItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Item
@@ -303,13 +311,14 @@ export def "vaults-items DeleteVaultItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subset of Item attributes
@@ -326,6 +335,7 @@ export def "vaults-items PatchVaultItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: string, title: string, vault: record<id: string>, category: string, urls: table<label: string, primary: bool, href: string>, favorite: bool, tags: list<string>, version: int, state: string, createdAt: string, updatedAt: string, lastEditedBy: string, sections: table<id: string, label: string>, fields: table<id: string, section: record, type: string, purpose: string, label: string, value: string, generate: bool, recipe: record, entropy: float>, files: table<id: string, name: string, size: int, content_path: string, section: record, content: string>> {
   let input = $in
@@ -335,7 +345,7 @@ export def "vaults-items PatchVaultItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all the files inside an Item
@@ -352,6 +362,7 @@ export def "vaults-items-files GetItemFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inline-files: oneof<nothing, bool> # Tells server to return the base64-encoded file contents in the response. (e.g. true)
 ]: nothing -> table<id: string, name: string, size: int, content_path: string, section: record<id: string>, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -360,7 +371,7 @@ export def "vaults-items-files GetItemFiles" [
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details of a File
@@ -378,6 +389,7 @@ export def "vaults-items-files GetDetailsOfFileById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inline-files: oneof<nothing, bool> # Tells server to return the base64-encoded file contents in the response. (e.g. true)
 ]: nothing -> record<id: string, name: string, size: int, content_path: string, section: record<id: string>, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -386,7 +398,7 @@ export def "vaults-items-files GetDetailsOfFileById" [
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files/($fileUuid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the content of a File
@@ -404,13 +416,14 @@ export def "vaults-items-files-content DownloadFileByID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files/($fileUuid)/content")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping the server for liveness
@@ -425,13 +438,14 @@ export def "heartbeat GetHeartbeat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://localhost:8080")
   let full_url = (build-url $base "/heartbeat")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get state of the server and its dependencies.
@@ -446,13 +460,14 @@ export def "health GetServerHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, version: string, dependencies: table<service: string, status: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://localhost:8080")
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query server for exposed Prometheus metrics
@@ -467,11 +482,12 @@ export def "metrics GetPrometheusMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://localhost:8080")
   let full_url = (build-url $base "/metrics")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -83,7 +84,7 @@ def resiliency-mode-completer [] { ["enforced" "monitor" "soft"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "api info0" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -117,6 +118,7 @@ export def "api info0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -129,7 +131,7 @@ export def "api info0" [
   let full_url = (build-url $base "/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns whether the cluster is running.
@@ -145,6 +147,7 @@ export def "api ping0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -157,7 +160,7 @@ export def "api ping0" [
   let full_url = (build-url $base "/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an alias.
@@ -173,6 +176,7 @@ export def "alias alias0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -189,7 +193,7 @@ export def "alias alias0" [
   let full_url = (build-url $base "/_alias" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an alias.
@@ -207,6 +211,7 @@ export def "alias alias0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -233,7 +238,7 @@ export def "alias alias0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns an alias.
@@ -250,6 +255,7 @@ export def "alias alias1-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -266,7 +272,7 @@ export def "alias alias1-by-name" [
   let full_url = (build-url $base $"/_alias/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular alias exists.
@@ -283,6 +289,7 @@ export def "alias alias0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, requests that include a missing data stream or index in the target indexes or data streams return an error.
@@ -299,7 +306,7 @@ export def "alias alias0-by-name" [
   let full_url = (build-url $base $"/_alias/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an alias.
@@ -318,6 +325,7 @@ export def "alias alias1-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -344,7 +352,7 @@ export def "alias alias1-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -363,6 +371,7 @@ export def "alias alias2-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -389,7 +398,7 @@ export def "alias alias2-by-name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates index aliases.
@@ -407,6 +416,7 @@ export def "aliases aliases0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -426,7 +436,7 @@ export def "aliases aliases0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -445,6 +455,7 @@ export def "aliases alias3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -471,7 +482,7 @@ export def "aliases alias3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -490,6 +501,7 @@ export def "aliases alias4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -516,7 +528,7 @@ export def "aliases alias4" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the analysis process on a text and return the tokens breakdown of the text.
@@ -532,6 +544,7 @@ export def "analyze indicesanalyze0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to scope the operation.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -557,7 +570,7 @@ export def "analyze indicesanalyze0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the analysis process on a text and return the tokens breakdown of the text.
@@ -573,6 +586,7 @@ export def "analyze indicesanalyze1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to scope the operation.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -598,7 +612,7 @@ export def "analyze indicesanalyze1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to perform multiple index/update/delete operations in a single request.
@@ -614,6 +628,7 @@ export def "bulk bulk0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -639,7 +654,7 @@ export def "bulk bulk0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations in a single request.
@@ -655,6 +670,7 @@ export def "bulk bulk1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -680,7 +696,7 @@ export def "bulk bulk1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations using request response streaming.
@@ -696,6 +712,7 @@ export def "bulk-stream stream0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -723,7 +740,7 @@ export def "bulk-stream stream0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations using request response streaming.
@@ -739,6 +756,7 @@ export def "bulk-stream stream1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -766,7 +784,7 @@ export def "bulk-stream stream1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Clears all or specific caches for one or more indexes.
@@ -782,6 +800,7 @@ export def "cache-clear cache0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --fielddata: oneof<nothing, bool> # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
@@ -803,7 +822,7 @@ export def "cache-clear cache0" [
   let full_url = (build-url $base "/_cache/clear" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns help for the Cat APIs.
@@ -819,6 +838,7 @@ export def "cat cathelp0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -831,7 +851,7 @@ export def "cat cathelp0" [
   let full_url = (build-url $base "/_cat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows information about aliases currently configured to indexes, including filter and routing information.
@@ -847,6 +867,7 @@ export def "cat-aliases cataliases0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand-wildcards: string
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -866,7 +887,7 @@ export def "cat-aliases cataliases0" [
   let full_url = (build-url $base "/_cat/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows information about aliases currently configured to indexes, including filter and routing information.
@@ -883,6 +904,7 @@ export def "cat-aliases cataliases1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand-wildcards: string
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -902,7 +924,7 @@ export def "cat-aliases cataliases1" [
   let full_url = (build-url $base $"/_cat/aliases/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides a snapshot of how many shards are allocated to each data node and how much disk space they are using.
@@ -919,6 +941,7 @@ export def "cat-allocation catallocation0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # A timeout for connection to the cluster manager node.
   --format: string # A short version of the HTTP `Accept` header, such as `json` or `yaml`.
@@ -940,7 +963,7 @@ export def "cat-allocation catallocation0" [
   let full_url = (build-url $base "/_cat/allocation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides a snapshot of how many shards are allocated to each data node and how much disk space they are using.
@@ -958,6 +981,7 @@ export def "cat-allocation catallocation1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # A timeout for connection to the cluster manager node.
   --format: string # A short version of the HTTP `Accept` header, such as `json` or `yaml`.
@@ -979,7 +1003,7 @@ export def "cat-allocation catallocation1" [
   let full_url = (build-url $base $"/_cat/allocation/($node_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the cluster-manager node.
@@ -996,6 +1020,7 @@ export def "cat-cluster-manager manager0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # A timeout for connection to the cluster manager node.
   --format: string # A short version of the HTTP `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1016,7 +1041,7 @@ export def "cat-cluster-manager manager0" [
   let full_url = (build-url $base "/_cat/cluster_manager" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides quick access to the document count of the entire cluster or of an individual index.
@@ -1032,6 +1057,7 @@ export def "cat-count catcount0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
   --help: oneof<nothing, bool> # Returns help information. (default: false)
@@ -1049,7 +1075,7 @@ export def "cat-count catcount0" [
   let full_url = (build-url $base "/_cat/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides quick access to the document count of the entire cluster or of an individual index.
@@ -1066,6 +1092,7 @@ export def "cat-count catcount1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
   --help: oneof<nothing, bool> # Returns help information. (default: false)
@@ -1083,7 +1110,7 @@ export def "cat-count catcount1" [
   let full_url = (build-url $base $"/_cat/count/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows how much heap memory is currently being used by field data on every data node in the cluster.
@@ -1099,6 +1126,7 @@ export def "cat-fielddata catfielddata0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --qp-fields: string # A comma-separated list of fields used to limit the amount of returned information.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1118,7 +1146,7 @@ export def "cat-fielddata catfielddata0" [
   let full_url = (build-url $base "/_cat/fielddata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows how much heap memory is currently being used by field data on every data node in the cluster.
@@ -1135,6 +1163,7 @@ export def "cat-fielddata catfielddata1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --qp-fields: string # A comma-separated list of fields used to limit the amount of returned information.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1154,7 +1183,7 @@ export def "cat-fielddata catfielddata1" [
   let full_url = (build-url $base $"/_cat/fielddata/($fields)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a concise representation of the cluster health.
@@ -1170,6 +1199,7 @@ export def "cat-health cathealth0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
   --help: oneof<nothing, bool> # Returns help information. (default: false)
@@ -1189,7 +1219,7 @@ export def "cat-health cathealth0" [
   let full_url = (build-url $base "/_cat/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists information related to indexes, that is, how much disk space they are using, how many shards they have, their health status, and so on.
@@ -1206,6 +1236,7 @@ export def "cat-indices catindices0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --expand-wildcards: string
@@ -1232,7 +1263,7 @@ export def "cat-indices catindices0" [
   let full_url = (build-url $base "/_cat/indices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists information related to indexes, that is, how much disk space they are using, how many shards they have, their health status, and so on.
@@ -1250,6 +1281,7 @@ export def "cat-indices catindices1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --expand-wildcards: string
@@ -1276,7 +1308,7 @@ export def "cat-indices catindices1" [
   let full_url = (build-url $base $"/_cat/indices/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the cluster-manager node.
@@ -1295,6 +1327,7 @@ export def "cat-master catmaster0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1315,7 +1348,7 @@ export def "cat-master catmaster0" [
   let full_url = (build-url $base "/_cat/master" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about custom node attributes.
@@ -1332,6 +1365,7 @@ export def "cat-nodeattrs catnodeattrs0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1352,7 +1386,7 @@ export def "cat-nodeattrs catnodeattrs0" [
   let full_url = (build-url $base "/_cat/nodeattrs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns basic statistics about the performance of cluster nodes.
@@ -1370,6 +1404,7 @@ export def "cat-nodes catnodes0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1393,7 +1428,7 @@ export def "cat-nodes catnodes0" [
   let full_url = (build-url $base "/_cat/nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a concise representation of the cluster's pending tasks.
@@ -1410,6 +1445,7 @@ export def "cat-pending-tasks tasks0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1431,7 +1467,7 @@ export def "cat-pending-tasks tasks0" [
   let full_url = (build-url $base "/_cat/pending_tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists one or several CAT point-in-time segments.
@@ -1447,6 +1483,7 @@ export def "cat-pit-segments segments0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1469,7 +1506,7 @@ export def "cat-pit-segments segments0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all active CAT point-in-time segments.
@@ -1485,6 +1522,7 @@ export def "cat-pit-segments-all segments0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1503,7 +1541,7 @@ export def "cat-pit-segments-all segments0" [
   let full_url = (build-url $base "/_cat/pit_segments/_all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the names, components, and versions of the installed plugins.
@@ -1520,6 +1558,7 @@ export def "cat-plugins catplugins0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1540,7 +1579,7 @@ export def "cat-plugins catplugins0" [
   let full_url = (build-url $base "/_cat/plugins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns all completed and ongoing index and shard recoveries.
@@ -1556,6 +1595,7 @@ export def "cat-recovery catrecovery0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries. (default: false)
   --bytes: string # The units used to display byte values.
   --detailed: oneof<nothing, bool> # When `true`, includes detailed information about shard recoveries. (default: false)
@@ -1578,7 +1618,7 @@ export def "cat-recovery catrecovery0" [
   let full_url = (build-url $base "/_cat/recovery" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns all completed and ongoing index and shard recoveries.
@@ -1595,6 +1635,7 @@ export def "cat-recovery catrecovery1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries. (default: false)
   --bytes: string # The units used to display byte values.
   --detailed: oneof<nothing, bool> # When `true`, includes detailed information about shard recoveries. (default: false)
@@ -1617,7 +1658,7 @@ export def "cat-recovery catrecovery1" [
   let full_url = (build-url $base $"/_cat/recovery/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about all snapshot repositories for a cluster.
@@ -1634,6 +1675,7 @@ export def "cat-repositories catrepositories0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1654,7 +1696,7 @@ export def "cat-repositories catrepositories0" [
   let full_url = (build-url $base "/_cat/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about active and last-completed segment replication events on each replica shard, including related shard-level metrics.  These metrics provide information about how far behind the primary shard the replicas are lagging.
@@ -1670,6 +1712,7 @@ export def "cat-segment-replication replication0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # When `true`, the response only includes ongoing segment replication events. (default: false)
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore the index if a wildcard index expression resolves to no concrete indexes. This includes the `_all` string or when no indexes have been specified.
   --bytes: string # The units used to display byte values.
@@ -1699,7 +1742,7 @@ export def "cat-segment-replication replication0" [
   let full_url = (build-url $base "/_cat/segment_replication" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about active and last-completed segment replication events on each replica shard, including related shard-level metrics.  These metrics provide information about how far behind the primary shard the replicas are lagging.
@@ -1716,6 +1759,7 @@ export def "cat-segment-replication replication1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # When `true`, the response only includes ongoing segment replication events. (default: false)
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore the index if a wildcard index expression resolves to no concrete indexes. This includes the `_all` string or when no indexes have been specified.
   --bytes: string # The units used to display byte values.
@@ -1745,7 +1789,7 @@ export def "cat-segment-replication replication1" [
   let full_url = (build-url $base $"/_cat/segment_replication/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides low-level information about the segments in the shards of an index.
@@ -1762,6 +1806,7 @@ export def "cat-segments catsegments0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1782,7 +1827,7 @@ export def "cat-segments catsegments0" [
   let full_url = (build-url $base "/_cat/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides low-level information about the segments in the shards of an index.
@@ -1800,6 +1845,7 @@ export def "cat-segments catsegments1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1820,7 +1866,7 @@ export def "cat-segments catsegments1" [
   let full_url = (build-url $base $"/_cat/segments/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the states of all primary and replica shards and how they are distributed.
@@ -1837,6 +1883,7 @@ export def "cat-shards catshards0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1859,7 +1906,7 @@ export def "cat-shards catshards0" [
   let full_url = (build-url $base "/_cat/shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the states of all primary and replica shards and how they are distributed.
@@ -1877,6 +1924,7 @@ export def "cat-shards catshards1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The units used to display byte values.
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -1899,7 +1947,7 @@ export def "cat-shards catshards1" [
   let full_url = (build-url $base $"/_cat/shards/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the snapshots stored in a specific repository.
@@ -1916,6 +1964,7 @@ export def "cat-snapshots catsnapshots0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1938,7 +1987,7 @@ export def "cat-snapshots catsnapshots0" [
   let full_url = (build-url $base "/_cat/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the snapshots stored in a specific repository.
@@ -1956,6 +2005,7 @@ export def "cat-snapshots catsnapshots1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -1978,7 +2028,7 @@ export def "cat-snapshots catsnapshots1" [
   let full_url = (build-url $base $"/_cat/snapshots/($repository)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the progress of all tasks currently running on the cluster.
@@ -1994,6 +2044,7 @@ export def "cat-tasks cattasks0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # The task action names used to limit the response.
   --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries. (default: false)
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
@@ -2016,7 +2067,7 @@ export def "cat-tasks cattasks0" [
   let full_url = (build-url $base "/_cat/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the names, patterns, order numbers, and version numbers of index templates.
@@ -2033,6 +2084,7 @@ export def "cat-templates cattemplates0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -2053,7 +2105,7 @@ export def "cat-templates cattemplates0" [
   let full_url = (build-url $base "/_cat/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the names, patterns, order numbers, and version numbers of index templates.
@@ -2071,6 +2123,7 @@ export def "cat-templates cattemplates1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -2091,7 +2144,7 @@ export def "cat-templates cattemplates1" [
   let full_url = (build-url $base $"/_cat/templates/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns cluster-wide thread pool statistics per node. By default the active, queued, and rejected statistics are returned for all thread pools.
@@ -2108,6 +2161,7 @@ export def "cat-thread-pool pool0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # A timeout for connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -2129,7 +2183,7 @@ export def "cat-thread-pool pool0" [
   let full_url = (build-url $base "/_cat/thread_pool" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns cluster-wide thread pool statistics per node. By default the active, queued, and rejected statistics are returned for all thread pools.
@@ -2147,6 +2201,7 @@ export def "cat-thread-pool pool1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # A timeout for connection to the cluster manager node.
   --format: string # A short version of the `Accept` header, such as `json` or `yaml`.
   --h: list # A comma-separated list of column names to display.
@@ -2168,7 +2223,7 @@ export def "cat-thread-pool pool1" [
   let full_url = (build-url $base $"/_cat/thread_pool/($thread_pool_patterns)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Explains how shards are allocated in the current cluster and provides an explanation for why unassigned shards can't be allocated to a node.
@@ -2184,6 +2239,7 @@ export def "cluster-allocation-explain explain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-disk-info: oneof<nothing, bool> # When `true`, returns information about disk usage and shard sizes. (default: false)
   --include-yes-decisions: oneof<nothing, bool> # When `true`, returns any `YES` decisions in the allocation explanation. `YES` decisions indicate when a particular shard allocation attempt was successful for the given node. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2205,7 +2261,7 @@ export def "cluster-allocation-explain explain0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Explains how shards are allocated in the current cluster and provides an explanation for why unassigned shards can't be allocated to a node.
@@ -2221,6 +2277,7 @@ export def "cluster-allocation-explain explain1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-disk-info: oneof<nothing, bool> # When `true`, returns information about disk usage and shard sizes. (default: false)
   --include-yes-decisions: oneof<nothing, bool> # When `true`, returns any `YES` decisions in the allocation explanation. `YES` decisions indicate when a particular shard allocation attempt was successful for the given node. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2242,7 +2299,7 @@ export def "cluster-allocation-explain explain1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recommissions a decommissioned zone.
@@ -2258,6 +2315,7 @@ export def "cluster-decommission-awareness awareness0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2270,7 +2328,7 @@ export def "cluster-decommission-awareness awareness0" [
   let full_url = (build-url $base "/_cluster/decommission/awareness" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the decommission status for all zones.
@@ -2287,6 +2345,7 @@ export def "cluster-decommission-awareness-status awareness0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2299,7 +2358,7 @@ export def "cluster-decommission-awareness-status awareness0" [
   let full_url = (build-url $base $"/_cluster/decommission/awareness/($awareness_attribute_name)/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Decommissions a cluster zone based on awareness. This can greatly benefit multi-zone deployments, where awareness attributes can aid in applying new upgrades to a cluster in a controlled fashion.
@@ -2317,6 +2376,7 @@ export def "cluster-decommission-awareness awareness0-by-awareness_attribute_nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2329,7 +2389,7 @@ export def "cluster-decommission-awareness awareness0-by-awareness_attribute_nam
   let full_url = (build-url $base $"/_cluster/decommission/awareness/($awareness_attribute_name)/($awareness_attribute_value)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns basic information about the health of the cluster.
@@ -2346,6 +2406,7 @@ export def "cluster-health clusterhealth0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --awareness-attribute: string # The name of the awareness attribute for which to return the cluster health status (for example, `zone`). Applicable only if `level` is set to `awareness_attributes`.
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --expand-wildcards: string
@@ -2371,7 +2432,7 @@ export def "cluster-health clusterhealth0" [
   let full_url = (build-url $base "/_cluster/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns basic information about the health of the cluster.
@@ -2389,6 +2450,7 @@ export def "cluster-health clusterhealth1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --awareness-attribute: string # The name of the awareness attribute for which to return the cluster health status (for example, `zone`). Applicable only if `level` is set to `awareness_attributes`.
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --expand-wildcards: string
@@ -2414,7 +2476,7 @@ export def "cluster-health clusterhealth1" [
   let full_url = (build-url $base $"/_cluster/health/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -2433,6 +2495,7 @@ export def "cluster-nodes-hot-threads threads2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -2451,7 +2514,7 @@ export def "cluster-nodes-hot-threads threads2" [
   let full_url = (build-url $base $"/_cluster/nodes/($node_id)/hot_threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -2469,6 +2532,7 @@ export def "cluster-nodes-hot-threads threads0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -2487,7 +2551,7 @@ export def "cluster-nodes-hot-threads threads0" [
   let full_url = (build-url $base "/_cluster/nodes/hot_threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of pending cluster-level tasks, such as index creation, mapping updates, or new allocations.
@@ -2504,6 +2568,7 @@ export def "cluster-pending-tasks tasks0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --local: oneof<nothing, bool> # When `true`, the request retrieves information from the local node only. When `false`, information is retrieved from the cluster manager node. (default: false)
   --master-timeout: string # DEPRECATED
@@ -2519,7 +2584,7 @@ export def "cluster-pending-tasks tasks0" [
   let full_url = (build-url $base "/_cluster/pending_tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to manually change the allocation of individual shards in the cluster.
@@ -2537,8 +2602,9 @@ export def "cluster-reroute clusterreroute0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
-  --dry-run: oneof<nothing, bool> # When `true`, the request simulates the operation and returns the resulting state.
+  --qp-dry-run: oneof<nothing, bool> # When `true`, the request simulates the operation and returns the resulting state.
   --explain: oneof<nothing, bool> # When `true`, the response contains an explanation of why reroute certain commands can or cannot be executed.
   --master-timeout: string # DEPRECATED
   --metric: string # Limits the information returned to the specified metrics.
@@ -2554,13 +2620,13 @@ export def "cluster-reroute clusterreroute0" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $dry_run "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "retry_failed" $retry_failed "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $qp_dry_run "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "retry_failed" $retry_failed "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/_cluster/reroute" $qp)
   let body = {commands: $commands} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetches weighted shard routing weights.
@@ -2577,6 +2643,7 @@ export def "cluster-routing-awareness-weights routing0-by-attribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2589,7 +2656,7 @@ export def "cluster-routing-awareness-weights routing0-by-attribute" [
   let full_url = (build-url $base $"/_cluster/routing/awareness/($attribute)/weights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates weighted shard routing weights.
@@ -2606,6 +2673,7 @@ export def "cluster-routing-awareness-weights routing0-by-attribute-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2623,7 +2691,7 @@ export def "cluster-routing-awareness-weights routing0-by-attribute-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete weighted shard routing weights.
@@ -2639,6 +2707,7 @@ export def "cluster-routing-awareness-weights routing0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -2655,7 +2724,7 @@ export def "cluster-routing-awareness-weights routing0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns cluster settings.
@@ -2672,6 +2741,7 @@ export def "cluster-settings settings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --include-defaults: oneof<nothing, bool> # When `true`, returns default cluster settings from the local node. (default: false)
@@ -2689,7 +2759,7 @@ export def "cluster-settings settings0" [
   let full_url = (build-url $base "/_cluster/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the cluster settings.
@@ -2706,6 +2776,7 @@ export def "cluster-settings settings0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --master-timeout: string # DEPRECATED
@@ -2727,7 +2798,7 @@ export def "cluster-settings settings0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns comprehensive information about the state of the cluster.
@@ -2744,6 +2815,7 @@ export def "cluster-state clusterstate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore a wildcard index expression that resolves into no concrete indexes. This includes the `_all` string or when no indexes have been specified.
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --expand-wildcards: string
@@ -2765,7 +2837,7 @@ export def "cluster-state clusterstate0" [
   let full_url = (build-url $base "/_cluster/state" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns comprehensive information about the state of the cluster.
@@ -2783,6 +2855,7 @@ export def "cluster-state clusterstate1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore a wildcard index expression that resolves into no concrete indexes. This includes the `_all` string or when no indexes have been specified.
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --expand-wildcards: string
@@ -2804,7 +2877,7 @@ export def "cluster-state clusterstate1" [
   let full_url = (build-url $base $"/_cluster/state/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns comprehensive information about the state of the cluster.
@@ -2823,6 +2896,7 @@ export def "cluster-state clusterstate2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore a wildcard index expression that resolves into no concrete indexes. This includes the `_all` string or when no indexes have been specified.
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --expand-wildcards: string
@@ -2844,7 +2918,7 @@ export def "cluster-state clusterstate2" [
   let full_url = (build-url $base $"/_cluster/state/($metric)/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a high-level overview of cluster statistics.
@@ -2860,6 +2934,7 @@ export def "cluster-stats clusterstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --timeout: string # The amount of time to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response's `_nodes.failed` property. Defaults to no timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2874,7 +2949,7 @@ export def "cluster-stats clusterstats0" [
   let full_url = (build-url $base "/_cluster/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a high-level overview of cluster statistics.
@@ -2893,6 +2968,7 @@ export def "cluster-stats-nodes clusterstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --timeout: string # The amount of time to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response's `_nodes.failed` property. Defaults to no timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2907,7 +2983,7 @@ export def "cluster-stats-nodes clusterstats3" [
   let full_url = (build-url $base $"/_cluster/stats/($metric)/($index_metric)/nodes/($node_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a high-level overview of cluster statistics.
@@ -2925,6 +3001,7 @@ export def "cluster-stats-nodes clusterstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --timeout: string # The amount of time to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response's `_nodes.failed` property. Defaults to no timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2939,7 +3016,7 @@ export def "cluster-stats-nodes clusterstats2" [
   let full_url = (build-url $base $"/_cluster/stats/($metric)/nodes/($node_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a high-level overview of cluster statistics.
@@ -2956,6 +3033,7 @@ export def "cluster-stats-nodes clusterstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --timeout: string # The amount of time to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response's `_nodes.failed` property. Defaults to no timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -2970,7 +3048,7 @@ export def "cluster-stats-nodes clusterstats1" [
   let full_url = (build-url $base $"/_cluster/stats/nodes/($node_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clears any cluster voting configuration exclusions.
@@ -2986,6 +3064,7 @@ export def "cluster-voting-config-exclusions exclusions0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait-for-removal: oneof<nothing, bool> # Specifies whether to wait for all excluded nodes to be removed from the cluster before clearing the voting configuration exclusions list. When `true`, all excluded nodes are removed from the cluster before this API takes any action. When `false`, the voting configuration exclusions list is cleared even if some excluded nodes are still in the cluster. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -2999,7 +3078,7 @@ export def "cluster-voting-config-exclusions exclusions0" [
   let full_url = (build-url $base "/_cluster/voting_config_exclusions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the cluster voting configuration by excluding certain node IDs or names.
@@ -3015,6 +3094,7 @@ export def "cluster-voting-config-exclusions exclusions0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --node-ids: string # A comma-separated list of node IDs to exclude from the voting configuration. When using this setting, you cannot also specify `node_names`. Either `node_ids` or `node_names` are required to receive a valid response.
   --node-names: string # A comma-separated list of node names to exclude from the voting configuration. When using this setting, you cannot also specify `node_ids`. Either `node_ids` or `node_names` are required to receive a valid response.
   --timeout: string # When adding a voting configuration exclusion, the API waits for the specified nodes to be excluded from the voting configuration before returning a response. If the timeout expires before the appropriate condition is satisfied, the request fails and returns an error.
@@ -3030,7 +3110,7 @@ export def "cluster-voting-config-exclusions exclusions0-1" [
   let full_url = (build-url $base "/_cluster/voting_config_exclusions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns one or more component templates.
@@ -3047,6 +3127,7 @@ export def "component-template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --local: oneof<nothing, bool> # When `true`, the request retrieves information from the local node only. When `false`, information is retrieved from the cluster manager node. (default: false)
@@ -3063,7 +3144,7 @@ export def "component-template template0" [
   let full_url = (build-url $base "/_component_template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a component template.
@@ -3081,6 +3162,7 @@ export def "component-template template0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # DEPRECATED
   --timeout: string
@@ -3096,7 +3178,7 @@ export def "component-template template0-by-name" [
   let full_url = (build-url $base $"/_component_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns one or more component templates.
@@ -3114,6 +3196,7 @@ export def "component-template template1-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --flat-settings: oneof<nothing, bool> # Whether to return settings in the flat form, which can improve readability, especially for heavily nested settings. For example, the flat form of `"cluster": { "max_shards_per_node": 500 }` is `"cluster.max_shards_per_node": "500"`. (default: false)
   --local: oneof<nothing, bool> # When `true`, the request retrieves information from the local node only. When `false`, information is retrieved from the cluster manager node. (default: false)
@@ -3130,7 +3213,7 @@ export def "component-template template1-by-name" [
   let full_url = (build-url $base $"/_component_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular component template exist.
@@ -3148,6 +3231,7 @@ export def "component-template template0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --local: oneof<nothing, bool> # When `true`, the request retrieves information from the local node only. When `false, information is retrieved from the cluster manager node. (default: false)
   --master-timeout: string # DEPRECATED
@@ -3163,7 +3247,7 @@ export def "component-template template0-by-name-1" [
   let full_url = (build-url $base $"/_component_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a component template.
@@ -3182,6 +3266,7 @@ export def "component-template template0-by-name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --create: oneof<nothing, bool> # When `true`, this request cannot replace or update existing component templates. (default: false)
   --master-timeout: string # DEPRECATED
@@ -3205,7 +3290,7 @@ export def "component-template template0-by-name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a component template.
@@ -3224,6 +3309,7 @@ export def "component-template template1-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --create: oneof<nothing, bool> # When `true`, this request cannot replace or update existing component templates. (default: false)
   --master-timeout: string # DEPRECATED
@@ -3247,7 +3333,7 @@ export def "component-template template1-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns number of documents matching a query.
@@ -3264,6 +3350,7 @@ export def "count count0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can only be used when the `q` query string parameter is specified. (default: false)
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
@@ -3294,7 +3381,7 @@ export def "count count0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns number of documents matching a query.
@@ -3311,6 +3398,7 @@ export def "count count1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can only be used when the `q` query string parameter is specified. (default: false)
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
@@ -3341,7 +3429,7 @@ export def "count count1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns all dangling indexes.
@@ -3357,6 +3445,7 @@ export def "dangling indices0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3369,7 +3458,7 @@ export def "dangling indices0" [
   let full_url = (build-url $base "/_dangling" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the specified dangling index.
@@ -3387,6 +3476,7 @@ export def "dangling index0-by-index_uuid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept-data-loss: oneof<nothing, bool> # Must be set to true in order to delete the dangling index.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Specify timeout for connection to cluster manager. (DEPRECATED)
@@ -3403,7 +3493,7 @@ export def "dangling index0-by-index_uuid" [
   let full_url = (build-url $base $"/_dangling/($index_uuid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Imports the specified dangling index.
@@ -3421,6 +3511,7 @@ export def "dangling index0-by-index_uuid-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept-data-loss: oneof<nothing, bool> # Must be set to true in order to import the dangling index.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Specify timeout for connection to cluster manager. (DEPRECATED)
@@ -3437,7 +3528,7 @@ export def "dangling index0-by-index_uuid-1" [
   let full_url = (build-url $base $"/_dangling/($index_uuid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns data streams.
@@ -3453,6 +3544,7 @@ export def "data-stream stream0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3465,7 +3557,7 @@ export def "data-stream stream0" [
   let full_url = (build-url $base "/_data_stream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides statistics on operations happening in a data stream.
@@ -3481,6 +3573,7 @@ export def "data-stream-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3493,7 +3586,7 @@ export def "data-stream-stats stats0" [
   let full_url = (build-url $base "/_data_stream/_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a data stream.
@@ -3510,6 +3603,7 @@ export def "data-stream stream0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3522,7 +3616,7 @@ export def "data-stream stream0-by-name" [
   let full_url = (build-url $base $"/_data_stream/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns data streams.
@@ -3539,6 +3633,7 @@ export def "data-stream stream1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3551,7 +3646,7 @@ export def "data-stream stream1" [
   let full_url = (build-url $base $"/_data_stream/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a data stream.
@@ -3568,6 +3663,7 @@ export def "data-stream stream0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3583,7 +3679,7 @@ export def "data-stream stream0-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides statistics on operations happening in a data stream.
@@ -3600,6 +3696,7 @@ export def "data-stream-stats stats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -3612,7 +3709,7 @@ export def "data-stream-stats stats1" [
   let full_url = (build-url $base $"/_data_stream/($name)/_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes the number of requests per second for a particular Delete By Query operation.
@@ -3629,6 +3726,7 @@ export def "delete-by-query-rethrottle rethrottle0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests-per-second: float # The throttle for this request in sub-requests per second. (format: float)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -3642,7 +3740,7 @@ export def "delete-by-query-rethrottle rethrottle0" [
   let full_url = (build-url $base $"/_delete_by_query/($task_id)/_rethrottle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the information about the capabilities of fields among multiple indexes.
@@ -3659,6 +3757,7 @@ export def "field-caps caps0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with bar.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # Comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
@@ -3681,7 +3780,7 @@ export def "field-caps caps0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the information about the capabilities of fields among multiple indexes.
@@ -3698,6 +3797,7 @@ export def "field-caps caps1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with bar.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # Comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
@@ -3720,7 +3820,7 @@ export def "field-caps caps1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the flush operation on one or more indexes.
@@ -3736,6 +3836,7 @@ export def "flush indicesflush0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
@@ -3753,7 +3854,7 @@ export def "flush indicesflush0" [
   let full_url = (build-url $base "/_flush" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the flush operation on one or more indexes.
@@ -3769,6 +3870,7 @@ export def "flush indicesflush1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
@@ -3786,7 +3888,7 @@ export def "flush indicesflush1" [
   let full_url = (build-url $base "/_flush" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the force merge operation on one or more indexes.
@@ -3802,6 +3904,7 @@ export def "forcemerge indicesforcemerge0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified)
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --flush: oneof<nothing, bool> # Specify whether the index should be flushed after performing the operation. (default: true)
@@ -3822,7 +3925,7 @@ export def "forcemerge indicesforcemerge0" [
   let full_url = (build-url $base "/_forcemerge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an index template.
@@ -3839,6 +3942,7 @@ export def "index-template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format. (default: false)
   --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the cluster-manager node. (default: false)
@@ -3855,7 +3959,7 @@ export def "index-template template0" [
   let full_url = (build-url $base "/_index_template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Simulate resolving the given template name or body.
@@ -3874,6 +3978,7 @@ export def "index-template-simulate template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cause: string # User defined reason for dry-run creating the new template for simulation purposes. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, the template passed in the body is only used if no existing templates match the same index patterns. If `false`, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation. (default: false)
@@ -3901,7 +4006,7 @@ export def "index-template-simulate template0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulate matching the given index name against the index templates in the system.
@@ -3921,6 +4026,7 @@ export def "index-template-simulate-index template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -3946,7 +4052,7 @@ export def "index-template-simulate-index template0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulate resolving the given template name or body.
@@ -3966,6 +4072,7 @@ export def "index-template-simulate template1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cause: string # User defined reason for dry-run creating the new template for simulation purposes. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, the template passed in the body is only used if no existing templates match the same index patterns. If `false`, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation. (default: false)
@@ -3993,7 +4100,7 @@ export def "index-template-simulate template1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an index template.
@@ -4011,6 +4118,7 @@ export def "index-template template0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -4026,7 +4134,7 @@ export def "index-template template0-by-name" [
   let full_url = (build-url $base $"/_index_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an index template.
@@ -4044,6 +4152,7 @@ export def "index-template template1-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format. (default: false)
   --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the cluster-manager node. (default: false)
@@ -4060,7 +4169,7 @@ export def "index-template template1-by-name" [
   let full_url = (build-url $base $"/_index_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular index template exists.
@@ -4078,6 +4187,7 @@ export def "index-template template0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # Return settings in flat format. (default: false)
   --local: oneof<nothing, bool> # Return local information, do not retrieve the state from cluster-manager node. (default: false)
@@ -4094,7 +4204,7 @@ export def "index-template template0-by-name-1" [
   let full_url = (build-url $base $"/_index_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an index template.
@@ -4114,6 +4224,7 @@ export def "index-template template0-by-name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cause: string # User defined reason for creating/updating the index template. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates. (default: false)
@@ -4140,7 +4251,7 @@ export def "index-template template0-by-name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an index template.
@@ -4160,6 +4271,7 @@ export def "index-template template1-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cause: string # User defined reason for creating/updating the index template. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates. (default: false)
@@ -4186,7 +4298,7 @@ export def "index-template template1-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns an ingest pipeline.
@@ -4203,6 +4315,7 @@ export def "ingest-pipeline pipeline0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -4217,7 +4330,7 @@ export def "ingest-pipeline pipeline0" [
   let full_url = (build-url $base "/_ingest/pipeline" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Simulates an ingest pipeline with example documents.
@@ -4235,6 +4348,7 @@ export def "ingest-pipeline-simulate ingestsimulate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verbose: oneof<nothing, bool> # When `true`, the response includes output data for each processor in the pipeline (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4253,7 +4367,7 @@ export def "ingest-pipeline-simulate ingestsimulate0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulates an ingest pipeline with example documents.
@@ -4271,6 +4385,7 @@ export def "ingest-pipeline-simulate ingestsimulate1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verbose: oneof<nothing, bool> # When `true`, the response includes output data for each processor in the pipeline (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4289,7 +4404,7 @@ export def "ingest-pipeline-simulate ingestsimulate1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an ingest pipeline.
@@ -4307,6 +4422,7 @@ export def "ingest-pipeline pipeline0-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -4322,7 +4438,7 @@ export def "ingest-pipeline pipeline0-by-id" [
   let full_url = (build-url $base $"/_ingest/pipeline/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an ingest pipeline.
@@ -4340,6 +4456,7 @@ export def "ingest-pipeline pipeline1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -4354,7 +4471,7 @@ export def "ingest-pipeline pipeline1" [
   let full_url = (build-url $base $"/_ingest/pipeline/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an ingest pipeline.
@@ -4374,6 +4491,7 @@ export def "ingest-pipeline pipeline0-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time allowed to establish a connection to the cluster manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -4397,7 +4515,7 @@ export def "ingest-pipeline pipeline0-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulates an ingest pipeline with example documents.
@@ -4416,6 +4534,7 @@ export def "ingest-pipeline-simulate ingestsimulate2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verbose: oneof<nothing, bool> # When `true`, the response includes output data for each processor in the pipeline (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4434,7 +4553,7 @@ export def "ingest-pipeline-simulate ingestsimulate2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulates an ingest pipeline with example documents.
@@ -4453,6 +4572,7 @@ export def "ingest-pipeline-simulate ingestsimulate3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verbose: oneof<nothing, bool> # When `true`, the response includes output data for each processor in the pipeline (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4471,7 +4591,7 @@ export def "ingest-pipeline-simulate ingestsimulate3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of built-in grok patterns.
@@ -4487,6 +4607,7 @@ export def "ingest-processor-grok grok0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --s: oneof<nothing, bool> # Determines how to sort returned grok patterns by key name. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4500,7 +4621,7 @@ export def "ingest-processor-grok grok0" [
   let full_url = (build-url $base "/_ingest/processor/grok" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the top queries based on the given metric type (latency, CPU, or memory).
@@ -4515,6 +4636,7 @@ export def "insights-top-queries queries0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Get top n queries by a specific metric.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -4528,7 +4650,7 @@ export def "insights-top-queries queries0" [
   let full_url = (build-url $base "/_insights/top_queries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns help for the List APIs.
@@ -4544,6 +4666,7 @@ export def "list listhelp0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4556,7 +4679,7 @@ export def "list listhelp0" [
   let full_url = (build-url $base "/_list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns paginated information about indexes including number of primaries and replicas, document counts, disk size.
@@ -4573,6 +4696,7 @@ export def "list-indices listindices0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The unit used to display byte values.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # The type of index that wildcard patterns can match.
@@ -4602,7 +4726,7 @@ export def "list-indices listindices0" [
   let full_url = (build-url $base "/_list/indices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns paginated information about indexes including number of primaries and replicas, document counts, disk size.
@@ -4620,6 +4744,7 @@ export def "list-indices listindices1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The unit used to display byte values.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # The type of index that wildcard patterns can match.
@@ -4649,7 +4774,7 @@ export def "list-indices listindices1" [
   let full_url = (build-url $base $"/_list/indices/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns paginated details of shard allocation on nodes.
@@ -4666,6 +4791,7 @@ export def "list-shards listshards0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The unit used to display byte values.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --format: string # A short version of the Accept header, such as `JSON`, `YAML`.
@@ -4691,7 +4817,7 @@ export def "list-shards listshards0" [
   let full_url = (build-url $base "/_list/shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns paginated details of shard allocation on nodes.
@@ -4709,6 +4835,7 @@ export def "list-shards listshards1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bytes: string # The unit used to display byte values.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --format: string # A short version of the Accept header, such as `JSON`, `YAML`.
@@ -4734,7 +4861,7 @@ export def "list-shards listshards1" [
   let full_url = (build-url $base $"/_list/shards/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the default feature store.
@@ -4749,6 +4876,7 @@ export def "ltr store0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4761,7 +4889,7 @@ export def "ltr store0" [
   let full_url = (build-url $base "/_ltr" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all available feature stores.
@@ -4776,6 +4904,7 @@ export def "ltr stores0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4788,7 +4917,7 @@ export def "ltr stores0" [
   let full_url = (build-url $base "/_ltr" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates the default feature store.
@@ -4803,6 +4932,7 @@ export def "ltr store0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4815,7 +4945,7 @@ export def "ltr store0-1" [
   let full_url = (build-url $base "/_ltr" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves cache statistics for all feature stores.
@@ -4830,6 +4960,7 @@ export def "ltr-cachestats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4842,7 +4973,7 @@ export def "ltr-cachestats stats0" [
   let full_url = (build-url $base "/_ltr/_cachestats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clears the store caches.
@@ -4857,6 +4988,7 @@ export def "ltr-clearcache cache0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4869,7 +5001,7 @@ export def "ltr-clearcache cache0" [
   let full_url = (build-url $base "/_ltr/_clearcache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a feature store with the specified name.
@@ -4885,6 +5017,7 @@ export def "ltr store0-by-store" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4897,7 +5030,7 @@ export def "ltr store0-by-store" [
   let full_url = (build-url $base $"/_ltr/($store)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks if a store exists.
@@ -4913,6 +5046,7 @@ export def "ltr store0-by-store-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4925,7 +5059,7 @@ export def "ltr store0-by-store-1" [
   let full_url = (build-url $base $"/_ltr/($store)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new feature store with the specified name.
@@ -4941,6 +5075,7 @@ export def "ltr store0-by-store-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4953,7 +5088,7 @@ export def "ltr store0-by-store-2" [
   let full_url = (build-url $base $"/_ltr/($store)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clears the store caches.
@@ -4969,6 +5104,7 @@ export def "ltr-clearcache cache1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -4981,7 +5117,7 @@ export def "ltr-clearcache cache1" [
   let full_url = (build-url $base $"/_ltr/($store)/_clearcache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns mappings for one or more indexes.
@@ -4998,6 +5134,7 @@ export def "mapping mapping0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -5017,7 +5154,7 @@ export def "mapping mapping0" [
   let full_url = (build-url $base "/_mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns mapping for one or more fields.
@@ -5034,6 +5171,7 @@ export def "mapping-field mapping0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -5051,7 +5189,7 @@ export def "mapping-field mapping0" [
   let full_url = (build-url $base $"/_mapping/field/($fields)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to get multiple documents in one request.
@@ -5068,6 +5206,7 @@ export def "mget mget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -5093,7 +5232,7 @@ export def "mget mget0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to get multiple documents in one request.
@@ -5110,6 +5249,7 @@ export def "mget mget1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -5135,7 +5275,7 @@ export def "mget mget1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to execute several search operations in one request.
@@ -5151,6 +5291,7 @@ export def "msearch msearch0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and remote clusters are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the multi search API can execute. (format: int32)
   --max-concurrent-shard-requests: int # Maximum number of concurrent shard requests that each sub-search request executes per node. (format: int32, default: 5)
@@ -5173,7 +5314,7 @@ export def "msearch msearch0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search operations in one request.
@@ -5189,6 +5330,7 @@ export def "msearch msearch1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and remote clusters are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the multi search API can execute. (format: int32)
   --max-concurrent-shard-requests: int # Maximum number of concurrent shard requests that each sub-search request executes per node. (format: int32, default: 5)
@@ -5211,7 +5353,7 @@ export def "msearch msearch1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search template operations in one request.
@@ -5227,6 +5369,7 @@ export def "msearch-template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the API can run. (format: int32)
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object. (default: false)
@@ -5247,7 +5390,7 @@ export def "msearch-template template0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search template operations in one request.
@@ -5263,6 +5406,7 @@ export def "msearch-template template1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the API can run. (format: int32)
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object. (default: false)
@@ -5283,7 +5427,7 @@ export def "msearch-template template1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Returns multiple termvectors in one request.
@@ -5300,6 +5444,7 @@ export def "mtermvectors mtermvectors0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
@@ -5329,7 +5474,7 @@ export def "mtermvectors mtermvectors0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns multiple termvectors in one request.
@@ -5346,6 +5491,7 @@ export def "mtermvectors mtermvectors1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
@@ -5375,7 +5521,7 @@ export def "mtermvectors mtermvectors1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about nodes in the cluster.
@@ -5391,6 +5537,7 @@ export def "nodes nodesinfo0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # When `true`, returns settings in flat format. (default: false)
   --timeout: string # The amount of time to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -5405,7 +5552,7 @@ export def "nodes nodesinfo0" [
   let full_url = (build-url $base "/_nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about nodes in the cluster.
@@ -5422,6 +5569,7 @@ export def "nodes nodesinfo1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # When `true`, returns settings in flat format. (default: false)
   --timeout: string # The amount of time to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -5436,7 +5584,7 @@ export def "nodes nodesinfo1" [
   let full_url = (build-url $base $"/_nodes/($node_id_or_metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about nodes in the cluster.
@@ -5454,6 +5602,7 @@ export def "nodes nodesinfo3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-settings: oneof<nothing, bool> # When `true`, returns settings in flat format. (default: false)
   --timeout: string # The amount of time to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -5468,7 +5617,7 @@ export def "nodes nodesinfo3" [
   let full_url = (build-url $base $"/_nodes/($node_id)/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -5485,6 +5634,7 @@ export def "nodes-hot-threads threads6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -5503,7 +5653,7 @@ export def "nodes-hot-threads threads6" [
   let full_url = (build-url $base $"/_nodes/($node_id)/hot_threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads secure settings.
@@ -5520,6 +5670,7 @@ export def "nodes-reload-secure-settings settings1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The amount of time to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5537,7 +5688,7 @@ export def "nodes-reload-secure-settings settings1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5554,6 +5705,7 @@ export def "nodes-stats nodesstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5574,7 +5726,7 @@ export def "nodes-stats nodesstats3" [
   let full_url = (build-url $base $"/_nodes/($node_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5592,6 +5744,7 @@ export def "nodes-stats nodesstats4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5612,7 +5765,7 @@ export def "nodes-stats nodesstats4" [
   let full_url = (build-url $base $"/_nodes/($node_id)/stats/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5631,6 +5784,7 @@ export def "nodes-stats nodesstats5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5651,7 +5805,7 @@ export def "nodes-stats nodesstats5" [
   let full_url = (build-url $base $"/_nodes/($node_id)/stats/($metric)/($index_metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns low-level information about REST actions usage on nodes.
@@ -5668,6 +5822,7 @@ export def "nodes-usage nodesusage2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5681,7 +5836,7 @@ export def "nodes-usage nodesusage2" [
   let full_url = (build-url $base $"/_nodes/($node_id)/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns low-level information about REST actions usage on nodes.
@@ -5699,6 +5854,7 @@ export def "nodes-usage nodesusage3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5712,7 +5868,7 @@ export def "nodes-usage nodesusage3" [
   let full_url = (build-url $base $"/_nodes/($node_id)/usage/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -5728,6 +5884,7 @@ export def "nodes-hot-threads threads4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -5746,7 +5903,7 @@ export def "nodes-hot-threads threads4" [
   let full_url = (build-url $base "/_nodes/hot_threads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads secure settings.
@@ -5762,6 +5919,7 @@ export def "nodes-reload-secure-settings settings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The amount of time to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5779,7 +5937,7 @@ export def "nodes-reload-secure-settings settings0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5795,6 +5953,7 @@ export def "nodes-stats nodesstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5815,7 +5974,7 @@ export def "nodes-stats nodesstats0" [
   let full_url = (build-url $base "/_nodes/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5832,6 +5991,7 @@ export def "nodes-stats nodesstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5852,7 +6012,7 @@ export def "nodes-stats nodesstats1" [
   let full_url = (build-url $base $"/_nodes/stats/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns statistical information about nodes in the cluster.
@@ -5870,6 +6030,7 @@ export def "nodes-stats nodesstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # A comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --fielddata-fields: string # A comma-separated list or wildcard expressions of fields to include in field data statistics.
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics.
@@ -5890,7 +6051,7 @@ export def "nodes-stats nodesstats2" [
   let full_url = (build-url $base $"/_nodes/stats/($metric)/($index_metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns low-level information about REST actions usage on nodes.
@@ -5906,6 +6067,7 @@ export def "nodes-usage nodesusage0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5919,7 +6081,7 @@ export def "nodes-usage nodesusage0" [
   let full_url = (build-url $base "/_nodes/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns low-level information about REST actions usage on nodes.
@@ -5936,6 +6098,7 @@ export def "nodes-usage nodesusage1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5949,7 +6112,7 @@ export def "nodes-usage nodesusage1" [
   let full_url = (build-url $base $"/_nodes/usage/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves information about the SSL configuration.
@@ -5964,6 +6127,7 @@ export def "opendistro-security-sslinfo sslinfo0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-dn: oneof<nothing, bool> # Whether to include all domain names in the response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -5977,7 +6141,7 @@ export def "opendistro-security-sslinfo sslinfo0" [
   let full_url = (build-url $base "/_opendistro/_security/sslinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs an asynchronous search.
@@ -6000,6 +6164,7 @@ export def "plugins-asynchronous-search searchsearch0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to be searched. Can be an individual name, a comma-separated list of indexes, or a wildcard expression of index names.
   --keep-alive: string # The amount of time that the result is saved in the cluster. For example, `2d` means that the results are stored in the cluster for 48 hours.  The saved search results are deleted after this period or if the search is canceled. Note that this includes the query execution time.  If the query exceeds this amount of time, the process cancels this query automatically.
   --keep-on-completion: oneof<nothing, bool> # Whether to save the results in the cluster after the search is complete. You can examine the stored results at a later time.
@@ -6049,7 +6214,7 @@ export def "plugins-asynchronous-search searchsearch0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes any responses from an asynchronous search.
@@ -6066,6 +6231,7 @@ export def "plugins-asynchronous-search searchdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6078,7 +6244,7 @@ export def "plugins-asynchronous-search searchdelete0" [
   let full_url = (build-url $base $"/_plugins/_asynchronous_search/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets partial responses from an asynchronous search.
@@ -6095,6 +6261,7 @@ export def "plugins-asynchronous-search searchget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6107,7 +6274,7 @@ export def "plugins-asynchronous-search searchget0" [
   let full_url = (build-url $base $"/_plugins/_asynchronous_search/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Monitors any asynchronous searches that are `running`, `completed`, or `persisted`.
@@ -6123,6 +6290,7 @@ export def "plugins-asynchronous-search-stats searchstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6135,7 +6303,7 @@ export def "plugins-asynchronous-search-stats searchstats0" [
   let full_url = (build-url $base "/_plugins/_asynchronous_search/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new workflow template.
@@ -6152,6 +6320,7 @@ export def "plugins-flow-framework-workflow frameworkcreate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --provision: oneof<nothing, bool> # default: false
   --reprovision: oneof<nothing, bool> # default: false
   --update-fields: oneof<nothing, bool> # default: false
@@ -6177,7 +6346,7 @@ export def "plugins-flow-framework-workflow frameworkcreate0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for workflows by using a query matching a field.
@@ -6194,6 +6363,7 @@ export def "plugins-flow-framework-workflow-search frameworksearch1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6210,7 +6380,7 @@ export def "plugins-flow-framework-workflow-search frameworksearch1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for workflows by using a query matching a field.
@@ -6227,6 +6397,7 @@ export def "plugins-flow-framework-workflow-search frameworksearch0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6243,7 +6414,7 @@ export def "plugins-flow-framework-workflow-search frameworksearch0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves available workflow steps.
@@ -6259,6 +6430,7 @@ export def "plugins-flow-framework-workflow-steps steps0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6272,7 +6444,7 @@ export def "plugins-flow-framework-workflow-steps steps0" [
   let full_url = (build-url $base "/_plugins/_flow_framework/workflow/_steps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a workflow template.
@@ -6289,6 +6461,7 @@ export def "plugins-flow-framework-workflow frameworkdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clear-status: oneof<nothing, bool> # default: false
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6302,7 +6475,7 @@ export def "plugins-flow-framework-workflow frameworkdelete0" [
   let full_url = (build-url $base $"/_plugins/_flow_framework/workflow/($workflow_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a workflow template.
@@ -6319,6 +6492,7 @@ export def "plugins-flow-framework-workflow frameworkget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6331,7 +6505,7 @@ export def "plugins-flow-framework-workflow frameworkget0" [
   let full_url = (build-url $base $"/_plugins/_flow_framework/workflow/($workflow_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a workflow template that has not been provisioned.
@@ -6349,6 +6523,7 @@ export def "plugins-flow-framework-workflow frameworkupdate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --provision: oneof<nothing, bool> # default: false
   --reprovision: oneof<nothing, bool> # default: false
   --update-fields: oneof<nothing, bool> # default: false
@@ -6374,7 +6549,7 @@ export def "plugins-flow-framework-workflow frameworkupdate0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprovision workflow's resources when you no longer need them.
@@ -6391,6 +6566,7 @@ export def "plugins-flow-framework-workflow-deprovision frameworkdeprovision0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-delete: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6404,7 +6580,7 @@ export def "plugins-flow-framework-workflow-deprovision frameworkdeprovision0" [
   let full_url = (build-url $base $"/_plugins/_flow_framework/workflow/($workflow_id)/_deprovision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provisioning a workflow. This API is also executed when the Create or Update Workflow API is called with the provision parameter set to true.
@@ -6421,6 +6597,7 @@ export def "plugins-flow-framework-workflow-provision frameworkprovision0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6436,7 +6613,7 @@ export def "plugins-flow-framework-workflow-provision frameworkprovision0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the current workflow provisioning status.
@@ -6453,6 +6630,7 @@ export def "plugins-flow-framework-workflow-status status0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Whether to return all fields in the response. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6466,7 +6644,7 @@ export def "plugins-flow-framework-workflow-status status0" [
   let full_url = (build-url $base $"/_plugins/_flow_framework/workflow/($workflow_id)/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for workflows by using a query matching a field.
@@ -6483,6 +6661,7 @@ export def "plugins-flow-framework-workflow-state-search state1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6499,7 +6678,7 @@ export def "plugins-flow-framework-workflow-state-search state1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for workflows by using a query matching a field.
@@ -6516,6 +6695,7 @@ export def "plugins-flow-framework-workflow-state-search state0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6532,7 +6712,7 @@ export def "plugins-flow-framework-workflow-state-search state0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a policy to an index.
@@ -6548,6 +6728,7 @@ export def "plugins-ism-add policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6565,7 +6746,7 @@ export def "plugins-ism-add policy0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a policy to an index.
@@ -6582,6 +6763,7 @@ export def "plugins-ism-add policy1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6599,7 +6781,7 @@ export def "plugins-ism-add policy1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the managed index policy to a new policy.
@@ -6616,6 +6798,7 @@ export def "plugins-ism-change-policy policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6635,7 +6818,7 @@ export def "plugins-ism-change-policy policy0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the managed index policy to a new policy.
@@ -6653,6 +6836,7 @@ export def "plugins-ism-change-policy policy1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -6672,7 +6856,7 @@ export def "plugins-ism-change-policy policy1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -6688,6 +6872,7 @@ export def "plugins-ism-explain policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6703,7 +6888,7 @@ export def "plugins-ism-explain policy0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -6719,6 +6904,7 @@ export def "plugins-ism-explain policy1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6734,7 +6920,7 @@ export def "plugins-ism-explain policy1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -6751,6 +6937,7 @@ export def "plugins-ism-explain policy3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6766,7 +6953,7 @@ export def "plugins-ism-explain policy3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -6783,6 +6970,7 @@ export def "plugins-ism-explain policy4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6798,7 +6986,7 @@ export def "plugins-ism-explain policy4" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the policies.
@@ -6814,6 +7002,7 @@ export def "plugins-ism-policies policies0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6826,7 +7015,7 @@ export def "plugins-ism-policies policies0" [
   let full_url = (build-url $base "/_plugins/_ism/policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates policies.
@@ -6843,6 +7032,7 @@ export def "plugins-ism-policies policies0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --policyID: string
@@ -6862,7 +7052,7 @@ export def "plugins-ism-policies policies0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a policy.
@@ -6879,6 +7069,7 @@ export def "plugins-ism-policies policy0-by-policy_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6891,7 +7082,7 @@ export def "plugins-ism-policies policy0-by-policy_id" [
   let full_url = (build-url $base $"/_plugins/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a specific policy.
@@ -6908,6 +7099,7 @@ export def "plugins-ism-policies policy0-by-policy_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6920,7 +7112,7 @@ export def "plugins-ism-policies policy0-by-policy_id-1" [
   let full_url = (build-url $base $"/_plugins/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks for the existence of a policy.
@@ -6937,6 +7129,7 @@ export def "plugins-ism-policies policy0-by-policy_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -6949,7 +7142,7 @@ export def "plugins-ism-policies policy0-by-policy_id-2" [
   let full_url = (build-url $base $"/_plugins/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a policy.
@@ -6967,6 +7160,7 @@ export def "plugins-ism-policies policy0-by-policy_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -6985,7 +7179,7 @@ export def "plugins-ism-policies policy0-by-policy_id-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a policy from an index.
@@ -7001,6 +7195,7 @@ export def "plugins-ism-remove policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7014,7 +7209,7 @@ export def "plugins-ism-remove policy0" [
   let full_url = (build-url $base "/_plugins/_ism/remove" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a policy from an index.
@@ -7031,6 +7226,7 @@ export def "plugins-ism-remove policy1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7044,7 +7240,7 @@ export def "plugins-ism-remove policy1" [
   let full_url = (build-url $base $"/_plugins/_ism/remove/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retries the failed action for an index.
@@ -7060,6 +7256,7 @@ export def "plugins-ism-retry index0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7077,7 +7274,7 @@ export def "plugins-ism-retry index0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retries the failed action for an index.
@@ -7094,6 +7291,7 @@ export def "plugins-ism-retry index1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7111,7 +7309,7 @@ export def "plugins-ism-retry index1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -7128,6 +7326,7 @@ export def "plugins-knn-stats knnstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7141,7 +7340,7 @@ export def "plugins-knn-stats knnstats2" [
   let full_url = (build-url $base $"/_plugins/_knn/($node_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -7159,6 +7358,7 @@ export def "plugins-knn-stats knnstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7172,7 +7372,7 @@ export def "plugins-knn-stats knnstats3" [
   let full_url = (build-url $base $"/_plugins/_knn/($node_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Use an OpenSearch query to search for models in the index.
@@ -7188,6 +7388,7 @@ export def "plugins-knn-models-search models0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: list # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: list # List of fields to exclude from the returned `_source` field.
   --source-includes: list # List of fields to extract and return from the `_source` field.
@@ -7245,7 +7446,7 @@ export def "plugins-knn-models-search models0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Use an OpenSearch query to search for models in the index.
@@ -7261,6 +7462,7 @@ export def "plugins-knn-models-search models1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: list # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: list # List of fields to exclude from the returned `_source` field.
   --source-includes: list # List of fields to extract and return from the `_source` field.
@@ -7318,7 +7520,7 @@ export def "plugins-knn-models-search models1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create and train a model that can be used for initializing k-NN native library indexes during indexing.
@@ -7335,6 +7537,7 @@ export def "plugins-knn-models-train model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preference: string # Preferred node to execute training.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7361,7 +7564,7 @@ export def "plugins-knn-models-train model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Used to delete a particular model in the cluster.
@@ -7378,6 +7581,7 @@ export def "plugins-knn-models model0-by-model_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7390,7 +7594,7 @@ export def "plugins-knn-models model0-by-model_id" [
   let full_url = (build-url $base $"/_plugins/_knn/models/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Used to retrieve information about models present in the cluster.
@@ -7407,6 +7611,7 @@ export def "plugins-knn-models model0-by-model_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7419,7 +7624,7 @@ export def "plugins-knn-models model0-by-model_id-1" [
   let full_url = (build-url $base $"/_plugins/_knn/models/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create and train a model that can be used for initializing k-NN native library indexes during indexing.
@@ -7437,6 +7642,7 @@ export def "plugins-knn-models-train model1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preference: string # Preferred node to execute training.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7463,7 +7669,7 @@ export def "plugins-knn-models-train model1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -7479,6 +7685,7 @@ export def "plugins-knn-stats knnstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7492,7 +7699,7 @@ export def "plugins-knn-stats knnstats0" [
   let full_url = (build-url $base "/_plugins/_knn/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -7509,6 +7716,7 @@ export def "plugins-knn-stats knnstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7522,7 +7730,7 @@ export def "plugins-knn-stats knnstats1" [
   let full_url = (build-url $base $"/_plugins/_knn/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preloads native library files into memory, reducing initial search latency for specified indexes.
@@ -7539,6 +7747,7 @@ export def "plugins-knn-warmup knnwarmup0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7551,7 +7760,7 @@ export def "plugins-knn-warmup knnwarmup0" [
   let full_url = (build-url $base $"/_plugins/_knn/warmup/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the LTR plugin.
@@ -7567,6 +7776,7 @@ export def "plugins-ltr-stats ltrstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The time in milliseconds to wait for a response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7580,7 +7790,7 @@ export def "plugins-ltr-stats ltrstats2" [
   let full_url = (build-url $base $"/_plugins/_ltr/($node_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the LTR plugin.
@@ -7597,6 +7807,7 @@ export def "plugins-ltr-stats ltrstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The time in milliseconds to wait for a response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7610,7 +7821,7 @@ export def "plugins-ltr-stats ltrstats3" [
   let full_url = (build-url $base $"/_plugins/_ltr/($node_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the LTR plugin.
@@ -7625,6 +7836,7 @@ export def "plugins-ltr-stats ltrstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The time in milliseconds to wait for a response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7638,7 +7850,7 @@ export def "plugins-ltr-stats ltrstats0" [
   let full_url = (build-url $base "/_plugins/_ltr/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the LTR plugin.
@@ -7654,6 +7866,7 @@ export def "plugins-ltr-stats ltrstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The time in milliseconds to wait for a response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -7667,7 +7880,7 @@ export def "plugins-ltr-stats ltrstats1" [
   let full_url = (build-url $base $"/_plugins/_ltr/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Execute an algorithm.
@@ -7684,6 +7897,7 @@ export def "plugins-ml-execute algorithm0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7710,7 +7924,7 @@ export def "plugins-ml-execute algorithm0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Predicts new data with trained model.
@@ -7728,6 +7942,7 @@ export def "plugins-ml-predict mlpredict0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7748,7 +7963,7 @@ export def "plugins-ml-predict mlpredict0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trains a model and predicts against the same training dataset.
@@ -7767,6 +7982,7 @@ export def "plugins-ml-train-predict predict0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7786,7 +8002,7 @@ export def "plugins-ml-train-predict predict0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trains a model synchronously.
@@ -7804,6 +8020,7 @@ export def "plugins-ml-train mltrain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7822,7 +8039,7 @@ export def "plugins-ml-train mltrain0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get stats.
@@ -7838,6 +8055,7 @@ export def "plugins-ml-stats stats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7850,7 +8068,7 @@ export def "plugins-ml-stats stats2" [
   let full_url = (build-url $base $"/_plugins/_ml/($node_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stats.
@@ -7867,6 +8085,7 @@ export def "plugins-ml-stats stats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7879,7 +8098,7 @@ export def "plugins-ml-stats stats3" [
   let full_url = (build-url $base $"/_plugins/_ml/($node_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register an agent.
@@ -7897,6 +8116,7 @@ export def "plugins-ml-agents-register agents0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7920,7 +8140,7 @@ export def "plugins-ml-agents-register agents0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search agents.
@@ -7937,6 +8157,7 @@ export def "plugins-ml-agents-search agents0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7955,7 +8176,7 @@ export def "plugins-ml-agents-search agents0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search agents.
@@ -7972,6 +8193,7 @@ export def "plugins-ml-agents-search agents1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -7990,7 +8212,7 @@ export def "plugins-ml-agents-search agents1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an agent.
@@ -8006,6 +8228,7 @@ export def "plugins-ml-agents agent0-by-agent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8018,7 +8241,7 @@ export def "plugins-ml-agents agent0-by-agent_id" [
   let full_url = (build-url $base $"/_plugins/_ml/agents/($agent_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an agent.
@@ -8034,6 +8257,7 @@ export def "plugins-ml-agents agent0-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8046,7 +8270,7 @@ export def "plugins-ml-agents agent0-by-agent_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/agents/($agent_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Execute an agent.
@@ -8062,6 +8286,7 @@ export def "plugins-ml-agents-execute agent0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8079,7 +8304,7 @@ export def "plugins-ml-agents-execute agent0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a standalone connector.
@@ -8097,6 +8322,7 @@ export def "plugins-ml-connectors-create connector0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8120,7 +8346,7 @@ export def "plugins-ml-connectors-create connector0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for standalone connectors.
@@ -8136,6 +8362,7 @@ export def "plugins-ml-connectors-search connectors0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8154,7 +8381,7 @@ export def "plugins-ml-connectors-search connectors0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for standalone connectors.
@@ -8170,6 +8397,7 @@ export def "plugins-ml-connectors-search connectors1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8188,7 +8416,7 @@ export def "plugins-ml-connectors-search connectors1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a standalone connector.
@@ -8204,6 +8432,7 @@ export def "plugins-ml-connectors connector0-by-connector_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8216,7 +8445,7 @@ export def "plugins-ml-connectors connector0-by-connector_id" [
   let full_url = (build-url $base $"/_plugins/_ml/connectors/($connector_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a standalone connector.
@@ -8232,6 +8461,7 @@ export def "plugins-ml-connectors connector0-by-connector_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8244,7 +8474,7 @@ export def "plugins-ml-connectors connector0-by-connector_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/connectors/($connector_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a standalone connector.
@@ -8262,6 +8492,7 @@ export def "plugins-ml-connectors connector0-by-connector_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8287,7 +8518,7 @@ export def "plugins-ml-connectors connector0-by-connector_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a controller.
@@ -8303,6 +8534,7 @@ export def "plugins-ml-controllers controller0-by-model_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8315,7 +8547,7 @@ export def "plugins-ml-controllers controller0-by-model_id" [
   let full_url = (build-url $base $"/_plugins/_ml/controllers/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a controller.
@@ -8331,6 +8563,7 @@ export def "plugins-ml-controllers controller0-by-model_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8343,7 +8576,7 @@ export def "plugins-ml-controllers controller0-by-model_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/controllers/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a controller.
@@ -8359,6 +8592,7 @@ export def "plugins-ml-controllers controller0-by-model_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8375,7 +8609,7 @@ export def "plugins-ml-controllers controller0-by-model_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a controller.
@@ -8391,6 +8625,7 @@ export def "plugins-ml-controllers controller0-by-model_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8408,7 +8643,7 @@ export def "plugins-ml-controllers controller0-by-model_id-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all memories.
@@ -8423,6 +8658,7 @@ export def "plugins-ml-memory memories0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # format: int32
   --next-token: int # format: int32
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -8437,7 +8673,7 @@ export def "plugins-ml-memory memories0" [
   let full_url = (build-url $base "/_plugins/_ml/memory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a memory.
@@ -8452,6 +8688,7 @@ export def "plugins-ml-memory memory0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8468,7 +8705,7 @@ export def "plugins-ml-memory memory0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search memory.
@@ -8485,6 +8722,7 @@ export def "plugins-ml-memory-search memory0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8503,7 +8741,7 @@ export def "plugins-ml-memory-search memory0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search memory.
@@ -8520,6 +8758,7 @@ export def "plugins-ml-memory-search memory1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8538,7 +8777,7 @@ export def "plugins-ml-memory-search memory1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a memory.
@@ -8554,6 +8793,7 @@ export def "plugins-ml-memory memory0-by-memory_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8566,7 +8806,7 @@ export def "plugins-ml-memory memory0-by-memory_id" [
   let full_url = (build-url $base $"/_plugins/_ml/memory/($memory_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a memory.
@@ -8582,6 +8822,7 @@ export def "plugins-ml-memory memory0-by-memory_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8594,7 +8835,7 @@ export def "plugins-ml-memory memory0-by-memory_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/memory/($memory_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a memory.
@@ -8610,6 +8851,7 @@ export def "plugins-ml-memory memory0-by-memory_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8626,7 +8868,7 @@ export def "plugins-ml-memory memory0-by-memory_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search messages.
@@ -8644,6 +8886,7 @@ export def "plugins-ml-memory-search message0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8662,7 +8905,7 @@ export def "plugins-ml-memory-search message0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search messages.
@@ -8680,6 +8923,7 @@ export def "plugins-ml-memory-search message1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8698,7 +8942,7 @@ export def "plugins-ml-memory-search message1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all messages in a memory.
@@ -8714,6 +8958,7 @@ export def "plugins-ml-memory-messages messages0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # format: int32
   --next-token: int # format: int32
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -8728,7 +8973,7 @@ export def "plugins-ml-memory-messages messages0" [
   let full_url = (build-url $base $"/_plugins/_ml/memory/($memory_id)/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a message.
@@ -8744,6 +8989,7 @@ export def "plugins-ml-memory-messages message0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8764,7 +9010,7 @@ export def "plugins-ml-memory-messages message0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a message.
@@ -8780,6 +9026,7 @@ export def "plugins-ml-memory-message message0-by-message_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8792,7 +9039,7 @@ export def "plugins-ml-memory-message message0-by-message_id" [
   let full_url = (build-url $base $"/_plugins/_ml/memory/message/($message_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a message.
@@ -8808,6 +9055,7 @@ export def "plugins-ml-memory-message message0-by-message_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8828,7 +9076,7 @@ export def "plugins-ml-memory-message message0-by-message_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a message traces.
@@ -8844,6 +9092,7 @@ export def "plugins-ml-memory-message-traces traces0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # format: int32
   --next-token: int # format: int32
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -8858,7 +9107,7 @@ export def "plugins-ml-memory-message-traces traces0" [
   let full_url = (build-url $base $"/_plugins/_ml/memory/message/($message_id)/traces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Registers a model group.
@@ -8873,6 +9122,7 @@ export def "plugins-ml-model-groups-register group0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8893,7 +9143,7 @@ export def "plugins-ml-model-groups-register group0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for model groups.
@@ -8910,6 +9160,7 @@ export def "plugins-ml-model-groups-search group0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8928,7 +9179,7 @@ export def "plugins-ml-model-groups-search group0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for model groups.
@@ -8945,6 +9196,7 @@ export def "plugins-ml-model-groups-search group1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8963,7 +9215,7 @@ export def "plugins-ml-model-groups-search group1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a model group.
@@ -8979,6 +9231,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -8991,7 +9244,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id" [
   let full_url = (build-url $base $"/_plugins/_ml/model_groups/($model_group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a model group.
@@ -9007,6 +9260,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9019,7 +9273,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/model_groups/($model_group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a model group.
@@ -9035,6 +9289,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9056,7 +9311,7 @@ export def "plugins-ml-model-groups group0-by-model_group_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers a model.
@@ -9071,6 +9326,7 @@ export def "plugins-ml-models-register model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9093,7 +9349,7 @@ export def "plugins-ml-models-register model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers model metadata.
@@ -9109,6 +9365,7 @@ export def "plugins-ml-models-register-meta meta0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9133,7 +9390,7 @@ export def "plugins-ml-models-register-meta meta0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for models.
@@ -9150,6 +9407,7 @@ export def "plugins-ml-models-search models0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9168,7 +9426,7 @@ export def "plugins-ml-models-search models0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for models.
@@ -9185,6 +9443,7 @@ export def "plugins-ml-models-search models1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9203,7 +9462,7 @@ export def "plugins-ml-models-search models1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Undeploys a model.
@@ -9218,6 +9477,7 @@ export def "plugins-ml-models-undeploy model1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9235,7 +9495,7 @@ export def "plugins-ml-models-undeploy model1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unloads a model.
@@ -9252,6 +9512,7 @@ export def "plugins-ml-models-unload model1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9269,7 +9530,7 @@ export def "plugins-ml-models-unload model1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers a model.
@@ -9286,6 +9547,7 @@ export def "plugins-ml-models-upload model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9306,7 +9568,7 @@ export def "plugins-ml-models-upload model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a model.
@@ -9322,6 +9584,7 @@ export def "plugins-ml-models model0-by-model_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9334,7 +9597,7 @@ export def "plugins-ml-models model0-by-model_id" [
   let full_url = (build-url $base $"/_plugins/_ml/models/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a model.
@@ -9350,6 +9613,7 @@ export def "plugins-ml-models model0-by-model_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9362,7 +9626,7 @@ export def "plugins-ml-models model0-by-model_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/models/($model_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a model.
@@ -9381,6 +9645,7 @@ export def "plugins-ml-models model0-by-model_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9405,7 +9670,7 @@ export def "plugins-ml-models model0-by-model_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deploys a model.
@@ -9421,6 +9686,7 @@ export def "plugins-ml-models-deploy model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9433,7 +9699,7 @@ export def "plugins-ml-models-deploy model0" [
   let full_url = (build-url $base $"/_plugins/_ml/models/($model_id)/_deploy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deploys a model.
@@ -9451,6 +9717,7 @@ export def "plugins-ml-models-load model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9463,7 +9730,7 @@ export def "plugins-ml-models-load model0" [
   let full_url = (build-url $base $"/_plugins/_ml/models/($model_id)/_load" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Predicts a model.
@@ -9479,6 +9746,7 @@ export def "plugins-ml-models-predict model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9496,7 +9764,7 @@ export def "plugins-ml-models-predict model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Undeploys a model.
@@ -9512,6 +9780,7 @@ export def "plugins-ml-models-undeploy model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9529,7 +9798,7 @@ export def "plugins-ml-models-undeploy model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unloads a model.
@@ -9547,6 +9816,7 @@ export def "plugins-ml-models-unload model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9564,7 +9834,7 @@ export def "plugins-ml-models-unload model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Uploads model chunk.
@@ -9583,6 +9853,7 @@ export def "plugins-ml-models-chunk model0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9599,7 +9870,7 @@ export def "plugins-ml-models-chunk model0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Uploads model chunk.
@@ -9616,6 +9887,7 @@ export def "plugins-ml-models-upload-chunk chunk0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9632,7 +9904,7 @@ export def "plugins-ml-models-upload-chunk chunk0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers model metadata.
@@ -9650,6 +9922,7 @@ export def "plugins-ml-models-meta meta0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9674,7 +9947,7 @@ export def "plugins-ml-models-meta meta0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a profile.
@@ -9689,6 +9962,7 @@ export def "plugins-ml-profile profile0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9709,7 +9983,7 @@ export def "plugins-ml-profile profile0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a profile models.
@@ -9724,6 +9998,7 @@ export def "plugins-ml-profile-models models0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9744,7 +10019,7 @@ export def "plugins-ml-profile-models models0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a profile models.
@@ -9760,6 +10035,7 @@ export def "plugins-ml-profile-models models1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9780,7 +10056,7 @@ export def "plugins-ml-profile-models models1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a profile tasks.
@@ -9795,6 +10071,7 @@ export def "plugins-ml-profile-tasks tasks0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9815,7 +10092,7 @@ export def "plugins-ml-profile-tasks tasks0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a profile tasks.
@@ -9831,6 +10108,7 @@ export def "plugins-ml-profile-tasks tasks1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9851,7 +10129,7 @@ export def "plugins-ml-profile-tasks tasks1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get stats.
@@ -9866,6 +10144,7 @@ export def "plugins-ml-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9878,7 +10157,7 @@ export def "plugins-ml-stats stats0" [
   let full_url = (build-url $base "/_plugins/_ml/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stats.
@@ -9894,6 +10173,7 @@ export def "plugins-ml-stats stats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9906,7 +10186,7 @@ export def "plugins-ml-stats stats1" [
   let full_url = (build-url $base $"/_plugins/_ml/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches for tasks.
@@ -9923,6 +10203,7 @@ export def "plugins-ml-tasks-search tasks0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9941,7 +10222,7 @@ export def "plugins-ml-tasks-search tasks0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches for tasks.
@@ -9958,6 +10239,7 @@ export def "plugins-ml-tasks-search tasks1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -9976,7 +10258,7 @@ export def "plugins-ml-tasks-search tasks1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a task.
@@ -9992,6 +10274,7 @@ export def "plugins-ml-tasks task0-by-task_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10004,7 +10287,7 @@ export def "plugins-ml-tasks task0-by-task_id" [
   let full_url = (build-url $base $"/_plugins/_ml/tasks/($task_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a task.
@@ -10020,6 +10303,7 @@ export def "plugins-ml-tasks task0-by-task_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10032,7 +10316,7 @@ export def "plugins-ml-tasks task0-by-task_id-1" [
   let full_url = (build-url $base $"/_plugins/_ml/tasks/($task_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tools.
@@ -10047,6 +10331,7 @@ export def "plugins-ml-tools tools0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10059,7 +10344,7 @@ export def "plugins-ml-tools tools0" [
   let full_url = (build-url $base "/_plugins/_ml/tools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tools.
@@ -10075,6 +10360,7 @@ export def "plugins-ml-tools tool0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10087,7 +10373,7 @@ export def "plugins-ml-tools tool0" [
   let full_url = (build-url $base $"/_plugins/_ml/tools/($tool_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the neural-search plugin.
@@ -10103,6 +10389,7 @@ export def "plugins-neural-stats neuralstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-stat-paths: oneof<nothing, bool> # Whether to return stats in the flat form, which can improve readability, especially for heavily nested stats. For example, the flat form of `"processors": { "ingest": { "text_embedding_executions": 20181212 } }` is  `"processors.ingest.text_embedding_executions": "20181212"`. (default: false)
   --include-metadata: oneof<nothing, bool> # Whether to return stat metadata instead of the raw stat value, includes additional information about the stat. These can include things like type hints, time since last stats being recorded, or recent rolling interval values (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10117,7 +10404,7 @@ export def "plugins-neural-stats neuralstats2" [
   let full_url = (build-url $base $"/_plugins/_neural/($node_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the neural-search plugin.
@@ -10134,6 +10421,7 @@ export def "plugins-neural-stats neuralstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-stat-paths: oneof<nothing, bool> # Whether to return stats in the flat form, which can improve readability, especially for heavily nested stats. For example, the flat form of `"processors": { "ingest": { "text_embedding_executions": 20181212 } }` is  `"processors.ingest.text_embedding_executions": "20181212"`. (default: false)
   --include-metadata: oneof<nothing, bool> # Whether to return stat metadata instead of the raw stat value, includes additional information about the stat. These can include things like type hints, time since last stats being recorded, or recent rolling interval values (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10148,7 +10436,7 @@ export def "plugins-neural-stats neuralstats3" [
   let full_url = (build-url $base $"/_plugins/_neural/($node_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the neural-search plugin.
@@ -10163,6 +10451,7 @@ export def "plugins-neural-stats neuralstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-stat-paths: oneof<nothing, bool> # Whether to return stats in the flat form, which can improve readability, especially for heavily nested stats. For example, the flat form of `"processors": { "ingest": { "text_embedding_executions": 20181212 } }` is  `"processors.ingest.text_embedding_executions": "20181212"`. (default: false)
   --include-metadata: oneof<nothing, bool> # Whether to return stat metadata instead of the raw stat value, includes additional information about the stat. These can include things like type hints, time since last stats being recorded, or recent rolling interval values (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10177,7 +10466,7 @@ export def "plugins-neural-stats neuralstats0" [
   let full_url = (build-url $base "/_plugins/_neural/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the neural-search plugin.
@@ -10193,6 +10482,7 @@ export def "plugins-neural-stats neuralstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flat-stat-paths: oneof<nothing, bool> # Whether to return stats in the flat form, which can improve readability, especially for heavily nested stats. For example, the flat form of `"processors": { "ingest": { "text_embedding_executions": 20181212 } }` is  `"processors.ingest.text_embedding_executions": "20181212"`. (default: false)
   --include-metadata: oneof<nothing, bool> # Whether to return stat metadata instead of the raw stat value, includes additional information about the stat. These can include things like type hints, time since last stats being recorded, or recent rolling interval values (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10207,7 +10497,7 @@ export def "plugins-neural-stats neuralstats1" [
   let full_url = (build-url $base $"/_plugins/_neural/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List created notification channels.
@@ -10223,6 +10513,7 @@ export def "plugins-notifications-channels channels0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10235,7 +10526,7 @@ export def "plugins-notifications-channels channels0" [
   let full_url = (build-url $base "/_plugins/_notifications/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete multiple channel configurations.
@@ -10251,6 +10542,7 @@ export def "plugins-notifications-configs configs0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --config-id: string # The ID of the channel configuration to delete.
   --config-id-list: string # A comma-separated list of channel IDs to delete.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10265,7 +10557,7 @@ export def "plugins-notifications-configs configs0" [
   let full_url = (build-url $base "/_plugins/_notifications/configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple channel configurations with filtering.
@@ -10281,6 +10573,7 @@ export def "plugins-notifications-configs configs0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chimeurl: string
   --chimeurlkeyword: string
   --config-id: string # Notification configuration ID.
@@ -10341,7 +10634,7 @@ export def "plugins-notifications-configs configs0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create channel configuration.
@@ -10358,6 +10651,7 @@ export def "plugins-notifications-configs config0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10375,7 +10669,7 @@ export def "plugins-notifications-configs config0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a channel configuration.
@@ -10392,6 +10686,7 @@ export def "plugins-notifications-configs config0-by-config_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10404,7 +10699,7 @@ export def "plugins-notifications-configs config0-by-config_id" [
   let full_url = (build-url $base $"/_plugins/_notifications/configs/($config_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific channel configuration.
@@ -10420,6 +10715,7 @@ export def "plugins-notifications-configs config0-by-config_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10432,7 +10728,7 @@ export def "plugins-notifications-configs config0-by-config_id-1" [
   let full_url = (build-url $base $"/_plugins/_notifications/configs/($config_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update channel configuration.
@@ -10450,6 +10746,7 @@ export def "plugins-notifications-configs config0-by-config_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10467,7 +10764,7 @@ export def "plugins-notifications-configs config0-by-config_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a test notification.
@@ -10486,6 +10783,7 @@ export def "plugins-notifications-feature-test test0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10498,7 +10796,7 @@ export def "plugins-notifications-feature-test test0" [
   let full_url = (build-url $base $"/_plugins/_notifications/feature/test/($config_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a test notification.
@@ -10515,6 +10813,7 @@ export def "plugins-notifications-feature-test test1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10527,7 +10826,7 @@ export def "plugins-notifications-feature-test test1" [
   let full_url = (build-url $base $"/_plugins/_notifications/feature/test/($config_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List supported channel configurations.
@@ -10543,6 +10842,7 @@ export def "plugins-notifications-features features0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10555,7 +10855,7 @@ export def "plugins-notifications-features features0" [
   let full_url = (build-url $base "/_plugins/_notifications/features" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves local stats of all observability objects.
@@ -10570,6 +10870,7 @@ export def "plugins-observability-local-stats localstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10582,7 +10883,7 @@ export def "plugins-observability-local-stats localstats0" [
   let full_url = (build-url $base "/_plugins/_observability/_local/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes specific observability objects specified by ID or a list of IDs.
@@ -10597,6 +10898,7 @@ export def "plugins-observability-object objects0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --objectId: string # The ID of a single observability object to delete.
   --objectIdList: string # A comma-separated list of observability object IDs to delete.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10611,7 +10913,7 @@ export def "plugins-observability-object objects0" [
   let full_url = (build-url $base "/_plugins/_observability/object" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves list of all observability objects.
@@ -10626,6 +10928,7 @@ export def "plugins-observability-object objects0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10638,7 +10941,7 @@ export def "plugins-observability-object objects0-1" [
   let full_url = (build-url $base "/_plugins/_observability/object" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new observability object.
@@ -10656,6 +10959,7 @@ export def "plugins-observability-object object0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10678,7 +10982,7 @@ export def "plugins-observability-object object0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes specific observability object specified by ID.
@@ -10694,6 +10998,7 @@ export def "plugins-observability-object object0-by-object_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10706,7 +11011,7 @@ export def "plugins-observability-object object0-by-object_id" [
   let full_url = (build-url $base $"/_plugins/_observability/object/($object_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves specific observability object specified by ID.
@@ -10722,6 +11027,7 @@ export def "plugins-observability-object object0-by-object_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10734,7 +11040,7 @@ export def "plugins-observability-object object0-by-object_id-1" [
   let full_url = (build-url $base $"/_plugins/_observability/object/($object_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an existing observability object.
@@ -10753,6 +11059,7 @@ export def "plugins-observability-object object0-by-object_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10775,7 +11082,7 @@ export def "plugins-observability-object object0-by-object_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Executes a PPL query against OpenSearch indexes.
@@ -10791,6 +11098,7 @@ export def "plugins-ppl pplquery0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON OR YAML).
   --sanitize: oneof<nothing, bool> # Whether to sanitize special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10811,7 +11119,7 @@ export def "plugins-ppl pplquery0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the execution plan for a PPL query.
@@ -10827,6 +11135,7 @@ export def "plugins-ppl-explain pplexplain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10847,7 +11156,7 @@ export def "plugins-ppl-explain pplexplain0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves performance metrics for the PPL plugin.
@@ -10863,6 +11172,7 @@ export def "plugins-ppl-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10877,7 +11187,7 @@ export def "plugins-ppl-stats stats0" [
   let full_url = (build-url $base "/_plugins/_ppl/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves filtered performance metrics for the PPL plugin.
@@ -10893,6 +11203,7 @@ export def "plugins-ppl-stats stats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -10917,7 +11228,7 @@ export def "plugins-ppl-stats stats1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a list of all available data sources.
@@ -10932,6 +11243,7 @@ export def "plugins-query-datasources list0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10944,7 +11256,7 @@ export def "plugins-query-datasources list0" [
   let full_url = (build-url $base "/_plugins/_query/_datasources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new query data source.
@@ -10960,6 +11272,7 @@ export def "plugins-query-datasources create0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -10983,7 +11296,7 @@ export def "plugins-query-datasources create0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates an existing query data source.
@@ -10999,6 +11312,7 @@ export def "plugins-query-datasources update0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11022,7 +11336,7 @@ export def "plugins-query-datasources update0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a specific data source by name.
@@ -11038,6 +11352,7 @@ export def "plugins-query-datasources delete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11050,7 +11365,7 @@ export def "plugins-query-datasources delete0" [
   let full_url = (build-url $base $"/_plugins/_query/_datasources/($datasource_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a specific data source by name.
@@ -11066,6 +11381,7 @@ export def "plugins-query-datasources retrieve0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11078,7 +11394,7 @@ export def "plugins-query-datasources retrieve0" [
   let full_url = (build-url $base $"/_plugins/_query/_datasources/($datasource_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates SQL plugin settings in the OpenSearch cluster configuration.
@@ -11095,6 +11411,7 @@ export def "plugins-query-settings sqlsettings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -11112,7 +11429,7 @@ export def "plugins-query-settings sqlsettings0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refreshes search analyzers in real time.
@@ -11129,6 +11446,7 @@ export def "plugins-refresh-search-analyzers analyzers0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11141,7 +11459,7 @@ export def "plugins-refresh-search-analyzers analyzers0" [
   let full_url = (build-url $base $"/_plugins/_refresh_search_analyzers/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the specified replication rule.
@@ -11157,6 +11475,7 @@ export def "plugins-replication-autofollow rule0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11174,7 +11493,7 @@ export def "plugins-replication-autofollow rule0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Automatically starts the replication on indexes matching a specified pattern.
@@ -11191,6 +11510,7 @@ export def "plugins-replication-autofollow rule0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11210,7 +11530,7 @@ export def "plugins-replication-autofollow rule0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pauses the replication of the leader index.
@@ -11227,6 +11547,7 @@ export def "plugins-replication-pause replicationpause0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11242,7 +11563,7 @@ export def "plugins-replication-pause replicationpause0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resumes replication of the leader index.
@@ -11259,6 +11580,7 @@ export def "plugins-replication-resume replicationresume0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11274,7 +11596,7 @@ export def "plugins-replication-resume replicationresume0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initiates the replication of an index from the leader cluster to the follower cluster.
@@ -11292,6 +11614,7 @@ export def "plugins-replication-start replicationstart0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11310,7 +11633,7 @@ export def "plugins-replication-start replicationstart0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the the status of an index replication.
@@ -11327,6 +11650,7 @@ export def "plugins-replication-status replicationstatus0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11339,7 +11663,7 @@ export def "plugins-replication-status replicationstatus0" [
   let full_url = (build-url $base $"/_plugins/_replication/($index)/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Terminates the replication and converts the follower index to a standard index.
@@ -11356,6 +11680,7 @@ export def "plugins-replication-stop replicationstop0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11371,7 +11696,7 @@ export def "plugins-replication-stop replicationstop0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates any settings on the follower index.
@@ -11388,6 +11713,7 @@ export def "plugins-replication-update settings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11404,7 +11730,7 @@ export def "plugins-replication-update settings0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves information about any auto-follow activity and any replication rules configured on the specified cluster.
@@ -11420,6 +11746,7 @@ export def "plugins-replication-autofollow-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11432,7 +11759,7 @@ export def "plugins-replication-autofollow-stats stats0" [
   let full_url = (build-url $base "/_plugins/_replication/autofollow_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves information about any follower (syncing) indexes on a specified cluster.
@@ -11448,6 +11775,7 @@ export def "plugins-replication-follower-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11460,7 +11788,7 @@ export def "plugins-replication-follower-stats stats0" [
   let full_url = (build-url $base "/_plugins/_replication/follower_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves information about any replicated leader indexes on a specified cluster.
@@ -11476,6 +11804,7 @@ export def "plugins-replication-leader-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11488,7 +11817,7 @@ export def "plugins-replication-leader-stats stats0" [
   let full_url = (build-url $base "/_plugins/_replication/leader_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an index rollup job configuration.
@@ -11505,6 +11834,7 @@ export def "plugins-rollup-jobs rollupsdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11517,7 +11847,7 @@ export def "plugins-rollup-jobs rollupsdelete0" [
   let full_url = (build-url $base $"/_plugins/_rollup/jobs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves an index rollup job configuration by ID.
@@ -11534,6 +11864,7 @@ export def "plugins-rollup-jobs rollupsget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11546,7 +11877,7 @@ export def "plugins-rollup-jobs rollupsget0" [
   let full_url = (build-url $base $"/_plugins/_rollup/jobs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an index rollup job configuration.
@@ -11564,6 +11895,7 @@ export def "plugins-rollup-jobs rollupsput0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only performs the operation if the document has the specified primary term.
   --if-seq-no: int # Only performs the operation if the document has the specified sequence number. (format: int64)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -11586,7 +11918,7 @@ export def "plugins-rollup-jobs rollupsput0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the execution status information for an index rollup job.
@@ -11603,6 +11935,7 @@ export def "plugins-rollup-jobs-explain rollupsexplain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11615,7 +11948,7 @@ export def "plugins-rollup-jobs-explain rollupsexplain0" [
   let full_url = (build-url $base $"/_plugins/_rollup/jobs/($id)/_explain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts the execution of an index rollup job.
@@ -11632,6 +11965,7 @@ export def "plugins-rollup-jobs-start rollupsstart0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11644,7 +11978,7 @@ export def "plugins-rollup-jobs-start rollupsstart0" [
   let full_url = (build-url $base $"/_plugins/_rollup/jobs/($id)/_start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops the execution of an index rollup job.
@@ -11661,6 +11995,7 @@ export def "plugins-rollup-jobs-stop rollupsstop0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11673,7 +12008,7 @@ export def "plugins-rollup-jobs-stop rollupsstop0" [
   let full_url = (build-url $base $"/_plugins/_rollup/jobs/($id)/_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks whether or not an upgrade can be performed and which security resources can be updated.
@@ -11689,6 +12024,7 @@ export def "plugins-security-upgrade-check check0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11701,7 +12037,7 @@ export def "plugins-security-upgrade-check check0" [
   let full_url = (build-url $base "/_plugins/_security/api/_upgrade_check" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assists the cluster operator with upgrading missing default values and stale default definitions.
@@ -11717,6 +12053,7 @@ export def "plugins-security-upgrade-perform perform0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11733,7 +12070,7 @@ export def "plugins-security-upgrade-perform perform0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns account information for the current user.
@@ -11749,6 +12086,7 @@ export def "plugins-security-account details0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11761,7 +12099,7 @@ export def "plugins-security-account details0" [
   let full_url = (build-url $base "/_plugins/_security/api/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes the password for the current user.
@@ -11777,6 +12115,7 @@ export def "plugins-security-account password0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11794,7 +12133,7 @@ export def "plugins-security-account password0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all action groups.
@@ -11810,6 +12149,7 @@ export def "plugins-security-actiongroups groups0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11822,7 +12162,7 @@ export def "plugins-security-actiongroups groups0" [
   let full_url = (build-url $base "/_plugins/_security/api/actiongroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates, updates, or deletes multiple action groups in a single request.
@@ -11838,6 +12178,7 @@ export def "plugins-security-actiongroups groups1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11853,7 +12194,7 @@ export def "plugins-security-actiongroups groups1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified action group.
@@ -11870,6 +12211,7 @@ export def "plugins-security-actiongroups group0-by-action_group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11882,7 +12224,7 @@ export def "plugins-security-actiongroups group0-by-action_group" [
   let full_url = (build-url $base $"/_plugins/_security/api/actiongroups/($action_group)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves one action group.
@@ -11899,6 +12241,7 @@ export def "plugins-security-actiongroups group0-by-action_group-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11911,7 +12254,7 @@ export def "plugins-security-actiongroups group0-by-action_group-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/actiongroups/($action_group)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the individual attributes of an action group.
@@ -11928,6 +12271,7 @@ export def "plugins-security-actiongroups group0-by-action_group-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11943,7 +12287,7 @@ export def "plugins-security-actiongroups group0-by-action_group-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces the specified action group.
@@ -11960,6 +12304,7 @@ export def "plugins-security-actiongroups group0-by-action_group-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -11981,7 +12326,7 @@ export def "plugins-security-actiongroups group0-by-action_group-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the current list of allowed APIs accessible to a normal user.
@@ -11997,6 +12342,7 @@ export def "plugins-security-allowlist allowlist0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12009,7 +12355,7 @@ export def "plugins-security-allowlist allowlist0" [
   let full_url = (build-url $base "/_plugins/_security/api/allowlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the current list of APIs accessible for users on the allow list.
@@ -12025,6 +12371,7 @@ export def "plugins-security-allowlist allowlist0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12040,7 +12387,7 @@ export def "plugins-security-allowlist allowlist0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces APIs permitted for users on the allow list. Requires a super admin certificate or REST API permissions.
@@ -12056,6 +12403,7 @@ export def "plugins-security-allowlist allowlist0-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12073,7 +12421,7 @@ export def "plugins-security-allowlist allowlist0-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the audit configuration.
@@ -12089,6 +12437,7 @@ export def "plugins-security-audit configuration0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12101,7 +12450,7 @@ export def "plugins-security-audit configuration0" [
   let full_url = (build-url $base "/_plugins/_security/api/audit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the specified fields in the audit configuration.
@@ -12117,6 +12466,7 @@ export def "plugins-security-audit configuration0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12132,7 +12482,7 @@ export def "plugins-security-audit configuration0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the audit configuration.
@@ -12150,6 +12500,7 @@ export def "plugins-security-audit-config configuration0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12168,7 +12519,7 @@ export def "plugins-security-audit-config configuration0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the authorization token for the current user.
@@ -12183,6 +12534,7 @@ export def "plugins-security-authtoken securityauthtoken0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12195,7 +12547,7 @@ export def "plugins-security-authtoken securityauthtoken0" [
   let full_url = (build-url $base "/_plugins/_security/api/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Flushes the Security plugin's user, authentication, and authorization cache.
@@ -12211,6 +12563,7 @@ export def "plugins-security-cache cache0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12223,7 +12576,7 @@ export def "plugins-security-cache cache0" [
   let full_url = (build-url $base "/_plugins/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -12238,6 +12591,7 @@ export def "plugins-security-cache securitycache1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12250,7 +12604,7 @@ export def "plugins-security-cache securitycache1" [
   let full_url = (build-url $base "/_plugins/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -12265,6 +12619,7 @@ export def "plugins-security-cache securitycache2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12277,7 +12632,7 @@ export def "plugins-security-cache securitycache2" [
   let full_url = (build-url $base "/_plugins/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -12292,6 +12647,7 @@ export def "plugins-security-cache securitycache3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12304,7 +12660,7 @@ export def "plugins-security-cache securitycache3" [
   let full_url = (build-url $base "/_plugins/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the cluster security certificates.
@@ -12319,6 +12675,7 @@ export def "plugins-security-certificates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cert-type: string # The type of certificates (`HTTP`, `TRANSPORT`, or `ALL`) to retrieve from all nodes.
   --timeout: string # The maximum duration, in seconds, to spend retrieving certificates from all nodes before a timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -12333,7 +12690,7 @@ export def "plugins-security-certificates list" [
   let full_url = (build-url $base "/_plugins/_security/api/certificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the specified node's security certificates.
@@ -12349,6 +12706,7 @@ export def "plugins-security-certificates certificates0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cert-type: string # The type of certificates (`HTTP`, `TRANSPORT`, or `ALL`) to retrieve from a node.
   --timeout: string # The maximum duration, in seconds, to spend retrieving certificates from all nodes before a timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -12363,7 +12721,7 @@ export def "plugins-security-certificates certificates0" [
   let full_url = (build-url $base $"/_plugins/_security/api/certificates/($node_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generates a `On-Behalf-Of` token for the current user.
@@ -12379,6 +12737,7 @@ export def "plugins-security-generateonbehalfoftoken token0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12397,7 +12756,7 @@ export def "plugins-security-generateonbehalfoftoken token0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all internal users.
@@ -12413,6 +12772,7 @@ export def "plugins-security-internalusers users0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12425,7 +12785,7 @@ export def "plugins-security-internalusers users0" [
   let full_url = (build-url $base "/_plugins/_security/api/internalusers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates, updates, or deletes multiple internal users in a single request.
@@ -12441,6 +12801,7 @@ export def "plugins-security-internalusers users0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12456,7 +12817,7 @@ export def "plugins-security-internalusers users0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified internal user.
@@ -12473,6 +12834,7 @@ export def "plugins-security-internalusers user0-by-username" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12485,7 +12847,7 @@ export def "plugins-security-internalusers user0-by-username" [
   let full_url = (build-url $base $"/_plugins/_security/api/internalusers/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve information about the specified internal user.
@@ -12502,6 +12864,7 @@ export def "plugins-security-internalusers user0-by-username-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12514,7 +12877,7 @@ export def "plugins-security-internalusers user0-by-username-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/internalusers/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates individual attributes for an internal user.
@@ -12531,6 +12894,7 @@ export def "plugins-security-internalusers user0-by-username-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12546,7 +12910,7 @@ export def "plugins-security-internalusers user0-by-username-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces the specified user.
@@ -12563,6 +12927,7 @@ export def "plugins-security-internalusers user0-by-username-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12587,7 +12952,7 @@ export def "plugins-security-internalusers user0-by-username-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generates an authorization token for the specified user.
@@ -12603,6 +12968,7 @@ export def "plugins-security-internalusers-authtoken token0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12615,7 +12981,7 @@ export def "plugins-security-internalusers-authtoken token0" [
   let full_url = (build-url $base $"/_plugins/_security/api/internalusers/($username)/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Migrates the security configuration from v6 to v7.
@@ -12630,6 +12996,7 @@ export def "plugins-security-migrate securitymigrate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12642,7 +13009,7 @@ export def "plugins-security-migrate securitymigrate0" [
   let full_url = (build-url $base "/_plugins/_security/api/migrate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all node distinguished names. Requires super admin or REST API permissions.
@@ -12658,6 +13025,7 @@ export def "plugins-security-nodesdn names0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-all: oneof<nothing, bool> # Whether to include or exclude any static node's DN settings from the final result.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -12671,7 +13039,7 @@ export def "plugins-security-nodesdn names0" [
   let full_url = (build-url $base "/_plugins/_security/api/nodesdn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk updates specified node distinguished names. Requires super admin or REST API permissions.
@@ -12687,6 +13055,7 @@ export def "plugins-security-nodesdn names0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12702,7 +13071,7 @@ export def "plugins-security-nodesdn names0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes all distinguished names in the specified cluster or node allowlist. Requires super admin or REST API permissions.
@@ -12719,6 +13088,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12731,7 +13101,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name" [
   let full_url = (build-url $base $"/_plugins/_security/api/nodesdn/($cluster_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all node distinguished names. Requires super admin or REST API permissions.
@@ -12748,6 +13118,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-all: oneof<nothing, bool> # Whether to include or exclude any static node's DN settings from the final result.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -12761,7 +13132,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/nodesdn/($cluster_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the distinguished cluster name for the specified cluster. Requires super admin or REST API permissions.
@@ -12777,6 +13148,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12792,7 +13164,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds or updates the specified distinguished names in the cluster or node allowlist. Requires super admin or REST API permissions.
@@ -12809,6 +13181,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12825,7 +13198,7 @@ export def "plugins-security-nodesdn name0-by-cluster_name-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the evaluated REST API permissions for the currently logged in user.
@@ -12840,6 +13213,7 @@ export def "plugins-security-permissionsinfo info0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12852,7 +13226,7 @@ export def "plugins-security-permissionsinfo info0" [
   let full_url = (build-url $base "/_plugins/_security/api/permissionsinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all roles.
@@ -12868,6 +13242,7 @@ export def "plugins-security-roles roles0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12880,7 +13255,7 @@ export def "plugins-security-roles roles0" [
   let full_url = (build-url $base "/_plugins/_security/api/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates, updates, or deletes multiple roles in a single call.
@@ -12896,6 +13271,7 @@ export def "plugins-security-roles roles0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12911,7 +13287,7 @@ export def "plugins-security-roles roles0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified role.
@@ -12928,6 +13304,7 @@ export def "plugins-security-roles role0-by-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12940,7 +13317,7 @@ export def "plugins-security-roles role0-by-role" [
   let full_url = (build-url $base $"/_plugins/_security/api/roles/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves one role.
@@ -12957,6 +13334,7 @@ export def "plugins-security-roles role0-by-role-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -12969,7 +13347,7 @@ export def "plugins-security-roles role0-by-role-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/roles/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the individual attributes of a role.
@@ -12986,6 +13364,7 @@ export def "plugins-security-roles role0-by-role-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13001,7 +13380,7 @@ export def "plugins-security-roles role0-by-role-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces the specified role.
@@ -13020,6 +13399,7 @@ export def "plugins-security-roles role0-by-role-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13042,7 +13422,7 @@ export def "plugins-security-roles role0-by-role-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all role mappings.
@@ -13058,6 +13438,7 @@ export def "plugins-security-rolesmapping mappings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13070,7 +13451,7 @@ export def "plugins-security-rolesmapping mappings0" [
   let full_url = (build-url $base "/_plugins/_security/api/rolesmapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates multiple role mappings in a single request.
@@ -13086,6 +13467,7 @@ export def "plugins-security-rolesmapping mappings0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13101,7 +13483,7 @@ export def "plugins-security-rolesmapping mappings0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified role mapping.
@@ -13118,6 +13500,7 @@ export def "plugins-security-rolesmapping mapping0-by-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13130,7 +13513,7 @@ export def "plugins-security-rolesmapping mapping0-by-role" [
   let full_url = (build-url $base $"/_plugins/_security/api/rolesmapping/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the specified role mapping.
@@ -13147,6 +13530,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13159,7 +13543,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/rolesmapping/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the individual attributes of a role mapping.
@@ -13176,6 +13560,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13191,7 +13576,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces the specified role mapping.
@@ -13208,6 +13593,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13230,7 +13616,7 @@ export def "plugins-security-rolesmapping mapping0-by-role-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the current Security plugin configuration in a JSON format.
@@ -13246,6 +13632,7 @@ export def "plugins-security-securityconfig configuration0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13258,7 +13645,7 @@ export def "plugins-security-securityconfig configuration0" [
   let full_url = (build-url $base "/_plugins/_security/api/securityconfig" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the existing security configuration using the REST API. Requires super admin or REST API permissions.
@@ -13274,6 +13661,7 @@ export def "plugins-security-securityconfig configuration0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13289,7 +13677,7 @@ export def "plugins-security-securityconfig configuration0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the settings for an existing security configuration. Requires super admin or REST API permissions.
@@ -13306,6 +13694,7 @@ export def "plugins-security-securityconfig-config configuration0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13322,7 +13711,7 @@ export def "plugins-security-securityconfig-config configuration0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the cluster security certificates.
@@ -13338,6 +13727,7 @@ export def "plugins-security-ssl-certs certificates0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13350,7 +13740,7 @@ export def "plugins-security-ssl-certs certificates0" [
   let full_url = (build-url $base "/_plugins/_security/api/ssl/certs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads the HTTP communication certificates.
@@ -13366,6 +13756,7 @@ export def "plugins-security-ssl-http-reloadcerts certificates0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13378,7 +13769,7 @@ export def "plugins-security-ssl-http-reloadcerts certificates0" [
   let full_url = (build-url $base "/_plugins/_security/api/ssl/http/reloadcerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads the transport communication certificates.
@@ -13394,6 +13785,7 @@ export def "plugins-security-ssl-transport-reloadcerts certificates0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13406,7 +13798,7 @@ export def "plugins-security-ssl-transport-reloadcerts certificates0" [
   let full_url = (build-url $base "/_plugins/_security/api/ssl/transport/reloadcerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the multi-tenancy configuration. Requires super admin or REST API permissions.
@@ -13422,6 +13814,7 @@ export def "plugins-security-tenancy-config config0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13434,7 +13827,7 @@ export def "plugins-security-tenancy-config config0" [
   let full_url = (build-url $base "/_plugins/_security/api/tenancy/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the multi-tenancy configuration. Requires super admin or REST API permissions.
@@ -13450,6 +13843,7 @@ export def "plugins-security-tenancy-config config0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13469,7 +13863,7 @@ export def "plugins-security-tenancy-config config0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all tenants.
@@ -13485,6 +13879,7 @@ export def "plugins-security-tenants tenants0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13497,7 +13892,7 @@ export def "plugins-security-tenants tenants0" [
   let full_url = (build-url $base "/_plugins/_security/api/tenants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds, deletes, or modifies multiple tenants in a single request.
@@ -13513,6 +13908,7 @@ export def "plugins-security-tenants tenants0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13528,7 +13924,7 @@ export def "plugins-security-tenants tenants0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified tenant.
@@ -13545,6 +13941,7 @@ export def "plugins-security-tenants tenant0-by-tenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13557,7 +13954,7 @@ export def "plugins-security-tenants tenant0-by-tenant" [
   let full_url = (build-url $base $"/_plugins/_security/api/tenants/($tenant)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the specified tenant.
@@ -13574,6 +13971,7 @@ export def "plugins-security-tenants tenant0-by-tenant-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13586,7 +13984,7 @@ export def "plugins-security-tenants tenant0-by-tenant-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/tenants/($tenant)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds, deletes, or modifies a single tenant.
@@ -13603,6 +14001,7 @@ export def "plugins-security-tenants tenant0-by-tenant-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13618,7 +14017,7 @@ export def "plugins-security-tenants tenant0-by-tenant-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or replaces the specified tenant.
@@ -13635,6 +14034,7 @@ export def "plugins-security-tenants tenant0-by-tenant-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13651,7 +14051,7 @@ export def "plugins-security-tenants tenant0-by-tenant-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all internal users. Legacy API.
@@ -13666,6 +14066,7 @@ export def "plugins-security-user legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13678,7 +14079,7 @@ export def "plugins-security-user legacy0" [
   let full_url = (build-url $base "/_plugins/_security/api/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specified user. Legacy API.
@@ -13694,6 +14095,7 @@ export def "plugins-security-user legacy0-by-username" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13706,7 +14108,7 @@ export def "plugins-security-user legacy0-by-username" [
   let full_url = (build-url $base $"/_plugins/_security/api/user/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve one user. Legacy API.
@@ -13722,6 +14124,7 @@ export def "plugins-security-user legacy0-by-username-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13734,7 +14137,7 @@ export def "plugins-security-user legacy0-by-username-1" [
   let full_url = (build-url $base $"/_plugins/_security/api/user/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified user. Legacy API.
@@ -13750,6 +14153,7 @@ export def "plugins-security-user legacy0-by-username-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13774,7 +14178,7 @@ export def "plugins-security-user legacy0-by-username-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generates authorization token for the given user. Legacy API. Not Implemented.
@@ -13790,6 +14194,7 @@ export def "plugins-security-user-authtoken legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13802,7 +14207,7 @@ export def "plugins-security-user-authtoken legacy0" [
   let full_url = (build-url $base $"/_plugins/_security/api/user/($username)/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks whether the v6 security configuration is valid and ready to be migrated to v7.
@@ -13817,6 +14222,7 @@ export def "plugins-security-validate securityvalidate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept-invalid: oneof<nothing, bool> # Whether an invalid v6 configuration should be allowed.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -13830,7 +14236,7 @@ export def "plugins-security-validate securityvalidate0" [
   let full_url = (build-url $base "/_plugins/_security/api/validate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns or updates authentication information for the currently authenticated user.
@@ -13845,6 +14251,7 @@ export def "plugins-security-authinfo securityauthinfo0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-type: string # The type of the current authentication request.
   --verbose: oneof<nothing, bool> # Whether to return a verbose response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -13859,7 +14266,7 @@ export def "plugins-security-authinfo securityauthinfo0" [
   let full_url = (build-url $base "/_plugins/_security/authinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns or updates authentication information for the currently authenticated user.
@@ -13874,6 +14281,7 @@ export def "plugins-security-authinfo securityauthinfo1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-type: string # The type of the current authentication request.
   --verbose: oneof<nothing, bool> # Whether to return a verbose response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -13888,7 +14296,7 @@ export def "plugins-security-authinfo securityauthinfo1" [
   let full_url = (build-url $base "/_plugins/_security/authinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the current values for dynamic security settings for OpenSearch Dashboards.
@@ -13903,6 +14311,7 @@ export def "plugins-security-dashboardsinfo info0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13915,7 +14324,7 @@ export def "plugins-security-dashboardsinfo info0" [
   let full_url = (build-url $base "/_plugins/_security/dashboardsinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the current values for dynamic security settings for OpenSearch Dashboards.
@@ -13930,6 +14339,7 @@ export def "plugins-security-dashboardsinfo info1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -13942,7 +14352,7 @@ export def "plugins-security-dashboardsinfo info1" [
   let full_url = (build-url $base "/_plugins/_security/dashboardsinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks to see if the Security plugin is running.
@@ -13958,6 +14368,7 @@ export def "plugins-security-health securityhealth0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string # A flag that determines whether to consider the security status before returning a response for a health query response. For example, `strict` mode indicates service should check the Security plugin status.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -13971,7 +14382,7 @@ export def "plugins-security-health securityhealth0" [
   let full_url = (build-url $base "/_plugins/_security/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks to see if the Security plugin is running.
@@ -13987,6 +14398,7 @@ export def "plugins-security-health securityhealth1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string # A flag that determines whether to consider the security status before returning a response for a health query response. For example, `strict` mode indicates service should check the Security plugin status.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -14000,7 +14412,7 @@ export def "plugins-security-health securityhealth1" [
   let full_url = (build-url $base "/_plugins/_security/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the names of current tenants. Requires super admin or `kibanaserver` permissions.
@@ -14015,6 +14427,7 @@ export def "plugins-security-tenantinfo info0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14027,7 +14440,7 @@ export def "plugins-security-tenantinfo info0" [
   let full_url = (build-url $base "/_plugins/_security/tenantinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the names of current tenants. Requires super admin or `kibanaserver` permissions.
@@ -14042,6 +14455,7 @@ export def "plugins-security-tenantinfo info1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14054,7 +14468,7 @@ export def "plugins-security-tenantinfo info1" [
   let full_url = (build-url $base "/_plugins/_security/tenantinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the identity information for the user currently logged in.
@@ -14069,6 +14483,7 @@ export def "plugins-security-whoami i0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14081,7 +14496,7 @@ export def "plugins-security-whoami i0" [
   let full_url = (build-url $base "/_plugins/_security/whoami" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the identity information for the user currently logged in.
@@ -14096,6 +14511,7 @@ export def "plugins-security-whoami i1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14108,7 +14524,7 @@ export def "plugins-security-whoami i1" [
   let full_url = (build-url $base "/_plugins/_security/whoami" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the identity information for the user currently logged in. To use this operation, you must have access to this endpoint when authorization at REST layer is enabled.
@@ -14123,6 +14539,7 @@ export def "plugins-security-whoamiprotected protected0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14135,7 +14552,7 @@ export def "plugins-security-whoamiprotected protected0" [
   let full_url = (build-url $base "/_plugins/_security/whoamiprotected" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all snapshot management policies with optional pagination and filtering.
@@ -14150,6 +14567,7 @@ export def "plugins-sm-policies policies0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: int # The starting index from which to retrieve snapshot management policies. (default: 0)
   --queryString: string # The query string to filter the returned snapshot management policies.
   --size: int # The number of snapshot management policies to return.
@@ -14167,7 +14585,7 @@ export def "plugins-sm-policies policies0" [
   let full_url = (build-url $base "/_plugins/_sm/policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a snapshot management policy.
@@ -14183,6 +14601,7 @@ export def "plugins-sm-policies policy0-by-policy_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14195,7 +14614,7 @@ export def "plugins-sm-policies policy0-by-policy_name" [
   let full_url = (build-url $base $"/_plugins/_sm/policies/($policy_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a specific snapshot management policy by name.
@@ -14211,6 +14630,7 @@ export def "plugins-sm-policies policy0-by-policy_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14223,7 +14643,7 @@ export def "plugins-sm-policies policy0-by-policy_name-1" [
   let full_url = (build-url $base $"/_plugins/_sm/policies/($policy_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a snapshot management policy.
@@ -14243,6 +14663,7 @@ export def "plugins-sm-policies policy0-by-policy_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14264,7 +14685,7 @@ export def "plugins-sm-policies policy0-by-policy_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates an existing snapshot management policy. Requires `if_seq_no` and `if_primary_term`.
@@ -14284,6 +14705,7 @@ export def "plugins-sm-policies policy0-by-policy_name-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: int # The primary term of the policy to update.
   --if-seq-no: int # The sequence number of the policy to update.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14307,7 +14729,7 @@ export def "plugins-sm-policies policy0-by-policy_name-3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Explains the state of the snapshot management policy.
@@ -14323,6 +14745,7 @@ export def "plugins-sm-policies-explain policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14335,7 +14758,7 @@ export def "plugins-sm-policies-explain policy0" [
   let full_url = (build-url $base $"/_plugins/_sm/policies/($policy_name)/_explain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts a snapshot management policy.
@@ -14351,6 +14774,7 @@ export def "plugins-sm-policies-start policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14363,7 +14787,7 @@ export def "plugins-sm-policies-start policy0" [
   let full_url = (build-url $base $"/_plugins/_sm/policies/($policy_name)/_start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops a snapshot management policy.
@@ -14379,6 +14803,7 @@ export def "plugins-sm-policies-stop policy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14391,7 +14816,7 @@ export def "plugins-sm-policies-stop policy0" [
   let full_url = (build-url $base $"/_plugins/_sm/policies/($policy_name)/_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Executes SQL or PPL queries against OpenSearch indexes.
@@ -14407,6 +14832,7 @@ export def "plugins-sql sqlquery0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14427,7 +14853,7 @@ export def "plugins-sql sqlquery0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the execution plan for a SQL or PPL query.
@@ -14443,6 +14869,7 @@ export def "plugins-sql-explain sqlexplain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14463,7 +14890,7 @@ export def "plugins-sql-explain sqlexplain0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Closes an open cursor to free server-side resources.
@@ -14479,6 +14906,7 @@ export def "plugins-sql-close sqlclose0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14497,7 +14925,7 @@ export def "plugins-sql-close sqlclose0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves performance metrics for the SQL plugin.
@@ -14513,6 +14941,7 @@ export def "plugins-sql-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14527,7 +14956,7 @@ export def "plugins-sql-stats stats0" [
   let full_url = (build-url $base "/_plugins/_sql/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves filtered performance metrics for the SQL plugin.
@@ -14543,6 +14972,7 @@ export def "plugins-sql-stats stats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14567,7 +14997,7 @@ export def "plugins-sql-stats stats1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the details of all transform jobs.
@@ -14583,6 +15013,7 @@ export def "plugins-transform transformssearch0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: float # The starting transform to return. Default is `0`.
   --search: string # The search term to use to filter results.
   --size: float # Specifies the number of transforms to return. Default is `10`.
@@ -14600,7 +15031,7 @@ export def "plugins-transform transformssearch0" [
   let full_url = (build-url $base "/_plugins/_transform" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a preview of what a transformed index would look like.
@@ -14617,6 +15048,7 @@ export def "plugins-transform-preview transformspreview0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14633,7 +15065,7 @@ export def "plugins-transform-preview transformspreview0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an index transform.
@@ -14650,6 +15082,7 @@ export def "plugins-transform transformsdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14662,7 +15095,7 @@ export def "plugins-transform transformsdelete0" [
   let full_url = (build-url $base $"/_plugins/_transform/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the status and metadata of a transform job.
@@ -14679,6 +15112,7 @@ export def "plugins-transform transformsget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14691,7 +15125,7 @@ export def "plugins-transform transformsget0" [
   let full_url = (build-url $base $"/_plugins/_transform/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an index transform, or update a transform if `if_seq_no` and `if_primary_term` are provided.
@@ -14709,6 +15143,7 @@ export def "plugins-transform transformsput0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -14727,7 +15162,7 @@ export def "plugins-transform transformsput0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the status and metadata of a transform job.
@@ -14744,6 +15179,7 @@ export def "plugins-transform-explain transformsexplain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14756,7 +15192,7 @@ export def "plugins-transform-explain transformsexplain0" [
   let full_url = (build-url $base $"/_plugins/_transform/($id)/_explain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start transform.
@@ -14773,6 +15209,7 @@ export def "plugins-transform-start transformsstart0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14785,7 +15222,7 @@ export def "plugins-transform-start transformsstart0" [
   let full_url = (build-url $base $"/_plugins/_transform/($id)/_start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop transform.
@@ -14802,6 +15239,7 @@ export def "plugins-transform-stop transformsstop0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14814,7 +15252,7 @@ export def "plugins-transform-stop transformsstop0" [
   let full_url = (build-url $base $"/_plugins/_transform/($id)/_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves statistics for all geospatial uploads.
@@ -14829,6 +15267,7 @@ export def "plugins-geospatial-upload-stats stats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14841,7 +15280,7 @@ export def "plugins-geospatial-upload-stats stats0" [
   let full_url = (build-url $base "/_plugins/geospatial/_upload/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Use an OpenSearch query to upload `GeoJSON`, operation will fail if index exists. - When type is `geo_point`, only Point geometry is allowed - When type is `geo_shape`, all geometry types are allowed (Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection, Envelope).
@@ -14857,6 +15296,7 @@ export def "plugins-geospatial-geojson-upload post0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14876,7 +15316,7 @@ export def "plugins-geospatial-geojson-upload post0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Use an OpenSearch query to upload `GeoJSON` regardless if index exists. - When type is `geo_point`, only Point geometry is allowed - When type is `geo_shape`, all geometry types are allowed (Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection, Envelope).
@@ -14892,6 +15332,7 @@ export def "plugins-geospatial-geojson-upload put0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14911,7 +15352,7 @@ export def "plugins-geospatial-geojson-upload put0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get one or more IP2Geo data sources, defaulting to returning all if no names specified.
@@ -14927,6 +15368,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14939,7 +15381,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0" [
   let full_url = (build-url $base "/_plugins/geospatial/ip2geo/datasource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a specific IP2Geo data source.
@@ -14956,6 +15398,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14968,7 +15411,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0-by-name" [
   let full_url = (build-url $base $"/_plugins/geospatial/ip2geo/datasource/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get one or more IP2Geo data sources, defaulting to returning all if no names specified.
@@ -14985,6 +15428,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -14997,7 +15441,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource1" [
   let full_url = (build-url $base $"/_plugins/geospatial/ip2geo/datasource/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a specific IP2Geo data source. Default values:   - `endpoint`: `"https://geoip.maps.opensearch.org/v1/geolite2-city/manifest.json"`   - `update_interval_in_days`: 3.
@@ -15014,6 +15458,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15031,7 +15476,7 @@ export def "plugins-geospatial-ip2geo-datasource datasource0-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a specific IP2Geo data source.
@@ -15048,6 +15493,7 @@ export def "plugins-geospatial-ip2geo-datasource-settings settings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15065,7 +15511,7 @@ export def "plugins-geospatial-ip2geo-datasource-settings settings0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to evaluate the quality of ranked search results over a set of typical search queries.
@@ -15083,6 +15529,7 @@ export def "rank-eval eval0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -15104,7 +15551,7 @@ export def "rank-eval eval0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to evaluate the quality of ranked search results over a set of typical search queries.
@@ -15122,6 +15569,7 @@ export def "rank-eval eval1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -15143,7 +15591,7 @@ export def "rank-eval eval1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about ongoing index shard recoveries.
@@ -15159,6 +15607,7 @@ export def "recovery indicesrecovery0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries. (default: false)
   --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -15173,7 +15622,7 @@ export def "recovery indicesrecovery0" [
   let full_url = (build-url $base "/_recovery" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the refresh operation in one or more indexes.
@@ -15189,6 +15638,7 @@ export def "refresh indicesrefresh0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -15204,7 +15654,7 @@ export def "refresh indicesrefresh0" [
   let full_url = (build-url $base "/_refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the refresh operation in one or more indexes.
@@ -15220,6 +15670,7 @@ export def "refresh indicesrefresh1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -15235,7 +15686,7 @@ export def "refresh indicesrefresh1" [
   let full_url = (build-url $base "/_refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to copy documents from one index to another, optionally filtering the source documents by a query, changing the destination index settings, or fetching the documents from a remote cluster.
@@ -15253,6 +15704,7 @@ export def "reindex reindex0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-docs: int # Maximum number of documents to process. By default, all documents. (format: int32)
   --refresh: string # If `true`, the request refreshes affected shards to make this operation visible to search.
   --requests-per-second: float # The throttle for this request in sub-requests per second. Defaults to no throttle. (format: float, default: 0)
@@ -15283,7 +15735,7 @@ export def "reindex reindex0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Changes the number of requests per second for a particular reindex operation.
@@ -15300,6 +15752,7 @@ export def "reindex-rethrottle rethrottle0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests-per-second: float # The throttle for this request in sub-requests per second. (format: float)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -15313,7 +15766,7 @@ export def "reindex-rethrottle rethrottle0" [
   let full_url = (build-url $base $"/_reindex/($task_id)/_rethrottle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the information about configured remote clusters.
@@ -15329,6 +15782,7 @@ export def "remote-info info0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15341,7 +15795,7 @@ export def "remote-info info0" [
   let full_url = (build-url $base "/_remote/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restores from remote store.
@@ -15357,6 +15811,7 @@ export def "remotestore-restore storerestore0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --wait-for-completion: oneof<nothing, bool> # Should this request wait until the operation has completed before returning. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -15375,7 +15830,7 @@ export def "remotestore-restore storerestore0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -15391,6 +15846,7 @@ export def "render-template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15409,7 +15865,7 @@ export def "render-template template0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -15425,6 +15881,7 @@ export def "render-template template1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15443,7 +15900,7 @@ export def "render-template template1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -15460,6 +15917,7 @@ export def "render-template template2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15478,7 +15936,7 @@ export def "render-template template2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -15495,6 +15953,7 @@ export def "render-template template3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15513,7 +15972,7 @@ export def "render-template template3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about any matching indexes, aliases, and data streams.
@@ -15530,6 +15989,7 @@ export def "resolve-index index0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -15543,7 +16003,7 @@ export def "resolve-index index0" [
   let full_url = (build-url $base $"/_resolve/index/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns all script contexts.
@@ -15559,6 +16019,7 @@ export def "script-context context0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15571,7 +16032,7 @@ export def "script-context context0" [
   let full_url = (build-url $base "/_script_context" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns available script types, languages and contexts.
@@ -15587,6 +16048,7 @@ export def "script-language languages0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15599,7 +16061,7 @@ export def "script-language languages0" [
   let full_url = (build-url $base "/_script_language" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a script.
@@ -15617,6 +16079,7 @@ export def "scripts script0-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -15632,7 +16095,7 @@ export def "scripts script0-by-id" [
   let full_url = (build-url $base $"/_scripts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a script.
@@ -15650,6 +16113,7 @@ export def "scripts script0-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Specify timeout for connection to master (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -15664,7 +16128,7 @@ export def "scripts script0-by-id-1" [
   let full_url = (build-url $base $"/_scripts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a script.
@@ -15683,6 +16147,7 @@ export def "scripts script0-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --context: string # Context in which the script or search template should run. To prevent errors, the API immediately compiles the script or template in this context.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -15703,7 +16168,7 @@ export def "scripts script0-by-id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a script.
@@ -15722,6 +16187,7 @@ export def "scripts script1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --context: string # Context in which the script or search template should run. To prevent errors, the API immediately compiles the script or template in this context.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -15742,7 +16208,7 @@ export def "scripts script1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a script.
@@ -15762,6 +16228,7 @@ export def "scripts script2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --context: string # Context in which the script or search template should run. To prevent errors, the API immediately compiles the script or template in this context.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -15782,7 +16249,7 @@ export def "scripts script2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a script.
@@ -15802,6 +16269,7 @@ export def "scripts script3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --context: string # Context in which the script or search template should run. To prevent errors, the API immediately compiles the script or template in this context.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -15822,7 +16290,7 @@ export def "scripts script3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows an arbitrary script to be executed and a result to be returned.
@@ -15839,6 +16307,7 @@ export def "scripts-painless-execute execute0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15857,7 +16326,7 @@ export def "scripts-painless-execute execute0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows an arbitrary script to be executed and a result to be returned.
@@ -15874,6 +16343,7 @@ export def "scripts-painless-execute execute1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -15892,7 +16362,7 @@ export def "scripts-painless-execute execute1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns results matching a query.
@@ -15915,6 +16385,7 @@ export def "search search0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Indicates which source fields are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are: `true` to return the entire document source; `false` to not return the document source; `<string>` to return the source fields that are specified as a comma-separated list (supports wildcard (`*`) patterns).
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -16009,7 +16480,7 @@ export def "search search0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns results matching a query.
@@ -16032,6 +16503,7 @@ export def "search search1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Indicates which source fields are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are: `true` to return the entire document source; `false` to not return the document source; `<string>` to return the source fields that are specified as a comma-separated list (supports wildcard (`*`) patterns).
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -16126,7 +16598,7 @@ export def "search search1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about the indexes and shards that a search request would be executed against.
@@ -16142,6 +16614,7 @@ export def "search-shards shards0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -16160,7 +16633,7 @@ export def "search-shards shards0" [
   let full_url = (build-url $base "/_search_shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the indexes and shards that a search request would be executed against.
@@ -16176,6 +16649,7 @@ export def "search-shards shards1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -16194,7 +16668,7 @@ export def "search-shards shards1" [
   let full_url = (build-url $base "/_search_shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves information about a specified search pipeline.
@@ -16209,6 +16683,7 @@ export def "search-pipeline pipelineget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # operation timeout for connection to cluster-manager node.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -16222,7 +16697,7 @@ export def "search-pipeline pipelineget0" [
   let full_url = (build-url $base "/_search/pipeline" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the specified search pipeline.
@@ -16238,6 +16713,7 @@ export def "search-pipeline pipelinedelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -16252,7 +16728,7 @@ export def "search-pipeline pipelinedelete0" [
   let full_url = (build-url $base $"/_search/pipeline/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves information about a specified search pipeline.
@@ -16268,6 +16744,7 @@ export def "search-pipeline pipelineget1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # operation timeout for connection to cluster-manager node.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -16281,7 +16758,7 @@ export def "search-pipeline pipelineget1" [
   let full_url = (build-url $base $"/_search/pipeline/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified search pipeline.
@@ -16298,6 +16775,7 @@ export def "search-pipeline pipelineput0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # operation timeout for connection to cluster-manager node.
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -16320,7 +16798,7 @@ export def "search-pipeline pipelineput0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes one or more point in time searches based on the IDs passed.
@@ -16336,6 +16814,7 @@ export def "search-point-in-time pit0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -16352,7 +16831,7 @@ export def "search-point-in-time pit0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes all active point in time searches.
@@ -16368,6 +16847,7 @@ export def "search-point-in-time-all pits0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -16380,7 +16860,7 @@ export def "search-point-in-time-all pits0" [
   let full_url = (build-url $base "/_search/point_in_time/_all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all active point in time searches.
@@ -16396,6 +16876,7 @@ export def "search-point-in-time-all pits0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -16408,7 +16889,7 @@ export def "search-point-in-time-all pits0-1" [
   let full_url = (build-url $base "/_search/point_in_time/_all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Explicitly clears the search context for a scroll.
@@ -16424,6 +16905,7 @@ export def "search-scroll scroll0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -16440,7 +16922,7 @@ export def "search-scroll scroll0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to retrieve a large numbers of results from a single search request.
@@ -16457,6 +16939,7 @@ export def "search-scroll scroll0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the API response's `hit.total` property is returned as an integer. If `false`, the API response's `hit.total` property is returned as an object. (default: false)
   --scroll: string # Period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID for scrolled search (DEPRECATED)
@@ -16477,7 +16960,7 @@ export def "search-scroll scroll0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to retrieve a large numbers of results from a single search request.
@@ -16494,6 +16977,7 @@ export def "search-scroll scroll1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the API response's `hit.total` property is returned as an integer. If `false`, the API response's `hit.total` property is returned as an object. (default: false)
   --scroll: string # Period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID for scrolled search (DEPRECATED)
@@ -16514,7 +16998,7 @@ export def "search-scroll scroll1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Explicitly clears the search context for a scroll.
@@ -16533,6 +17017,7 @@ export def "search-scroll scroll1-by-scroll_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -16549,7 +17034,7 @@ export def "search-scroll scroll1-by-scroll_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to retrieve a large numbers of results from a single search request.
@@ -16569,6 +17054,7 @@ export def "search-scroll scroll2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the API response's `hit.total` property is returned as an integer. If `false`, the API response's `hit.total` property is returned as an object. (default: false)
   --scroll: string # Period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID for scrolled search (DEPRECATED)
@@ -16589,7 +17075,7 @@ export def "search-scroll scroll2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to retrieve a large numbers of results from a single search request.
@@ -16609,6 +17095,7 @@ export def "search-scroll scroll3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the API response's `hit.total` property is returned as an integer. If `false`, the API response's `hit.total` property is returned as an object. (default: false)
   --scroll: string # Period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID for scrolled search (DEPRECATED)
@@ -16629,7 +17116,7 @@ export def "search-scroll scroll3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -16645,6 +17132,7 @@ export def "search-template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -16678,7 +17166,7 @@ export def "search-template template0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -16694,6 +17182,7 @@ export def "search-template template1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -16727,7 +17216,7 @@ export def "search-template template1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides low-level information about segments in a Lucene index.
@@ -16743,6 +17232,7 @@ export def "segments indicessegments0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -16759,7 +17249,7 @@ export def "segments indicessegments0" [
   let full_url = (build-url $base "/_segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns settings for one or more indexes.
@@ -16776,6 +17266,7 @@ export def "settings settings0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -16796,7 +17287,7 @@ export def "settings settings0" [
   let full_url = (build-url $base "/_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the index settings.
@@ -16835,6 +17326,7 @@ export def "settings settings0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -16930,7 +17422,7 @@ export def "settings settings0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns settings for one or more indexes.
@@ -16948,6 +17440,7 @@ export def "settings settings1-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -16968,7 +17461,7 @@ export def "settings settings1-by-name" [
   let full_url = (build-url $base $"/_settings/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides store information for shard copies of indexes.
@@ -16984,6 +17477,7 @@ export def "shard-stores stores0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -17000,7 +17494,7 @@ export def "shard-stores stores0" [
   let full_url = (build-url $base "/_shard_stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about a snapshot repository.
@@ -17017,6 +17511,7 @@ export def "snapshot repository0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --local: oneof<nothing, bool> # Whether to get information from the local node. (default: false)
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
@@ -17032,7 +17527,7 @@ export def "snapshot repository0" [
   let full_url = (build-url $base "/_snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the status of a snapshot.
@@ -17049,6 +17544,7 @@ export def "snapshot-status snapshotstatus0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --ignore-unavailable: oneof<nothing, bool> # Whether to ignore any unavailable snapshots, When `false`, a `SnapshotMissingException` is thrown. (default: false)
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
@@ -17064,7 +17560,7 @@ export def "snapshot-status snapshotstatus0" [
   let full_url = (build-url $base "/_snapshot/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a snapshot repository.
@@ -17082,6 +17578,7 @@ export def "snapshot repository0-by-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -17097,7 +17594,7 @@ export def "snapshot repository0-by-repository" [
   let full_url = (build-url $base $"/_snapshot/($repository)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about a snapshot repository.
@@ -17115,6 +17612,7 @@ export def "snapshot repository1-by-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --local: oneof<nothing, bool> # Whether to get information from the local node. (default: false)
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
@@ -17130,7 +17628,7 @@ export def "snapshot repository1-by-repository" [
   let full_url = (build-url $base $"/_snapshot/($repository)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a snapshot repository.
@@ -17150,6 +17648,7 @@ export def "snapshot repository0-by-repository-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -17172,7 +17671,7 @@ export def "snapshot repository0-by-repository-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a snapshot repository.
@@ -17192,6 +17691,7 @@ export def "snapshot repository1-by-repository-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -17214,7 +17714,7 @@ export def "snapshot repository1-by-repository-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes any stale data from a snapshot repository.
@@ -17232,6 +17732,7 @@ export def "snapshot-cleanup repository0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -17247,7 +17748,7 @@ export def "snapshot-cleanup repository0" [
   let full_url = (build-url $base $"/_snapshot/($repository)/_cleanup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the status of a snapshot.
@@ -17265,6 +17766,7 @@ export def "snapshot-status snapshotstatus1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --ignore-unavailable: oneof<nothing, bool> # Whether to ignore any unavailable snapshots, When `false`, a `SnapshotMissingException` is thrown. (default: false)
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
@@ -17280,7 +17782,7 @@ export def "snapshot-status snapshotstatus1" [
   let full_url = (build-url $base $"/_snapshot/($repository)/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verifies a repository.
@@ -17298,6 +17800,7 @@ export def "snapshot-verify repository0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --timeout: string # The amount of time to wait for a response.
@@ -17313,7 +17816,7 @@ export def "snapshot-verify repository0" [
   let full_url = (build-url $base $"/_snapshot/($repository)/_verify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a snapshot.
@@ -17332,6 +17835,7 @@ export def "snapshot snapshotdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -17346,7 +17850,7 @@ export def "snapshot snapshotdelete0" [
   let full_url = (build-url $base $"/_snapshot/($repository)/($snapshot)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about a snapshot.
@@ -17365,6 +17869,7 @@ export def "snapshot snapshotget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --ignore-unavailable: oneof<nothing, bool> # When `false`, the request returns an error for any snapshots that are unavailable. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -17381,7 +17886,7 @@ export def "snapshot snapshotget0" [
   let full_url = (build-url $base $"/_snapshot/($repository)/($snapshot)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a snapshot within an existing repository.
@@ -17400,6 +17905,7 @@ export def "snapshot snapshotcreate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --wait-for-completion: oneof<nothing, bool> # When `true`, the request returns a response when the snapshot is complete. When `false`, the request returns a response when the snapshot initializes. (default: false)
@@ -17424,7 +17930,7 @@ export def "snapshot snapshotcreate0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a snapshot within an existing repository.
@@ -17443,6 +17949,7 @@ export def "snapshot snapshotcreate1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --wait-for-completion: oneof<nothing, bool> # When `true`, the request returns a response when the snapshot is complete. When `false`, the request returns a response when the snapshot initializes. (default: false)
@@ -17467,7 +17974,7 @@ export def "snapshot snapshotcreate1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a clone of all or part of a snapshot in the same repository as the original snapshot.
@@ -17487,6 +17994,7 @@ export def "snapshot-clone snapshotclone0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -17505,7 +18013,7 @@ export def "snapshot-clone snapshotclone0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restores a snapshot.
@@ -17525,6 +18033,7 @@ export def "snapshot-restore snapshotrestore0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
   --wait-for-completion: oneof<nothing, bool> # -| Whether to return a response after the restore operation has completed. When `false`, the request returns a response when the restore operation initializes. When `true`, the request returns a response when the restore operation completes. (default: false)
@@ -17556,7 +18065,7 @@ export def "snapshot-restore snapshotrestore0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about the status of a snapshot.
@@ -17575,6 +18084,7 @@ export def "snapshot-status snapshotstatus2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # The amount of time to wait for a response from the cluster manager node. For more information about supported time units, see [Common parameters](https://opensearch.org/docs/latest/api-reference/common-parameters/#time-units).
   --ignore-unavailable: oneof<nothing, bool> # Whether to ignore any unavailable snapshots, When `false`, a `SnapshotMissingException` is thrown. (default: false)
   --master-timeout: string # Explicit operation timeout for connection to cluster-manager node (DEPRECATED)
@@ -17590,7 +18100,7 @@ export def "snapshot-status snapshotstatus2" [
   let full_url = (build-url $base $"/_snapshot/($repository)/($snapshot)/_status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides statistics on operations happening in an index.
@@ -17606,6 +18116,7 @@ export def "stats indicesstats0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in field data statistics.
@@ -17627,7 +18138,7 @@ export def "stats indicesstats0" [
   let full_url = (build-url $base "/_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides statistics on operations happening in an index.
@@ -17644,6 +18155,7 @@ export def "stats indicesstats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in field data statistics.
@@ -17665,7 +18177,7 @@ export def "stats indicesstats1" [
   let full_url = (build-url $base $"/_stats/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of tasks.
@@ -17681,6 +18193,7 @@ export def "tasks taskslist0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: string # A comma-separated list of actions that should be returned. Keep empty to return all.
   --detailed: oneof<nothing, bool> # When `true`, the response includes detailed information about shard recoveries. (default: false)
   --group-by: string@group-by-completer # Groups tasks by parent/child relationships or nodes.
@@ -17700,7 +18213,7 @@ export def "tasks taskslist0" [
   let full_url = (build-url $base "/_tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels a task, if it can be cancelled through an API.
@@ -17716,6 +18229,7 @@ export def "tasks-cancel taskscancel0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: string # A comma-separated list of actions that should be returned. Keep empty to return all.
   --nodes: list # A comma-separated list of node IDs or names used to limit the returned information. Use `_local` to return information from the node you're connecting to, specify the node name to get information from a specific node, or keep the parameter empty to get information from all nodes.
   --parent-task-id: string # Returns tasks with a specified parent task ID (`node_id:task_number`). Keep empty or set to -1 to return all.
@@ -17732,7 +18246,7 @@ export def "tasks-cancel taskscancel0" [
   let full_url = (build-url $base "/_tasks/_cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about a task.
@@ -17749,6 +18263,7 @@ export def "tasks tasksget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # The amount of time to wait for a response.
   --wait-for-completion: oneof<nothing, bool> # Waits for the matching task to complete. When `true`, the request is blocked until the task has completed. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -17763,7 +18278,7 @@ export def "tasks tasksget0" [
   let full_url = (build-url $base $"/_tasks/($task_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels a task, if it can be cancelled through an API.
@@ -17780,6 +18295,7 @@ export def "tasks-cancel taskscancel1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: string # A comma-separated list of actions that should be returned. Keep empty to return all.
   --nodes: list # A comma-separated list of node IDs or names used to limit the returned information. Use `_local` to return information from the node you're connecting to, specify the node name to get information from a specific node, or keep the parameter empty to get information from all nodes.
   --parent-task-id: string # Returns tasks with a specified parent task ID (`node_id:task_number`). Keep empty or set to -1 to return all.
@@ -17796,7 +18312,7 @@ export def "tasks-cancel taskscancel1" [
   let full_url = (build-url $base $"/_tasks/($task_id)/_cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an index template.
@@ -17813,6 +18329,7 @@ export def "template template0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format. (default: false)
   --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (default: false)
@@ -17829,7 +18346,7 @@ export def "template template0" [
   let full_url = (build-url $base "/_template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an index template.
@@ -17847,6 +18364,7 @@ export def "template template0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -17862,7 +18380,7 @@ export def "template template0-by-name" [
   let full_url = (build-url $base $"/_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an index template.
@@ -17880,6 +18398,7 @@ export def "template template1-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format. (default: false)
   --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (default: false)
@@ -17896,7 +18415,7 @@ export def "template template1-by-name" [
   let full_url = (build-url $base $"/_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular index template exists.
@@ -17914,6 +18433,7 @@ export def "template template0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --flat-settings: oneof<nothing, bool> # Return settings in flat format. (default: false)
   --local: oneof<nothing, bool> # Return local information, do not retrieve the state from cluster-manager node. (default: false)
@@ -17930,7 +18450,7 @@ export def "template template0-by-name-1" [
   let full_url = (build-url $base $"/_template/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an index template.
@@ -17949,6 +18469,7 @@ export def "template template0-by-name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -17974,7 +18495,7 @@ export def "template template0-by-name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an index template.
@@ -17993,6 +18514,7 @@ export def "template template1-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -18018,7 +18540,7 @@ export def "template template1-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Changes the number of requests per second for a particular Update By Query operation.
@@ -18035,6 +18557,7 @@ export def "update-by-query-rethrottle rethrottle0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests-per-second: float # The throttle for this request in sub-requests per second. (format: float)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -18048,7 +18571,7 @@ export def "update-by-query-rethrottle rethrottle0" [
   let full_url = (build-url $base $"/_update_by_query/($task_id)/_rethrottle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The `_upgrade` API is no longer useful and will be removed.
@@ -18064,6 +18587,7 @@ export def "upgrade upgrade0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified).
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # Whether specified concrete indexes should be ignored when unavailable (missing or closed).
@@ -18079,7 +18603,7 @@ export def "upgrade upgrade0" [
   let full_url = (build-url $base "/_upgrade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The `_upgrade` API is no longer useful and will be removed.
@@ -18095,6 +18619,7 @@ export def "upgrade indicesupgrade0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified).
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # Whether specified concrete indexes should be ignored when unavailable (missing or closed).
@@ -18112,7 +18637,7 @@ export def "upgrade indicesupgrade0" [
   let full_url = (build-url $base "/_upgrade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows a user to validate a potentially expensive query without executing it.
@@ -18129,6 +18654,7 @@ export def "validate-query query0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. (default: false)
@@ -18157,7 +18683,7 @@ export def "validate-query query0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows a user to validate a potentially expensive query without executing it.
@@ -18174,6 +18700,7 @@ export def "validate-query query1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. (default: false)
@@ -18202,7 +18729,7 @@ export def "validate-query query1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the specified query group. If no query group is specified, all query groups in the cluster are retrieved.
@@ -18217,6 +18744,7 @@ export def "wlm-query-group group0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -18229,7 +18757,7 @@ export def "wlm-query-group group0" [
   let full_url = (build-url $base "/_wlm/query_group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new query group and sets the resource limits for the new query group.
@@ -18244,6 +18772,7 @@ export def "wlm-query-group group0-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -18262,7 +18791,7 @@ export def "wlm-query-group group0-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified query group.
@@ -18278,6 +18807,7 @@ export def "wlm-query-group group0-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -18290,7 +18820,7 @@ export def "wlm-query-group group0-by-name" [
   let full_url = (build-url $base $"/_wlm/query_group/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the specified query group. If no query group is specified, all query groups in the cluster are retrieved.
@@ -18306,6 +18836,7 @@ export def "wlm-query-group group1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -18318,7 +18849,7 @@ export def "wlm-query-group group1" [
   let full_url = (build-url $base $"/_wlm/query_group/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the specified query group.
@@ -18335,6 +18866,7 @@ export def "wlm-query-group group0-by-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -18352,7 +18884,7 @@ export def "wlm-query-group group0-by-name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates an alias to point to a new index when the existing index is considered to be too large or too old.
@@ -18372,8 +18904,9 @@ export def "rollover indicesrollover0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
-  --dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover. (default: false)
+  --qp-dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to all or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
@@ -18390,13 +18923,13 @@ export def "rollover indicesrollover0" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $dry_run "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "wait_for_active_shards" $wait_for_active_shards "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $qp_dry_run "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "wait_for_active_shards" $wait_for_active_shards "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($alias)/_rollover" $qp)
   let body = {aliases: $aliases, conditions: $conditions, mappings: $mappings, settings: $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates an alias to point to a new index when the existing index is considered to be too large or too old.
@@ -18417,8 +18950,9 @@ export def "rollover indicesrollover1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
-  --dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover. (default: false)
+  --qp-dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to all or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
@@ -18435,13 +18969,13 @@ export def "rollover indicesrollover1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $dry_run "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "wait_for_active_shards" $wait_for_active_shards "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cluster_manager_timeout" $cluster_manager_timeout "scalar") (serialize-qp "dry_run" $qp_dry_run "scalar") (serialize-qp "master_timeout" $master_timeout "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "wait_for_active_shards" $wait_for_active_shards "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "human" $human "scalar") (serialize-qp "error_trace" $error_trace "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "filter_path" $filter_path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/($alias)/_rollover/($new_index)" $qp)
   let body = {aliases: $aliases, conditions: $conditions, mappings: $mappings, settings: $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an index.
@@ -18459,6 +18993,7 @@ export def "api indicesdelete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -18477,7 +19012,7 @@ export def "api indicesdelete0" [
   let full_url = (build-url $base $"/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about one or more indexes.
@@ -18495,6 +19030,7 @@ export def "api indicesget0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting foo*,bar* returns an error if an index starts with foo but no index starts with bar. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -18515,7 +19051,7 @@ export def "api indicesget0" [
   let full_url = (build-url $base $"/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular index exists.
@@ -18532,6 +19068,7 @@ export def "api indicesexists0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. (default: false)
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -18551,7 +19088,7 @@ export def "api indicesexists0" [
   let full_url = (build-url $base $"/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an index with optional settings and mappings.
@@ -18571,6 +19108,7 @@ export def "api indicescreate0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18593,7 +19131,7 @@ export def "api indicescreate0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns an alias.
@@ -18610,6 +19148,7 @@ export def "alias alias2-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -18626,7 +19165,7 @@ export def "alias alias2-by-index" [
   let full_url = (build-url $base $"/($index)/_alias" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an alias.
@@ -18645,6 +19184,7 @@ export def "alias alias5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18671,7 +19211,7 @@ export def "alias alias5" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an alias.
@@ -18690,6 +19230,7 @@ export def "alias alias0-by-index-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18705,7 +19246,7 @@ export def "alias alias0-by-index-name" [
   let full_url = (build-url $base $"/($index)/_alias/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an alias.
@@ -18723,6 +19264,7 @@ export def "alias alias3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -18739,7 +19281,7 @@ export def "alias alias3" [
   let full_url = (build-url $base $"/($index)/_alias/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a particular alias exists.
@@ -18757,6 +19299,7 @@ export def "alias alias1-by-index-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, requests that include a missing data stream or index in the target indexes or data streams return an error.
@@ -18773,7 +19316,7 @@ export def "alias alias1-by-index-name" [
   let full_url = (build-url $base $"/($index)/_alias/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an alias.
@@ -18793,6 +19336,7 @@ export def "alias alias6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18819,7 +19363,7 @@ export def "alias alias6" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -18839,6 +19383,7 @@ export def "alias alias7" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18865,7 +19410,7 @@ export def "alias alias7" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -18884,6 +19429,7 @@ export def "aliases alias8" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18910,7 +19456,7 @@ export def "aliases alias8" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an alias.
@@ -18929,6 +19475,7 @@ export def "aliases alias1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18944,7 +19491,7 @@ export def "aliases alias1" [
   let full_url = (build-url $base $"/($index)/_aliases/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an alias.
@@ -18964,6 +19511,7 @@ export def "aliases alias9" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -18990,7 +19538,7 @@ export def "aliases alias9" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates an alias.
@@ -19010,6 +19558,7 @@ export def "aliases alias10" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
@@ -19036,7 +19585,7 @@ export def "aliases alias10" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the analysis process on a text and return the tokens breakdown of the text.
@@ -19053,6 +19602,7 @@ export def "analyze indicesanalyze2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to scope the operation.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -19078,7 +19628,7 @@ export def "analyze indicesanalyze2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the analysis process on a text and return the tokens breakdown of the text.
@@ -19095,6 +19645,7 @@ export def "analyze indicesanalyze3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to scope the operation.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -19120,7 +19671,7 @@ export def "analyze indicesanalyze3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a block to an index.
@@ -19139,6 +19690,7 @@ export def "block block0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified).
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
@@ -19157,7 +19709,7 @@ export def "block block0" [
   let full_url = (build-url $base $"/($index)/_block/($block)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to perform multiple index/update/delete operations in a single request.
@@ -19174,6 +19726,7 @@ export def "bulk bulk2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19199,7 +19752,7 @@ export def "bulk bulk2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations in a single request.
@@ -19216,6 +19769,7 @@ export def "bulk bulk3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19241,7 +19795,7 @@ export def "bulk bulk3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations using request response streaming.
@@ -19258,6 +19812,7 @@ export def "bulk-stream stream2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19285,7 +19840,7 @@ export def "bulk-stream stream2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to perform multiple index/update/delete operations using request response streaming.
@@ -19302,6 +19857,7 @@ export def "bulk-stream stream3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19329,7 +19885,7 @@ export def "bulk-stream stream3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Clears all or specific caches for one or more indexes.
@@ -19346,6 +19902,7 @@ export def "cache-clear cache1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --fielddata: oneof<nothing, bool> # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
@@ -19367,7 +19924,7 @@ export def "cache-clear cache1" [
   let full_url = (build-url $base $"/($index)/_cache/clear" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clones an index.
@@ -19386,6 +19943,7 @@ export def "clone indicesclone0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --task-execution-timeout: string # Explicit task execution timeout, only useful when `wait_for_completion` is false, defaults to `1h`.
@@ -19409,7 +19967,7 @@ export def "clone indicesclone0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clones an index.
@@ -19428,6 +19986,7 @@ export def "clone indicesclone1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
   --task-execution-timeout: string # Explicit task execution timeout, only useful when `wait_for_completion` is false, defaults to `1h`.
@@ -19451,7 +20010,7 @@ export def "clone indicesclone1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Closes an index.
@@ -19469,6 +20028,7 @@ export def "close indicesclose0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -19488,7 +20048,7 @@ export def "close indicesclose0" [
   let full_url = (build-url $base $"/($index)/_close" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns number of documents matching a query.
@@ -19506,6 +20066,7 @@ export def "count count2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can only be used when the `q` query string parameter is specified. (default: false)
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
@@ -19536,7 +20097,7 @@ export def "count count2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns number of documents matching a query.
@@ -19554,6 +20115,7 @@ export def "count count3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can only be used when the `q` query string parameter is specified. (default: false)
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
@@ -19584,7 +20146,7 @@ export def "count count3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new document in the index.  Returns a 409 response when a document with a same ID already exists in the index.
@@ -19602,6 +20164,7 @@ export def "create create0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pipeline: string # ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --refresh: string # If `true`, OpenSearch refreshes the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # Custom value used to route operations to a specific shard.
@@ -19624,7 +20187,7 @@ export def "create create0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new document in the index.  Returns a 409 response when a document with a same ID already exists in the index.
@@ -19642,6 +20205,7 @@ export def "create create1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pipeline: string # ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --refresh: string # If `true`, OpenSearch refreshes the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # Custom value used to route operations to a specific shard.
@@ -19664,7 +20228,7 @@ export def "create create1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes documents matching the provided query.
@@ -19683,6 +20247,7 @@ export def "delete-by-query query0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: list # List of fields to exclude from the returned `_source` field.
   --source-includes: list # List of fields to extract and return from the `_source` field.
@@ -19734,7 +20299,7 @@ export def "delete-by-query query0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a document in an index.
@@ -19751,6 +20316,7 @@ export def "doc index0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: int # Only perform the operation if the document has this primary term. (format: int64)
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --op-type: string # Set to create to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. Same as using the `<index>/_create` endpoint. Valid values: `index`, `create`. If document id is specified, it defaults to `index`. Otherwise, it defaults to `create`.
@@ -19777,7 +20343,7 @@ export def "doc index0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a document from the index.
@@ -19795,6 +20361,7 @@ export def "doc delete0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: int # Only perform the operation if the document has this primary term. (format: int64)
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --refresh: string # If `true`, OpenSearch refreshes the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
@@ -19815,7 +20382,7 @@ export def "doc delete0" [
   let full_url = (build-url $base $"/($index)/_doc/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a document.
@@ -19833,6 +20400,7 @@ export def "doc get0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19855,7 +20423,7 @@ export def "doc get0" [
   let full_url = (build-url $base $"/($index)/_doc/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a document exists in an index.
@@ -19873,6 +20441,7 @@ export def "doc exists0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -19895,7 +20464,7 @@ export def "doc exists0" [
   let full_url = (build-url $base $"/($index)/_doc/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a document in an index.
@@ -19913,6 +20482,7 @@ export def "doc index1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: int # Only perform the operation if the document has this primary term. (format: int64)
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --op-type: string # Set to create to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. Same as using the `<index>/_create` endpoint. Valid values: `index`, `create`. If document id is specified, it defaults to `index`. Otherwise, it defaults to `create`.
@@ -19939,7 +20509,7 @@ export def "doc index1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a document in an index.
@@ -19957,6 +20527,7 @@ export def "doc index2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: int # Only perform the operation if the document has this primary term. (format: int64)
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --op-type: string # Set to create to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. Same as using the `<index>/_create` endpoint. Valid values: `index`, `create`. If document id is specified, it defaults to `index`. Otherwise, it defaults to `create`.
@@ -19983,7 +20554,7 @@ export def "doc index2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about why a specific matches (or doesn't match) a query.
@@ -20002,6 +20573,7 @@ export def "explain explain0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -20030,7 +20602,7 @@ export def "explain explain0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about why a specific matches (or doesn't match) a query.
@@ -20049,6 +20621,7 @@ export def "explain explain1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -20077,7 +20650,7 @@ export def "explain explain1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the information about the capabilities of fields among multiple indexes.
@@ -20095,6 +20668,7 @@ export def "field-caps caps2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with bar.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # Comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
@@ -20117,7 +20691,7 @@ export def "field-caps caps2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the information about the capabilities of fields among multiple indexes.
@@ -20135,6 +20709,7 @@ export def "field-caps caps3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with bar.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # Comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
@@ -20157,7 +20732,7 @@ export def "field-caps caps3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs the flush operation on one or more indexes.
@@ -20174,6 +20749,7 @@ export def "flush indicesflush2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
@@ -20191,7 +20767,7 @@ export def "flush indicesflush2" [
   let full_url = (build-url $base $"/($index)/_flush" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the flush operation on one or more indexes.
@@ -20208,6 +20784,7 @@ export def "flush indicesflush3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
@@ -20225,7 +20802,7 @@ export def "flush indicesflush3" [
   let full_url = (build-url $base $"/($index)/_flush" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the force merge operation on one or more indexes.
@@ -20242,6 +20819,7 @@ export def "forcemerge indicesforcemerge1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified)
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --flush: oneof<nothing, bool> # Specify whether the index should be flushed after performing the operation. (default: true)
@@ -20262,7 +20840,7 @@ export def "forcemerge indicesforcemerge1" [
   let full_url = (build-url $base $"/($index)/_forcemerge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns mappings for one or more indexes.
@@ -20280,6 +20858,7 @@ export def "mapping mapping1-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -20299,7 +20878,7 @@ export def "mapping mapping1-by-index" [
   let full_url = (build-url $base $"/($index)/_mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the index mappings.
@@ -20320,6 +20899,7 @@ export def "mapping mapping0-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -20352,7 +20932,7 @@ export def "mapping mapping0-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the index mappings.
@@ -20373,6 +20953,7 @@ export def "mapping mapping1-by-index-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -20405,7 +20986,7 @@ export def "mapping mapping1-by-index-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns mapping for one or more fields.
@@ -20423,6 +21004,7 @@ export def "mapping-field mapping1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -20440,7 +21022,7 @@ export def "mapping-field mapping1" [
   let full_url = (build-url $base $"/($index)/_mapping/field/($fields)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to get multiple documents in one request.
@@ -20458,6 +21040,7 @@ export def "mget mget2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -20483,7 +21066,7 @@ export def "mget mget2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to get multiple documents in one request.
@@ -20501,6 +21084,7 @@ export def "mget mget3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -20526,7 +21110,7 @@ export def "mget mget3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to execute several search operations in one request.
@@ -20543,6 +21127,7 @@ export def "msearch msearch2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and remote clusters are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the multi search API can execute. (format: int32)
   --max-concurrent-shard-requests: int # Maximum number of concurrent shard requests that each sub-search request executes per node. (format: int32, default: 5)
@@ -20565,7 +21150,7 @@ export def "msearch msearch2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search operations in one request.
@@ -20582,6 +21167,7 @@ export def "msearch msearch3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and remote clusters are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the multi search API can execute. (format: int32)
   --max-concurrent-shard-requests: int # Maximum number of concurrent shard requests that each sub-search request executes per node. (format: int32, default: 5)
@@ -20604,7 +21190,7 @@ export def "msearch msearch3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search template operations in one request.
@@ -20621,6 +21207,7 @@ export def "msearch-template template2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the API can run. (format: int32)
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object. (default: false)
@@ -20641,7 +21228,7 @@ export def "msearch-template template2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Allows to execute several search template operations in one request.
@@ -20658,6 +21245,7 @@ export def "msearch-template template3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --max-concurrent-searches: int # Maximum number of concurrent searches the API can run. (format: int32)
   --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object. (default: false)
@@ -20678,7 +21266,7 @@ export def "msearch-template template3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Returns multiple termvectors in one request.
@@ -20696,6 +21284,7 @@ export def "mtermvectors mtermvectors2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
@@ -20725,7 +21314,7 @@ export def "mtermvectors mtermvectors2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns multiple termvectors in one request.
@@ -20743,6 +21332,7 @@ export def "mtermvectors mtermvectors3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
@@ -20772,7 +21362,7 @@ export def "mtermvectors mtermvectors3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Opens an index.
@@ -20790,6 +21380,7 @@ export def "open indicesopen0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -20811,7 +21402,7 @@ export def "open indicesopen0" [
   let full_url = (build-url $base $"/($index)/_open" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to evaluate the quality of ranked search results over a set of typical search queries.
@@ -20830,6 +21421,7 @@ export def "rank-eval eval2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -20851,7 +21443,7 @@ export def "rank-eval eval2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to evaluate the quality of ranked search results over a set of typical search queries.
@@ -20870,6 +21462,7 @@ export def "rank-eval eval3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -20891,7 +21484,7 @@ export def "rank-eval eval3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about ongoing index shard recoveries.
@@ -20908,6 +21501,7 @@ export def "recovery indicesrecovery1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries. (default: false)
   --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries. (default: false)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -20922,7 +21516,7 @@ export def "recovery indicesrecovery1" [
   let full_url = (build-url $base $"/($index)/_recovery" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the refresh operation in one or more indexes.
@@ -20939,6 +21533,7 @@ export def "refresh indicesrefresh2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -20954,7 +21549,7 @@ export def "refresh indicesrefresh2" [
   let full_url = (build-url $base $"/($index)/_refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs the refresh operation in one or more indexes.
@@ -20971,6 +21566,7 @@ export def "refresh indicesrefresh3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -20986,7 +21582,7 @@ export def "refresh indicesrefresh3" [
   let full_url = (build-url $base $"/($index)/_refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns results matching a query.
@@ -21010,6 +21606,7 @@ export def "search search2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Indicates which source fields are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are: `true` to return the entire document source; `false` to not return the document source; `<string>` to return the source fields that are specified as a comma-separated list (supports wildcard (`*`) patterns).
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -21104,7 +21701,7 @@ export def "search search2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns results matching a query.
@@ -21128,6 +21725,7 @@ export def "search search3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Indicates which source fields are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are: `true` to return the entire document source; `false` to not return the document source; `<string>` to return the source fields that are specified as a comma-separated list (supports wildcard (`*`) patterns).
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -21222,7 +21820,7 @@ export def "search search3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about the indexes and shards that a search request would be executed against.
@@ -21239,6 +21837,7 @@ export def "search-shards shards2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -21257,7 +21856,7 @@ export def "search-shards shards2" [
   let full_url = (build-url $base $"/($index)/_search_shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about the indexes and shards that a search request would be executed against.
@@ -21274,6 +21873,7 @@ export def "search-shards shards3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -21292,7 +21892,7 @@ export def "search-shards shards3" [
   let full_url = (build-url $base $"/($index)/_search_shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates point in time context.
@@ -21309,6 +21909,7 @@ export def "search-point-in-time pit0-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-partial-pit-creation: oneof<nothing, bool> # Allow if point in time can be created with partial failures.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --keep-alive: string # Specify the keep alive for point in time.
@@ -21326,7 +21927,7 @@ export def "search-point-in-time pit0-by-index" [
   let full_url = (build-url $base $"/($index)/_search/point_in_time" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -21343,6 +21944,7 @@ export def "search-template template2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -21376,7 +21978,7 @@ export def "search-template template2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows to use the Mustache language to pre-render a search definition.
@@ -21393,6 +21995,7 @@ export def "search-template template3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests. (default: true)
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
@@ -21426,7 +22029,7 @@ export def "search-template template3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides low-level information about segments in a Lucene index.
@@ -21443,6 +22046,7 @@ export def "segments indicessegments1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. Valid values are: `all`, `open`, `closed`, `hidden`, `none`.
   --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a missing or closed index.
@@ -21459,7 +22063,7 @@ export def "segments indicessegments1" [
   let full_url = (build-url $base $"/($index)/_segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns settings for one or more indexes.
@@ -21477,6 +22081,7 @@ export def "settings settings2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -21497,7 +22102,7 @@ export def "settings settings2" [
   let full_url = (build-url $base $"/($index)/_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the index settings.
@@ -21537,6 +22142,7 @@ export def "settings settings1-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with `foo` but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -21632,7 +22238,7 @@ export def "settings settings1-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns settings for one or more indexes.
@@ -21651,6 +22257,7 @@ export def "settings settings3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes. For example, a request targeting `foo*,bar*` returns an error if an index starts with foo but no index starts with `bar`.
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
@@ -21671,7 +22278,7 @@ export def "settings settings3" [
   let full_url = (build-url $base $"/($index)/_settings/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides store information for shard copies of indexes.
@@ -21688,6 +22295,7 @@ export def "shard-stores stores1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
   --ignore-unavailable: oneof<nothing, bool> # If `true`, missing or closed indexes are not included in the response.
@@ -21704,7 +22312,7 @@ export def "shard-stores stores1" [
   let full_url = (build-url $base $"/($index)/_shard_stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allow to shrink an existing index into a new index with fewer primary shards.
@@ -21723,6 +22331,7 @@ export def "shrink indicesshrink0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --copy-settings: oneof<nothing, bool> # whether or not to copy settings from the source index. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -21747,7 +22356,7 @@ export def "shrink indicesshrink0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allow to shrink an existing index into a new index with fewer primary shards.
@@ -21766,6 +22375,7 @@ export def "shrink indicesshrink1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --copy-settings: oneof<nothing, bool> # whether or not to copy settings from the source index. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -21790,7 +22400,7 @@ export def "shrink indicesshrink1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the source of a document.
@@ -21808,6 +22418,7 @@ export def "source source0-by-id-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -21829,7 +22440,7 @@ export def "source source0-by-id-index" [
   let full_url = (build-url $base $"/($index)/_source/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about whether a document source exists in an index.
@@ -21847,6 +22458,7 @@ export def "source source0-by-id-index-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
@@ -21868,7 +22480,7 @@ export def "source source0-by-id-index-1" [
   let full_url = (build-url $base $"/($index)/_source/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows you to split an existing index into a new index with more primary shards.
@@ -21887,6 +22499,7 @@ export def "split indicessplit0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --copy-settings: oneof<nothing, bool> # whether or not to copy settings from the source index. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -21911,7 +22524,7 @@ export def "split indicessplit0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows you to split an existing index into a new index with more primary shards.
@@ -21930,6 +22543,7 @@ export def "split indicessplit1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-manager-timeout: string # Operation timeout for connection to cluster-manager node.
   --copy-settings: oneof<nothing, bool> # whether or not to copy settings from the source index. (default: false)
   --master-timeout: string # Period to wait for a connection to the cluster-manager node. If no response is received before the timeout expires, the request fails and returns an error. (DEPRECATED)
@@ -21954,7 +22568,7 @@ export def "split indicessplit1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides statistics on operations happening in an index.
@@ -21971,6 +22585,7 @@ export def "stats indicesstats2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in field data statistics.
@@ -21992,7 +22607,7 @@ export def "stats indicesstats2" [
   let full_url = (build-url $base $"/($index)/_stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides statistics on operations happening in an index.
@@ -22010,6 +22625,7 @@ export def "stats indicesstats3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in field data and suggest statistics.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in field data statistics.
@@ -22031,7 +22647,7 @@ export def "stats indicesstats3" [
   let full_url = (build-url $base $"/($index)/_stats/($metric)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information and statistics about terms in the fields of a particular document.
@@ -22049,6 +22665,7 @@ export def "termvectors termvectors0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
@@ -22078,7 +22695,7 @@ export def "termvectors termvectors0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information and statistics about terms in the fields of a particular document.
@@ -22096,6 +22713,7 @@ export def "termvectors termvectors1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
@@ -22125,7 +22743,7 @@ export def "termvectors termvectors1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information and statistics about terms in the fields of a particular document.
@@ -22144,6 +22762,7 @@ export def "termvectors termvectors2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
@@ -22173,7 +22792,7 @@ export def "termvectors termvectors2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information and statistics about terms in the fields of a particular document.
@@ -22192,6 +22811,7 @@ export def "termvectors termvectors3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies. (default: true)
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics. Used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
   --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
@@ -22221,7 +22841,7 @@ export def "termvectors termvectors3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs an update on every document in the index without changing the source, for example to pick up a mapping change.
@@ -22240,6 +22860,7 @@ export def "update-by-query query0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `true` or `false` to return the `_source` field or not, or a list of fields to return.
   --source-excludes: list # List of fields to exclude from the returned `_source` field.
   --source-includes: list # List of fields to extract and return from the `_source` field.
@@ -22294,7 +22915,7 @@ export def "update-by-query query0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a document with a script or partial document.
@@ -22312,6 +22933,7 @@ export def "update update0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string # Set to `false` to disable source retrieval. You can also specify a comma-separated list of the fields you want to retrieve.
   --source-excludes: string # Specify the source fields you want to exclude.
   --source-includes: string # Specify the source fields you want to retrieve.
@@ -22346,7 +22968,7 @@ export def "update update0" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # The `_upgrade` API is no longer useful and will be removed.
@@ -22363,6 +22985,7 @@ export def "upgrade upgrade1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified).
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # Whether specified concrete indexes should be ignored when unavailable (missing or closed).
@@ -22378,7 +23001,7 @@ export def "upgrade upgrade1" [
   let full_url = (build-url $base $"/($index)/_upgrade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The `_upgrade` API is no longer useful and will be removed.
@@ -22395,6 +23018,7 @@ export def "upgrade indicesupgrade1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-no-indices: oneof<nothing, bool> # Whether to ignore if a wildcard indexes expression resolves into no concrete indexes. (This includes `_all` string or when no indexes have been specified).
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indexes that are open, closed or both.
   --ignore-unavailable: oneof<nothing, bool> # Whether specified concrete indexes should be ignored when unavailable (missing or closed).
@@ -22412,7 +23036,7 @@ export def "upgrade indicesupgrade1" [
   let full_url = (build-url $base $"/($index)/_upgrade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows a user to validate a potentially expensive query without executing it.
@@ -22430,6 +23054,7 @@ export def "validate-query query2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. (default: false)
@@ -22458,7 +23083,7 @@ export def "validate-query query2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Allows a user to validate a potentially expensive query without executing it.
@@ -22476,6 +23101,7 @@ export def "validate-query query3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --allow-no-indices: oneof<nothing, bool> # If `false`, the request returns an error if any wildcard expression, index alias, or `_all` value targets only missing or closed indexes. This behavior applies even if the request targets other open indexes.
   --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. (default: false)
@@ -22504,7 +23130,7 @@ export def "validate-query query3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Performs an asynchronous search.
@@ -22529,6 +23155,7 @@ export def "opendistro-asynchronous-search superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # The name of the index to be searched. Can be an individual name, a comma-separated list of indexes, or a wildcard expression of index names.
   --keep-alive: string # The amount of time that the result is saved in the cluster. For example, `2d` means that the results are stored in the cluster for 48 hours.  The saved search results are deleted after this period or if the search is canceled. Note that this includes the query execution time.  If the query exceeds this amount of time, the process cancels this query automatically.
   --keep-on-completion: oneof<nothing, bool> # Whether to save the results in the cluster after the search is complete. You can examine the stored results at a later time.
@@ -22578,7 +23205,7 @@ export def "opendistro-asynchronous-search superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Monitors any asynchronous searches that are `running`, `completed`, or `persisted`.
@@ -22596,6 +23223,7 @@ export def "opendistro-asynchronous-search-stats superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22608,7 +23236,7 @@ export def "opendistro-asynchronous-search-stats superseded" [
   let full_url = (build-url $base "/_opendistro/_asynchronous_search/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets partial responses from an asynchronous search.
@@ -22627,6 +23255,7 @@ export def "opendistro-asynchronous-search superseded-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22639,7 +23268,7 @@ export def "opendistro-asynchronous-search superseded-by-id" [
   let full_url = (build-url $base $"/_opendistro/_asynchronous_search/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes any responses from an asynchronous search.
@@ -22658,6 +23287,7 @@ export def "opendistro-asynchronous-search superseded-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22670,7 +23300,7 @@ export def "opendistro-asynchronous-search superseded-by-id-1" [
   let full_url = (build-url $base $"/_opendistro/_asynchronous_search/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a policy to an index.
@@ -22688,6 +23318,7 @@ export def "opendistro-ism-add superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -22705,7 +23336,7 @@ export def "opendistro-ism-add superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a policy to an index.
@@ -22724,6 +23355,7 @@ export def "opendistro-ism-add superseded-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -22741,7 +23373,7 @@ export def "opendistro-ism-add superseded-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the managed index policy to a new policy.
@@ -22760,6 +23392,7 @@ export def "opendistro-ism-change-policy superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -22779,7 +23412,7 @@ export def "opendistro-ism-change-policy superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the managed index policy to a new policy.
@@ -22799,6 +23432,7 @@ export def "opendistro-ism-change-policy superseded-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -22818,7 +23452,7 @@ export def "opendistro-ism-change-policy superseded-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -22836,6 +23470,7 @@ export def "opendistro-ism-explain superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22851,7 +23486,7 @@ export def "opendistro-ism-explain superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -22869,6 +23504,7 @@ export def "opendistro-ism-explain superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22884,7 +23520,7 @@ export def "opendistro-ism-explain superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -22903,6 +23539,7 @@ export def "opendistro-ism-explain superseded-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22918,7 +23555,7 @@ export def "opendistro-ism-explain superseded-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the currently applied policy on the specified indexes.
@@ -22937,6 +23574,7 @@ export def "opendistro-ism-explain superseded-by-index-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22952,7 +23590,7 @@ export def "opendistro-ism-explain superseded-by-index-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the policies.
@@ -22970,6 +23608,7 @@ export def "opendistro-ism-policies superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -22982,7 +23621,7 @@ export def "opendistro-ism-policies superseded" [
   let full_url = (build-url $base "/_opendistro/_ism/policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates policies.
@@ -23001,6 +23640,7 @@ export def "opendistro-ism-policies superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --policyID: string
@@ -23020,7 +23660,7 @@ export def "opendistro-ism-policies superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a specific policy.
@@ -23039,6 +23679,7 @@ export def "opendistro-ism-policies superseded-by-policy_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23051,7 +23692,7 @@ export def "opendistro-ism-policies superseded-by-policy_id" [
   let full_url = (build-url $base $"/_opendistro/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks for the existence of a policy.
@@ -23070,6 +23711,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23082,7 +23724,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-1" [
   let full_url = (build-url $base $"/_opendistro/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a policy.
@@ -23102,6 +23744,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: int # Only perform the operation if the document has this sequence number. (format: int64)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23120,7 +23763,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a policy.
@@ -23139,6 +23782,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23151,7 +23795,7 @@ export def "opendistro-ism-policies superseded-by-policy_id-3" [
   let full_url = (build-url $base $"/_opendistro/_ism/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a policy from an index.
@@ -23169,6 +23813,7 @@ export def "opendistro-ism-remove superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23182,7 +23827,7 @@ export def "opendistro-ism-remove superseded" [
   let full_url = (build-url $base "/_opendistro/_ism/remove" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a policy from an index.
@@ -23201,6 +23846,7 @@ export def "opendistro-ism-remove superseded-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23214,7 +23860,7 @@ export def "opendistro-ism-remove superseded-by-index" [
   let full_url = (build-url $base $"/_opendistro/_ism/remove/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retries the failed action for an index.
@@ -23232,6 +23878,7 @@ export def "opendistro-ism-retry superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23249,7 +23896,7 @@ export def "opendistro-ism-retry superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retries the failed action for an index.
@@ -23268,6 +23915,7 @@ export def "opendistro-ism-retry superseded-by-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23285,7 +23933,7 @@ export def "opendistro-ism-retry superseded-by-index" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -23304,6 +23952,7 @@ export def "opendistro-knn-stats list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23317,7 +23966,7 @@ export def "opendistro-knn-stats list" [
   let full_url = (build-url $base $"/_opendistro/_knn/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preloads native library files into memory, reducing initial search latency for specified indexes.
@@ -23336,6 +23985,7 @@ export def "opendistro-knn-warmup superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23348,7 +23998,7 @@ export def "opendistro-knn-warmup superseded" [
   let full_url = (build-url $base $"/_opendistro/_knn/warmup/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides information about the current status of the k-NN plugin.
@@ -23368,6 +24018,7 @@ export def "opendistro-knn-stats superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: string # Operation timeout.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -23381,7 +24032,7 @@ export def "opendistro-knn-stats superseded" [
   let full_url = (build-url $base $"/_opendistro/_knn/($node_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Executes a PPL query against OpenSearch indexes.
@@ -23399,6 +24050,7 @@ export def "opendistro-ppl superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON OR YAML).
   --sanitize: oneof<nothing, bool> # Whether to sanitize special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23419,7 +24071,7 @@ export def "opendistro-ppl superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the execution plan for a PPL query.
@@ -23437,6 +24089,7 @@ export def "opendistro-ppl-explain superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23457,7 +24110,7 @@ export def "opendistro-ppl-explain superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves performance metrics for the PPL plugin.
@@ -23475,6 +24128,7 @@ export def "opendistro-ppl-stats superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23489,7 +24143,7 @@ export def "opendistro-ppl-stats superseded" [
   let full_url = (build-url $base "/_opendistro/_ppl/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves filtered performance metrics for the PPL plugin.
@@ -23507,6 +24161,7 @@ export def "opendistro-ppl-stats superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON, YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23531,7 +24186,7 @@ export def "opendistro-ppl-stats superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refreshes search analyzers in real time.
@@ -23550,6 +24205,7 @@ export def "opendistro-refresh-search-analyzers superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23562,7 +24218,7 @@ export def "opendistro-refresh-search-analyzers superseded" [
   let full_url = (build-url $base $"/_opendistro/_refresh_search_analyzers/($index)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves an index rollup job configuration by ID.
@@ -23581,6 +24237,7 @@ export def "opendistro-rollup-jobs superseded-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23593,7 +24250,7 @@ export def "opendistro-rollup-jobs superseded-by-id" [
   let full_url = (build-url $base $"/_opendistro/_rollup/jobs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an index rollup job configuration.
@@ -23613,6 +24270,7 @@ export def "opendistro-rollup-jobs superseded-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --if-primary-term: float # Only performs the operation if the document has the specified primary term.
   --if-seq-no: int # Only performs the operation if the document has the specified sequence number. (format: int64)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -23635,7 +24293,7 @@ export def "opendistro-rollup-jobs superseded-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an index rollup job configuration.
@@ -23654,6 +24312,7 @@ export def "opendistro-rollup-jobs superseded-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23666,7 +24325,7 @@ export def "opendistro-rollup-jobs superseded-by-id-2" [
   let full_url = (build-url $base $"/_opendistro/_rollup/jobs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the execution status information for an index rollup job.
@@ -23685,6 +24344,7 @@ export def "opendistro-rollup-jobs-explain superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23697,7 +24357,7 @@ export def "opendistro-rollup-jobs-explain superseded" [
   let full_url = (build-url $base $"/_opendistro/_rollup/jobs/($id)/_explain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts the execution of an index rollup job.
@@ -23716,6 +24376,7 @@ export def "opendistro-rollup-jobs-start superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23728,7 +24389,7 @@ export def "opendistro-rollup-jobs-start superseded" [
   let full_url = (build-url $base $"/_opendistro/_rollup/jobs/($id)/_start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops the execution of an index rollup job.
@@ -23747,6 +24408,7 @@ export def "opendistro-rollup-jobs-stop superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23759,7 +24421,7 @@ export def "opendistro-rollup-jobs-stop superseded" [
   let full_url = (build-url $base $"/_opendistro/_rollup/jobs/($id)/_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns account information for the current user.
@@ -23777,6 +24439,7 @@ export def "opendistro-security-account superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23789,7 +24452,7 @@ export def "opendistro-security-account superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes the password for the current user.
@@ -23807,6 +24470,7 @@ export def "opendistro-security-account superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23824,7 +24488,7 @@ export def "opendistro-security-account superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves one action group.
@@ -23843,6 +24507,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23855,7 +24520,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group" [
   let full_url = (build-url $base $"/_opendistro/_security/api/actiongroups/($action_group)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified action group.
@@ -23874,6 +24539,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23895,7 +24561,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the individual attributes of an action group.
@@ -23914,6 +24580,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23929,7 +24596,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified action group.
@@ -23948,6 +24615,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23960,7 +24628,7 @@ export def "opendistro-security-actiongroups superseded-by-action_group-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/actiongroups/($action_group)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the audit configuration.
@@ -23980,6 +24648,7 @@ export def "opendistro-security-audit-config superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -23998,7 +24667,7 @@ export def "opendistro-security-audit-config superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the authorization token for the current user.
@@ -24015,6 +24684,7 @@ export def "opendistro-security-authtoken superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24027,7 +24697,7 @@ export def "opendistro-security-authtoken superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -24044,6 +24714,7 @@ export def "opendistro-security-cache superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24056,7 +24727,7 @@ export def "opendistro-security-cache superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -24073,6 +24744,7 @@ export def "opendistro-security-cache superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24085,7 +24757,7 @@ export def "opendistro-security-cache superseded-1" [
   let full_url = (build-url $base "/_opendistro/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Not supported for the Cache API.
@@ -24102,6 +24774,7 @@ export def "opendistro-security-cache superseded-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24114,7 +24787,7 @@ export def "opendistro-security-cache superseded-2" [
   let full_url = (build-url $base "/_opendistro/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Flushes the Security plugin's user, authentication, and authorization cache.
@@ -24132,6 +24805,7 @@ export def "opendistro-security-cache superseded-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24144,7 +24818,7 @@ export def "opendistro-security-cache superseded-3" [
   let full_url = (build-url $base "/_opendistro/_security/api/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve information about the specified internal user.
@@ -24163,6 +24837,7 @@ export def "opendistro-security-internalusers superseded-by-username" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24175,7 +24850,7 @@ export def "opendistro-security-internalusers superseded-by-username" [
   let full_url = (build-url $base $"/_opendistro/_security/api/internalusers/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified user.
@@ -24194,6 +24869,7 @@ export def "opendistro-security-internalusers superseded-by-username-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24218,7 +24894,7 @@ export def "opendistro-security-internalusers superseded-by-username-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates individual attributes for an internal user.
@@ -24237,6 +24913,7 @@ export def "opendistro-security-internalusers superseded-by-username-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24252,7 +24929,7 @@ export def "opendistro-security-internalusers superseded-by-username-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified internal user.
@@ -24271,6 +24948,7 @@ export def "opendistro-security-internalusers superseded-by-username-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24283,7 +24961,7 @@ export def "opendistro-security-internalusers superseded-by-username-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/internalusers/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generates an authorization token for the specified user.
@@ -24301,6 +24979,7 @@ export def "opendistro-security-internalusers-authtoken superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24313,7 +24992,7 @@ export def "opendistro-security-internalusers-authtoken superseded" [
   let full_url = (build-url $base $"/_opendistro/_security/api/internalusers/($username)/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Migrates the security configuration from v6 to v7.
@@ -24330,6 +25009,7 @@ export def "opendistro-security-migrate superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24342,7 +25022,7 @@ export def "opendistro-security-migrate superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/migrate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the evaluated REST API permissions for the currently logged in user.
@@ -24359,6 +25039,7 @@ export def "opendistro-security-permissionsinfo superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24371,7 +25052,7 @@ export def "opendistro-security-permissionsinfo superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/permissionsinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves one role.
@@ -24390,6 +25071,7 @@ export def "opendistro-security-roles superseded-by-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24402,7 +25084,7 @@ export def "opendistro-security-roles superseded-by-role" [
   let full_url = (build-url $base $"/_opendistro/_security/api/roles/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified role.
@@ -24423,6 +25105,7 @@ export def "opendistro-security-roles superseded-by-role-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24445,7 +25128,7 @@ export def "opendistro-security-roles superseded-by-role-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the individual attributes of a role.
@@ -24464,6 +25147,7 @@ export def "opendistro-security-roles superseded-by-role-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24479,7 +25163,7 @@ export def "opendistro-security-roles superseded-by-role-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified role.
@@ -24498,6 +25182,7 @@ export def "opendistro-security-roles superseded-by-role-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24510,7 +25195,7 @@ export def "opendistro-security-roles superseded-by-role-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/roles/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the specified role mapping.
@@ -24529,6 +25214,7 @@ export def "opendistro-security-rolesmapping superseded-by-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24541,7 +25227,7 @@ export def "opendistro-security-rolesmapping superseded-by-role" [
   let full_url = (build-url $base $"/_opendistro/_security/api/rolesmapping/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified role mapping.
@@ -24560,6 +25246,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24582,7 +25269,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the individual attributes of a role mapping.
@@ -24601,6 +25288,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24616,7 +25304,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified role mapping.
@@ -24635,6 +25323,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24647,7 +25336,7 @@ export def "opendistro-security-rolesmapping superseded-by-role-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/rolesmapping/($role)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the current Security plugin configuration in a JSON format.
@@ -24665,6 +25354,7 @@ export def "opendistro-security-securityconfig superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24677,7 +25367,7 @@ export def "opendistro-security-securityconfig superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/securityconfig" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the existing security configuration using the REST API. Requires super admin or REST API permissions.
@@ -24695,6 +25385,7 @@ export def "opendistro-security-securityconfig superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24710,7 +25401,7 @@ export def "opendistro-security-securityconfig superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the settings for an existing security configuration. Requires super admin or REST API permissions.
@@ -24729,6 +25420,7 @@ export def "opendistro-security-securityconfig-config superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24745,7 +25437,7 @@ export def "opendistro-security-securityconfig-config superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the cluster security certificates.
@@ -24763,6 +25455,7 @@ export def "opendistro-security-ssl-certs superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24775,7 +25468,7 @@ export def "opendistro-security-ssl-certs superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/ssl/certs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads the transport communication certificates.
@@ -24793,6 +25486,7 @@ export def "opendistro-security-ssl-transport-reloadcerts superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24805,7 +25499,7 @@ export def "opendistro-security-ssl-transport-reloadcerts superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/ssl/transport/reloadcerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reloads the HTTP communication certificates.
@@ -24823,6 +25517,7 @@ export def "opendistro-security-ssl-http-reloadcerts superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24835,7 +25530,7 @@ export def "opendistro-security-ssl-http-reloadcerts superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/ssl/http/reloadcerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all node distinguished names. Requires super admin or REST API permissions.
@@ -24854,6 +25549,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-all: oneof<nothing, bool> # Whether to include or exclude any static node's DN settings from the final result.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -24867,7 +25563,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name" [
   let full_url = (build-url $base $"/_opendistro/_security/api/nodesdn/($cluster_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds or updates the specified distinguished names in the cluster or node allowlist. Requires super admin or REST API permissions.
@@ -24886,6 +25582,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24902,7 +25599,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the distinguished cluster name for the specified cluster. Requires super admin or REST API permissions.
@@ -24920,6 +25617,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24935,7 +25633,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes all distinguished names in the specified cluster or node allowlist. Requires super admin or REST API permissions.
@@ -24954,6 +25652,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24966,7 +25665,7 @@ export def "opendistro-security-nodesdn superseded-by-cluster_name-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/nodesdn/($cluster_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the multi-tenancy configuration. Requires super admin or REST API permissions.
@@ -24984,6 +25683,7 @@ export def "opendistro-security-tenancy-config superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -24996,7 +25696,7 @@ export def "opendistro-security-tenancy-config superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/tenancy/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the multi-tenancy configuration. Requires super admin or REST API permissions.
@@ -25014,6 +25714,7 @@ export def "opendistro-security-tenancy-config superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25033,7 +25734,7 @@ export def "opendistro-security-tenancy-config superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all tenants.
@@ -25051,6 +25752,7 @@ export def "opendistro-security-tenants superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25063,7 +25765,7 @@ export def "opendistro-security-tenants superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/tenants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds, deletes, or modifies multiple tenants in a single request.
@@ -25081,6 +25783,7 @@ export def "opendistro-security-tenants superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25096,7 +25799,7 @@ export def "opendistro-security-tenants superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the specified tenant.
@@ -25115,6 +25818,7 @@ export def "opendistro-security-tenants superseded-by-tenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25127,7 +25831,7 @@ export def "opendistro-security-tenants superseded-by-tenant" [
   let full_url = (build-url $base $"/_opendistro/_security/api/tenants/($tenant)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified tenant.
@@ -25146,6 +25850,7 @@ export def "opendistro-security-tenants superseded-by-tenant-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25162,7 +25867,7 @@ export def "opendistro-security-tenants superseded-by-tenant-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds, deletes, or modifies a single tenant.
@@ -25181,6 +25886,7 @@ export def "opendistro-security-tenants superseded-by-tenant-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25196,7 +25902,7 @@ export def "opendistro-security-tenants superseded-by-tenant-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the specified tenant.
@@ -25215,6 +25921,7 @@ export def "opendistro-security-tenants superseded-by-tenant-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25227,7 +25934,7 @@ export def "opendistro-security-tenants superseded-by-tenant-3" [
   let full_url = (build-url $base $"/_opendistro/_security/api/tenants/($tenant)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all internal users. Legacy API.
@@ -25244,6 +25951,7 @@ export def "opendistro-security-user superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25256,7 +25964,7 @@ export def "opendistro-security-user superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve one user. Legacy API.
@@ -25274,6 +25982,7 @@ export def "opendistro-security-user superseded-by-username" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25286,7 +25995,7 @@ export def "opendistro-security-user superseded-by-username" [
   let full_url = (build-url $base $"/_opendistro/_security/api/user/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces the specified user. Legacy API.
@@ -25304,6 +26013,7 @@ export def "opendistro-security-user superseded-by-username-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25328,7 +26038,7 @@ export def "opendistro-security-user superseded-by-username-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the specified user. Legacy API.
@@ -25346,6 +26056,7 @@ export def "opendistro-security-user superseded-by-username-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25358,7 +26069,7 @@ export def "opendistro-security-user superseded-by-username-2" [
   let full_url = (build-url $base $"/_opendistro/_security/api/user/($username)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generates authorization token for the given user. Legacy API. Not Implemented.
@@ -25376,6 +26087,7 @@ export def "opendistro-security-user-authtoken superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25388,7 +26100,7 @@ export def "opendistro-security-user-authtoken superseded" [
   let full_url = (build-url $base $"/_opendistro/_security/api/user/($username)/authtoken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks whether the v6 security configuration is valid and ready to be migrated to v7.
@@ -25405,6 +26117,7 @@ export def "opendistro-security-validate superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept-invalid: oneof<nothing, bool> # Whether an invalid v6 configuration should be allowed.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -25418,7 +26131,7 @@ export def "opendistro-security-validate superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/validate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the current list of allowed APIs accessible to a normal user.
@@ -25436,6 +26149,7 @@ export def "opendistro-security-allowlist superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25448,7 +26162,7 @@ export def "opendistro-security-allowlist superseded" [
   let full_url = (build-url $base "/_opendistro/_security/api/allowlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or replaces APIs permitted for users on the allow list. Requires a super admin certificate or REST API permissions.
@@ -25466,6 +26180,7 @@ export def "opendistro-security-allowlist superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25483,7 +26198,7 @@ export def "opendistro-security-allowlist superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the current list of APIs accessible for users on the allow list.
@@ -25501,6 +26216,7 @@ export def "opendistro-security-allowlist superseded-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25516,7 +26232,7 @@ export def "opendistro-security-allowlist superseded-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns or updates authentication information for the currently authenticated user.
@@ -25533,6 +26249,7 @@ export def "opendistro-security-authinfo superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-type: string # The type of the current authentication request.
   --verbose: oneof<nothing, bool> # Whether to return a verbose response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25547,7 +26264,7 @@ export def "opendistro-security-authinfo superseded" [
   let full_url = (build-url $base "/_opendistro/_security/authinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns or updates authentication information for the currently authenticated user.
@@ -25564,6 +26281,7 @@ export def "opendistro-security-authinfo superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auth-type: string # The type of the current authentication request.
   --verbose: oneof<nothing, bool> # Whether to return a verbose response.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25578,7 +26296,7 @@ export def "opendistro-security-authinfo superseded-1" [
   let full_url = (build-url $base "/_opendistro/_security/authinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks to see if the Security plugin is running.
@@ -25596,6 +26314,7 @@ export def "opendistro-security-health superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string # A flag that determines whether to consider the security status before returning a response for a health query response. For example, `strict` mode indicates service should check the Security plugin status.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -25609,7 +26328,7 @@ export def "opendistro-security-health superseded" [
   let full_url = (build-url $base "/_opendistro/_security/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks to see if the Security plugin is running.
@@ -25627,6 +26346,7 @@ export def "opendistro-security-health superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string # A flag that determines whether to consider the security status before returning a response for a health query response. For example, `strict` mode indicates service should check the Security plugin status.
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -25640,7 +26360,7 @@ export def "opendistro-security-health superseded-1" [
   let full_url = (build-url $base "/_opendistro/_security/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the current values for dynamic security settings for OpenSearch Dashboards.
@@ -25657,6 +26377,7 @@ export def "opendistro-security-kibanainfo superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25669,7 +26390,7 @@ export def "opendistro-security-kibanainfo superseded" [
   let full_url = (build-url $base "/_opendistro/_security/kibanainfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the current values for dynamic security settings for OpenSearch Dashboards.
@@ -25686,6 +26407,7 @@ export def "opendistro-security-kibanainfo superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25698,7 +26420,7 @@ export def "opendistro-security-kibanainfo superseded-1" [
   let full_url = (build-url $base "/_opendistro/_security/kibanainfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the names of current tenants. Requires super admin or `kibanaserver` permissions.
@@ -25715,6 +26437,7 @@ export def "opendistro-security-tenantinfo superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25727,7 +26450,7 @@ export def "opendistro-security-tenantinfo superseded" [
   let full_url = (build-url $base "/_opendistro/_security/tenantinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the names of current tenants. Requires super admin or `kibanaserver` permissions.
@@ -25744,6 +26467,7 @@ export def "opendistro-security-tenantinfo superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
   --error-trace: oneof<nothing, bool> # Whether to include the stack trace of returned errors. (default: false)
@@ -25756,7 +26480,7 @@ export def "opendistro-security-tenantinfo superseded-1" [
   let full_url = (build-url $base "/_opendistro/_security/tenantinfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Executes SQL or PPL queries against OpenSearch indexes.
@@ -25774,6 +26498,7 @@ export def "opendistro-sql superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25794,7 +26519,7 @@ export def "opendistro-sql superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the execution plan for a SQL or PPL query.
@@ -25812,6 +26537,7 @@ export def "opendistro-sql-explain superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25832,7 +26558,7 @@ export def "opendistro-sql-explain superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Closes an open cursor to free server-side resources.
@@ -25850,6 +26576,7 @@ export def "opendistro-sql-close superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25868,7 +26595,7 @@ export def "opendistro-sql-close superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates SQL plugin settings in the OpenSearch cluster configuration.
@@ -25887,6 +26614,7 @@ export def "opendistro-sql-settings superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
   --human: oneof<nothing, bool> # Whether to return human readable values for statistics. (default: true)
@@ -25904,7 +26632,7 @@ export def "opendistro-sql-settings superseded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves performance metrics for the SQL plugin.
@@ -25922,6 +26650,7 @@ export def "opendistro-sql-stats superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25936,7 +26665,7 @@ export def "opendistro-sql-stats superseded" [
   let full_url = (build-url $base "/_opendistro/_sql/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves filtered performance metrics for the SQL plugin.
@@ -25954,6 +26683,7 @@ export def "opendistro-sql-stats superseded-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Specifies the response format (JSON or YAML).
   --sanitize: oneof<nothing, bool> # Whether to escape special characters in the results. (default: true)
   --pretty: oneof<nothing, bool> # Whether to pretty format the returned JSON response. (default: false)
@@ -25978,7 +26708,7 @@ export def "opendistro-sql-stats superseded-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -25996,6 +26726,7 @@ export def "cluster-nodes-hotthreads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -26014,7 +26745,7 @@ export def "cluster-nodes-hotthreads list" [
   let full_url = (build-url $base "/_cluster/nodes/hotthreads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -26033,6 +26764,7 @@ export def "cluster-nodes-hotthreads superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -26051,7 +26783,7 @@ export def "cluster-nodes-hotthreads superseded" [
   let full_url = (build-url $base $"/_cluster/nodes/($node_id)/hotthreads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -26070,6 +26802,7 @@ export def "nodes-hotthreads superseded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -26088,7 +26821,7 @@ export def "nodes-hotthreads superseded" [
   let full_url = (build-url $base $"/_nodes/($node_id)/hotthreads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns information about hot threads on each node in the cluster.
@@ -26106,6 +26839,7 @@ export def "nodes-hotthreads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-idle-threads: oneof<nothing, bool> # Whether to show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue. (default: true)
   --interval: string # The time interval between thread stack trace samples.
   --snapshots: int # The number of thread stack trace samples to collect. (format: int32, default: 10)
@@ -26124,5 +26858,5 @@ export def "nodes-hotthreads list" [
   let full_url = (build-url $base "/_nodes/hotthreads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

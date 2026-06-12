@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def associatedType-completer [] { ["GROUP_MPS" "OUTBOUND_LINK_TO_RETURN" "RETURN
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-token post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "oauth-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   grant_type: string@grant-type-completer
   client_id: string # API key issued by the FedEx Developer Portal
   client_secret: string # Secret key issued by the FedEx Developer Portal
@@ -114,7 +116,7 @@ export def "oauth-token post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Track by tracking numbers
@@ -129,6 +131,7 @@ export def "track-trackingnumbers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-locale: string # e.g. en_US
   --x-customer-transaction-id: string
   --includeDetailedScans: oneof<nothing, bool> # When true, include per-event detailed scan history
@@ -144,7 +147,7 @@ export def "track-trackingnumbers post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track by reference
@@ -159,6 +162,7 @@ export def "track-referencenumbers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDetailedScans: oneof<nothing, bool>
   --trackingInfo: list # item shape: {shipDateBegin?: string, shipDateEnd?: string, carrierCode?: string, referenceTypeCode?: "BILL_OF_LADING"|"INVOICE"|"PURCHASE_ORDER"|"REFERENCE"|"SHIPPER_REFERENCE", value?: string, destinationCountryCode?: string, destinationPostalCode?: string, shipperAccountNumber?: string}
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
@@ -170,7 +174,7 @@ export def "track-referencenumbers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track by Transportation Control Number (TCN)
@@ -185,6 +189,7 @@ export def "track-tcn post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDetailedScans: oneof<nothing, bool>
   --trackingInfo: list # item shape: {trackingNumberInfo?: record}
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
@@ -196,7 +201,7 @@ export def "track-tcn post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track associated shipments (multi-piece)
@@ -211,6 +216,7 @@ export def "track-associatedshipments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --masterTrackingNumberInfo: record # shape: {trackingNumberInfo?: record}
   --associatedType: string@associatedType-completer
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
@@ -222,7 +228,7 @@ export def "track-associatedshipments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve tracking documents
@@ -238,6 +244,7 @@ export def "track-trackingdocuments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trackDocumentDetail: record # shape: {documentType?: "SIGNATURE_PROOF_OF_DELIVERY"|"BILL_OF_LADING"|"FREIGHT_BILL_OF_LADING", documentFormat?: record}
   --trackingNumberInfo: record # shape: {trackingNumber?: string}
 ]: any -> record<output: record<documents: list<record>>> {
@@ -249,7 +256,7 @@ export def "track-trackingdocuments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send shipment notifications
@@ -264,6 +271,7 @@ export def "track-notifications post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trackingEventNotificationDetail: record # shape: {trackingNotifications?: list}
 ]: any -> any {
   let input = $in
@@ -274,5 +282,5 @@ export def "track-notifications post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def resource-type-completer-1 [] { ["portfolio" "project" "project_template" "ta
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-requests get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "access-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target: string # Globally unique identifier for the target object. (e.g. 1331)
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. (e.g. me)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
@@ -121,7 +123,7 @@ export def "access-requests get" [
   let full_url = (build-url $base "/access_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an access request
@@ -137,6 +139,7 @@ export def "access-requests createAccessRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A request to create shareable access for a user. — shape: {target: string, message?: string}
 ]: any -> record<data: record<gid: string, resource_type: string, message: string, approval_status: string, requester: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string>>> {
   let input = $in
@@ -147,7 +150,7 @@ export def "access-requests createAccessRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Approve an access request
@@ -163,13 +166,14 @@ export def "access-requests-approve approveAccessRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access_requests/($access_request_gid)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject an access request
@@ -185,13 +189,14 @@ export def "access-requests-reject rejectAccessRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access_requests/($access_request_gid)/reject")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of agents in a workspace
@@ -207,6 +212,7 @@ export def "workspaces-agents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [behavior_guidance, description, name, offset, path, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, resource_subtype, uri, workspace])
@@ -217,7 +223,7 @@ export def "workspaces-agents get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/agents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an agent
@@ -233,6 +239,7 @@ export def "agents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [behavior_guidance, description, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, resource_subtype, workspace])
 ]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, name: string, description: string, behavior_guidance: string, workspace: record<gid: string, resource_type: string, name: string>, photo: record<image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string, image_128x128: string, image_1024x1024: string>>> {
@@ -242,7 +249,7 @@ export def "agents get" [
   let full_url = (build-url $base $"/agents/($agent_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an allocation
@@ -258,6 +265,7 @@ export def "allocations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_by, created_by.name, effort, effort.type, effort.value, end_date, parent, parent.name, resource_subtype, start_date])
 ]: nothing -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
@@ -267,7 +275,7 @@ export def "allocations get" [
   let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an allocation
@@ -283,6 +291,7 @@ export def "allocations updateAllocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_by, created_by.name, effort, effort.type, effort.value, end_date, parent, parent.name, resource_subtype, start_date])
   --data: any
@@ -296,7 +305,7 @@ export def "allocations updateAllocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an allocation
@@ -312,6 +321,7 @@ export def "allocations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -320,7 +330,7 @@ export def "allocations delete" [
   let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple allocations
@@ -335,6 +345,7 @@ export def "allocations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent: string # Globally unique identifier for the project to filter allocations by. (e.g. 77688)
   --assignee: string # Globally unique identifier for the user or placeholder the allocation is assigned to. (e.g. 12345)
   --workspace: string # Globally unique identifier for the workspace. (e.g. 98765)
@@ -348,7 +359,7 @@ export def "allocations list" [
   let full_url = (build-url $base "/allocations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an allocation
@@ -363,6 +374,7 @@ export def "allocations createAllocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_by, created_by.name, effort, effort.type, effort.value, end_date, parent, parent.name, resource_subtype, start_date])
   --data: any
@@ -376,7 +388,7 @@ export def "allocations createAllocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an attachment
@@ -392,6 +404,7 @@ export def "attachments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [connected_to_app, created_at, download_url, host, name, parent, parent.created_by, parent.name, parent.resource_subtype, permanent_url, resource_subtype, size, view_url])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
@@ -401,7 +414,7 @@ export def "attachments get" [
   let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an attachment
@@ -417,6 +430,7 @@ export def "attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -425,7 +439,7 @@ export def "attachments delete" [
   let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from an object
@@ -440,6 +454,7 @@ export def "attachments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --parent: string # Globally unique identifier for object to fetch statuses from. Must be a GID for a `project`, `project_brief`, or `task`. (e.g. 159874)
@@ -451,7 +466,7 @@ export def "attachments list" [
   let full_url = (build-url $base "/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload an attachment
@@ -466,6 +481,7 @@ export def "attachments createAttachmentForObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [connected_to_app, created_at, download_url, host, name, parent, parent.created_by, parent.name, parent.resource_subtype, permanent_url, resource_subtype, size, view_url])
   --resource-subtype: string@resource-subtype-completer # The type of the attachment. Must be one of the given values. If not specified, a file attachment of type `asana` will be assumed. Note that if the value of `resource_subtype` is `external`, a `parent`, `name`, and `url` must also be provided.  (e.g. external)
@@ -484,7 +500,7 @@ export def "attachments createAttachmentForObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get audit log events
@@ -500,6 +516,7 @@ export def "workspaces-audit-log-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: string # Filter to events created after this time (inclusive). (format: date-time)
   --end-at: string # Filter to events created before this time (exclusive). (format: date-time)
   --event-type: string # Filter to events of this type. Refer to the [supported audit log events](/docs/audit-log-events#supported-audit-log-events) for a full list of values.
@@ -515,7 +532,7 @@ export def "workspaces-audit-log-events get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/audit_log_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit parallel requests
@@ -531,6 +548,7 @@ export def "batch createBatchRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [body, headers, status_code])
   --data: record # A request object for use in a batch request. — shape: {actions?: list}
@@ -544,7 +562,7 @@ export def "batch createBatchRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all budgets
@@ -559,6 +577,7 @@ export def "budgets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --parent: string # Globally unique identifier for the budget's parent object. This currently can only be a `project`. (e.g. 1331)
 ]: nothing -> record<data: table<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record>> {
@@ -568,7 +587,7 @@ export def "budgets list" [
   let full_url = (build-url $base "/budgets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a budget
@@ -583,6 +602,7 @@ export def "budgets createBudget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
@@ -595,7 +615,7 @@ export def "budgets createBudget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a budget
@@ -611,6 +631,7 @@ export def "budgets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual, actual.billable_status_filter, actual.units, actual.value, budget_type, estimate, estimate.billable_status_filter, estimate.enabled, estimate.source, estimate.units, estimate.value, parent, parent.name, total, total.enabled, total.units, total.value])
 ]: nothing -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
@@ -620,7 +641,7 @@ export def "budgets get" [
   let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a budget
@@ -636,6 +657,7 @@ export def "budgets updateBudget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual, actual.billable_status_filter, actual.units, actual.value, budget_type, estimate, estimate.billable_status_filter, estimate.enabled, estimate.source, estimate.units, estimate.value, parent, parent.name, total, total.enabled, total.units, total.value])
   --data: any
@@ -649,7 +671,7 @@ export def "budgets updateBudget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a budget
@@ -665,6 +687,7 @@ export def "budgets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -673,7 +696,7 @@ export def "budgets delete" [
   let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project's custom fields
@@ -689,6 +712,7 @@ export def "projects-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -700,7 +724,7 @@ export def "projects-custom-field-settings get" [
   let full_url = (build-url $base $"/projects/($project_gid)/custom_field_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a portfolio's custom fields
@@ -716,6 +740,7 @@ export def "portfolios-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -727,7 +752,7 @@ export def "portfolios-custom-field-settings get" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)/custom_field_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a goal's custom fields
@@ -743,6 +768,7 @@ export def "goals-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -754,7 +780,7 @@ export def "goals-custom-field-settings get" [
   let full_url = (build-url $base $"/goals/($goal_gid)/custom_field_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team's custom fields
@@ -770,6 +796,7 @@ export def "teams-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_field, custom_field.asana_created_field, custom_field.created_by, custom_field.created_by.name, custom_field.currency_code, custom_field.custom_label, custom_field.custom_label_position, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.default_access_level, custom_field.description, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.format, custom_field.has_notifications_enabled, custom_field.html_text_value, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.is_global_to_workspace, custom_field.is_value_read_only, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.people_value, custom_field.people_value.name, custom_field.precision, custom_field.privacy_setting, custom_field.reference_value, custom_field.reference_value.name, custom_field.representation_type, custom_field.resource_subtype, custom_field.text_value, custom_field.type, is_important, parent, parent.name, project, project.name])
 ]: nothing -> record<data: table<gid: string, resource_type: string, project: record, is_important: bool, parent: record, custom_field: record>> {
@@ -779,7 +806,7 @@ export def "teams-custom-field-settings get" [
   let full_url = (build-url $base $"/teams/($team_gid)/custom_field_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a custom field
@@ -794,6 +821,7 @@ export def "custom-fields createCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [asana_created_field, created_by, created_by.name, currency_code, custom_label, custom_label_position, date_value, date_value.date, date_value.date_time, default_access_level, description, display_value, enabled, enum_options, enum_options.color, enum_options.enabled, enum_options.name, enum_value, enum_value.color, enum_value.enabled, enum_value.name, format, has_notifications_enabled, html_text_value, id_prefix, input_restrictions, is_formula_field, is_global_to_workspace, is_value_read_only, multi_enum_values, multi_enum_values.color, multi_enum_values.enabled, multi_enum_values.name, name, number_value, people_value, people_value.name, precision, privacy_setting, reference_value, reference_value.name, representation_type, resource_subtype, text_value, type])
   --data: any
@@ -807,7 +835,7 @@ export def "custom-fields createCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a custom field
@@ -823,6 +851,7 @@ export def "custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [asana_created_field, created_by, created_by.name, currency_code, custom_label, custom_label_position, date_value, date_value.date, date_value.date_time, default_access_level, description, display_value, enabled, enum_options, enum_options.color, enum_options.enabled, enum_options.name, enum_value, enum_value.color, enum_value.enabled, enum_value.name, format, has_notifications_enabled, html_text_value, id_prefix, input_restrictions, is_formula_field, is_global_to_workspace, is_value_read_only, multi_enum_values, multi_enum_values.color, multi_enum_values.enabled, multi_enum_values.name, name, number_value, people_value, people_value.name, precision, privacy_setting, reference_value, reference_value.name, representation_type, resource_subtype, text_value, type])
 ]: nothing -> record<data: record<representation_type: string, id_prefix: string, input_restrictions: list<string>, is_formula_field: bool, is_value_read_only: bool, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>, reference_value: list<record>, html_text_value: string, privacy_setting: string, default_access_level: string, resource_subtype: string>> {
@@ -832,7 +861,7 @@ export def "custom-fields get" [
   let full_url = (build-url $base $"/custom_fields/($custom_field_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a custom field
@@ -848,6 +877,7 @@ export def "custom-fields updateCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [asana_created_field, created_by, created_by.name, currency_code, custom_label, custom_label_position, date_value, date_value.date, date_value.date_time, default_access_level, description, display_value, enabled, enum_options, enum_options.color, enum_options.enabled, enum_options.name, enum_value, enum_value.color, enum_value.enabled, enum_value.name, format, has_notifications_enabled, html_text_value, id_prefix, input_restrictions, is_formula_field, is_global_to_workspace, is_value_read_only, multi_enum_values, multi_enum_values.color, multi_enum_values.enabled, multi_enum_values.name, name, number_value, people_value, people_value.name, precision, privacy_setting, reference_value, reference_value.name, representation_type, resource_subtype, text_value, type])
   --data: any
@@ -861,7 +891,7 @@ export def "custom-fields updateCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom field
@@ -877,6 +907,7 @@ export def "custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -885,7 +916,7 @@ export def "custom-fields delete" [
   let full_url = (build-url $base $"/custom_fields/($custom_field_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a workspace's custom fields
@@ -901,6 +932,7 @@ export def "workspaces-custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -912,7 +944,7 @@ export def "workspaces-custom-fields get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/custom_fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an enum option
@@ -928,6 +960,7 @@ export def "custom-fields-enum-options createEnumOptionForCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, enabled, name])
   --data: any
@@ -941,7 +974,7 @@ export def "custom-fields-enum-options createEnumOptionForCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reorder a custom field's enum
@@ -958,6 +991,7 @@ export def "custom-fields-enum-options-insert insertEnumOptionForCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, enabled, name])
   --data: record # shape: {enum_option: string, before_enum_option?: string, after_enum_option?: string}
@@ -971,7 +1005,7 @@ export def "custom-fields-enum-options-insert insertEnumOptionForCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an enum option
@@ -988,6 +1022,7 @@ export def "enum-options updateEnumOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, enabled, name])
   --data: record # Enum options are the possible values which an enum custom field can adopt. An enum custom field must contain at least 1 enum option but no more than 500.  You can add enum options to a custom field by using the `POST /custom_fields/custom_field_gid/enum_options` endpoint.  **It is not possible to remove or delete an enum option**. Instead, enum options can be disabled by updating the `enabled` field to false with the `PUT /enum_options/enum_option_gid` endpoint. Other attributes can be updated similarly.  On creation of an enum option, `enabled` is always set to `true`, meaning the enum option is a selectable value for the custom field. Setting `enabled=false` is equivalent to “trashing” the enum option in the Asana web app within the “Edit Fields” dialog. The enum option will no longer be selectable but, if the enum option value was previously set within a task, the task will retain the value.  Enum options are an ordered list and by default new enum options are inserted at the end. Ordering in relation to existing enum options can be specified on creation by using `insert_before` or `insert_after` to reference an existing enum option. Only one of `insert_before` and `insert_after` can be provided when creating a new enum option.  An enum options list can be reordered with the `POST /custom_fields/custom_field_gid/enum_options/insert` endpoint. — shape: {name?: string, enabled?: bool, color?: string}
@@ -1001,7 +1036,7 @@ export def "enum-options updateEnumOption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all custom types associated with an object
@@ -1016,6 +1051,7 @@ export def "custom-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project: string # Globally unique identifier for the project, which is used as a filter when retrieving all custom types. (e.g. 1331)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -1028,7 +1064,7 @@ export def "custom-types list" [
   let full_url = (build-url $base "/custom_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a custom type
@@ -1044,6 +1080,7 @@ export def "custom-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [name, status_options, status_options.color, status_options.completion_state, status_options.enabled, status_options.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, status_options: list<record>>> {
@@ -1053,7 +1090,7 @@ export def "custom-types get" [
   let full_url = (build-url $base $"/custom_types/($custom_type_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events on a resource
@@ -1068,6 +1105,7 @@ export def "events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource: string # A resource ID to subscribe to. The resource can be a task, project, or goal. (e.g. 12345)
   --sync: string # A sync token received from the last request, or none on first sync. Events will be returned from the point in time that the sync token was generated. *Note: On your first request, omit the sync token. The response will be the same as for an expired sync token, and will include a new valid sync token.If the sync token is too old (which may happen from time to time) the API will return a `412 Precondition Failed` error, and include a fresh sync token in the response.* (e.g. de4774f6915eae04714ca93bb2f5ee81)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
@@ -1079,7 +1117,7 @@ export def "events get" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate a graph export
@@ -1095,6 +1133,7 @@ export def "exports-graph createGraphExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A *graph_export* request starts a job to export data starting from a parent object. — shape: {parent?: string}
 ]: any -> record<data: record<gid: string, resource_type: string, resource_subtype: string, status: string, new_graph_export: record<gid: string, resource_type: string, created_at: string, download_url: string, completed_at: string>>> {
   let input = $in
@@ -1105,7 +1144,7 @@ export def "exports-graph createGraphExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initiate a resource export
@@ -1121,6 +1160,7 @@ export def "exports-resource createResourceExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A *resource_export* request starts a job to bulk export objects for one or more resources. — shape: {workspace?: string, export_request_parameters?: list}
 ]: any -> record<data: record<gid: string, resource_type: string, resource_subtype: string, status: string, new_resource_export: record<gid: string, resource_type: string, created_at: string, download_url: string, completed_at: string>>> {
   let input = $in
@@ -1131,7 +1171,7 @@ export def "exports-resource createResourceExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a goal relationship
@@ -1147,6 +1187,7 @@ export def "goal-relationships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [contribution_weight, resource_subtype, supported_goal, supported_goal.name, supported_goal.owner, supported_goal.owner.name, supporting_resource, supporting_resource.name])
 ]: nothing -> record<data: record> {
@@ -1156,7 +1197,7 @@ export def "goal-relationships get" [
   let full_url = (build-url $base $"/goal_relationships/($goal_relationship_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a goal relationship
@@ -1172,6 +1213,7 @@ export def "goal-relationships updateGoalRelationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [contribution_weight, resource_subtype, supported_goal, supported_goal.name, supported_goal.owner, supported_goal.owner.name, supporting_resource, supporting_resource.name])
   --data: any
@@ -1185,7 +1227,7 @@ export def "goal-relationships updateGoalRelationship" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get goal relationships
@@ -1200,6 +1242,7 @@ export def "goal-relationships list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -1213,7 +1256,7 @@ export def "goal-relationships list" [
   let full_url = (build-url $base "/goal_relationships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a supporting goal relationship
@@ -1230,6 +1273,7 @@ export def "goals-add-supporting-relationship addSupportingRelationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [contribution_weight, resource_subtype, supported_goal, supported_goal.name, supported_goal.owner, supported_goal.owner.name, supporting_resource, supporting_resource.name])
   --data: record # shape: {supporting_resource: string, insert_before?: string, insert_after?: string, contribution_weight?: float}
@@ -1243,7 +1287,7 @@ export def "goals-add-supporting-relationship addSupportingRelationship" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a supporting goal relationship
@@ -1260,6 +1304,7 @@ export def "goals-remove-supporting-relationship removeSupportingRelationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {supporting_resource: string}
 ]: any -> record<data: record> {
@@ -1272,7 +1317,7 @@ export def "goals-remove-supporting-relationship removeSupportingRelationship" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a goal
@@ -1288,6 +1333,7 @@ export def "goals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, html_notes: string, notes: string, due_on: string, start_on: string, is_workspace_level: bool, liked: bool, likes: list<record>, num_likes: int, team: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, followers: list<record>, time_period: record<gid: string, resource_type: string, end_on: string, start_on: string, period: string, display_name: string>, metric: record<gid: string, resource_type: string, resource_subtype: string, precision: int, unit: string, currency_code: string, initial_number_value: float, target_number_value: float, current_number_value: float, current_display_value: string, progress_source: string, is_custom_weight: bool, can_manage: bool>, owner: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, title: string, resource_subtype: string>, status: string, privacy_setting: string, default_access_level: string, custom_fields: list<record>, custom_field_settings: list<record>>> {
@@ -1297,7 +1343,7 @@ export def "goals get" [
   let full_url = (build-url $base $"/goals/($goal_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a goal
@@ -1313,6 +1359,7 @@ export def "goals updateGoal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: any
@@ -1326,7 +1373,7 @@ export def "goals updateGoal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a goal
@@ -1342,6 +1389,7 @@ export def "goals delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1350,7 +1398,7 @@ export def "goals delete" [
   let full_url = (build-url $base $"/goals/($goal_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get goals
@@ -1365,6 +1413,7 @@ export def "goals list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --portfolio: string # Globally unique identifier for supporting portfolio. (e.g. 159874)
   --project: string # Globally unique identifier for supporting project. (e.g. 512241)
   --task: string # Globally unique identifier for supporting task. (e.g. 78424)
@@ -1382,7 +1431,7 @@ export def "goals list" [
   let full_url = (build-url $base "/goals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a goal
@@ -1397,6 +1446,7 @@ export def "goals createGoal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: any
@@ -1410,7 +1460,7 @@ export def "goals createGoal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a goal metric
@@ -1427,6 +1477,7 @@ export def "goals-set-metric createGoalMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {precision?: int, unit?: "none"|"currency"|"percentage", currency_code?: string, initial_number_value?: float, target_number_value?: float, current_number_value?: float, progress_source?: "manual"|"subgoal_progress"|"project_task_completion"|"project_milestone_completion"|"task_completion"|"external", is_custom_weight?: bool}
@@ -1440,7 +1491,7 @@ export def "goals-set-metric createGoalMetric" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a goal metric
@@ -1457,6 +1508,7 @@ export def "goals-set-metric-current-value updateGoalMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {current_number_value?: float}
@@ -1470,7 +1522,7 @@ export def "goals-set-metric-current-value updateGoalMetric" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a collaborator to a goal
@@ -1487,6 +1539,7 @@ export def "goals-add-followers addFollowers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: record # shape: {followers: list}
@@ -1500,7 +1553,7 @@ export def "goals-add-followers addFollowers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a collaborator from a goal
@@ -1517,6 +1570,7 @@ export def "goals-remove-followers removeFollowers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
   --data: record # shape: {followers: list}
@@ -1530,7 +1584,7 @@ export def "goals-remove-followers removeFollowers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get parent goals from a goal
@@ -1546,6 +1600,7 @@ export def "goals-parent-goals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, followers, followers.name, html_notes, is_workspace_level, liked, likes, likes.user, likes.user.name, metric, metric.can_manage, metric.currency_code, metric.current_display_value, metric.current_number_value, metric.initial_number_value, metric.is_custom_weight, metric.precision, metric.progress_source, metric.resource_subtype, metric.target_number_value, metric.unit, name, notes, num_likes, owner, owner.name, privacy_setting, start_on, status, team, team.name, time_period, time_period.display_name, time_period.end_on, time_period.period, time_period.start_on, workspace, workspace.name])
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, owner: record>> {
@@ -1555,7 +1610,7 @@ export def "goals-parent-goals get" [
   let full_url = (build-url $base $"/goals/($goal_gid)/parentGoals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a custom field to a goal
@@ -1572,6 +1627,7 @@ export def "goals-add-custom-field-setting addCustomFieldSettingForGoal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: any, is_important?: bool, insert_before?: string, insert_after?: string}
 ]: any -> record<data: record<gid: string, resource_type: string, project: record<gid: string, resource_type: string, name: string>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, custom_field: record>> {
@@ -1584,7 +1640,7 @@ export def "goals-add-custom-field-setting addCustomFieldSettingForGoal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a custom field from a goal
@@ -1601,6 +1657,7 @@ export def "goals-remove-custom-field-setting removeCustomFieldSettingForGoal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string}
 ]: any -> record<data: record> {
@@ -1613,7 +1670,7 @@ export def "goals-remove-custom-field-setting removeCustomFieldSettingForGoal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a job by id
@@ -1629,6 +1686,7 @@ export def "jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
 ]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, status: string, new_portfolio: record<gid: string, resource_type: string, name: string>, new_project: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, new_project_template: record<gid: string, resource_type: string, name: string>, new_graph_export: record<gid: string, resource_type: string, created_at: string, download_url: string, completed_at: string>, new_resource_export: record<gid: string, resource_type: string, created_at: string, download_url: string, completed_at: string>>> {
@@ -1638,7 +1696,7 @@ export def "jobs get" [
   let full_url = (build-url $base $"/jobs/($job_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple memberships
@@ -1653,6 +1711,7 @@ export def "memberships list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent: string # Globally unique identifier for `goal`, `project`, `portfolio`, `custom_type`, or `custom_field`. This parameter is optional when `resource_subtype` is provided along with `member` of type `team`. (e.g. 159874)
   --member: string # Globally unique identifier for `team` or `user`. When used with `resource_subtype` and without `parent`, `member` must be of type `team`. For user-type memberships `parent` parameter is required to disambiguate the workspace from which memberships should be retrieved. (e.g. 1061493)
   --resource-subtype: string@resource-subtype-completer-1 # The type of membership to return. Required when `parent` is absent. Currently supported value is `project_membership` (when `member` is a team GID, returns all project memberships for that team). (e.g. project_membership)
@@ -1666,7 +1725,7 @@ export def "memberships list" [
   let full_url = (build-url $base "/memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a membership
@@ -1681,6 +1740,7 @@ export def "memberships createMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: any
 ]: any -> record<data: any> {
@@ -1693,7 +1753,7 @@ export def "memberships createMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a membership
@@ -1709,6 +1769,7 @@ export def "memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1717,7 +1778,7 @@ export def "memberships get" [
   let full_url = (build-url $base $"/memberships/($membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a membership
@@ -1734,6 +1795,7 @@ export def "memberships updateMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {access_level?: string}
 ]: any -> record<data: any> {
@@ -1746,7 +1808,7 @@ export def "memberships updateMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a membership
@@ -1762,6 +1824,7 @@ export def "memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1770,7 +1833,7 @@ export def "memberships delete" [
   let full_url = (build-url $base $"/memberships/($membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an OOO entry
@@ -1786,6 +1849,7 @@ export def "ooo-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, end_date, start_date, user, user.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, user: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>>> {
@@ -1795,7 +1859,7 @@ export def "ooo-entries get" [
   let full_url = (build-url $base $"/ooo_entries/($ooo_entry_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an OOO entry
@@ -1812,6 +1876,7 @@ export def "ooo-entries updateOooEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, end_date, start_date, user, user.name])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {start_date?: string, end_date?: string}
@@ -1825,7 +1890,7 @@ export def "ooo-entries updateOooEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an OOO entry
@@ -1841,6 +1906,7 @@ export def "ooo-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1849,7 +1915,7 @@ export def "ooo-entries delete" [
   let full_url = (build-url $base $"/ooo_entries/($ooo_entry_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OOO entries for a user
@@ -1864,6 +1930,7 @@ export def "ooo-entries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # Globally unique identifier for the user to filter OOO entries by. (e.g. 12345)
   --workspace: string # Globally unique identifier for the workspace. (e.g. 98765)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -1878,7 +1945,7 @@ export def "ooo-entries list" [
   let full_url = (build-url $base "/ooo_entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an OOO entry
@@ -1893,6 +1960,7 @@ export def "ooo-entries createOooEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, end_date, start_date, user, user.name])
   --data: any
@@ -1906,7 +1974,7 @@ export def "ooo-entries createOooEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an organization export request
@@ -1922,6 +1990,7 @@ export def "organization-exports createOrganizationExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, download_url, organization, organization.name, state])
   --data: record # An *organization_export* request starts a job to export the complete data of the given Organization. — shape: {organization?: string}
@@ -1935,7 +2004,7 @@ export def "organization-exports createOrganizationExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details on an org export request
@@ -1951,6 +2020,7 @@ export def "organization-exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, download_url, organization, organization.name, state])
 ]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, state: string, organization: record<gid: string, resource_type: string, name: string>>> {
@@ -1960,7 +2030,7 @@ export def "organization-exports get" [
   let full_url = (build-url $base $"/organization_exports/($organization_export_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple portfolio memberships
@@ -1975,6 +2045,7 @@ export def "portfolio-memberships list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --portfolio: string # The portfolio to filter results on. (e.g. 12345)
   --workspace: string # The workspace to filter results on. (e.g. 12345)
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. (e.g. me)
@@ -1989,7 +2060,7 @@ export def "portfolio-memberships list" [
   let full_url = (build-url $base "/portfolio_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a portfolio membership
@@ -2005,6 +2076,7 @@ export def "portfolio-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [access_level, portfolio, portfolio.name, user, user.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, portfolio: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>, access_level: string>> {
@@ -2014,7 +2086,7 @@ export def "portfolio-memberships get" [
   let full_url = (build-url $base $"/portfolio_memberships/($portfolio_membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get memberships from a portfolio
@@ -2030,6 +2102,7 @@ export def "portfolios-portfolio-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. (e.g. me)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -2042,7 +2115,7 @@ export def "portfolios-portfolio-memberships get" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)/portfolio_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple portfolios
@@ -2057,6 +2130,7 @@ export def "portfolios list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace or organization to filter portfolios on. (e.g. 1331)
@@ -2069,7 +2143,7 @@ export def "portfolios list" [
   let full_url = (build-url $base "/portfolios" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a portfolio
@@ -2084,6 +2158,7 @@ export def "portfolios createPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, created_at, created_by, created_by.name, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, members, members.name, name, owner, owner.name, permalink_url, privacy_setting, project_templates, project_templates.name, public, start_on, workspace, workspace.name])
   --data: any
@@ -2097,7 +2172,7 @@ export def "portfolios createPortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a portfolio
@@ -2113,6 +2188,7 @@ export def "portfolios get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, created_at, created_by, created_by.name, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, members, members.name, name, owner, owner.name, permalink_url, privacy_setting, project_templates, project_templates.name, public, start_on, workspace, workspace.name])
 ]: nothing -> record<data: record<created_at: string, created_by: record<gid: string, resource_type: string, name: string>, custom_field_settings: list<record>, current_status_update: record<gid: string, resource_type: string, title: string, resource_subtype: string>, custom_fields: list<record>, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, privacy_setting: string, project_templates: list<record>>> {
@@ -2122,7 +2198,7 @@ export def "portfolios get" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a portfolio
@@ -2138,6 +2214,7 @@ export def "portfolios updatePortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, created_at, created_by, created_by.name, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, members, members.name, name, owner, owner.name, permalink_url, privacy_setting, project_templates, project_templates.name, public, start_on, workspace, workspace.name])
   --data: any
@@ -2151,7 +2228,7 @@ export def "portfolios updatePortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a portfolio
@@ -2167,6 +2244,7 @@ export def "portfolios delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2175,7 +2253,7 @@ export def "portfolios delete" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get portfolio items
@@ -2191,6 +2269,7 @@ export def "portfolios-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -2202,7 +2281,7 @@ export def "portfolios-items get" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a portfolio item
@@ -2219,6 +2298,7 @@ export def "portfolios-add-item addItemForPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {item: string, insert_before?: string, insert_after?: string}
 ]: any -> record<data: record> {
@@ -2231,7 +2311,7 @@ export def "portfolios-add-item addItemForPortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a portfolio item
@@ -2248,6 +2328,7 @@ export def "portfolios-remove-item removeItemForPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {item: string}
 ]: any -> record<data: record> {
@@ -2260,7 +2341,7 @@ export def "portfolios-remove-item removeItemForPortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a custom field to a portfolio
@@ -2277,6 +2358,7 @@ export def "portfolios-add-custom-field-setting addCustomFieldSettingForPortfoli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: any, is_important?: bool, insert_before?: string, insert_after?: string}
 ]: any -> record<data: record<gid: string, resource_type: string, project: record<gid: string, resource_type: string, name: string>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, custom_field: record>> {
@@ -2289,7 +2371,7 @@ export def "portfolios-add-custom-field-setting addCustomFieldSettingForPortfoli
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a custom field from a portfolio
@@ -2306,6 +2388,7 @@ export def "portfolios-remove-custom-field-setting removeCustomFieldSettingForPo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string}
 ]: any -> record<data: record> {
@@ -2318,7 +2401,7 @@ export def "portfolios-remove-custom-field-setting removeCustomFieldSettingForPo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add users to a portfolio
@@ -2335,6 +2418,7 @@ export def "portfolios-add-members addMembersForPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, created_at, created_by, created_by.name, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, members, members.name, name, owner, owner.name, permalink_url, privacy_setting, project_templates, project_templates.name, public, start_on, workspace, workspace.name])
   --data: record # shape: {members: string}
@@ -2348,7 +2432,7 @@ export def "portfolios-add-members addMembersForPortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove users from a portfolio
@@ -2365,6 +2449,7 @@ export def "portfolios-remove-members removeMembersForPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, created_at, created_by, created_by.name, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, due_on, members, members.name, name, owner, owner.name, permalink_url, privacy_setting, project_templates, project_templates.name, public, start_on, workspace, workspace.name])
   --data: record # shape: {members: string}
@@ -2378,7 +2463,7 @@ export def "portfolios-remove-members removeMembersForPortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Duplicate a portfolio
@@ -2395,6 +2480,7 @@ export def "portfolios-duplicate duplicatePortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name: string, include?: string}
@@ -2408,7 +2494,7 @@ export def "portfolios-duplicate duplicatePortfolio" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a project brief
@@ -2424,6 +2510,7 @@ export def "project-briefs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [html_text, permalink_url, project, project.name, text, title])
 ]: nothing -> record<data: record<text: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>>> {
@@ -2433,7 +2520,7 @@ export def "project-briefs get" [
   let full_url = (build-url $base $"/project_briefs/($project_brief_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project brief
@@ -2449,6 +2536,7 @@ export def "project-briefs updateProjectBrief" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [html_text, permalink_url, project, project.name, text, title])
   --data: any
@@ -2462,7 +2550,7 @@ export def "project-briefs updateProjectBrief" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a project brief
@@ -2478,6 +2566,7 @@ export def "project-briefs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2486,7 +2575,7 @@ export def "project-briefs delete" [
   let full_url = (build-url $base $"/project_briefs/($project_brief_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project brief
@@ -2502,6 +2591,7 @@ export def "projects-project-briefs createProjectBrief" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [html_text, permalink_url, project, project.name, text, title])
   --data: any
@@ -2515,7 +2605,7 @@ export def "projects-project-briefs createProjectBrief" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a project membership
@@ -2531,6 +2621,7 @@ export def "project-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [access_level, member, member.name, parent, parent.name, project, project.name, user, user.name, write_access])
 ]: nothing -> record<data: record<gid: string, resource_type: string, parent: record<gid: string, resource_type: string, name: string>, member: record<gid: string, resource_type: string, name: string>, access_level: string, user: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>, write_access: string>> {
@@ -2540,7 +2631,7 @@ export def "project-memberships get" [
   let full_url = (build-url $base $"/project_memberships/($project_membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get memberships from a project
@@ -2556,6 +2647,7 @@ export def "projects-project-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. (e.g. me)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -2568,7 +2660,7 @@ export def "projects-project-memberships get" [
   let full_url = (build-url $base $"/projects/($project_gid)/project_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project portfolio setting
@@ -2584,6 +2676,7 @@ export def "project-portfolio-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, is_access_control_inherited, portfolio, project])
 ]: nothing -> record<data: record<gid: string, resource_type: string, project: record<gid: string, resource_type: string, name: string>, portfolio: record<gid: string, resource_type: string, name: string>, is_access_control_inherited: bool, created_at: string>> {
@@ -2593,7 +2686,7 @@ export def "project-portfolio-settings get" [
   let full_url = (build-url $base $"/project_portfolio_settings/($project_portfolio_setting_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project portfolio setting
@@ -2610,6 +2703,7 @@ export def "project-portfolio-settings updateProjectPortfolioSetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, is_access_control_inherited, portfolio, project])
   --data: record # shape: {is_access_control_inherited?: bool}
@@ -2623,7 +2717,7 @@ export def "project-portfolio-settings updateProjectPortfolioSetting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project portfolio settings for a project
@@ -2639,6 +2733,7 @@ export def "projects-project-portfolio-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -2650,7 +2745,7 @@ export def "projects-project-portfolio-settings get" [
   let full_url = (build-url $base $"/projects/($project_gid)/project_portfolio_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project portfolio settings for a portfolio
@@ -2666,6 +2761,7 @@ export def "portfolios-project-portfolio-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -2677,7 +2773,7 @@ export def "portfolios-project-portfolio-settings get" [
   let full_url = (build-url $base $"/portfolios/($portfolio_gid)/project_portfolio_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project status
@@ -2693,6 +2789,7 @@ export def "project-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [author, author.name, color, created_at, created_by, created_by.name, html_text, modified_at, text, title])
 ]: nothing -> record<data: record<author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>> {
@@ -2702,7 +2799,7 @@ export def "project-statuses get" [
   let full_url = (build-url $base $"/project_statuses/($project_status_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a project status
@@ -2718,6 +2815,7 @@ export def "project-statuses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2726,7 +2824,7 @@ export def "project-statuses delete" [
   let full_url = (build-url $base $"/project_statuses/($project_status_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get statuses from a project
@@ -2742,6 +2840,7 @@ export def "projects-project-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -2753,7 +2852,7 @@ export def "projects-project-statuses get" [
   let full_url = (build-url $base $"/projects/($project_gid)/project_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project status
@@ -2769,6 +2868,7 @@ export def "projects-project-statuses createProjectStatusForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [author, author.name, color, created_at, created_by, created_by.name, html_text, modified_at, text, title])
   --data: any
@@ -2782,7 +2882,7 @@ export def "projects-project-statuses createProjectStatusForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a project template
@@ -2798,6 +2898,7 @@ export def "project-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, description, html_description, name, owner, public, requested_dates, requested_dates.description, requested_dates.name, requested_roles, requested_roles.name, team, team.name])
 ]: nothing -> record<data: record> {
@@ -2807,7 +2908,7 @@ export def "project-templates get" [
   let full_url = (build-url $base $"/project_templates/($project_template_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a project template
@@ -2823,6 +2924,7 @@ export def "project-templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2831,7 +2933,7 @@ export def "project-templates delete" [
   let full_url = (build-url $base $"/project_templates/($project_template_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple project templates
@@ -2846,6 +2948,7 @@ export def "project-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workspace: string # The workspace to filter results on. (e.g. 12345)
   --team: string # The team to filter projects on. (e.g. 14916)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -2858,7 +2961,7 @@ export def "project-templates list" [
   let full_url = (build-url $base "/project_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team's project templates
@@ -2874,6 +2977,7 @@ export def "teams-project-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, description, html_description, name, offset, owner, path, public, requested_dates, requested_dates.description, requested_dates.name, requested_roles, requested_roles.name, team, team.name, uri])
@@ -2884,7 +2988,7 @@ export def "teams-project-templates get" [
   let full_url = (build-url $base $"/teams/($team_gid)/project_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Instantiate a project from a project template
@@ -2901,6 +3005,7 @@ export def "project-templates-instantiate-project instantiateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name: string, team?: string, public?: bool, privacy_setting?: "public_to_workspace"|"private_to_team"|"private", is_strict?: bool, requested_dates?: list, requested_roles?: list}
@@ -2914,7 +3019,7 @@ export def "project-templates-instantiate-project instantiateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple projects
@@ -2930,6 +3035,7 @@ export def "projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace or organization to filter projects on. (e.g. 1331)
@@ -2943,7 +3049,7 @@ export def "projects list" [
   let full_url = (build-url $base "/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project
@@ -2958,6 +3064,7 @@ export def "projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: any
@@ -2971,7 +3078,7 @@ export def "projects createProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a project
@@ -2987,6 +3094,7 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
 ]: nothing -> record<data: record<custom_fields: list<record>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, followers: list<record>, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, created_from_template: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
@@ -2996,7 +3104,7 @@ export def "projects get" [
   let full_url = (build-url $base $"/projects/($project_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project
@@ -3012,6 +3120,7 @@ export def "projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: any
@@ -3025,7 +3134,7 @@ export def "projects updateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a project
@@ -3041,6 +3150,7 @@ export def "projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3049,7 +3159,7 @@ export def "projects delete" [
   let full_url = (build-url $base $"/projects/($project_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Duplicate a project
@@ -3066,6 +3176,7 @@ export def "projects-duplicate duplicateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name: string, include?: string, schedule_dates?: record}
@@ -3079,7 +3190,7 @@ export def "projects-duplicate duplicateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get projects a task is in
@@ -3095,6 +3206,7 @@ export def "tasks-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -3106,7 +3218,7 @@ export def "tasks-projects get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team's projects
@@ -3122,6 +3234,7 @@ export def "teams-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --archived: oneof<nothing, bool> # Only return projects whose `archived` field takes on the value of this parameter. (e.g. false)
@@ -3133,7 +3246,7 @@ export def "teams-projects get" [
   let full_url = (build-url $base $"/teams/($team_gid)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project in a team
@@ -3149,6 +3262,7 @@ export def "teams-projects createProjectForTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: any
@@ -3162,7 +3276,7 @@ export def "teams-projects createProjectForTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all projects in a workspace
@@ -3178,6 +3292,7 @@ export def "workspaces-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --archived: oneof<nothing, bool> # Only return projects whose `archived` field takes on the value of this parameter. (e.g. false)
@@ -3189,7 +3304,7 @@ export def "workspaces-projects get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project in a workspace
@@ -3205,6 +3320,7 @@ export def "workspaces-projects createProjectForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: any
@@ -3218,7 +3334,7 @@ export def "workspaces-projects createProjectForWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search projects in a workspace
@@ -3234,6 +3350,7 @@ export def "workspaces-projects-search searchProjectsForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --text: string # Performs full-text search on the project name. (e.g. Bugs)
   --sort-by: string@sort-by-completer # One of `due_date`, `created_at`, `completed_at`, `relevance`, or `modified_at`, defaults to `modified_at`. (default: modified_at, e.g. modified_at)
@@ -3270,7 +3387,7 @@ export def "workspaces-projects-search searchProjectsForWorkspace" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/projects/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a custom field to a project
@@ -3287,6 +3404,7 @@ export def "projects-add-custom-field-setting addCustomFieldSettingForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_field, custom_field.asana_created_field, custom_field.created_by, custom_field.created_by.name, custom_field.currency_code, custom_field.custom_label, custom_field.custom_label_position, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.default_access_level, custom_field.description, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.format, custom_field.has_notifications_enabled, custom_field.html_text_value, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.is_global_to_workspace, custom_field.is_value_read_only, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.people_value, custom_field.people_value.name, custom_field.precision, custom_field.privacy_setting, custom_field.reference_value, custom_field.reference_value.name, custom_field.representation_type, custom_field.resource_subtype, custom_field.text_value, custom_field.type, is_important, parent, parent.name, project, project.name])
   --data: record # shape: {custom_field: any, is_important?: bool, insert_before?: string, insert_after?: string}
@@ -3300,7 +3418,7 @@ export def "projects-add-custom-field-setting addCustomFieldSettingForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a custom field from a project
@@ -3317,6 +3435,7 @@ export def "projects-remove-custom-field-setting removeCustomFieldSettingForProj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string}
 ]: any -> record<data: record> {
@@ -3329,7 +3448,7 @@ export def "projects-remove-custom-field-setting removeCustomFieldSettingForProj
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get task count of a project
@@ -3345,6 +3464,7 @@ export def "projects-task-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [num_completed_milestones, num_completed_tasks, num_incomplete_milestones, num_incomplete_tasks, num_milestones, num_tasks])
 ]: nothing -> record<data: record<num_tasks: int, num_incomplete_tasks: int, num_completed_tasks: int, num_milestones: int, num_incomplete_milestones: int, num_completed_milestones: int>> {
@@ -3354,7 +3474,7 @@ export def "projects-task-counts get" [
   let full_url = (build-url $base $"/projects/($project_gid)/task_counts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add users to a project
@@ -3371,6 +3491,7 @@ export def "projects-add-members addMembersForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: record # shape: {members: string}
@@ -3384,7 +3505,7 @@ export def "projects-add-members addMembersForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove users from a project
@@ -3401,6 +3522,7 @@ export def "projects-remove-members removeMembersForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: record # shape: {members: string}
@@ -3414,7 +3536,7 @@ export def "projects-remove-members removeMembersForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add followers to a project
@@ -3431,6 +3553,7 @@ export def "projects-add-followers addFollowersForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: record # shape: {followers: string}
@@ -3444,7 +3567,7 @@ export def "projects-add-followers addFollowersForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove followers from a project
@@ -3461,6 +3584,7 @@ export def "projects-remove-followers removeFollowersForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [archived, color, completed, completed_at, completed_by, completed_by.name, created_at, created_from_template, created_from_template.name, current_status, current_status.author, current_status.author.name, current_status.color, current_status.created_at, current_status.created_by, current_status.created_by.name, current_status.html_text, current_status.modified_at, current_status.text, current_status.title, current_status_update, current_status_update.resource_subtype, current_status_update.title, custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, default_access_level, default_view, due_date, due_on, followers, followers.name, html_notes, icon, members, members.name, minimum_access_level_for_customization, minimum_access_level_for_sharing, modified_at, name, notes, owner, permalink_url, privacy_setting, project_brief, public, start_on, team, team.name, workspace, workspace.name])
   --data: record # shape: {followers: string}
@@ -3474,7 +3598,7 @@ export def "projects-remove-followers removeFollowersForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a project template from a project
@@ -3491,6 +3615,7 @@ export def "projects-save-as-template projectSaveAsTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name: string, team?: string, workspace?: string, public: bool}
@@ -3504,7 +3629,7 @@ export def "projects-save-as-template projectSaveAsTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple rates
@@ -3519,6 +3644,7 @@ export def "rates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent: string # Globally unique identifier for `project`. (e.g. 159874)
   --resource: string # Globally unique identifier for `user` or `placeholder`. (e.g. 1061493)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -3531,7 +3657,7 @@ export def "rates list" [
   let full_url = (build-url $base "/rates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a rate
@@ -3547,6 +3673,7 @@ export def "rates createRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, currency_code, parent, parent.name, rate, resource, resource.name])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {parent: string, resource: string, rate: float}
@@ -3560,7 +3687,7 @@ export def "rates createRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a rate
@@ -3576,6 +3703,7 @@ export def "rates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, currency_code, parent, parent.name, rate, resource, resource.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, parent: record<gid: string, resource_type: string, name: string>, resource: record<gid: string, resource_type: string, name: string>, rate: float, currency_code: string, created_by: record<gid: string, resource_type: string, name: string>>> {
@@ -3585,7 +3713,7 @@ export def "rates get" [
   let full_url = (build-url $base $"/rates/($rate_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a rate
@@ -3602,6 +3730,7 @@ export def "rates updateRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_by, created_by.name, currency_code, parent, parent.name, rate, resource, resource.name])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {rate?: float}
@@ -3615,7 +3744,7 @@ export def "rates updateRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a rate
@@ -3631,6 +3760,7 @@ export def "rates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3639,7 +3769,7 @@ export def "rates delete" [
   let full_url = (build-url $base $"/rates/($rate_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reactions with an emoji base on an object.
@@ -3654,6 +3784,7 @@ export def "reactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -3666,7 +3797,7 @@ export def "reactions get" [
   let full_url = (build-url $base "/reactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple roles
@@ -3681,6 +3812,7 @@ export def "roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace or organization to filter roles on. (e.g. 1331)
@@ -3693,7 +3825,7 @@ export def "roles list" [
   let full_url = (build-url $base "/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a role
@@ -3708,6 +3840,7 @@ export def "roles createRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [base_role_type, creation_time, description, is_standard_role, modified_at, name, permissions, permissions.allowed_guest_invites, permissions.assign_roles, permissions.create_and_edit_ai_automations, permissions.create_and_edit_ai_teammates, permissions.create_app_authorization, permissions.create_global_custom_fields, permissions.create_goal, permissions.create_pat_authorization, permissions.create_portfolio, permissions.create_project, permissions.create_read_only_link, permissions.create_team, permissions.download_mobile_attachments, permissions.export_project_data, permissions.import_data, permissions.manage_roles, permissions.proactive_ai, permissions.share_goal_with_domain, permissions.share_portfolios_with_org, permissions.share_teams_with_org, permissions.standard_ai, permissions.task_deletion_policy, permissions.upload_attachments, permissions.view_public_teams, permissions.view_shared_with_org_portfolios, permissions.view_shared_with_org_projects, permissions.view_shared_with_org_tasks, workspace, workspace.name])
   --data: any
@@ -3721,7 +3854,7 @@ export def "roles createRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a role
@@ -3737,6 +3870,7 @@ export def "roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [base_role_type, creation_time, description, is_standard_role, modified_at, name, permissions, permissions.allowed_guest_invites, permissions.assign_roles, permissions.create_and_edit_ai_automations, permissions.create_and_edit_ai_teammates, permissions.create_app_authorization, permissions.create_global_custom_fields, permissions.create_goal, permissions.create_pat_authorization, permissions.create_portfolio, permissions.create_project, permissions.create_read_only_link, permissions.create_team, permissions.download_mobile_attachments, permissions.export_project_data, permissions.import_data, permissions.manage_roles, permissions.proactive_ai, permissions.share_goal_with_domain, permissions.share_portfolios_with_org, permissions.share_teams_with_org, permissions.standard_ai, permissions.task_deletion_policy, permissions.upload_attachments, permissions.view_public_teams, permissions.view_shared_with_org_portfolios, permissions.view_shared_with_org_projects, permissions.view_shared_with_org_tasks, workspace, workspace.name])
 ]: nothing -> record<data: record<workspace: record<gid: string, resource_type: string, name: string>>> {
@@ -3746,7 +3880,7 @@ export def "roles get" [
   let full_url = (build-url $base $"/roles/($role_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role
@@ -3762,6 +3896,7 @@ export def "roles updateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [base_role_type, creation_time, description, is_standard_role, modified_at, name, permissions, permissions.allowed_guest_invites, permissions.assign_roles, permissions.create_and_edit_ai_automations, permissions.create_and_edit_ai_teammates, permissions.create_app_authorization, permissions.create_global_custom_fields, permissions.create_goal, permissions.create_pat_authorization, permissions.create_portfolio, permissions.create_project, permissions.create_read_only_link, permissions.create_team, permissions.download_mobile_attachments, permissions.export_project_data, permissions.import_data, permissions.manage_roles, permissions.proactive_ai, permissions.share_goal_with_domain, permissions.share_portfolios_with_org, permissions.share_teams_with_org, permissions.standard_ai, permissions.task_deletion_policy, permissions.upload_attachments, permissions.view_public_teams, permissions.view_shared_with_org_portfolios, permissions.view_shared_with_org_projects, permissions.view_shared_with_org_tasks, workspace, workspace.name])
   --data: any
@@ -3775,7 +3910,7 @@ export def "roles updateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a role
@@ -3791,6 +3926,7 @@ export def "roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3799,7 +3935,7 @@ export def "roles delete" [
   let full_url = (build-url $base $"/roles/($role_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a rule
@@ -3816,6 +3952,7 @@ export def "rule-triggers-run triggerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # shape: {resource: string, action_data: record}
 ]: any -> record<data: record<message: string>> {
   let input = $in
@@ -3826,7 +3963,7 @@ export def "rule-triggers-run triggerRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a section
@@ -3842,6 +3979,7 @@ export def "sections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, name, project, project.name, projects, projects.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>> {
@@ -3851,7 +3989,7 @@ export def "sections get" [
   let full_url = (build-url $base $"/sections/($section_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a section
@@ -3868,6 +4006,7 @@ export def "sections updateSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, name, project, project.name, projects, projects.name])
   --data: record # shape: {name: string, insert_before?: string, insert_after?: string}
@@ -3881,7 +4020,7 @@ export def "sections updateSection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a section
@@ -3897,6 +4036,7 @@ export def "sections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3905,7 +4045,7 @@ export def "sections delete" [
   let full_url = (build-url $base $"/sections/($section_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sections in a project
@@ -3921,6 +4061,7 @@ export def "projects-sections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, name, offset, path, project, project.name, projects, projects.name, uri])
@@ -3931,7 +4072,7 @@ export def "projects-sections get" [
   let full_url = (build-url $base $"/projects/($project_gid)/sections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a section in a project
@@ -3948,6 +4089,7 @@ export def "projects-sections createSectionForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, name, project, project.name, projects, projects.name])
   --data: record # shape: {name: string, insert_before?: string, insert_after?: string}
@@ -3961,7 +4103,7 @@ export def "projects-sections createSectionForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add task to section
@@ -3978,6 +4120,7 @@ export def "sections-add-task addTaskForSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {task: string, insert_before?: string, insert_after?: string}
 ]: any -> record<data: record> {
@@ -3990,7 +4133,7 @@ export def "sections-add-task addTaskForSection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move or Insert sections
@@ -4007,6 +4150,7 @@ export def "projects-sections-insert insertSectionForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {section: string, before_section?: string, after_section?: string}
 ]: any -> record<data: record> {
@@ -4019,7 +4163,7 @@ export def "projects-sections-insert insertSectionForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a status update
@@ -4035,6 +4179,7 @@ export def "status-updates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [author, author.name, created_at, created_by, created_by.name, hearted, hearts, hearts.user, hearts.user.name, html_text, liked, likes, likes.user, likes.user.name, modified_at, num_hearts, num_likes, parent, parent.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, status_type, text, title])
 ]: nothing -> record<data: record<author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, reaction_summary: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record<gid: string, resource_type: string, name: string>>> {
@@ -4044,7 +4189,7 @@ export def "status-updates get" [
   let full_url = (build-url $base $"/status_updates/($status_update_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a status update
@@ -4060,6 +4205,7 @@ export def "status-updates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4068,7 +4214,7 @@ export def "status-updates delete" [
   let full_url = (build-url $base $"/status_updates/($status_update_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get status updates from an object
@@ -4083,6 +4229,7 @@ export def "status-updates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -4096,7 +4243,7 @@ export def "status-updates list" [
   let full_url = (build-url $base "/status_updates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a status update
@@ -4111,6 +4258,7 @@ export def "status-updates createStatusForObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -4126,7 +4274,7 @@ export def "status-updates createStatusForObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a story
@@ -4142,6 +4290,7 @@ export def "stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type])
 ]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, resource_subtype: string, text: string, html_text: string, is_pinned: bool, sticker_name: string, created_by: record<gid: string, resource_type: string, name: string>, type: string, is_editable: bool, is_edited: bool, hearted: bool, hearts: list<record>, num_hearts: int, liked: bool, likes: list<record>, num_likes: int, reaction_summary: list<record>, previews: list<record>, old_name: string, new_name: string, old_dates: record<start_on: string, due_at: string, due_on: string>, new_dates: record<start_on: string, due_at: string, due_on: string>, old_resource_subtype: string, new_resource_subtype: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, assignee: record<gid: string, resource_type: string, name: string>, follower: record<gid: string, resource_type: string, name: string>, old_section: record<gid: string, resource_type: string, name: string>, new_section: record<gid: string, resource_type: string, name: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, project: record<gid: string, resource_type: string, name: string>, tag: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, name: string, type: string, enum_options: list, enabled: bool, representation_type: string, id_prefix: string, input_restrictions: list, is_formula_field: bool, date_value: record, enum_value: record, multi_enum_values: list, number_value: float, text_value: string, display_value: string>, old_text_value: string, new_text_value: string, old_number_value: int, new_number_value: int, old_enum_value: record<gid: string, resource_type: string, name: string, enabled: bool, color: string>, new_enum_value: record<gid: string, resource_type: string, name: string, enabled: bool, color: string>, old_date_value: record<start_on: string, due_at: string, due_on: string>, new_date_value: record<start_on: string, due_at: string, due_on: string>, old_people_value: list<record>, new_people_value: list<record>, old_multi_enum_values: list<record>, new_multi_enum_values: list<record>, new_approval_status: string, old_approval_status: string, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, source: string, target: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>>> {
@@ -4151,7 +4300,7 @@ export def "stories get" [
   let full_url = (build-url $base $"/stories/($story_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a story
@@ -4168,6 +4317,7 @@ export def "stories updateStory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type])
   --data: record # A story represents an activity associated with an object in the Asana system. — shape: {text?: string, html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love"}
@@ -4181,7 +4331,7 @@ export def "stories updateStory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a story
@@ -4197,6 +4347,7 @@ export def "stories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4205,7 +4356,7 @@ export def "stories delete" [
   let full_url = (build-url $base $"/stories/($story_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stories from a task
@@ -4221,6 +4372,7 @@ export def "tasks-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, offset, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, path, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type, uri])
@@ -4231,7 +4383,7 @@ export def "tasks-stories get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a story on a task
@@ -4248,6 +4400,7 @@ export def "tasks-stories createStoryForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type])
   --data: record # A story represents an activity associated with an object in the Asana system. — shape: {text?: string, html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love"}
@@ -4261,7 +4414,7 @@ export def "tasks-stories createStoryForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get stories from a goal
@@ -4277,6 +4430,7 @@ export def "goals-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, offset, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, path, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type, uri])
@@ -4287,7 +4441,7 @@ export def "goals-stories get" [
   let full_url = (build-url $base $"/goals/($goal_gid)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a story on a goal
@@ -4304,6 +4458,7 @@ export def "goals-stories createStoryForGoal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [assignee, assignee.name, created_at, created_by, created_by.name, custom_field, custom_field.date_value, custom_field.date_value.date, custom_field.date_value.date_time, custom_field.display_value, custom_field.enabled, custom_field.enum_options, custom_field.enum_options.color, custom_field.enum_options.enabled, custom_field.enum_options.name, custom_field.enum_value, custom_field.enum_value.color, custom_field.enum_value.enabled, custom_field.enum_value.name, custom_field.id_prefix, custom_field.input_restrictions, custom_field.is_formula_field, custom_field.multi_enum_values, custom_field.multi_enum_values.color, custom_field.multi_enum_values.enabled, custom_field.multi_enum_values.name, custom_field.name, custom_field.number_value, custom_field.representation_type, custom_field.text_value, custom_field.type, dependency, dependency.created_by, dependency.name, dependency.resource_subtype, duplicate_of, duplicate_of.created_by, duplicate_of.name, duplicate_of.resource_subtype, duplicated_from, duplicated_from.created_by, duplicated_from.name, duplicated_from.resource_subtype, follower, follower.name, hearted, hearts, hearts.user, hearts.user.name, html_text, is_editable, is_edited, is_pinned, liked, likes, likes.user, likes.user.name, new_approval_status, new_date_value, new_dates, new_dates.due_at, new_dates.due_on, new_dates.start_on, new_enum_value, new_enum_value.color, new_enum_value.enabled, new_enum_value.name, new_multi_enum_values, new_multi_enum_values.color, new_multi_enum_values.enabled, new_multi_enum_values.name, new_name, new_number_value, new_people_value, new_people_value.name, new_resource_subtype, new_section, new_section.name, new_text_value, num_hearts, num_likes, old_approval_status, old_date_value, old_dates, old_dates.due_at, old_dates.due_on, old_dates.start_on, old_enum_value, old_enum_value.color, old_enum_value.enabled, old_enum_value.name, old_multi_enum_values, old_multi_enum_values.color, old_multi_enum_values.enabled, old_multi_enum_values.name, old_name, old_number_value, old_people_value, old_people_value.name, old_resource_subtype, old_section, old_section.name, old_text_value, previews, previews.fallback, previews.footer, previews.header, previews.header_link, previews.html_text, previews.text, previews.title, previews.title_link, project, project.name, reaction_summary, reaction_summary.count, reaction_summary.emoji_base, reaction_summary.reacted, reaction_summary.variant, resource_subtype, source, sticker_name, story, story.created_at, story.created_by, story.created_by.name, story.resource_subtype, story.text, tag, tag.name, target, target.created_by, target.name, target.resource_subtype, task, task.created_by, task.name, task.resource_subtype, text, type])
   --data: record # A story represents an activity associated with an object in the Asana system. — shape: {text?: string, html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love"}
@@ -4317,7 +4472,7 @@ export def "goals-stories createStoryForGoal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple tags
@@ -4332,6 +4487,7 @@ export def "tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace to filter tags on. (e.g. 1331)
@@ -4343,7 +4499,7 @@ export def "tags list" [
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tag
@@ -4358,6 +4514,7 @@ export def "tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, created_at, followers, followers.name, name, notes, permalink_url, workspace, workspace.name])
   --data: any
@@ -4371,7 +4528,7 @@ export def "tags createTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a tag
@@ -4387,6 +4544,7 @@ export def "tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, created_at, followers, followers.name, name, notes, permalink_url, workspace, workspace.name])
 ]: nothing -> record<data: record<created_at: string, followers: list<record>, workspace: record<gid: string, resource_type: string, name: string>, permalink_url: string>> {
@@ -4396,7 +4554,7 @@ export def "tags get" [
   let full_url = (build-url $base $"/tags/($tag_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a tag
@@ -4412,6 +4570,7 @@ export def "tags updateTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, created_at, followers, followers.name, name, notes, permalink_url, workspace, workspace.name])
   --data: any
@@ -4425,7 +4584,7 @@ export def "tags updateTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tag
@@ -4441,6 +4600,7 @@ export def "tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4449,7 +4609,7 @@ export def "tags delete" [
   let full_url = (build-url $base $"/tags/($tag_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a task's tags
@@ -4465,6 +4625,7 @@ export def "tasks-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -4476,7 +4637,7 @@ export def "tasks-tags get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tags in a workspace
@@ -4492,6 +4653,7 @@ export def "workspaces-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, created_at, followers, followers.name, name, notes, offset, path, permalink_url, uri, workspace, workspace.name])
@@ -4502,7 +4664,7 @@ export def "workspaces-tags get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tag in a workspace
@@ -4518,6 +4680,7 @@ export def "workspaces-tags createTagForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, created_at, followers, followers.name, name, notes, permalink_url, workspace, workspace.name])
   --data: any
@@ -4531,7 +4694,7 @@ export def "workspaces-tags createTagForWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple task templates
@@ -4546,6 +4709,7 @@ export def "task-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --project: string # The project to filter task templates on. (e.g. 321654)
@@ -4557,7 +4721,7 @@ export def "task-templates list" [
   let full_url = (build-url $base "/task_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a task template
@@ -4573,6 +4737,7 @@ export def "task-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, created_by, name, project, template])
 ]: nothing -> record<data: record<name: string, project: record<gid: string, resource_type: string, name: string>, template: record, created_by: record<gid: string, resource_type: string, name: string>, created_at: string>> {
@@ -4582,7 +4747,7 @@ export def "task-templates get" [
   let full_url = (build-url $base $"/task_templates/($task_template_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a task template
@@ -4598,6 +4763,7 @@ export def "task-templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4606,7 +4772,7 @@ export def "task-templates delete" [
   let full_url = (build-url $base $"/task_templates/($task_template_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Instantiate a task from a task template
@@ -4623,6 +4789,7 @@ export def "task-templates-instantiate-task instantiateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name?: string}
@@ -4636,7 +4803,7 @@ export def "task-templates-instantiate-task instantiateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple tasks
@@ -4651,6 +4818,7 @@ export def "tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --assignee: string # The assignee to filter tasks on. If searching for unassigned tasks, assignee.any = null can be specified. *Note: If you specify `assignee`, you must also specify the `workspace` to filter on.* (e.g. 14641)
@@ -4667,7 +4835,7 @@ export def "tasks list" [
   let full_url = (build-url $base "/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a task
@@ -4682,6 +4850,7 @@ export def "tasks createTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: any
@@ -4695,7 +4864,7 @@ export def "tasks createTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a task
@@ -4711,6 +4880,7 @@ export def "tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
 ]: nothing -> record<data: record<assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, custom_type: record<gid: string, resource_type: string, name: string>, custom_type_status_option: record<gid: string, resource_type: string, name: string>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>, permalink_url: string>> {
@@ -4720,7 +4890,7 @@ export def "tasks get" [
   let full_url = (build-url $base $"/tasks/($task_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a task
@@ -4736,6 +4906,7 @@ export def "tasks updateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: any
@@ -4749,7 +4920,7 @@ export def "tasks updateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a task
@@ -4765,6 +4936,7 @@ export def "tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4773,7 +4945,7 @@ export def "tasks delete" [
   let full_url = (build-url $base $"/tasks/($task_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Duplicate a task
@@ -4790,6 +4962,7 @@ export def "tasks-duplicate duplicateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [new_graph_export, new_graph_export.completed_at, new_graph_export.created_at, new_graph_export.download_url, new_portfolio, new_portfolio.name, new_project, new_project.name, new_project_template, new_project_template.name, new_resource_export, new_resource_export.completed_at, new_resource_export.created_at, new_resource_export.download_url, new_task, new_task.created_by, new_task.name, new_task.resource_subtype, resource_subtype, status])
   --data: record # shape: {name?: string, include?: string}
@@ -4803,7 +4976,7 @@ export def "tasks-duplicate duplicateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tasks from a project
@@ -4819,6 +4992,7 @@ export def "projects-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completed-since: string # Only return tasks that are either incomplete or that have been completed since this time. Accepts a date-time string or the keyword *now*.  (e.g. 2012-02-22T02:06:58.158Z)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -4831,7 +5005,7 @@ export def "projects-tasks get" [
   let full_url = (build-url $base $"/projects/($project_gid)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from a section
@@ -4847,6 +5021,7 @@ export def "sections-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -4859,7 +5034,7 @@ export def "sections-tasks get" [
   let full_url = (build-url $base $"/sections/($section_gid)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from a tag
@@ -4875,6 +5050,7 @@ export def "tags-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -4886,7 +5062,7 @@ export def "tags-tasks get" [
   let full_url = (build-url $base $"/tags/($tag_gid)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks from a user task list
@@ -4902,6 +5078,7 @@ export def "user-task-lists-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completed-since: string # Only return tasks that are either incomplete or that have been completed since this time. Accepts a date-time string or the keyword *now*.  (e.g. 2012-02-22T02:06:58.158Z)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -4914,7 +5091,7 @@ export def "user-task-lists-tasks get" [
   let full_url = (build-url $base $"/user_task_lists/($user_task_list_gid)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subtasks from a task
@@ -4930,6 +5107,7 @@ export def "tasks-subtasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, offset, parent, parent.created_by, parent.name, parent.resource_subtype, path, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, uri, workspace, workspace.name])
@@ -4940,7 +5118,7 @@ export def "tasks-subtasks get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/subtasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a subtask
@@ -4956,6 +5134,7 @@ export def "tasks-subtasks createSubtaskForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: any
@@ -4969,7 +5148,7 @@ export def "tasks-subtasks createSubtaskForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the parent of a task
@@ -4986,6 +5165,7 @@ export def "tasks-set-parent setParentForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: record # shape: {parent: string, insert_after?: string, insert_before?: string}
@@ -4999,7 +5179,7 @@ export def "tasks-set-parent setParentForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dependencies from a task
@@ -5015,6 +5195,7 @@ export def "tasks-dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5026,7 +5207,7 @@ export def "tasks-dependencies get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/dependencies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set dependencies for a task
@@ -5043,6 +5224,7 @@ export def "tasks-add-dependencies addDependenciesForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # e.g. {dependencies: [133713, 184253]} — shape: {dependencies?: list}
 ]: any -> record<data: record> {
@@ -5055,7 +5237,7 @@ export def "tasks-add-dependencies addDependenciesForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlink dependencies from a task
@@ -5072,6 +5254,7 @@ export def "tasks-remove-dependencies removeDependenciesForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # e.g. {dependencies: [133713, 184253]} — shape: {dependencies?: list}
 ]: any -> record<data: record> {
@@ -5084,7 +5267,7 @@ export def "tasks-remove-dependencies removeDependenciesForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dependents from a task
@@ -5100,6 +5283,7 @@ export def "tasks-dependents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5111,7 +5295,7 @@ export def "tasks-dependents get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/dependents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set dependents for a task
@@ -5128,6 +5312,7 @@ export def "tasks-add-dependents addDependentsForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # A set of dependent tasks. (e.g. {dependents: [133713, 184253]}) — shape: {dependents?: list}
 ]: any -> record<data: record> {
@@ -5140,7 +5325,7 @@ export def "tasks-add-dependents addDependentsForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlink dependents from a task
@@ -5157,6 +5342,7 @@ export def "tasks-remove-dependents removeDependentsForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # A set of dependent tasks. (e.g. {dependents: [133713, 184253]}) — shape: {dependents?: list}
 ]: any -> record<data: record> {
@@ -5169,7 +5355,7 @@ export def "tasks-remove-dependents removeDependentsForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a project to a task
@@ -5186,6 +5372,7 @@ export def "tasks-add-project addProjectForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {project: string, insert_after?: string, insert_before?: string, section?: string}
 ]: any -> record<data: record> {
@@ -5198,7 +5385,7 @@ export def "tasks-add-project addProjectForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a project from a task
@@ -5215,6 +5402,7 @@ export def "tasks-remove-project removeProjectForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {project: string}
 ]: any -> record<data: record> {
@@ -5227,7 +5415,7 @@ export def "tasks-remove-project removeProjectForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a tag to a task
@@ -5244,6 +5432,7 @@ export def "tasks-add-tag addTagForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {tag: string}
 ]: any -> record<data: record> {
@@ -5256,7 +5445,7 @@ export def "tasks-add-tag addTagForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a tag from a task
@@ -5273,6 +5462,7 @@ export def "tasks-remove-tag removeTagForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {tag: string}
 ]: any -> record<data: record> {
@@ -5285,7 +5475,7 @@ export def "tasks-remove-tag removeTagForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add followers to a task
@@ -5302,6 +5492,7 @@ export def "tasks-add-followers addFollowersForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: record # shape: {followers: list}
@@ -5315,7 +5506,7 @@ export def "tasks-add-followers addFollowersForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove followers from a task
@@ -5332,6 +5523,7 @@ export def "tasks-remove-followers removeFollowerForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [actual_time_minutes, approval_status, assigned_by, assigned_by.name, assignee, assignee.name, assignee_section, assignee_section.name, assignee_status, completed, completed_at, completed_by, completed_by.name, created_at, created_by, custom_fields, custom_fields.asana_created_field, custom_fields.created_by, custom_fields.created_by.name, custom_fields.currency_code, custom_fields.custom_label, custom_fields.custom_label_position, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.default_access_level, custom_fields.description, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.format, custom_fields.has_notifications_enabled, custom_fields.html_text_value, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.is_global_to_workspace, custom_fields.is_value_read_only, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.people_value, custom_fields.people_value.name, custom_fields.precision, custom_fields.privacy_setting, custom_fields.reference_value, custom_fields.reference_value.name, custom_fields.representation_type, custom_fields.resource_subtype, custom_fields.text_value, custom_fields.type, custom_type, custom_type.name, custom_type_status_option, custom_type_status_option.name, dependencies, dependents, due_at, due_on, external, external.data, followers, followers.name, hearted, hearts, hearts.user, hearts.user.name, html_notes, is_rendered_as_separator, liked, likes, likes.user, likes.user.name, memberships, memberships.project, memberships.project.name, memberships.section, memberships.section.name, modified_at, name, notes, num_hearts, num_likes, num_subtasks, parent, parent.created_by, parent.name, parent.resource_subtype, permalink_url, projects, projects.name, resource_subtype, start_at, start_on, tags, tags.name, workspace, workspace.name])
   --data: record # shape: {followers: list}
@@ -5345,7 +5537,7 @@ export def "tasks-remove-followers removeFollowerForTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a task for a given custom ID
@@ -5362,13 +5554,14 @@ export def "workspaces-tasks-custom-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, custom_type: record<gid: string, resource_type: string, name: string>, custom_type_status_option: record<gid: string, resource_type: string, name: string>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>, permalink_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/tasks/custom_id/($custom_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search tasks in a workspace
@@ -5384,6 +5577,7 @@ export def "workspaces-tasks-search searchTasksForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --text: string # Performs full-text search on both task name and description (e.g. Bug)
   --resource-subtype: string@resource-subtype-completer-2 # Filters results by the task's resource_subtype (default: milestone)
@@ -5446,7 +5640,7 @@ export def "workspaces-tasks-search searchTasksForWorkspace" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/tasks/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team membership
@@ -5462,6 +5656,7 @@ export def "team-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [is_admin, is_guest, is_limited_access, team, team.name, user, user.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, is_guest: bool, is_limited_access: bool, is_admin: bool>> {
@@ -5471,7 +5666,7 @@ export def "team-memberships get" [
   let full_url = (build-url $base $"/team_memberships/($team_membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get team memberships
@@ -5486,6 +5681,7 @@ export def "team-memberships list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5500,7 +5696,7 @@ export def "team-memberships list" [
   let full_url = (build-url $base "/team_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get memberships from a team
@@ -5516,6 +5712,7 @@ export def "teams-team-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5527,7 +5724,7 @@ export def "teams-team-memberships get" [
   let full_url = (build-url $base $"/teams/($team_gid)/team_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get memberships from a user
@@ -5543,6 +5740,7 @@ export def "users-team-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5555,7 +5753,7 @@ export def "users-team-memberships get" [
   let full_url = (build-url $base $"/users/($user_gid)/team_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a team
@@ -5570,6 +5768,7 @@ export def "teams createTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, description, edit_team_name_or_description_access_level, edit_team_visibility_or_trash_team_access_level, endorsed, guest_invite_management_access_level, html_description, join_request_management_access_level, member_invite_management_access_level, name, organization, organization.name, permalink_url, team_content_management_access_level, team_member_removal_access_level, visibility])
   --data: any
@@ -5583,7 +5782,7 @@ export def "teams createTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a team
@@ -5599,6 +5798,7 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, description, edit_team_name_or_description_access_level, edit_team_visibility_or_trash_team_access_level, endorsed, guest_invite_management_access_level, html_description, join_request_management_access_level, member_invite_management_access_level, name, organization, organization.name, permalink_url, team_content_management_access_level, team_member_removal_access_level, visibility])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string, edit_team_name_or_description_access_level: string, edit_team_visibility_or_trash_team_access_level: string, member_invite_management_access_level: string, guest_invite_management_access_level: string, join_request_management_access_level: string, team_member_removal_access_level: string, team_content_management_access_level: string, endorsed: bool, custom_field_settings: list<record>>> {
@@ -5608,7 +5808,7 @@ export def "teams get" [
   let full_url = (build-url $base $"/teams/($team_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a team
@@ -5624,6 +5824,7 @@ export def "teams updateTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_field_settings, custom_field_settings.custom_field, custom_field_settings.custom_field.asana_created_field, custom_field_settings.custom_field.created_by, custom_field_settings.custom_field.created_by.name, custom_field_settings.custom_field.currency_code, custom_field_settings.custom_field.custom_label, custom_field_settings.custom_field.custom_label_position, custom_field_settings.custom_field.date_value, custom_field_settings.custom_field.date_value.date, custom_field_settings.custom_field.date_value.date_time, custom_field_settings.custom_field.default_access_level, custom_field_settings.custom_field.description, custom_field_settings.custom_field.display_value, custom_field_settings.custom_field.enabled, custom_field_settings.custom_field.enum_options, custom_field_settings.custom_field.enum_options.color, custom_field_settings.custom_field.enum_options.enabled, custom_field_settings.custom_field.enum_options.name, custom_field_settings.custom_field.enum_value, custom_field_settings.custom_field.enum_value.color, custom_field_settings.custom_field.enum_value.enabled, custom_field_settings.custom_field.enum_value.name, custom_field_settings.custom_field.format, custom_field_settings.custom_field.has_notifications_enabled, custom_field_settings.custom_field.html_text_value, custom_field_settings.custom_field.id_prefix, custom_field_settings.custom_field.input_restrictions, custom_field_settings.custom_field.is_formula_field, custom_field_settings.custom_field.is_global_to_workspace, custom_field_settings.custom_field.is_value_read_only, custom_field_settings.custom_field.multi_enum_values, custom_field_settings.custom_field.multi_enum_values.color, custom_field_settings.custom_field.multi_enum_values.enabled, custom_field_settings.custom_field.multi_enum_values.name, custom_field_settings.custom_field.name, custom_field_settings.custom_field.number_value, custom_field_settings.custom_field.people_value, custom_field_settings.custom_field.people_value.name, custom_field_settings.custom_field.precision, custom_field_settings.custom_field.privacy_setting, custom_field_settings.custom_field.reference_value, custom_field_settings.custom_field.reference_value.name, custom_field_settings.custom_field.representation_type, custom_field_settings.custom_field.resource_subtype, custom_field_settings.custom_field.text_value, custom_field_settings.custom_field.type, custom_field_settings.is_important, custom_field_settings.parent, custom_field_settings.parent.name, custom_field_settings.project, custom_field_settings.project.name, description, edit_team_name_or_description_access_level, edit_team_visibility_or_trash_team_access_level, endorsed, guest_invite_management_access_level, html_description, join_request_management_access_level, member_invite_management_access_level, name, organization, organization.name, permalink_url, team_content_management_access_level, team_member_removal_access_level, visibility])
   --data: any
@@ -5637,7 +5838,7 @@ export def "teams updateTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get teams in a workspace
@@ -5653,6 +5854,7 @@ export def "workspaces-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5664,7 +5866,7 @@ export def "workspaces-teams get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get teams for a user
@@ -5680,6 +5882,7 @@ export def "users-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5692,7 +5895,7 @@ export def "users-teams get" [
   let full_url = (build-url $base $"/users/($user_gid)/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a user to a team
@@ -5709,6 +5912,7 @@ export def "teams-add-user addUserForTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [is_admin, is_guest, is_limited_access, team, team.name, user, user.name])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
@@ -5722,7 +5926,7 @@ export def "teams-add-user addUserForTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a user from a team
@@ -5739,6 +5943,7 @@ export def "teams-remove-user removeUserForTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
 ]: any -> record<data: record> {
@@ -5751,7 +5956,7 @@ export def "teams-remove-user removeUserForTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a time period
@@ -5767,6 +5972,7 @@ export def "time-periods get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [display_name, end_on, parent, parent.display_name, parent.end_on, parent.period, parent.start_on, period, start_on])
 ]: nothing -> record<data: record<gid: string, resource_type: string, end_on: string, start_on: string, period: string, display_name: string, parent: record<gid: string, resource_type: string, end_on: string, start_on: string, period: string, display_name: string>>> {
@@ -5776,7 +5982,7 @@ export def "time-periods get" [
   let full_url = (build-url $base $"/time_periods/($time_period_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time periods
@@ -5791,6 +5997,7 @@ export def "time-periods list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -5805,7 +6012,7 @@ export def "time-periods list" [
   let full_url = (build-url $base "/time_periods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a time tracking category
@@ -5821,6 +6028,7 @@ export def "time-tracking-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, is_archived, name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, color: string, is_archived: bool>> {
@@ -5830,7 +6038,7 @@ export def "time-tracking-categories get" [
   let full_url = (build-url $base $"/time_tracking_categories/($time_tracking_category_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a time tracking category
@@ -5846,6 +6054,7 @@ export def "time-tracking-categories updateTimeTrackingCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, is_archived, name])
   --data: any
@@ -5859,7 +6068,7 @@ export def "time-tracking-categories updateTimeTrackingCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a time tracking category
@@ -5875,6 +6084,7 @@ export def "time-tracking-categories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5883,7 +6093,7 @@ export def "time-tracking-categories delete" [
   let full_url = (build-url $base $"/time_tracking_categories/($time_tracking_category_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time tracking entries for a time tracking category
@@ -5899,6 +6109,7 @@ export def "time-tracking-categories-time-tracking-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The start date for filtering time tracking entries by their entry date. (format: date, e.g. 2025-01-01)
   --end-date: string # The end date for filtering time tracking entries by their entry date. (format: date, e.g. 2025-12-31)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -5911,7 +6122,7 @@ export def "time-tracking-categories-time-tracking-entries get" [
   let full_url = (build-url $base $"/time_tracking_categories/($time_tracking_category_gid)/time_tracking_entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time tracking categories for a workspace
@@ -5926,6 +6137,7 @@ export def "time-tracking-categories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workspace: string # Globally unique identifier for the workspace. (e.g. 12345)
   --is-archived: oneof<nothing, bool> # Filter by archived status. If not provided, defaults to returning non-archived categories. (e.g. false)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -5938,7 +6150,7 @@ export def "time-tracking-categories list" [
   let full_url = (build-url $base "/time_tracking_categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a time tracking category
@@ -5953,6 +6165,7 @@ export def "time-tracking-categories createTimeTrackingCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [color, is_archived, name])
   --data: any
@@ -5966,7 +6179,7 @@ export def "time-tracking-categories createTimeTrackingCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get time tracking entries for a task
@@ -5982,6 +6195,7 @@ export def "tasks-time-tracking-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [attributable_to, attributable_to.name, categories, categories.color, categories.name, created_by, created_by.name, duration_minutes, entered_on, offset, path, uri])
@@ -5992,7 +6206,7 @@ export def "tasks-time-tracking-entries get" [
   let full_url = (build-url $base $"/tasks/($task_gid)/time_tracking_entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a time tracking entry
@@ -6009,6 +6223,7 @@ export def "tasks-time-tracking-entries createTimeTrackingEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, attributable_to, attributable_to.name, billable_status, categories, categories.color, categories.name, created_at, created_by, created_by.name, description, duration_minutes, entered_on, task, task.created_by, task.name, task.resource_subtype])
   --data: record # shape: {duration_minutes?: int, entered_on?: string, attributable_to?: string, billable_status?: "billable"|"nonBillable"|"notApplicable", description?: string, categories?: list}
@@ -6022,7 +6237,7 @@ export def "tasks-time-tracking-entries createTimeTrackingEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a time tracking entry
@@ -6038,6 +6253,7 @@ export def "time-tracking-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, attributable_to, attributable_to.name, billable_status, categories, categories.color, categories.name, created_at, created_by, created_by.name, description, duration_minutes, entered_on, task, task.created_by, task.name, task.resource_subtype])
 ]: nothing -> record<data: record<gid: string, resource_type: string, duration_minutes: int, entered_on: string, attributable_to: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, categories: list<record>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, created_at: string, approval_status: string, billable_status: string, description: string>> {
@@ -6047,7 +6263,7 @@ export def "time-tracking-entries get" [
   let full_url = (build-url $base $"/time_tracking_entries/($time_tracking_entry_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a time tracking entry
@@ -6064,6 +6280,7 @@ export def "time-tracking-entries updateTimeTrackingEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, attributable_to, attributable_to.name, billable_status, categories, categories.color, categories.name, created_at, created_by, created_by.name, description, duration_minutes, entered_on, task, task.created_by, task.name, task.resource_subtype])
   --data: record # shape: {duration_minutes?: int, entered_on?: string, attributable_to?: string, billable_status?: "billable"|"nonBillable"|"notApplicable", description?: string, categories?: list}
@@ -6077,7 +6294,7 @@ export def "time-tracking-entries updateTimeTrackingEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a time tracking entry
@@ -6093,6 +6310,7 @@ export def "time-tracking-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6101,7 +6319,7 @@ export def "time-tracking-entries delete" [
   let full_url = (build-url $base $"/time_tracking_entries/($time_tracking_entry_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple time tracking entries
@@ -6116,6 +6334,7 @@ export def "time-tracking-entries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --task: string # Globally unique identifier for the task to filter time tracking entries by. (e.g. 12345)
   --attributable-to: string # Globally unique identifier for the project the time tracking entries are attributed to. (e.g. 12345)
   --portfolio: string # Globally unique identifier for the portfolio to filter time tracking entries by. (e.g. 12345)
@@ -6134,7 +6353,7 @@ export def "time-tracking-entries list" [
   let full_url = (build-url $base "/time_tracking_entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a timesheet approval status
@@ -6150,6 +6369,7 @@ export def "timesheet-approval-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, created_at, end_date, start_date, user, user.name, workspace, workspace.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, user: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, start_date: string, end_date: string, approval_status: string>> {
@@ -6159,7 +6379,7 @@ export def "timesheet-approval-statuses get" [
   let full_url = (build-url $base $"/timesheet_approval_statuses/($timesheet_approval_status_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a timesheet approval status
@@ -6176,6 +6396,7 @@ export def "timesheet-approval-statuses updateTimesheetApprovalStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, created_at, end_date, start_date, user, user.name, workspace, workspace.name])
   --data: record # A request to update a timesheet approval status. — shape: {approval_status: "submitted"|"draft"|"approved"|"rejected", message?: string}
@@ -6189,7 +6410,7 @@ export def "timesheet-approval-statuses updateTimesheetApprovalStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple timesheet approval statuses
@@ -6204,6 +6425,7 @@ export def "timesheet-approval-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workspace: string # Globally unique identifier for the workspace. (e.g. 12345)
   --user: string # Globally unique identifier for the user to filter timesheet approval statuses by. (e.g. 67890)
   --from-date: string # The start date for filtering timesheet approval statuses. (format: date, e.g. 2025-11-01)
@@ -6219,7 +6441,7 @@ export def "timesheet-approval-statuses list" [
   let full_url = (build-url $base "/timesheet_approval_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a timesheet approval status
@@ -6235,6 +6457,7 @@ export def "timesheet-approval-statuses createTimesheetApprovalStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [approval_status, created_at, end_date, start_date, user, user.name, workspace, workspace.name])
   --data: record # A request to create a timesheet approval status. — shape: {user: string, workspace: string, start_date: string, end_date: string}
@@ -6248,7 +6471,7 @@ export def "timesheet-approval-statuses createTimesheetApprovalStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get objects via typeahead
@@ -6264,6 +6487,7 @@ export def "workspaces-typeahead typeaheadForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource-type: string@resource-type-completer # The type of values the typeahead should return. You can choose from one of the following: `actor`, `agent`, `custom_field`, `goal`, `project`, `project_template`, `portfolio`, `tag`, `task`, `team`, and `user`. Note that unlike in the names of endpoints, the types listed here are in singular form (e.g. `task`). Using multiple types is not yet supported. The `agent` type returns only agents, currently limited to AI Teammates, which are Asana's first-party agents. The `actor` type returns a combined set of users and agents. (default: user)
   --type: string@type-completer # *Deprecated: new integrations should prefer the resource_type field.* (default: user)
   --qp-query: string # The string that will be used to search for relevant objects. If an empty string is passed in, the API will return results. (e.g. Greg)
@@ -6277,7 +6501,7 @@ export def "workspaces-typeahead typeaheadForWorkspace" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/typeahead" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user task list
@@ -6293,6 +6517,7 @@ export def "user-task-lists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [name, owner, workspace])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
@@ -6302,7 +6527,7 @@ export def "user-task-lists get" [
   let full_url = (build-url $base $"/user_task_lists/($user_task_list_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's task list
@@ -6318,6 +6543,7 @@ export def "users-user-task-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --workspace: string # The workspace in which to get the user task list. (e.g. 1234)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [name, owner, workspace])
@@ -6328,7 +6554,7 @@ export def "users-user-task-list get" [
   let full_url = (build-url $base $"/users/($user_gid)/user_task_list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple users
@@ -6343,6 +6569,7 @@ export def "users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workspace: string # The workspace or organization ID to filter users on. (e.g. 1331)
   --team: string # The team ID to filter users on. (e.g. 15627)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
@@ -6356,7 +6583,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -6372,6 +6599,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --workspace: string # The workspace to filter results on. (e.g. 12345)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
@@ -6382,7 +6610,7 @@ export def "users get" [
   let full_url = (build-url $base $"/users/($user_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -6398,6 +6626,7 @@ export def "users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --workspace: string # The workspace to filter results on. (e.g. 12345)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
@@ -6412,7 +6641,7 @@ export def "users updateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's favorites
@@ -6428,6 +6657,7 @@ export def "users-favorites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -6441,7 +6671,7 @@ export def "users-favorites get" [
   let full_url = (build-url $base $"/users/($user_gid)/favorites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users in a team
@@ -6457,6 +6687,7 @@ export def "teams-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
@@ -6467,7 +6698,7 @@ export def "teams-users get" [
   let full_url = (build-url $base $"/teams/($team_gid)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users in a workspace or organization
@@ -6483,6 +6714,7 @@ export def "workspaces-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
@@ -6493,7 +6725,7 @@ export def "workspaces-users list" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user in a workspace or organization
@@ -6510,6 +6742,7 @@ export def "workspaces-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
 ]: nothing -> record<data: record<workspaces: list<record>, custom_fields: list<record>>> {
@@ -6519,7 +6752,7 @@ export def "workspaces-users get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/users/($user_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user in a workspace or organization
@@ -6536,6 +6769,7 @@ export def "workspaces-users updateUserForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [custom_fields, custom_fields.date_value, custom_fields.date_value.date, custom_fields.date_value.date_time, custom_fields.display_value, custom_fields.enabled, custom_fields.enum_options, custom_fields.enum_options.color, custom_fields.enum_options.enabled, custom_fields.enum_options.name, custom_fields.enum_value, custom_fields.enum_value.color, custom_fields.enum_value.enabled, custom_fields.enum_value.name, custom_fields.id_prefix, custom_fields.input_restrictions, custom_fields.is_formula_field, custom_fields.multi_enum_values, custom_fields.multi_enum_values.color, custom_fields.multi_enum_values.enabled, custom_fields.multi_enum_values.name, custom_fields.name, custom_fields.number_value, custom_fields.representation_type, custom_fields.text_value, custom_fields.type, email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60, workspaces, workspaces.name])
   --data: any
@@ -6549,7 +6783,7 @@ export def "workspaces-users updateUserForWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple webhooks
@@ -6564,6 +6798,7 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace to query for webhooks in. (e.g. 1331)
@@ -6576,7 +6811,7 @@ export def "webhooks list" [
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Establish a webhook
@@ -6592,6 +6827,7 @@ export def "webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [active, created_at, delivery_retry_count, failure_deletion_timestamp, filters, filters.action, filters.fields, filters.resource_subtype, last_failure_at, last_failure_content, last_success_at, next_attempt_after, resource, resource.name, target])
   --data: record # shape: {resource: string, target: string, filters?: list}
@@ -6605,7 +6841,7 @@ export def "webhooks createWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook
@@ -6621,6 +6857,7 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [active, created_at, delivery_retry_count, failure_deletion_timestamp, filters, filters.action, filters.fields, filters.resource_subtype, last_failure_at, last_failure_content, last_success_at, next_attempt_after, resource, resource.name, target])
 ]: nothing -> record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, last_failure_at: string, last_failure_content: string, last_success_at: string, delivery_retry_count: int, next_attempt_after: string, failure_deletion_timestamp: string, filters: list<record>>> {
@@ -6630,7 +6867,7 @@ export def "webhooks get" [
   let full_url = (build-url $base $"/webhooks/($webhook_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -6647,6 +6884,7 @@ export def "webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [active, created_at, delivery_retry_count, failure_deletion_timestamp, filters, filters.action, filters.fields, filters.resource_subtype, last_failure_at, last_failure_content, last_success_at, next_attempt_after, resource, resource.name, target])
   --data: record # shape: {filters?: list}
@@ -6660,7 +6898,7 @@ export def "webhooks updateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook
@@ -6676,6 +6914,7 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6684,7 +6923,7 @@ export def "webhooks delete" [
   let full_url = (build-url $base $"/webhooks/($webhook_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a workspace membership
@@ -6700,6 +6939,7 @@ export def "workspace-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [created_at, is_active, is_admin, is_guest, is_view_only, user, user.name, user_task_list, user_task_list.name, user_task_list.owner, user_task_list.workspace, vacation_dates, vacation_dates.end_on, vacation_dates.start_on, workspace, workspace.name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, user_task_list: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>, is_active: bool, is_admin: bool, is_guest: bool, is_view_only: bool, vacation_dates: record<start_on: string, end_on: string>, created_at: string>> {
@@ -6709,7 +6949,7 @@ export def "workspace-memberships get" [
   let full_url = (build-url $base $"/workspace_memberships/($workspace_membership_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workspace memberships for a user
@@ -6725,6 +6965,7 @@ export def "users-workspace-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -6736,7 +6977,7 @@ export def "users-workspace-memberships get" [
   let full_url = (build-url $base $"/users/($user_gid)/workspace_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the workspace memberships for a workspace
@@ -6752,6 +6993,7 @@ export def "workspaces-workspace-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. (e.g. me)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
@@ -6764,7 +7006,7 @@ export def "workspaces-workspace-memberships get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/workspace_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple workspaces
@@ -6779,6 +7021,7 @@ export def "workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. *Note: You can only pass in an offset that was returned to you via a previously paginated request.* (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
@@ -6790,7 +7033,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a workspace
@@ -6806,6 +7049,7 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [email_domains, is_organization, name])
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, email_domains: list<string>, is_organization: bool>> {
@@ -6815,7 +7059,7 @@ export def "workspaces get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a workspace
@@ -6832,6 +7076,7 @@ export def "workspaces updateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [email_domains, is_organization, name])
   --data: record # A *workspace* is the highest-level organizational unit in Asana. All projects and tasks have an associated workspace. — shape: {name?: string}
@@ -6845,7 +7090,7 @@ export def "workspaces updateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a user to a workspace or organization
@@ -6862,6 +7107,7 @@ export def "workspaces-add-user addUserForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list # This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. (e.g. [email, name, photo, photo.image_1024x1024, photo.image_128x128, photo.image_21x21, photo.image_27x27, photo.image_36x36, photo.image_60x60])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
@@ -6875,7 +7121,7 @@ export def "workspaces-add-user addUserForWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a user from a workspace or organization
@@ -6892,6 +7138,7 @@ export def "workspaces-remove-user removeUserForWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
 ]: any -> record<data: record> {
@@ -6904,7 +7151,7 @@ export def "workspaces-remove-user removeUserForWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workspace events
@@ -6920,6 +7167,7 @@ export def "workspaces-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --sync: string # A sync token received from the last request, or none on first sync. Events will be returned from the point in time that the sync token was generated. *Note: On your first request, omit the sync token. The response will be the same as for an expired sync token, and will include a new valid sync token. If the sync token is too old (which may happen from time to time) the API will return a `412 Precondition Failed` error, and include a fresh sync token in the response.* (e.g. de4774f6915eae04714ca93bb2f5ee81)
 ]: nothing -> record<data: table<user: record, resource: record, type: string, action: string, parent: record, created_at: string, change: record>, sync: string, has_more: bool> {
@@ -6929,5 +7177,5 @@ export def "workspaces-events get" [
   let full_url = (build-url $base $"/workspaces/($workspace_gid)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

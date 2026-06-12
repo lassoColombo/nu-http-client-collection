@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["bearer" "music-user-token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-albums get-by-storefront" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "catalog-albums get-by-storefront" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the albums.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --filter: list # A filter to apply to the request.
@@ -115,7 +117,7 @@ export def "catalog-albums get-by-storefront" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/albums" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Album
@@ -132,6 +134,7 @@ export def "catalog-albums get-by-storefront-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --views: list # The views to activate for the albums resource.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
@@ -143,7 +146,7 @@ export def "catalog-albums get-by-storefront-id" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/albums/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Album's Relationship Directly by Name
@@ -161,6 +164,7 @@ export def "catalog-albums get-by-storefront-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -172,7 +176,7 @@ export def "catalog-albums get-by-storefront-id-relationship" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/albums/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Album's Relationship View Directly by Name
@@ -190,6 +194,7 @@ export def "catalog-albums-view get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -202,7 +207,7 @@ export def "catalog-albums-view get" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/albums/($id)/view/($view)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Multiple Catalog Artists
@@ -218,6 +223,7 @@ export def "catalog-artists get-by-storefront" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the artists.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --filter: list # A filter to apply to the request.
@@ -231,7 +237,7 @@ export def "catalog-artists get-by-storefront" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/artists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Artist
@@ -248,6 +254,7 @@ export def "catalog-artists get-by-storefront-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --views: list # The views to activate for the artists resource.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
@@ -259,7 +266,7 @@ export def "catalog-artists get-by-storefront-id" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/artists/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Artist's Relationship Directly by Name
@@ -277,6 +284,7 @@ export def "catalog-artists get-by-storefront-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -288,7 +296,7 @@ export def "catalog-artists get-by-storefront-id-relationship" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/artists/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Artist's Relationship View Directly by Name
@@ -306,6 +314,7 @@ export def "catalog-artists-view get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -318,7 +327,7 @@ export def "catalog-artists-view get" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/artists/($id)/view/($view)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for Catalog Resources
@@ -334,6 +343,7 @@ export def "catalog-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
   --limit: int # The number of objects or number of objects in the specified relationship returned. (default: 5)
   --offset: string # The next page or group of objects to fetch.
@@ -347,7 +357,7 @@ export def "catalog-search get" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Multiple Catalog Songs by ID
@@ -363,6 +373,7 @@ export def "catalog-songs get-by-storefront" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the songs.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --filter: list # A filter to apply to the request.
@@ -376,7 +387,7 @@ export def "catalog-songs get-by-storefront" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/songs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Song
@@ -393,6 +404,7 @@ export def "catalog-songs get-by-storefront-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -403,7 +415,7 @@ export def "catalog-songs get-by-storefront-id" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/songs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Catalog Song's Relationship Directly by Name
@@ -421,6 +433,7 @@ export def "catalog-songs get-by-storefront-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -432,7 +445,7 @@ export def "catalog-songs get-by-storefront-id-relationship" [
   let full_url = (build-url $base $"/v1/catalog/($storefront)/songs/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a Resource to a Library
@@ -447,6 +460,7 @@ export def "me-library addToLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique catalog identifiers for the resources. To indicate the type of resource to be added, ids must be followed by one of the allowed values. Add multiple types in the same request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -455,7 +469,7 @@ export def "me-library addToLibrary" [
   let full_url = (build-url $base "/v1/me/library" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Library Albums
@@ -470,6 +484,7 @@ export def "me-library-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the albums.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
@@ -483,7 +498,7 @@ export def "me-library-albums get" [
   let full_url = (build-url $base "/v1/me/library/albums" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Album
@@ -499,6 +514,7 @@ export def "me-library-albums get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -509,7 +525,7 @@ export def "me-library-albums get-by-id" [
   let full_url = (build-url $base $"/v1/me/library/albums/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Album's Relationship Directly by Name
@@ -526,6 +542,7 @@ export def "me-library-albums get-by-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -537,7 +554,7 @@ export def "me-library-albums get-by-id-relationship" [
   let full_url = (build-url $base $"/v1/me/library/albums/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Library Artists
@@ -552,6 +569,7 @@ export def "me-library-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the artists.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
@@ -565,7 +583,7 @@ export def "me-library-artists get" [
   let full_url = (build-url $base "/v1/me/library/artists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Artist
@@ -581,6 +599,7 @@ export def "me-library-artists get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -591,7 +610,7 @@ export def "me-library-artists get-by-id" [
   let full_url = (build-url $base $"/v1/me/library/artists/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Artist's Relationship Directly by Name
@@ -608,6 +627,7 @@ export def "me-library-artists get-by-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -619,7 +639,7 @@ export def "me-library-artists get-by-id-relationship" [
   let full_url = (build-url $base $"/v1/me/library/artists/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Library Songs
@@ -634,6 +654,7 @@ export def "me-library-songs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The unique identifiers for the songs.
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
@@ -647,7 +668,7 @@ export def "me-library-songs get" [
   let full_url = (build-url $base "/v1/me/library/songs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Song
@@ -663,6 +684,7 @@ export def "me-library-songs get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -673,7 +695,7 @@ export def "me-library-songs get-by-id" [
   let full_url = (build-url $base $"/v1/me/library/songs/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Library Song's Relationship Directly by Name
@@ -690,6 +712,7 @@ export def "me-library-songs get-by-id-relationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extend: list # A list of attribute extensions to apply to resources in the response.
   --include: list # Additional relationships to include in the fetch.
   --l: string # The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
@@ -701,5 +724,5 @@ export def "me-library-songs get-by-id-relationship" [
   let full_url = (build-url $base $"/v1/me/library/songs/($id)/($relationship)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

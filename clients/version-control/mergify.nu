@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def sort-completer-1 [] { ["executions_count" "job_name" "pipeline_name"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "application get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,13 +105,14 @@ export def "application get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, account_scope: record<id: int, login: string>, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get merge queues configuration
@@ -129,13 +131,14 @@ export def "repos-queues-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<configuration: table<name: string, config: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queues/configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause the merge queue
@@ -154,6 +157,7 @@ export def "repos-queue-pause put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # The reason of the queue pause
 ]: any -> record<queue_pause: table<reason: string, pause_date: string>> {
   let input = $in
@@ -164,7 +168,7 @@ export def "repos-queue-pause put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unpause merge queue
@@ -183,13 +187,14 @@ export def "repos-queue-pause delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queue/pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get queue pause data
@@ -208,13 +213,14 @@ export def "repos-queue-pause get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<queue_pause: table<reason: string, pause_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queue/pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpause merge queue
@@ -233,13 +239,14 @@ export def "repos-queue-pause-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queue/pause/delete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get merge queues
@@ -258,13 +265,14 @@ export def "repos-queues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<queues: table<branch: record, pull_requests: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the base refs in the repository
@@ -283,6 +291,7 @@ export def "repos-queues-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: string # Get the stats until this date, default 1 day before end_at
   --end-at: string # Get the stats from this date, default now
 ]: nothing -> record<base_refs: list<string>> {
@@ -292,7 +301,7 @@ export def "repos-queues-branches get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/queues/branches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get PNG badge
@@ -311,6 +320,7 @@ export def "badges get-by-owner-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --style: string # The style of the button, more details on https://shields.io/. (default: flat)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -319,7 +329,7 @@ export def "badges get-by-owner-repository" [
   let full_url = (build-url $base $"/badges/($owner)/($repository).png" $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SVG badge
@@ -338,6 +348,7 @@ export def "badges get-by-owner-repository-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --style: string # The style of the button, more details on https://shields.io/. (default: flat)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -346,7 +357,7 @@ export def "badges get-by-owner-repository-1" [
   let full_url = (build-url $base $"/badges/($owner)/($repository).svg" $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shields.io badge config
@@ -365,13 +376,14 @@ export def "badges get-by-owner-repository-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/badges/($owner)/($repository)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Mergify simulation for a pull request
@@ -389,6 +401,7 @@ export def "repos-pulls-simulator post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mergify_yml: string # A Mergify configuration
 ]: any -> record<title: string, summary: string, deprecations: table<message: string, deadline: string, path_to_field: any>> {
   let input = $in
@@ -399,7 +412,7 @@ export def "repos-pulls-simulator post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Mergify simulation for a repository
@@ -416,6 +429,7 @@ export def "repos-simulator post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mergify_yml: string # A Mergify configuration
 ]: any -> record<title: string, summary: string, deprecations: table<message: string, deadline: string, path_to_field: any>> {
   let input = $in
@@ -426,7 +440,7 @@ export def "repos-simulator post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Mergify configuration simulation for a repository
@@ -443,6 +457,7 @@ export def "repos-configuration-simulator post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mergify_yml: string # A Mergify configuration
 ]: any -> record<message: string, deprecations: table<message: string, deadline: string, path_to_field: any>> {
   let input = $in
@@ -453,7 +468,7 @@ export def "repos-configuration-simulator post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the events log
@@ -470,6 +485,7 @@ export def "repos-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pull-request: string # Filter events by pull-request number. Repeatable to match several PRs at once (e.g. `?pull_request=1&pull_request=2`).
   --base-ref: string # Get events for PRs to the given base ref
   --event-type: string # The specific types of events to select
@@ -487,7 +503,7 @@ export def "repos-logs get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get aggregated event counts
@@ -504,6 +520,7 @@ export def "repos-logs-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pull-request: string # Filter events by pull-request number. Repeatable to match several PRs at once (e.g. `?pull_request=1&pull_request=2`).
   --base-ref: string # Get events for PRs to the given base ref
   --event-type: string # The specific types of events to select
@@ -519,7 +536,7 @@ export def "repos-logs-aggregate get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/logs/aggregate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Time to merge statistics for every queues and partitions
@@ -538,6 +555,7 @@ export def "repos-stats-time-to-merge get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # Retrieve the time to merge at this timestamp (ISO 8601 with timezone, e.g. 2024-01-01T00:00:00Z)
   --branch: string # The name of the branch
 ]: nothing -> table<partition_name: string, queues: list<record>> {
@@ -547,7 +565,7 @@ export def "repos-stats-time-to-merge get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/time_to_merge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue checks outcome for the repository
@@ -566,6 +584,7 @@ export def "repos-stats-merge-queue-checks-outcome get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Merge queue name(s) of the pull requests
@@ -579,7 +598,7 @@ export def "repos-stats-merge-queue-checks-outcome get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/merge_queue_checks_outcome" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the count of queue checks outcomes
@@ -596,6 +615,7 @@ export def "repos-stats-queues-checks-outcome-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Merge queue name(s) of the pull requests
@@ -609,7 +629,7 @@ export def "repos-stats-queues-checks-outcome-count get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queues_checks_outcome_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the count of pull requests entering the queues
@@ -626,6 +646,7 @@ export def "repos-stats-queues-entered-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -639,7 +660,7 @@ export def "repos-stats-queues-entered-count get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queues_entered_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the count of pull requests merged by queues
@@ -656,6 +677,7 @@ export def "repos-stats-queues-merged-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -669,7 +691,7 @@ export def "repos-stats-queues-merged-count get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queues_merged_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the average CI runtime
@@ -686,6 +708,7 @@ export def "repos-stats-average-ci-runtime get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -699,7 +722,7 @@ export def "repos-stats-average-ci-runtime get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/average_ci_runtime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the idle queue time
@@ -716,6 +739,7 @@ export def "repos-stats-idle-queue-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -729,7 +753,7 @@ export def "repos-stats-idle-queue-time get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/idle_queue_time" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue time
@@ -746,6 +770,7 @@ export def "repos-stats-total-queue-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -759,7 +784,7 @@ export def "repos-stats-total-queue-time get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/total_queue_time" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue size
@@ -776,6 +801,7 @@ export def "repos-stats-queue-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -789,7 +815,7 @@ export def "repos-stats-queue-size get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queue_size" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of running speculative checks
@@ -806,6 +832,7 @@ export def "repos-stats-running-speculative-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Merge queue name(s) of the pull requests
@@ -818,7 +845,7 @@ export def "repos-stats-running-speculative-checks get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/running_speculative_checks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the checks batch size
@@ -835,6 +862,7 @@ export def "repos-stats-batch-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Merge queue rule name(s) of the pull requests
@@ -848,7 +876,7 @@ export def "repos-stats-batch-size get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/batch_size" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get batch bisection statistics
@@ -865,6 +893,7 @@ export def "repos-stats-batch-bisection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Merge queue rule name(s) of the pull requests
@@ -878,7 +907,7 @@ export def "repos-stats-batch-bisection get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/batch_bisection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the base refs in the repository
@@ -895,6 +924,7 @@ export def "repos-stats-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: string # Get the stats until this date, default 1 day before end_at
   --end-at: string # Get the stats from this date, default now
 ]: nothing -> record<base_refs: list<string>> {
@@ -904,7 +934,7 @@ export def "repos-stats-branches get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/branches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue checks retries statistics
@@ -921,6 +951,7 @@ export def "repos-stats-checks-retries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -934,7 +965,7 @@ export def "repos-stats-checks-retries get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/checks_retries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue failure rate
@@ -951,6 +982,7 @@ export def "repos-stats-failure-rate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -964,7 +996,7 @@ export def "repos-stats-failure-rate get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/failure_rate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get PR exit reasons by interval
@@ -981,6 +1013,7 @@ export def "repos-stats-queues-pr-exit-reasons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-ref: string # Base reference(s) of the pull requests
   --partition-name: string # Partition name(s) of the pull requests
   --queue-name: string # Name of the merge queue(s) for the pull requests
@@ -994,7 +1027,7 @@ export def "repos-stats-queues-pr-exit-reasons get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queues_pr_exit_reasons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the queue names in the repository
@@ -1011,6 +1044,7 @@ export def "repos-stats-queues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: string # Get the stats until this date, default 1 day before end_at
   --end-at: string # Get the stats from this date, default now
 ]: nothing -> record<queue_names: list<string>> {
@@ -1020,7 +1054,7 @@ export def "repos-stats-queues get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/stats/queues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the scopes for a pull request
@@ -1038,6 +1072,7 @@ export def "repos-pulls-scopes put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scopes: list
 ]: any -> any {
   let input = $in
@@ -1048,7 +1083,7 @@ export def "repos-pulls-scopes put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the scopes for a pull request (deprecated, use PUT)
@@ -1068,6 +1103,7 @@ export def "repos-pulls-scopes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scopes: list
 ]: any -> any {
   let input = $in
@@ -1078,7 +1114,7 @@ export def "repos-pulls-scopes post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search tests
@@ -1095,6 +1131,7 @@ export def "ci-repositories-search-tests ci-search-tests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --test-name: string # Filter by test name. Pass multiple times to combine matches. Supports glob patterns (`*`, `?`). Omit to return all test identities.
   --qp-sort: string@sort-completer # Sort field (default: executions_count)
   --direction: string@direction-completer # Sort direction (default: desc)
@@ -1118,7 +1155,7 @@ export def "ci-repositories-search-tests ci-search-tests" [
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/search/tests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get detailed information about a test
@@ -1136,13 +1173,14 @@ export def "ci-repositories-tests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<repository: string, test_name: string, test_id: string, health_status: string, last_conclusion: string, failure_ratio: float, flakiness_ratio: float, success_ratio: float, flaky_detection_enabled: bool, first_failure_at: any, first_failure_commit: any, first_failure_pull: any, last_failure_at: any, last_success_at: any, test_framework: any, test_framework_version: any, test_programming_language: any, test_filepath: any, test_function_name: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/tests/($test_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single test stat as a time series
@@ -1162,6 +1200,7 @@ export def "ci-repositories-tests-stats ci-test-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Start of the time range. Defaults to `end - 1 day` when omitted.
   --end: string # End of the time range. Defaults to `start + 1 day` when only start is provided, or `now` otherwise.
 ]: nothing -> any {
@@ -1171,7 +1210,7 @@ export def "ci-repositories-tests-stats ci-test-stats" [
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/tests/($test_id)/stats/($stat)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get test failures
@@ -1189,13 +1228,14 @@ export def "ci-repositories-tests-failures ci-test-failures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<failures: table<id: string, exception_type: string, exception_message: string, failure_count: int, first_failure_at: string, last_failure_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/tests/($test_id)/failures")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get test failure
@@ -1214,13 +1254,14 @@ export def "ci-repositories-tests-failures ci-test-failure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, exception_type: string, exception_message: string, failure_count: int, first_failure_at: string, last_failure_at: string, latest_events: table<id: string, failed_at: string, exception_stacktrace: any, test_filepath: any, test_programming_language: any, job_url: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/tests/($test_id)/failures/($failure_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a test's executions
@@ -1238,6 +1279,7 @@ export def "ci-repositories-tests-executions ci-test-executions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer-1 # Sort field (default: executions_count)
   --direction: string@direction-completer # Sort direction (default: desc)
   --cursor: string # The opaque cursor of the current page. Must be extracted from RFC 5988 pagination links to get first/previous/next/last pages
@@ -1251,7 +1293,7 @@ export def "ci-repositories-tests-executions ci-test-executions" [
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository_name)/tests/($test_id)/executions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List quarantined tests
@@ -1268,6 +1310,7 @@ export def "ci-repositories-quarantines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string
   --test-id: string
   --qp-source: string
@@ -1280,7 +1323,7 @@ export def "ci-repositories-quarantines list" [
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository)/quarantines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark a test as quarantined
@@ -1297,6 +1340,7 @@ export def "ci-repositories-quarantines post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   test_name: string # The fully qualified name of the test that needs to be quarantined
   reason: string # Reason for the test being added to the quarantine
   --branch: any # Branch name or pattern on which the test should be quarantined. If not specified, it will be quarantined on all branches.
@@ -1309,7 +1353,7 @@ export def "ci-repositories-quarantines post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a quarantined test
@@ -1327,13 +1371,14 @@ export def "ci-repositories-quarantines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, test_name: string, test_id: string, reason: string, branch: any, created_at: string, source: string, is_recovered: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository)/quarantines/($quarantine_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a quarantine
@@ -1351,13 +1396,14 @@ export def "ci-repositories-quarantines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ci/($owner)/repositories/($repository)/quarantines/($quarantine_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get scheduled freezes
@@ -1374,13 +1420,14 @@ export def "repos-scheduled-freeze get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scheduled_freezes: table<id: string, reason: string, start: string, end: any, timezone: string, matching_conditions: list, exclude_conditions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/scheduled_freeze")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a scheduled freeze
@@ -1397,6 +1444,7 @@ export def "repos-scheduled-freeze post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # The reason for the scheduled freeze.
   start: any # When the scheduled freeze begins (date and time in ISO 8601 format without TZ). Begins now if the attribute is null.
   --end: any # When the scheduled freeze ends (date and time in ISO 8601 format without TZ).
@@ -1412,7 +1460,7 @@ export def "repos-scheduled-freeze post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a scheduled freeze
@@ -1430,6 +1478,7 @@ export def "repos-scheduled-freeze patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: any # The reason for the scheduled freeze.
   --start: any # When the scheduled freeze begins (date and time in ISO 8601 format without TZ). Can only be updated if the scheduled freeze has not yet begun. Set to null to start now.
   --end: any # When the scheduled freeze ends (date and time in ISO 8601 format without TZ). Set to null for an indefinite freeze.
@@ -1445,7 +1494,7 @@ export def "repos-scheduled-freeze patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a scheduled freeze
@@ -1465,6 +1514,7 @@ export def "repos-scheduled-freeze delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete-reason: string # The reason for the deletion
 ]: any -> any {
   let input = $in
@@ -1475,7 +1525,7 @@ export def "repos-scheduled-freeze delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a scheduled freeze
@@ -1493,6 +1543,7 @@ export def "repos-scheduled-freeze-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete-reason: string # The reason for the deletion
 ]: any -> any {
   let input = $in
@@ -1503,7 +1554,7 @@ export def "repos-scheduled-freeze-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get branches with active merge queues
@@ -1520,13 +1571,14 @@ export def "repos-merge-queue-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<branches: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/merge-queue/branches")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the current status of the merge queue
@@ -1543,6 +1595,7 @@ export def "repos-merge-queue-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # The name of the branch
 ]: nothing -> record<batches: table<id: string, name: string, parent_ids: list, status: record, started_at: any, estimated_merge_at: any, estimated_ci_finish_at: any, ci_finished_at: any, scopes: list, queue_rule_name: string, checks_summary: record, pull_requests: list, checks_timeout_at: any, sub_batches: any>, waiting_pull_requests: table<number: int, title: string, url: string, author: record, queued_at: string, priority_alias: string, priority_rule_name: string, labels: list, scopes: list, github_labels: any, estimated_merge_at: any, estimated_ci_finish_at: any, conflict_with_pull_requests: any>, scope_queues: record, pause: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1551,7 +1604,7 @@ export def "repos-merge-queue-status get" [
   let full_url = (build-url $base $"/repos/($owner)/($repository)/merge-queue/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pull request in the merge queue
@@ -1569,13 +1622,14 @@ export def "repos-merge-queue-pull get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<number: int, queued_at: string, estimated_time_of_merge: any, position: int, priority_rule_name: string, queue_rule_name: string, checks_timeout_at: any, queue_rule: record<name: string, config: record>, mergeability_check: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/merge-queue/pull/($pr_number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause the merge queue
@@ -1592,6 +1646,7 @@ export def "repos-merge-queue-pause put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # The reason of the merge queue pause
 ]: any -> record<paused: bool, reason: any, paused_at: any> {
   let input = $in
@@ -1602,7 +1657,7 @@ export def "repos-merge-queue-pause put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unpause merge queue
@@ -1619,13 +1674,14 @@ export def "repos-merge-queue-pause delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/merge-queue/pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get merge queue pause data
@@ -1642,13 +1698,14 @@ export def "repos-merge-queue-pause get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<paused: bool, reason: any, paused_at: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($repository)/merge-queue/pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage enabled products
@@ -1665,6 +1722,7 @@ export def "products put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   products: list
 ]: any -> any {
   let input = $in
@@ -1675,7 +1733,7 @@ export def "products put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default enabled products
@@ -1691,13 +1749,14 @@ export def "default-products get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<products: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default_products/($owner)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage default enabled products
@@ -1713,6 +1772,7 @@ export def "default-products put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   products: list
 ]: any -> any {
   let input = $in
@@ -1723,5 +1783,5 @@ export def "default-products put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

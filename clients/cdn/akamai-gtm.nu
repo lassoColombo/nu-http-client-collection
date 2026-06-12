@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def type-completer [] { ["Download score" "Non-XML load object via HTTP" "Non-XM
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains post-domain" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "domains post-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contractId: string # A unique identifier for the contract. If your GTM client credential has access to more than one contract, you need to specify under which contract to provision the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 1-1TJZFW)
   --gid: int # A unique identifier for the group. If your GTM client credential has access to more than one group, you need to specify which group to assign to the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 15166)
@@ -120,7 +122,7 @@ export def "domains post-domain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "domain-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "domain-vnd-config-gtm.v1.0+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "domain-vnd-config-gtm.v1.0+json" $body
 }
 
 # List domains
@@ -136,6 +138,7 @@ export def "domains get-domains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -144,7 +147,7 @@ export def "domains get-domains" [
   let full_url = (build-url $base "/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a domain
@@ -161,6 +164,7 @@ export def "domains get-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contractId: string # A unique identifier for the contract. If your GTM client credential has access to more than one contract, you need to specify under which contract to provision the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 1-1TJZFW)
   --gid: int # A unique identifier for the group. If your GTM client credential has access to more than one group, you need to specify which group to assign to the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 15166)
@@ -172,7 +176,7 @@ export def "domains get-domain" [
   let full_url = (build-url $base $"/domains/($domainName)" $qp)
   let accept_val = ($accept | default "domain-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a domain
@@ -189,6 +193,7 @@ export def "domains put-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contractId: string # A unique identifier for the contract. If your GTM client credential has access to more than one contract, you need to specify under which contract to provision the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 1-1TJZFW)
   --gid: int # A unique identifier for the group. If your GTM client credential has access to more than one group, you need to specify which group to assign to the domain. For more information, see [API concepts](https://techdocs.akamai.com/gtm/reference/api-concepts). (e.g. 15166)
@@ -203,7 +208,7 @@ export def "domains put-domain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "domain-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "domain-vnd-config-gtm.v1.0+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "domain-vnd-config-gtm.v1.0+json" $body
 }
 
 # List AS maps
@@ -220,6 +225,7 @@ export def "domains-as-maps get-as-maps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -228,7 +234,7 @@ export def "domains-as-maps get-as-maps" [
   let full_url = (build-url $base $"/domains/($domainName)/as-maps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an AS map
@@ -246,6 +252,7 @@ export def "domains-as-maps get-as-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<assignments: table<asNumbers: list, datacenterId: int, nickname: string>, defaultDatacenter: record<datacenterId: int, nickname: string>, links: table<href: string, rel: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -254,7 +261,7 @@ export def "domains-as-maps get-as-map" [
   let full_url = (build-url $base $"/domains/($domainName)/as-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update an AS map
@@ -275,6 +282,7 @@ export def "domains-as-maps put-as-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   assignments: list # Contains information about the AS zone groupings of AS IDs. — item shape: {asNumbers: list, datacenterId: int, nickname: string}
@@ -291,7 +299,7 @@ export def "domains-as-maps put-as-map" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an AS map
@@ -309,6 +317,7 @@ export def "domains-as-maps delete-as-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -317,7 +326,7 @@ export def "domains-as-maps delete-as-map" [
   let full_url = (build-url $base $"/domains/($domainName)/as-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List CIDR maps
@@ -334,6 +343,7 @@ export def "domains-cidr-maps get-cidr-maps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -342,7 +352,7 @@ export def "domains-cidr-maps get-cidr-maps" [
   let full_url = (build-url $base $"/domains/($domainName)/cidr-maps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a CIDR map
@@ -360,6 +370,7 @@ export def "domains-cidr-maps get-cidr-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<assignments: table<blocks: list, datacenterId: int, nickname: string>, defaultDatacenter: record<datacenterId: int, nickname: string>, links: table<href: string, rel: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -368,7 +379,7 @@ export def "domains-cidr-maps get-cidr-map" [
   let full_url = (build-url $base $"/domains/($domainName)/cidr-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a CIDR map
@@ -389,6 +400,7 @@ export def "domains-cidr-maps put-cidr-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --assignments: list # Contains information about the CIDR zone groupings of CIDR blocks. — item shape: {blocks?: list, datacenterId?: int, nickname?: string}
@@ -405,7 +417,7 @@ export def "domains-cidr-maps put-cidr-map" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a CIDR map
@@ -423,6 +435,7 @@ export def "domains-cidr-maps delete-cidr-maps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -431,7 +444,7 @@ export def "domains-cidr-maps delete-cidr-maps" [
   let full_url = (build-url $base $"/domains/($domainName)/cidr-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a data center
@@ -448,6 +461,7 @@ export def "domains-datacenters post-datacenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --body: record
@@ -460,7 +474,7 @@ export def "domains-datacenters post-datacenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "datacenter-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "datacenter-vnd-config-gtm.v1.0+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "datacenter-vnd-config-gtm.v1.0+json" $body
 }
 
 # List data centers
@@ -477,6 +491,7 @@ export def "domains-datacenters get-datacenters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -485,7 +500,7 @@ export def "domains-datacenters get-datacenters" [
   let full_url = (build-url $base $"/domains/($domainName)/datacenters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an IPv4 datacenter for ip-version-selector
@@ -502,6 +517,7 @@ export def "domains-datacenters-datacenter-for-ip-version-selector-ipv4 post-dat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -510,7 +526,7 @@ export def "domains-datacenters-datacenter-for-ip-version-selector-ipv4 post-dat
   let full_url = (build-url $base $"/domains/($domainName)/datacenters/datacenter-for-ip-version-selector-ipv4" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an IPv6 datacenter for ip-version-selector
@@ -527,6 +543,7 @@ export def "domains-datacenters-datacenter-for-ip-version-selector-ipv6 post-dat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -535,7 +552,7 @@ export def "domains-datacenters-datacenter-for-ip-version-selector-ipv6 post-dat
   let full_url = (build-url $base $"/domains/($domainName)/datacenters/datacenter-for-ip-version-selector-ipv6" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a default data center
@@ -552,6 +569,7 @@ export def "domains-datacenters-default-datacenter-for-maps post-default-datacen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -560,7 +578,7 @@ export def "domains-datacenters-default-datacenter-for-maps post-default-datacen
   let full_url = (build-url $base $"/domains/($domainName)/datacenters/default-datacenter-for-maps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a data center
@@ -578,6 +596,7 @@ export def "domains-datacenters get-datacenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> any {
@@ -587,7 +606,7 @@ export def "domains-datacenters get-datacenter" [
   let full_url = (build-url $base $"/domains/($domainName)/datacenters/($datacenterId)" $qp)
   let accept_val = ($accept | default "datacenter-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a data center
@@ -605,6 +624,7 @@ export def "domains-datacenters put-datacenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
@@ -618,7 +638,7 @@ export def "domains-datacenters put-datacenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "datacenter-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "datacenter-vnd-config-gtm.v1.0+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "datacenter-vnd-config-gtm.v1.0+json" $body
 }
 
 # Remove a data center
@@ -636,6 +656,7 @@ export def "domains-datacenters delete-datacenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -644,7 +665,7 @@ export def "domains-datacenters delete-datacenter" [
   let full_url = (build-url $base $"/domains/($domainName)/datacenters/($datacenterId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List geographic maps
@@ -661,6 +682,7 @@ export def "domains-geographic-maps get-geographic-maps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -669,7 +691,7 @@ export def "domains-geographic-maps get-geographic-maps" [
   let full_url = (build-url $base $"/domains/($domainName)/geographic-maps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a geographic map
@@ -687,6 +709,7 @@ export def "domains-geographic-maps get-geographic-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<assignments: table<countries: list, datacenterId: int, nickname: string>, defaultDatacenter: record<datacenterId: int, nickname: string>, links: table<href: string, rel: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -695,7 +718,7 @@ export def "domains-geographic-maps get-geographic-map" [
   let full_url = (build-url $base $"/domains/($domainName)/geographic-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a geographic map
@@ -716,6 +739,7 @@ export def "domains-geographic-maps put-geographic-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --assignments: list # Contains information about the geographic zone groupings of countries. — item shape: {countries?: list, datacenterId?: int, nickname?: string}
@@ -732,7 +756,7 @@ export def "domains-geographic-maps put-geographic-map" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a geographic map
@@ -750,6 +774,7 @@ export def "domains-geographic-maps delete-geographic-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -758,7 +783,7 @@ export def "domains-geographic-maps delete-geographic-map" [
   let full_url = (build-url $base $"/domains/($domainName)/geographic-maps/($mapName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List domain history
@@ -775,6 +800,7 @@ export def "domains-history get-domain-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. The first is page 1. (e.g. 1)
   --pageSize: int # The number of elements to return per page. The default is 25. (default: 25, e.g. 20)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
@@ -785,7 +811,7 @@ export def "domains-history get-domain-history" [
   let full_url = (build-url $base $"/domains/($domainName)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List properties
@@ -802,6 +828,7 @@ export def "domains-properties get-properties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<items: table<backupCName: string, backupIp: string, balanceByDownloadScore: bool, cname: string, comments: string, dynamicTTL: int, failbackDelay: int, failoverDelay: int, handoutMode: string, healthMax: float, healthMultiplier: float, healthThreshold: float, ipv6: bool, lastModified: string, links: list, livenessTests: list, loadImbalancePercentage: float, mapName: string, maxUnreachablePenalty: float, mxRecords: list, name: string, scoreAggregationType: string, staticTTL: int, stickinessBonusConstant: int, stickinessBonusPercentage: int, trafficTargets: list, type: string, unreachableThreshold: float, useComputedTargets: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -810,7 +837,7 @@ export def "domains-properties get-properties" [
   let full_url = (build-url $base $"/domains/($domainName)/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a property
@@ -828,6 +855,7 @@ export def "domains-properties get-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> any {
@@ -837,7 +865,7 @@ export def "domains-properties get-property" [
   let full_url = (build-url $base $"/domains/($domainName)/properties/($propertyName)" $qp)
   let accept_val = ($accept | default "application/property-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a property
@@ -855,6 +883,7 @@ export def "domains-properties put-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
@@ -868,7 +897,7 @@ export def "domains-properties put-property" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/property-vnd-config-gtm.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/property-vnd-config-gtm.v1.0+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/property-vnd-config-gtm.v1.0+json" $body
 }
 
 # Remove a property
@@ -886,6 +915,7 @@ export def "domains-properties delete-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: string, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -894,7 +924,7 @@ export def "domains-properties delete-property" [
   let full_url = (build-url $base $"/domains/($domainName)/properties/($propertyName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List resources
@@ -911,6 +941,7 @@ export def "domains-resources get-resources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: table<href: string, rel: string>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: table<datacenterId: int, loadObject: string, loadObjectPort: int, loadServers: list, useDefaultLoadObject: bool>, type: string, upperBound: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -919,7 +950,7 @@ export def "domains-resources get-resources" [
   let full_url = (build-url $base $"/domains/($domainName)/resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a resource
@@ -937,6 +968,7 @@ export def "domains-resources get-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: table<href: string, rel: string>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: table<datacenterId: int, loadObject: string, loadObjectPort: int, loadServers: list, useDefaultLoadObject: bool>, type: string, upperBound: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -945,7 +977,7 @@ export def "domains-resources get-resource" [
   let full_url = (build-url $base $"/domains/($domainName)/resources/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a resource
@@ -965,6 +997,7 @@ export def "domains-resources put-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domainModificationComments: string # Specifies change descriptions for audit trail and domain's change history. The maximum is 4000 characters. (nullable, e.g. Load balancer policy change)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   aggregationType: string@aggregationType-completer # Specifies how GTM handles different load numbers when multiple load servers are used for a data center or property. Either `sum`, `median`, or `latest`. For test time load feedback, consider `median`. (Akamai conducts tests from multiple locations, so you can ignore outlying values.) For load feedback with manual targets or dynamic targets, consider `latest` because all load servers normally report similar numbers. (e.g. {{aggregationType}})
@@ -992,7 +1025,7 @@ export def "domains-resources put-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a resource
@@ -1010,6 +1043,7 @@ export def "domains-resources delete-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<resource: record<aggregationType: string, comments: string, constrainedProperty: string, decayRate: float, description: string, hostHeader: string, leaderString: string, leastSquaresDecay: float, links: list<record>, loadImbalancePercentage: float, maxUMultiplicativeIncrement: float, name: string, resourceInstances: list<record>, type: string, upperBound: int>, status: record<changeId: string, links: list<record>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1018,7 +1052,7 @@ export def "domains-resources delete-resource" [
   let full_url = (build-url $base $"/domains/($domainName)/resources/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current status
@@ -1035,6 +1069,7 @@ export def "domains-status-current get-status-current" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<changeId: string, links: table<href: string, rel: string>, message: string, passingValidation: bool, propagationStatus: string, propagationStatusDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1043,7 +1078,7 @@ export def "domains-status-current get-status-current" [
   let full_url = (build-url $base $"/domains/($domainName)/status/current" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get identity
@@ -1059,6 +1094,7 @@ export def "identity get-identity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<accountId: string, active: bool, contracts: table<contractId: string, features: list, permissions: list>, email: string, firstName: string, lastName: string, locale: string, userName: string, userTimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1067,7 +1103,7 @@ export def "identity get-identity" [
   let full_url = (build-url $base "/identity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contracts
@@ -1083,6 +1119,7 @@ export def "identity-contracts get-identity-contracts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<accountId: string, contracts: table<contractId: string, contractName: string, contractTypeName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1091,7 +1128,7 @@ export def "identity-contracts get-identity-contracts" [
   let full_url = (build-url $base "/identity/contracts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List groups
@@ -1107,6 +1144,7 @@ export def "identity-groups get-identity-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<groups: table<contractIds: list, groupId: int, groupName: string, permissions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1115,5 +1153,5 @@ export def "identity-groups get-identity-groups" [
   let full_url = (build-url $base "/identity/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

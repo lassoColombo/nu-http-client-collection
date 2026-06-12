@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -60,14 +61,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,10 +99,11 @@ export def "articles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: list # Search for all documents related to a specific event using its Launch Library 2 ID.
-  --has-event: string@bool-completer # Get all documents that have a related event.
-  --has-launch: string@bool-completer # Get all documents that have a related launch.
-  --is-featured: string@bool-completer # Get all documents that are featured.
+  --has-event: oneof<nothing, bool> # Get all documents that have a related event.
+  --has-launch: oneof<nothing, bool> # Get all documents that have a related launch.
+  --is-featured: oneof<nothing, bool> # Get all documents that are featured.
   --launch: list # Search for all documents related to a specific launch using its Launch Library 2 ID.
   --limit: int # Number of results to return per page.
   --news-site: string # Search for documents with a news_site__name present in a list of comma-separated values. Case insensitive.
@@ -131,7 +132,7 @@ export def "articles list" [
   let full_url = (build-url $base "/v4/articles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/articles/{id}/
@@ -146,13 +147,14 @@ export def "articles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, title: string, authors: table<name: string, socials: record>, url: string, image_url: string, news_site: string, summary: string, published_at: string, updated_at: string, featured: bool, launches: table<launch_id: string, provider: string>, events: table<event_id: int, provider: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v4/articles/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/blogs/
@@ -166,10 +168,11 @@ export def "blogs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: list # Search for all documents related to a specific event using its Launch Library 2 ID.
-  --has-event: string@bool-completer # Get all documents that have a related event.
-  --has-launch: string@bool-completer # Get all documents that have a related launch.
-  --is-featured: string@bool-completer # Get all documents that are featured.
+  --has-event: oneof<nothing, bool> # Get all documents that have a related event.
+  --has-launch: oneof<nothing, bool> # Get all documents that have a related launch.
+  --is-featured: oneof<nothing, bool> # Get all documents that are featured.
   --launch: list # Search for all documents related to a specific launch using its Launch Library 2 ID.
   --limit: int # Number of results to return per page.
   --news-site: string # Search for documents with a news_site__name present in a list of comma-separated values. Case insensitive.
@@ -198,7 +201,7 @@ export def "blogs list" [
   let full_url = (build-url $base "/v4/blogs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/blogs/{id}/
@@ -213,13 +216,14 @@ export def "blogs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, title: string, authors: table<name: string, socials: record>, url: string, image_url: string, news_site: string, summary: string, published_at: string, updated_at: string, featured: bool, launches: table<launch_id: string, provider: string>, events: table<event_id: int, provider: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v4/blogs/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/info/
@@ -233,13 +237,14 @@ export def "info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, news_sites: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/info/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/reports/
@@ -253,6 +258,7 @@ export def "reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --news-site: string # Search for documents with a news_site__name present in a list of comma-separated values. Case insensitive.
   --news-site-exclude: string # Search for documents with a news_site__name not present in a list of comma-separated values. Case insensitive.
@@ -280,7 +286,7 @@ export def "reports list" [
   let full_url = (build-url $base "/v4/reports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v4/reports/{id}/
@@ -295,11 +301,12 @@ export def "reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, title: string, authors: table<name: string, socials: record>, url: string, image_url: string, news_site: string, summary: string, published_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v4/reports/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

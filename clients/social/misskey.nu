@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -121,7 +122,7 @@ def category-completer [] { ["criticalBreach" "explicit" "nsfw" "other" "otherBr
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-abuse-report-resolver-create create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -155,6 +156,7 @@ export def "admin-abuse-report-resolver-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --targetUserPattern: string # nullable
   --reporterPattern: string # nullable
@@ -170,7 +172,7 @@ export def "admin-abuse-report-resolver-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report-resolver/delete
@@ -186,6 +188,7 @@ export def "admin-abuse-report-resolver-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   resolverId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -196,7 +199,7 @@ export def "admin-abuse-report-resolver-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report-resolver/list
@@ -212,6 +215,7 @@ export def "admin-abuse-report-resolver-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -224,7 +228,7 @@ export def "admin-abuse-report-resolver-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report-resolver/update
@@ -240,6 +244,7 @@ export def "admin-abuse-report-resolver-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   resolverId: string # format: misskey:id
   --name: string
   --targetUserPattern: string # nullable
@@ -256,7 +261,7 @@ export def "admin-abuse-report-resolver-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report/notification-recipient/create
@@ -272,6 +277,7 @@ export def "admin-abuse-report-notification-recipient-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isActive: oneof<nothing, bool>
   name: string
   method: string@method-completer
@@ -286,7 +292,7 @@ export def "admin-abuse-report-notification-recipient-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report/notification-recipient/delete
@@ -302,6 +308,7 @@ export def "admin-abuse-report-notification-recipient-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -312,7 +319,7 @@ export def "admin-abuse-report-notification-recipient-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report/notification-recipient/list
@@ -328,6 +335,7 @@ export def "admin-abuse-report-notification-recipient-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: list
 ]: any -> table<id: string, isActive: bool, updatedAt: string, name: string, method: string, userId: string, user: record, systemWebhookId: string, systemWebhook: record> {
   let input = $in
@@ -338,7 +346,7 @@ export def "admin-abuse-report-notification-recipient-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report/notification-recipient/show
@@ -354,6 +362,7 @@ export def "admin-abuse-report-notification-recipient-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> record<id: string, isActive: bool, updatedAt: string, name: string, method: string, userId: string, user: record, systemWebhookId: string, systemWebhook: record> {
   let input = $in
@@ -364,7 +373,7 @@ export def "admin-abuse-report-notification-recipient-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-report/notification-recipient/update
@@ -380,6 +389,7 @@ export def "admin-abuse-report-notification-recipient-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
   --isActive: oneof<nothing, bool>
   name: string
@@ -395,7 +405,7 @@ export def "admin-abuse-report-notification-recipient-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/abuse-user-reports
@@ -411,6 +421,7 @@ export def "admin-abuse-user-reports abuse-user-reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -428,7 +439,7 @@ export def "admin-abuse-user-reports abuse-user-reports" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/accounts/create
@@ -444,6 +455,7 @@ export def "admin-accounts-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string
   password: string
   --setupPassword: string # nullable
@@ -456,7 +468,7 @@ export def "admin-accounts-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/accounts/delete
@@ -472,6 +484,7 @@ export def "admin-accounts-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --soft: oneof<nothing, bool> # Since deletion by an administrator is a moderation action, the default is to soft delete. (default: true)
 ]: any -> any {
@@ -483,7 +496,7 @@ export def "admin-accounts-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/accounts/find-by-email
@@ -499,6 +512,7 @@ export def "admin-accounts-find-by-email find-by-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string
 ]: any -> any {
   let input = $in
@@ -509,7 +523,7 @@ export def "admin-accounts-find-by-email find-by-email" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/accounts/pending/list
@@ -525,6 +539,7 @@ export def "admin-accounts-pending-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --body-sort: string@sort-completer
@@ -540,7 +555,7 @@ export def "admin-accounts-pending-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/accounts/pending/revoke
@@ -556,6 +571,7 @@ export def "admin-accounts-pending-revoke revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # format: misskey:id
   --code: string
 ]: any -> any {
@@ -567,7 +583,7 @@ export def "admin-accounts-pending-revoke revoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/ad/create
@@ -583,6 +599,7 @@ export def "admin-ad-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string
   memo: string
   place: string
@@ -602,7 +619,7 @@ export def "admin-ad-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/ad/delete
@@ -618,6 +635,7 @@ export def "admin-ad-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -628,7 +646,7 @@ export def "admin-ad-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/ad/list
@@ -644,6 +662,7 @@ export def "admin-ad-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -657,7 +676,7 @@ export def "admin-ad-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/ad/update
@@ -673,6 +692,7 @@ export def "admin-ad-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
   --memo: string
   --body-url: string
@@ -693,7 +713,7 @@ export def "admin-ad-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/announcements/create
@@ -709,6 +729,7 @@ export def "admin-announcements-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string
   text: string
   --imageUrl: string # nullable
@@ -730,7 +751,7 @@ export def "admin-announcements-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/announcements/delete
@@ -746,6 +767,7 @@ export def "admin-announcements-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -756,7 +778,7 @@ export def "admin-announcements-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/announcements/list
@@ -772,6 +794,7 @@ export def "admin-announcements-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --userId: string # nullable, format: misskey:id
@@ -785,7 +808,7 @@ export def "admin-announcements-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/announcements/update
@@ -801,6 +824,7 @@ export def "admin-announcements-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
   --title: string
   --text: string
@@ -823,7 +847,7 @@ export def "admin-announcements-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/avatar-decorations/create
@@ -839,6 +863,7 @@ export def "admin-avatar-decorations-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   description: string
   --body-url: string
@@ -852,7 +877,7 @@ export def "admin-avatar-decorations-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/avatar-decorations/delete
@@ -868,6 +893,7 @@ export def "admin-avatar-decorations-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -878,7 +904,7 @@ export def "admin-avatar-decorations-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/avatar-decorations/list
@@ -894,6 +920,7 @@ export def "admin-avatar-decorations-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -907,7 +934,7 @@ export def "admin-avatar-decorations-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/avatar-decorations/update
@@ -923,6 +950,7 @@ export def "admin-avatar-decorations-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
   --name: string
   --description: string
@@ -937,7 +965,7 @@ export def "admin-avatar-decorations-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/captcha/current
@@ -953,13 +981,14 @@ export def "admin-captcha-current current" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<provider: string, hcaptcha: record<siteKey: string, secretKey: string>, mcaptcha: record<siteKey: string, secretKey: string, instanceUrl: string>, recaptcha: record<siteKey: string, secretKey: string>, turnstile: record<siteKey: string, secretKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/captcha/current")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/captcha/save
@@ -975,6 +1004,7 @@ export def "admin-captcha-save save" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   provider: string@provider-completer
   --captchaResult: string # nullable
   --sitekey: string # nullable
@@ -989,7 +1019,7 @@ export def "admin-captcha-save save" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/drive/clean-remote-files
@@ -1005,13 +1035,14 @@ export def "admin-drive-clean-remote-files clean-remote-files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/drive/clean-remote-files")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/drive/cleanup
@@ -1027,13 +1058,14 @@ export def "admin-drive-cleanup cleanup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/drive/cleanup")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/drive/delete-all-files-of-a-user
@@ -1049,6 +1081,7 @@ export def "admin-drive-delete-all-files-of-a-user delete-all-files-of-a-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -1059,7 +1092,7 @@ export def "admin-drive-delete-all-files-of-a-user delete-all-files-of-a-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/drive/files
@@ -1075,6 +1108,7 @@ export def "admin-drive-files files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -1091,7 +1125,7 @@ export def "admin-drive-files files" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/drive/show-file
@@ -1107,6 +1141,7 @@ export def "admin-drive-show-file show-file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fileId: string # format: misskey:id
   --body-url: string
 ]: any -> record<id: string, createdAt: string, userId: string, userHost: string, md5: string, name: string, type: string, size: float, comment: string, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, storedInternal: bool, url: string, thumbnailUrl: string, webpublicUrl: string, accessKey: string, thumbnailAccessKey: string, webpublicAccessKey: string, uri: string, src: string, folderId: string, isSensitive: bool, isLink: bool> {
@@ -1118,7 +1153,7 @@ export def "admin-drive-show-file show-file" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/add
@@ -1134,6 +1169,7 @@ export def "admin-emoji-add add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   fileId: string # format: misskey:id
   --category: string # Use `null` to reset the category. (nullable)
@@ -1154,7 +1190,7 @@ export def "admin-emoji-add add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/add-aliases-bulk
@@ -1170,6 +1206,7 @@ export def "admin-emoji-add-aliases-bulk add-aliases-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
   aliases: list
 ]: any -> any {
@@ -1181,7 +1218,7 @@ export def "admin-emoji-add-aliases-bulk add-aliases-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/copy
@@ -1197,6 +1234,7 @@ export def "admin-emoji-copy copy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emojiId: string # format: misskey:id
 ]: any -> record<id: string> {
   let input = $in
@@ -1207,7 +1245,7 @@ export def "admin-emoji-copy copy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/delete
@@ -1223,6 +1261,7 @@ export def "admin-emoji-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -1233,7 +1272,7 @@ export def "admin-emoji-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/delete-bulk
@@ -1249,6 +1288,7 @@ export def "admin-emoji-delete-bulk delete-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
 ]: any -> any {
   let input = $in
@@ -1259,7 +1299,7 @@ export def "admin-emoji-delete-bulk delete-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/import-zip
@@ -1275,6 +1315,7 @@ export def "admin-emoji-import-zip import-zip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -1285,7 +1326,7 @@ export def "admin-emoji-import-zip import-zip" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/list
@@ -1301,6 +1342,7 @@ export def "admin-emoji-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string # nullable
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -1314,7 +1356,7 @@ export def "admin-emoji-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/list-remote
@@ -1330,6 +1372,7 @@ export def "admin-emoji-list-remote list-remote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string # nullable
   --host: string # Use `null` to represent the local host. (nullable)
   --limit: int # default: 10
@@ -1344,7 +1387,7 @@ export def "admin-emoji-list-remote list-remote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/remove-aliases-bulk
@@ -1360,6 +1403,7 @@ export def "admin-emoji-remove-aliases-bulk remove-aliases-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
   aliases: list
 ]: any -> any {
@@ -1371,7 +1415,7 @@ export def "admin-emoji-remove-aliases-bulk remove-aliases-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/set-aliases-bulk
@@ -1387,6 +1431,7 @@ export def "admin-emoji-set-aliases-bulk set-aliases-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
   aliases: list
 ]: any -> any {
@@ -1398,7 +1443,7 @@ export def "admin-emoji-set-aliases-bulk set-aliases-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/set-category-bulk
@@ -1414,6 +1459,7 @@ export def "admin-emoji-set-category-bulk set-category-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
   --category: string # Use `null` to reset the category. (nullable)
 ]: any -> any {
@@ -1425,7 +1471,7 @@ export def "admin-emoji-set-category-bulk set-category-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/set-license-bulk
@@ -1441,6 +1487,7 @@ export def "admin-emoji-set-license-bulk set-license-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list
   --license: string # Use `null` to reset the license. (nullable)
 ]: any -> any {
@@ -1452,7 +1499,7 @@ export def "admin-emoji-set-license-bulk set-license-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/emoji/update
@@ -1468,6 +1515,7 @@ export def "admin-emoji-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # format: misskey:id
   --name: string
   --fileId: string # format: misskey:id
@@ -1489,7 +1537,7 @@ export def "admin-emoji-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/federation/delete-all-files
@@ -1505,6 +1553,7 @@ export def "admin-federation-delete-all-files delete-all-files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
 ]: any -> any {
   let input = $in
@@ -1515,7 +1564,7 @@ export def "admin-federation-delete-all-files delete-all-files" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/federation/refresh-remote-instance-metadata
@@ -1531,6 +1580,7 @@ export def "admin-federation-refresh-remote-instance-metadata refresh-remote-ins
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
 ]: any -> any {
   let input = $in
@@ -1541,7 +1591,7 @@ export def "admin-federation-refresh-remote-instance-metadata refresh-remote-ins
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/federation/remove-all-following
@@ -1557,6 +1607,7 @@ export def "admin-federation-remove-all-following remove-all-following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
 ]: any -> any {
   let input = $in
@@ -1567,7 +1618,7 @@ export def "admin-federation-remove-all-following remove-all-following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/federation/update-instance
@@ -1583,6 +1634,7 @@ export def "admin-federation-update-instance update-instance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
   --isSuspended: oneof<nothing, bool>
   --moderationNote: string
@@ -1595,7 +1647,7 @@ export def "admin-federation-update-instance update-instance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/forward-abuse-user-report
@@ -1611,6 +1663,7 @@ export def "admin-forward-abuse-user-report forward-abuse-user-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reportId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -1621,7 +1674,7 @@ export def "admin-forward-abuse-user-report forward-abuse-user-report" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/get-index-stats
@@ -1637,13 +1690,14 @@ export def "admin-get-index-stats get-index-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<tablename: string, indexname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/get-index-stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/get-table-stats
@@ -1659,13 +1713,14 @@ export def "admin-get-table-stats get-table-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/get-table-stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/get-user-ips
@@ -1681,6 +1736,7 @@ export def "admin-get-user-ips get-user-ips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> table<ip: string, createdAt: string> {
   let input = $in
@@ -1691,7 +1747,7 @@ export def "admin-get-user-ips get-user-ips" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/indie-auth/create
@@ -1707,6 +1763,7 @@ export def "admin-indie-auth-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string
   --name: string # nullable
   --redirectUris: list
@@ -1719,7 +1776,7 @@ export def "admin-indie-auth-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/indie-auth/delete
@@ -1735,6 +1792,7 @@ export def "admin-indie-auth-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string
 ]: any -> any {
   let input = $in
@@ -1745,7 +1803,7 @@ export def "admin-indie-auth-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/indie-auth/list
@@ -1761,6 +1819,7 @@ export def "admin-indie-auth-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
 ]: any -> table<id: string, createdAt: string, name: string, redirectUris: list<string>> {
@@ -1772,7 +1831,7 @@ export def "admin-indie-auth-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/indie-auth/update
@@ -1788,6 +1847,7 @@ export def "admin-indie-auth-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string
   --name: string # nullable
   --redirectUris: list
@@ -1800,7 +1860,7 @@ export def "admin-indie-auth-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/invite/create
@@ -1816,6 +1876,7 @@ export def "admin-invite-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # default: 1
   --expiresAt: string # nullable
 ]: any -> table<id: string, code: string, expiresAt: string, createdAt: string, createdBy: record, usedBy: record, usedAt: string, used: bool> {
@@ -1827,7 +1888,7 @@ export def "admin-invite-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/invite/list
@@ -1843,6 +1904,7 @@ export def "admin-invite-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 30
   --offset: int # default: 0
   --type: string@type-completer # default: all
@@ -1856,7 +1918,7 @@ export def "admin-invite-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/meta
@@ -1872,13 +1934,14 @@ export def "admin-meta meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cacheRemoteFiles: bool, cacheRemoteSensitiveFiles: bool, emailRequiredForSignup: bool, enableHcaptcha: bool, hcaptchaSiteKey: string, enableMcaptcha: bool, mcaptchaSiteKey: string, mcaptchaInstanceUrl: string, enableRecaptcha: bool, recaptchaSiteKey: string, enableTurnstile: bool, turnstileSiteKey: string, googleAnalyticsId: string, swPublickey: string, mascotImageUrl: string, bannerUrl: string, serverErrorImageUrl: string, infoImageUrl: string, notFoundImageUrl: string, iconUrl: string, app192IconUrl: string, app512IconUrl: string, enableEmail: bool, enableServiceWorker: bool, translatorAvailable: bool, silencedHosts: list<string>, sensitiveMediaHosts: list<string>, pinnedUsers: list<string>, hiddenTags: list<string>, blockedHosts: list<string>, blockedRemoteCustomEmojis: list<string>, sensitiveWords: list<string>, prohibitedWords: list<string>, bannedEmailDomains: list<string>, preservedUsernames: list<string>, hcaptchaSecretKey: string, mcaptchaSecretKey: string, recaptchaSecretKey: string, turnstileSecretKey: string, sensitiveMediaDetection: string, sensitiveMediaDetectionSensitivity: string, setSensitiveFlagAutomatically: bool, enableSensitiveMediaDetectionForVideos: bool, proxyAccountId: string, email: string, smtpSecure: bool, smtpHost: string, smtpPort: float, smtpUser: string, smtpPass: string, swPrivateKey: string, useObjectStorage: bool, objectStorageBaseUrl: string, objectStorageBucket: string, objectStoragePrefix: string, objectStorageEndpoint: string, objectStorageRegion: string, objectStoragePort: float, objectStorageAccessKey: string, objectStorageSecretKey: string, objectStorageUseSSL: bool, objectStorageUseProxy: bool, objectStorageSetPublicRead: bool, enableIpLogging: bool, enableActiveEmailValidation: bool, enableVerifymailApi: bool, verifymailAuthKey: string, enableTruemailApi: bool, truemailInstance: string, truemailAuthKey: string, enableChartsForRemoteUser: bool, enableChartsForFederatedInstances: bool, enableServerMachineStats: bool, enableIdenticonGeneration: bool, manifestJsonOverride: string, policies: record, enableFanoutTimeline: bool, enableFanoutTimelineDbFallback: bool, perLocalUserUserTimelineCacheMax: float, perRemoteUserUserTimelineCacheMax: float, perUserHomeTimelineCacheMax: float, perUserListTimelineCacheMax: float, notesPerOneAd: float, wellKnownWebsites: list<string>, urlPreviewDenyList: list<string>, featuredGameChannels: list<string>, backgroundImageUrl: string, deeplAuthKey: string, deeplIsPro: bool, defaultDarkTheme: string, defaultLightTheme: string, description: string, dimensions: float, disableRegistration: bool, impressumUrl: string, maintainerEmail: string, maintainerName: string, name: string, shortName: string, objectStorageS3ForcePathStyle: bool, privacyPolicyUrl: string, repositoryUrl: string, summalyProxy: string, themeColor: string, tosUrl: string, uri: string, version: string, urlPreviewEnabled: bool, urlPreviewTimeout: float, urlPreviewMaximumContentLength: float, urlPreviewRequireContentLength: bool, urlPreviewUserAgent: string, urlPreviewSummaryProxyUrl: string, federation: string, federationHosts: list<string>, prohibitedWordsForNameOfUser: list<string>, inquiryUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/meta")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/promo/create
@@ -1894,6 +1957,7 @@ export def "admin-promo-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   expiresAt: int
 ]: any -> any {
@@ -1905,7 +1969,7 @@ export def "admin-promo-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/queue/clear
@@ -1921,6 +1985,7 @@ export def "admin-queue-clear clear" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-1
   state: string@state-completer
 ]: any -> any {
@@ -1932,7 +1997,7 @@ export def "admin-queue-clear clear" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/queue/deliver-delayed
@@ -1948,13 +2013,14 @@ export def "admin-queue-deliver-delayed deliver-delayed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/queue/deliver-delayed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/queue/inbox-delayed
@@ -1970,13 +2036,14 @@ export def "admin-queue-inbox-delayed inbox-delayed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/queue/inbox-delayed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/queue/promote
@@ -1992,6 +2059,7 @@ export def "admin-queue-promote promote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-2
 ]: any -> any {
   let input = $in
@@ -2002,7 +2070,7 @@ export def "admin-queue-promote promote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/queue/stats
@@ -2018,13 +2086,14 @@ export def "admin-queue-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deliver: record<waiting: float, active: float, completed: float, failed: float, delayed: float>, inbox: record<waiting: float, active: float, completed: float, failed: float, delayed: float>, db: record<waiting: float, active: float, completed: float, failed: float, delayed: float>, objectStorage: record<waiting: float, active: float, completed: float, failed: float, delayed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/queue/stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/regenerate-user-token
@@ -2040,6 +2109,7 @@ export def "admin-regenerate-user-token regenerate-user-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2050,7 +2120,7 @@ export def "admin-regenerate-user-token regenerate-user-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/relays/add
@@ -2066,6 +2136,7 @@ export def "admin-relays-add add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   inbox: string
 ]: any -> record<id: string, inbox: string, status: string> {
   let input = $in
@@ -2076,7 +2147,7 @@ export def "admin-relays-add add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/relays/list
@@ -2092,13 +2163,14 @@ export def "admin-relays-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, inbox: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/relays/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/relays/remove
@@ -2114,6 +2186,7 @@ export def "admin-relays-remove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   inbox: string
 ]: any -> any {
   let input = $in
@@ -2124,7 +2197,7 @@ export def "admin-relays-remove remove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/reset-password
@@ -2140,6 +2213,7 @@ export def "admin-reset-password reset-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<password: string> {
   let input = $in
@@ -2150,7 +2224,7 @@ export def "admin-reset-password reset-password" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/resolve-abuse-user-report
@@ -2166,6 +2240,7 @@ export def "admin-resolve-abuse-user-report resolve-abuse-user-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reportId: string # format: misskey:id
   --resolvedAs: string@resolvedAs-completer # nullable
   --forward: oneof<nothing, bool> # default: false
@@ -2178,7 +2253,7 @@ export def "admin-resolve-abuse-user-report resolve-abuse-user-report" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/assign
@@ -2194,6 +2269,7 @@ export def "admin-roles-assign assign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   userId: string # format: misskey:id
   --memo: string
@@ -2207,7 +2283,7 @@ export def "admin-roles-assign assign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/create
@@ -2223,6 +2299,7 @@ export def "admin-roles-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   description: string
   --color: string # nullable
@@ -2248,7 +2325,7 @@ export def "admin-roles-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/delete
@@ -2264,6 +2341,7 @@ export def "admin-roles-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2274,7 +2352,7 @@ export def "admin-roles-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/list
@@ -2290,13 +2368,14 @@ export def "admin-roles-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/roles/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # admin/roles/show
@@ -2312,6 +2391,7 @@ export def "admin-roles-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -2322,7 +2402,7 @@ export def "admin-roles-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/unassign
@@ -2338,6 +2418,7 @@ export def "admin-roles-unassign unassign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   userId: string # format: misskey:id
 ]: any -> any {
@@ -2349,7 +2430,7 @@ export def "admin-roles-unassign unassign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/update
@@ -2365,6 +2446,7 @@ export def "admin-roles-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   --name: string
   --description: string
@@ -2391,7 +2473,7 @@ export def "admin-roles-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/update-default-policies
@@ -2407,6 +2489,7 @@ export def "admin-roles-update-default-policies update-default-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policies: record
 ]: any -> any {
   let input = $in
@@ -2417,7 +2500,7 @@ export def "admin-roles-update-default-policies update-default-policies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/update-inline-policies
@@ -2434,6 +2517,7 @@ export def "admin-roles-update-inline-policies update-inline-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   policies: list # item shape: {id?: string, policy: "gtlAvailable"|"ltlAvailable"|"canPublicNote"|"canScheduleNote"|"scheduleNoteLimit"|"scheduleNoteMaxDays"|"canInitiateConversation"|"canCreateContent"|"canUpdateContent"|"canDeleteContent"|"canPurgeAccount"|"canUpdateAvatar"|"canUpdateBanner"|"mentionLimit"|"canInvite"|"inviteLimit"|"inviteLimitCycle"|"inviteExpirationTime"|"canManageCustomEmojis"|"canManageAvatarDecorations"|"canSearchNotes"|"canUseTranslator"|"canUseDriveFileInSoundSettings"|"canUseReaction"|"canHideAds"|"driveCapacityMb"|"maxFileSizeMb"|"alwaysMarkNsfw"|"canUpdateBioMedia"|"skipNsfwDetection"|"pinLimit"|"antennaLimit"|"antennaNotesLimit"|"wordMuteLimit"|"webhookLimit"|"clipLimit"|"noteEachClipsLimit"|"userListLimit"|"userEachUserListsLimit"|"rateLimitFactor"|"avatarDecorationLimit"|"canImportAntennas"|"canImportBlocking"|"canImportFollowing"|"canImportMuting"|"canImportUserLists"|"mutualLinkSectionLimit"|"mutualLinkLimit"|"chatAvailability", operation?: "set"|"increment", value?: any, memo?: string}
 ]: any -> any {
@@ -2445,7 +2529,7 @@ export def "admin-roles-update-inline-policies update-inline-policies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/roles/users
@@ -2461,6 +2545,7 @@ export def "admin-roles-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -2474,7 +2559,7 @@ export def "admin-roles-users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/send-email
@@ -2490,6 +2575,7 @@ export def "admin-send-email send-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string
   subject: string
   text: string
@@ -2502,7 +2588,7 @@ export def "admin-send-email send-email" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/show-moderation-logs
@@ -2518,6 +2604,7 @@ export def "admin-show-moderation-logs show-moderation-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -2532,7 +2619,7 @@ export def "admin-show-moderation-logs show-moderation-logs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/show-user
@@ -2548,6 +2635,7 @@ export def "admin-show-user show-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<email: string, emailVerified: bool, followedMessage: string, autoAcceptFollowed: bool, noCrawle: bool, preventAiLearning: bool, alwaysMarkNsfw: bool, autoSensitive: bool, carefulBot: bool, injectFeaturedNote: bool, receiveAnnouncementEmail: bool, mutedWords: list<any>, mutedInstances: list<string>, notificationRecieveConfig: record<note: record, follow: record, mention: record, reply: record, renote: record, quote: record, reaction: record, pollEnded: record, receiveFollowRequest: record, followRequestAccepted: record, roleAssigned: record, chatRoomInvitationReceived: record, achievementEarned: record, app: record, test: record>, isModerator: bool, isSilenced: bool, isLimited: bool, isDeleted: bool, isSuspended: bool, isHibernated: bool, lastActiveDate: string, moderationNote: string, signins: table<id: string, createdAt: string, ip: string, headers: record, success: bool>, policies: record<gtlAvailable: bool, ltlAvailable: bool, canPublicNote: bool, canScheduleNote: bool, scheduleNoteLimit: int, scheduleNoteMaxDays: int, canInitiateConversation: bool, canCreateContent: bool, canUpdateContent: bool, canDeleteContent: bool, canPurgeAccount: bool, canUpdateAvatar: bool, canUpdateBanner: bool, mentionLimit: int, canInvite: bool, inviteLimit: int, inviteLimitCycle: int, inviteExpirationTime: int, canManageCustomEmojis: bool, canManageAvatarDecorations: bool, canSearchNotes: bool, canUseTranslator: bool, canUseDriveFileInSoundSettings: bool, canUseReaction: bool, canHideAds: bool, driveCapacityMb: int, maxFileSizeMb: int, alwaysMarkNsfw: bool, skipNsfwDetection: bool, canUpdateBioMedia: bool, pinLimit: int, antennaLimit: int, antennaNotesLimit: int, wordMuteLimit: int, webhookLimit: int, clipLimit: int, noteEachClipsLimit: int, userListLimit: int, userEachUserListsLimit: int, rateLimitFactor: int, avatarDecorationLimit: int, canImportAntennas: bool, canImportBlocking: bool, canImportFollowing: bool, canImportMuting: bool, canImportUserLists: bool, mutualLinkSectionLimit: int, mutualLinkLimit: int, chatAvailability: string>, roles: list<record>, roleAssigns: table<createdAt: string, expiresAt: string, roleId: string, memo: string>, inlinePolicies: table<id: string, createdAt: string, updatedAt: string, policy: string, operation: string, value: any, memo: string>> {
   let input = $in
@@ -2558,7 +2646,7 @@ export def "admin-show-user show-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/show-user-account-move-logs
@@ -2574,6 +2662,7 @@ export def "admin-show-user-account-move-logs show-user-account-move-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -2590,7 +2679,7 @@ export def "admin-show-user-account-move-logs show-user-account-move-logs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/show-users
@@ -2606,6 +2695,7 @@ export def "admin-show-users show-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --body-sort: string@sort-completer-2
@@ -2622,7 +2712,7 @@ export def "admin-show-users show-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/sso/create
@@ -2638,6 +2728,7 @@ export def "admin-sso-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   type: string@type-completer-3
   issuer: string
@@ -2660,7 +2751,7 @@ export def "admin-sso-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/sso/delete
@@ -2676,6 +2767,7 @@ export def "admin-sso-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string
 ]: any -> any {
   let input = $in
@@ -2686,7 +2778,7 @@ export def "admin-sso-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/sso/list
@@ -2702,6 +2794,7 @@ export def "admin-sso-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
 ]: any -> table<id: string, createdAt: string, name: string, type: string, issuer: string, audience: list<string>, binding: string, acsUrl: string, useCertificate: bool, publicKey: string, signatureAlgorithm: string, cipherAlgorithm: string, wantAuthnRequestsSigned: bool, wantAssertionsSigned: bool, wantEmailAddressNormalized: bool> {
@@ -2713,7 +2806,7 @@ export def "admin-sso-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/sso/update
@@ -2729,6 +2822,7 @@ export def "admin-sso-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string
   --name: string # nullable
   --issuer: string
@@ -2751,7 +2845,7 @@ export def "admin-sso-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/suspend-user
@@ -2767,6 +2861,7 @@ export def "admin-suspend-user suspend-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2777,7 +2872,7 @@ export def "admin-suspend-user suspend-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/create
@@ -2793,6 +2888,7 @@ export def "admin-system-webhook-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isActive: oneof<nothing, bool>
   name: string
   on: list
@@ -2807,7 +2903,7 @@ export def "admin-system-webhook-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/delete
@@ -2823,6 +2919,7 @@ export def "admin-system-webhook-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2833,7 +2930,7 @@ export def "admin-system-webhook-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/list
@@ -2849,6 +2946,7 @@ export def "admin-system-webhook-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isActive: oneof<nothing, bool>
   --on: list
 ]: any -> table<id: string, isActive: bool, updatedAt: string, latestSentAt: string, latestStatus: float, name: string, on: list<string>, url: string, secret: string> {
@@ -2860,7 +2958,7 @@ export def "admin-system-webhook-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/show
@@ -2876,6 +2974,7 @@ export def "admin-system-webhook-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
 ]: any -> record<id: string, isActive: bool, updatedAt: string, latestSentAt: string, latestStatus: float, name: string, on: list<string>, url: string, secret: string> {
   let input = $in
@@ -2886,7 +2985,7 @@ export def "admin-system-webhook-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/test
@@ -2903,6 +3002,7 @@ export def "admin-system-webhook-test test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookId: string # format: misskey:id
   type: string@type-completer-4
   --override: record # shape: {url?: string, secret?: string}
@@ -2915,7 +3015,7 @@ export def "admin-system-webhook-test test" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/system-webhook/update
@@ -2931,6 +3031,7 @@ export def "admin-system-webhook-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # format: misskey:id
   --isActive: oneof<nothing, bool>
   name: string
@@ -2946,7 +3047,7 @@ export def "admin-system-webhook-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/unset-user-avatar
@@ -2962,6 +3063,7 @@ export def "admin-unset-user-avatar unset-user-avatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2972,7 +3074,7 @@ export def "admin-unset-user-avatar unset-user-avatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/unset-user-banner
@@ -2988,6 +3090,7 @@ export def "admin-unset-user-banner unset-user-banner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -2998,7 +3101,7 @@ export def "admin-unset-user-banner unset-user-banner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/unset-user-mutual-link
@@ -3014,6 +3117,7 @@ export def "admin-unset-user-mutual-link unset-user-mutual-link" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   itemId: string # format: misskey:id
 ]: any -> any {
@@ -3025,7 +3129,7 @@ export def "admin-unset-user-mutual-link unset-user-mutual-link" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/unsuspend-user
@@ -3041,6 +3145,7 @@ export def "admin-unsuspend-user unsuspend-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -3051,7 +3156,7 @@ export def "admin-unsuspend-user unsuspend-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/update-abuse-user-report
@@ -3067,6 +3172,7 @@ export def "admin-update-abuse-user-report update-abuse-user-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reportId: string # format: misskey:id
   --moderationNote: string
 ]: any -> any {
@@ -3078,7 +3184,7 @@ export def "admin-update-abuse-user-report update-abuse-user-report" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/update-meta
@@ -3094,6 +3200,7 @@ export def "admin-update-meta update-meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disableRegistration: oneof<nothing, bool> # nullable
   --pinnedUsers: list # nullable
   --hiddenTags: list # nullable
@@ -3218,7 +3325,7 @@ export def "admin-update-meta update-meta" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/update-proxy-account
@@ -3234,6 +3341,7 @@ export def "admin-update-proxy-account update-proxy-account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # nullable
 ]: any -> any {
   let input = $in
@@ -3244,7 +3352,7 @@ export def "admin-update-proxy-account update-proxy-account" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/update-user-name
@@ -3260,6 +3368,7 @@ export def "admin-update-user-name update-user-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --name: string
 ]: any -> any {
@@ -3271,7 +3380,7 @@ export def "admin-update-user-name update-user-name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # admin/update-user-note
@@ -3287,6 +3396,7 @@ export def "admin-update-user-note update-user-note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   text: string
 ]: any -> any {
@@ -3298,7 +3408,7 @@ export def "admin-update-user-note update-user-note" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # announcement
@@ -3314,6 +3424,7 @@ export def "announcement announcement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   announcementId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, updatedAt: string, text: string, title: string, imageUrl: string, icon: string, display: string, needConfirmationToRead: bool, needEnrollmentTutorialToRead: bool, forYou: bool, closeDuration: float, displayOrder: float, silence: bool, isRead: bool> {
   let input = $in
@@ -3324,7 +3435,7 @@ export def "announcement announcement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # announcements
@@ -3340,6 +3451,7 @@ export def "announcements announcements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -3354,7 +3466,7 @@ export def "announcements announcements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # announcements/show
@@ -3370,6 +3482,7 @@ export def "announcements-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   announcementId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, updatedAt: string, text: string, title: string, imageUrl: string, icon: string, display: string, needConfirmationToRead: bool, needEnrollmentTutorialToRead: bool, forYou: bool, closeDuration: float, displayOrder: float, silence: bool, isRead: bool> {
   let input = $in
@@ -3380,7 +3493,7 @@ export def "announcements-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # antennas/create
@@ -3396,6 +3509,7 @@ export def "antennas-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   src: string@src-completer
   --userListId: string # nullable, format: misskey:id
@@ -3417,7 +3531,7 @@ export def "antennas-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # antennas/delete
@@ -3433,6 +3547,7 @@ export def "antennas-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   antennaId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -3443,7 +3558,7 @@ export def "antennas-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # antennas/list
@@ -3459,13 +3574,14 @@ export def "antennas-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, name: string, keywords: list<list>, excludeKeywords: list<list>, src: string, userListId: string, users: list<string>, caseSensitive: bool, localOnly: bool, excludeBots: bool, withReplies: bool, withFile: bool, isActive: bool, hasUnreadNote: bool, notify: bool, excludeNotesInSensitiveChannel: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/antennas/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # antennas/notes
@@ -3481,6 +3597,7 @@ export def "antennas-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   antennaId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -3496,7 +3613,7 @@ export def "antennas-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # antennas/show
@@ -3512,6 +3629,7 @@ export def "antennas-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   antennaId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, name: string, keywords: list<list<string>>, excludeKeywords: list<list<string>>, src: string, userListId: string, users: list<string>, caseSensitive: bool, localOnly: bool, excludeBots: bool, withReplies: bool, withFile: bool, isActive: bool, hasUnreadNote: bool, notify: bool, excludeNotesInSensitiveChannel: bool> {
   let input = $in
@@ -3522,7 +3640,7 @@ export def "antennas-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # antennas/update
@@ -3538,6 +3656,7 @@ export def "antennas-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   antennaId: string # format: misskey:id
   --name: string
   --src: string@src-completer
@@ -3560,7 +3679,7 @@ export def "antennas-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ap/get
@@ -3576,6 +3695,7 @@ export def "ap-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   uri: string
 ]: any -> record {
   let input = $in
@@ -3586,7 +3706,7 @@ export def "ap-get get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ap/show
@@ -3602,6 +3722,7 @@ export def "ap-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   uri: string
 ]: any -> any {
   let input = $in
@@ -3612,7 +3733,7 @@ export def "ap-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # app/create
@@ -3628,6 +3749,7 @@ export def "app-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   description: string
   permission: list
@@ -3641,7 +3763,7 @@ export def "app-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # app/show
@@ -3657,6 +3779,7 @@ export def "app-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   appId: string # format: misskey:id
 ]: any -> record<id: string, name: string, callbackUrl: string, permission: list<string>, secret: string, isAuthorized: bool> {
   let input = $in
@@ -3667,7 +3790,7 @@ export def "app-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # auth/accept
@@ -3683,6 +3806,7 @@ export def "auth-accept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
 ]: any -> any {
   let input = $in
@@ -3693,7 +3817,7 @@ export def "auth-accept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # auth/session/generate
@@ -3709,6 +3833,7 @@ export def "auth-session-generate generate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   appSecret: string
 ]: any -> record<token: string, url: string> {
   let input = $in
@@ -3719,7 +3844,7 @@ export def "auth-session-generate generate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # auth/session/show
@@ -3735,6 +3860,7 @@ export def "auth-session-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
 ]: any -> record<id: string, app: record<id: string, name: string, callbackUrl: string, permission: list<string>, secret: string, isAuthorized: bool>, token: string> {
   let input = $in
@@ -3745,7 +3871,7 @@ export def "auth-session-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # auth/session/userkey
@@ -3761,6 +3887,7 @@ export def "auth-session-userkey userkey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   appSecret: string
   --body-token: string
 ]: any -> record<accessToken: string, user: any> {
@@ -3772,7 +3899,7 @@ export def "auth-session-userkey userkey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # blocking/create
@@ -3788,6 +3915,7 @@ export def "blocking-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -3798,7 +3926,7 @@ export def "blocking-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # blocking/delete
@@ -3814,6 +3942,7 @@ export def "blocking-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -3824,7 +3953,7 @@ export def "blocking-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # blocking/list
@@ -3840,6 +3969,7 @@ export def "blocking-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 30
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -3852,7 +3982,7 @@ export def "blocking-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # bubble-game/ranking
@@ -3868,6 +3998,7 @@ export def "bubble-game-ranking ranking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gameMode: string
 ]: any -> table<id: string, score: int, user: record> {
   let input = $in
@@ -3878,7 +4009,7 @@ export def "bubble-game-ranking ranking" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # bubble-game/ranking
@@ -3894,6 +4025,7 @@ export def "bubble-game-ranking ranking-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gameMode: string
 ]: any -> table<id: string, score: int, user: record> {
   let input = $in
@@ -3904,7 +4036,7 @@ export def "bubble-game-ranking ranking-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # bubble-game/register
@@ -3920,6 +4052,7 @@ export def "bubble-game-register register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   score: int
   seed: string
   logs: list
@@ -3934,7 +4067,7 @@ export def "bubble-game-register register" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/create
@@ -3950,6 +4083,7 @@ export def "channels-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --description: string # nullable
   --bannerId: string # nullable, format: misskey:id
@@ -3965,7 +4099,7 @@ export def "channels-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/favorite
@@ -3981,6 +4115,7 @@ export def "channels-favorite favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -3991,7 +4126,7 @@ export def "channels-favorite favorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/featured
@@ -4007,13 +4142,14 @@ export def "channels-featured featured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/featured")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # channels/featured-games
@@ -4029,13 +4165,14 @@ export def "channels-featured-games featured-games" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/featured-games")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # channels/follow
@@ -4051,6 +4188,7 @@ export def "channels-follow follow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -4061,7 +4199,7 @@ export def "channels-follow follow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/followed
@@ -4077,6 +4215,7 @@ export def "channels-followed followed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 5
@@ -4089,7 +4228,7 @@ export def "channels-followed followed" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/my-favorites
@@ -4105,13 +4244,14 @@ export def "channels-my-favorites my-favorites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/my-favorites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # channels/owned
@@ -4127,6 +4267,7 @@ export def "channels-owned owned" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 5
@@ -4139,7 +4280,7 @@ export def "channels-owned owned" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/search
@@ -4155,6 +4296,7 @@ export def "channels-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string
   --type: string@type-completer-5 # default: nameAndDescription
   --sinceId: string # format: misskey:id
@@ -4169,7 +4311,7 @@ export def "channels-search search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/show
@@ -4185,6 +4327,7 @@ export def "channels-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list, visibleUserIds: list, fileIds: list, files: list, tags: list, poll: record, emojis: record, channelId: string, channel: record, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list, clippedCount: float, myReaction: string>> {
   let input = $in
@@ -4195,7 +4338,7 @@ export def "channels-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/timeline
@@ -4211,6 +4354,7 @@ export def "channels-timeline timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -4228,7 +4372,7 @@ export def "channels-timeline timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/unfavorite
@@ -4244,6 +4388,7 @@ export def "channels-unfavorite unfavorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -4254,7 +4399,7 @@ export def "channels-unfavorite unfavorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/unfollow
@@ -4270,6 +4415,7 @@ export def "channels-unfollow unfollow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -4280,7 +4426,7 @@ export def "channels-unfollow unfollow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # channels/update
@@ -4296,6 +4442,7 @@ export def "channels-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channelId: string # format: misskey:id
   --name: string
   --description: string # nullable
@@ -4314,7 +4461,7 @@ export def "channels-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/active-users
@@ -4330,6 +4477,7 @@ export def "charts-active-users active-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4342,7 +4490,7 @@ export def "charts-active-users active-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/active-users
@@ -4358,6 +4506,7 @@ export def "charts-active-users active-users-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4370,7 +4519,7 @@ export def "charts-active-users active-users-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/ap-request
@@ -4386,6 +4535,7 @@ export def "charts-ap-request ap-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4398,7 +4548,7 @@ export def "charts-ap-request ap-request" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/ap-request
@@ -4414,6 +4564,7 @@ export def "charts-ap-request ap-request-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4426,7 +4577,7 @@ export def "charts-ap-request ap-request-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/drive
@@ -4442,6 +4593,7 @@ export def "charts-drive drive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4454,7 +4606,7 @@ export def "charts-drive drive" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/drive
@@ -4470,6 +4622,7 @@ export def "charts-drive drive-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4482,7 +4635,7 @@ export def "charts-drive drive-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/federation
@@ -4498,6 +4651,7 @@ export def "charts-federation federation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4510,7 +4664,7 @@ export def "charts-federation federation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/federation
@@ -4526,6 +4680,7 @@ export def "charts-federation federation-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4538,7 +4693,7 @@ export def "charts-federation federation-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/instance
@@ -4554,6 +4709,7 @@ export def "charts-instance instance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4567,7 +4723,7 @@ export def "charts-instance instance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/instance
@@ -4583,6 +4739,7 @@ export def "charts-instance instance-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4596,7 +4753,7 @@ export def "charts-instance instance-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/notes
@@ -4612,6 +4769,7 @@ export def "charts-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4624,7 +4782,7 @@ export def "charts-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/notes
@@ -4640,6 +4798,7 @@ export def "charts-notes notes-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4652,7 +4811,7 @@ export def "charts-notes notes-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/drive
@@ -4668,6 +4827,7 @@ export def "charts-user-drive drive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4681,7 +4841,7 @@ export def "charts-user-drive drive" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/drive
@@ -4697,6 +4857,7 @@ export def "charts-user-drive drive-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4710,7 +4871,7 @@ export def "charts-user-drive drive-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/following
@@ -4726,6 +4887,7 @@ export def "charts-user-following following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4739,7 +4901,7 @@ export def "charts-user-following following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/following
@@ -4755,6 +4917,7 @@ export def "charts-user-following following-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4768,7 +4931,7 @@ export def "charts-user-following following-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/notes
@@ -4784,6 +4947,7 @@ export def "charts-user-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4797,7 +4961,7 @@ export def "charts-user-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/notes
@@ -4813,6 +4977,7 @@ export def "charts-user-notes notes-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4826,7 +4991,7 @@ export def "charts-user-notes notes-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/pv
@@ -4842,6 +5007,7 @@ export def "charts-user-pv pv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4855,7 +5021,7 @@ export def "charts-user-pv pv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/pv
@@ -4871,6 +5037,7 @@ export def "charts-user-pv pv-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4884,7 +5051,7 @@ export def "charts-user-pv pv-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/reactions
@@ -4900,6 +5067,7 @@ export def "charts-user-reactions reactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4913,7 +5081,7 @@ export def "charts-user-reactions reactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/user/reactions
@@ -4929,6 +5097,7 @@ export def "charts-user-reactions reactions-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4942,7 +5111,7 @@ export def "charts-user-reactions reactions-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/users
@@ -4958,6 +5127,7 @@ export def "charts-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4970,7 +5140,7 @@ export def "charts-users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # charts/users
@@ -4986,6 +5156,7 @@ export def "charts-users users-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   span: string@span-completer
   --limit: int # default: 30
   --offset: int # nullable
@@ -4998,7 +5169,7 @@ export def "charts-users users-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/add-note
@@ -5014,6 +5185,7 @@ export def "clips-add-note add-note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
   noteId: string # format: misskey:id
 ]: any -> any {
@@ -5025,7 +5197,7 @@ export def "clips-add-note add-note" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/create
@@ -5041,6 +5213,7 @@ export def "clips-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --isPublic: oneof<nothing, bool> # default: false
   --description: string # nullable
@@ -5053,7 +5226,7 @@ export def "clips-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/delete
@@ -5069,6 +5242,7 @@ export def "clips-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -5079,7 +5253,7 @@ export def "clips-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/favorite
@@ -5095,6 +5269,7 @@ export def "clips-favorite favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -5105,7 +5280,7 @@ export def "clips-favorite favorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/list
@@ -5121,13 +5296,14 @@ export def "clips-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clips/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # clips/my-favorites
@@ -5143,13 +5319,14 @@ export def "clips-my-favorites my-favorites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clips/my-favorites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # clips/notes
@@ -5165,6 +5342,7 @@ export def "clips-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -5178,7 +5356,7 @@ export def "clips-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/remove-note
@@ -5194,6 +5372,7 @@ export def "clips-remove-note remove-note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
   noteId: string # format: misskey:id
 ]: any -> any {
@@ -5205,7 +5384,7 @@ export def "clips-remove-note remove-note" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/show
@@ -5221,6 +5400,7 @@ export def "clips-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let input = $in
@@ -5231,7 +5411,7 @@ export def "clips-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/unfavorite
@@ -5247,6 +5427,7 @@ export def "clips-unfavorite unfavorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -5257,7 +5438,7 @@ export def "clips-unfavorite unfavorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clips/update
@@ -5273,6 +5454,7 @@ export def "clips-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   clipId: string # format: misskey:id
   --name: string
   --isPublic: oneof<nothing, bool>
@@ -5286,7 +5468,7 @@ export def "clips-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive
@@ -5302,13 +5484,14 @@ export def "drive drive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<capacity: float, usage: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/drive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # drive/files
@@ -5324,6 +5507,7 @@ export def "drive-files files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -5339,7 +5523,7 @@ export def "drive-files files" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/attached-notes
@@ -5355,6 +5539,7 @@ export def "drive-files-attached-notes attached-notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -5368,7 +5553,7 @@ export def "drive-files-attached-notes attached-notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/check-existence
@@ -5384,6 +5569,7 @@ export def "drive-files-check-existence check-existence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   md5: string
 ]: any -> bool {
   let input = $in
@@ -5394,7 +5580,7 @@ export def "drive-files-check-existence check-existence" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/create
@@ -5410,6 +5596,7 @@ export def "drive-files-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folderId: string # nullable, format: misskey:id
   --name: string # nullable
   --comment: string # nullable
@@ -5425,7 +5612,7 @@ export def "drive-files-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # drive/files/delete
@@ -5441,6 +5628,7 @@ export def "drive-files-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -5451,7 +5639,7 @@ export def "drive-files-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/find
@@ -5467,6 +5655,7 @@ export def "drive-files-find find" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --folderId: string # nullable, format: misskey:id
 ]: any -> table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record> {
@@ -5478,7 +5667,7 @@ export def "drive-files-find find" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/find-by-hash
@@ -5494,6 +5683,7 @@ export def "drive-files-find-by-hash find-by-hash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   md5: string
 ]: any -> table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record> {
   let input = $in
@@ -5504,7 +5694,7 @@ export def "drive-files-find-by-hash find-by-hash" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/show
@@ -5520,6 +5710,7 @@ export def "drive-files-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fileId: string # format: misskey:id
   --body-url: string
 ]: any -> record<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record> {
@@ -5531,7 +5722,7 @@ export def "drive-files-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/update
@@ -5547,6 +5738,7 @@ export def "drive-files-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
   --folderId: string # nullable, format: misskey:id
   --name: string
@@ -5561,7 +5753,7 @@ export def "drive-files-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/files/upload-from-url
@@ -5577,6 +5769,7 @@ export def "drive-files-upload-from-url upload-from-url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string
   --folderId: string # nullable, format: misskey:id
   --isSensitive: oneof<nothing, bool> # default: false
@@ -5592,7 +5785,7 @@ export def "drive-files-upload-from-url upload-from-url" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders
@@ -5608,6 +5801,7 @@ export def "drive-folders folders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -5621,7 +5815,7 @@ export def "drive-folders folders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders/create
@@ -5637,6 +5831,7 @@ export def "drive-folders-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # default: Untitled
   --parentId: string # nullable, format: misskey:id
 ]: any -> record<id: string, createdAt: string, name: string, parentId: string, foldersCount: float, filesCount: float, parent: record> {
@@ -5648,7 +5843,7 @@ export def "drive-folders-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders/delete
@@ -5664,6 +5859,7 @@ export def "drive-folders-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   folderId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -5674,7 +5870,7 @@ export def "drive-folders-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders/find
@@ -5690,6 +5886,7 @@ export def "drive-folders-find find" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --parentId: string # nullable, format: misskey:id
 ]: any -> table<id: string, createdAt: string, name: string, parentId: string, foldersCount: float, filesCount: float, parent: record> {
@@ -5701,7 +5898,7 @@ export def "drive-folders-find find" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders/show
@@ -5717,6 +5914,7 @@ export def "drive-folders-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   folderId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, name: string, parentId: string, foldersCount: float, filesCount: float, parent: record> {
   let input = $in
@@ -5727,7 +5925,7 @@ export def "drive-folders-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/folders/update
@@ -5743,6 +5941,7 @@ export def "drive-folders-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   folderId: string # format: misskey:id
   --name: string
   --parentId: string # nullable, format: misskey:id
@@ -5755,7 +5954,7 @@ export def "drive-folders-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # drive/stream
@@ -5771,6 +5970,7 @@ export def "drive-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -5784,7 +5984,7 @@ export def "drive-stream stream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # email-address/available
@@ -5800,6 +6000,7 @@ export def "email-address-available available" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emailAddress: string
 ]: any -> record<available: bool, reason: string> {
   let input = $in
@@ -5810,7 +6011,7 @@ export def "email-address-available available" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # emoji
@@ -5826,6 +6027,7 @@ export def "emoji emoji" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> record<id: string, createdAt: string, updatedAt: string, aliases: list<string>, name: string, category: string, host: string, url: string, license: string, isSensitive: bool, localOnly: bool, requestedBy: string, memo: string, roleIdsThatCanBeUsedThisEmojiAsReaction: list<string>, roleIdsThatCanNotBeUsedThisEmojiAsReaction: list<string>> {
   let input = $in
@@ -5836,7 +6038,7 @@ export def "emoji emoji" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # emoji
@@ -5852,6 +6054,7 @@ export def "emoji emoji-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> record<id: string, createdAt: string, updatedAt: string, aliases: list<string>, name: string, category: string, host: string, url: string, license: string, isSensitive: bool, localOnly: bool, requestedBy: string, memo: string, roleIdsThatCanBeUsedThisEmojiAsReaction: list<string>, roleIdsThatCanNotBeUsedThisEmojiAsReaction: list<string>> {
   let input = $in
@@ -5862,7 +6065,7 @@ export def "emoji emoji-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # emojis
@@ -5878,13 +6081,14 @@ export def "emojis emojis" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emojis: table<aliases: list, name: string, category: string, url: string, localOnly: bool, isSensitive: bool, roleIdsThatCanBeUsedThisEmojiAsReaction: list, roleIdsThatCanNotBeUsedThisEmojiAsReaction: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/emojis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # emojis
@@ -5900,13 +6104,14 @@ export def "emojis emojis-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emojis: table<aliases: list, name: string, category: string, url: string, localOnly: bool, isSensitive: bool, roleIdsThatCanBeUsedThisEmojiAsReaction: list, roleIdsThatCanNotBeUsedThisEmojiAsReaction: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/emojis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # endpoint
@@ -5922,6 +6127,7 @@ export def "endpoint endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endpoint: string
 ]: any -> record<params: table<name: string, type: string>> {
   let input = $in
@@ -5932,7 +6138,7 @@ export def "endpoint endpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # endpoints
@@ -5948,13 +6154,14 @@ export def "endpoints endpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/endpoints")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # export-custom-emojis
@@ -5970,13 +6177,14 @@ export def "export-custom-emojis export-custom-emojis" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export-custom-emojis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # federation/followers
@@ -5992,6 +6200,7 @@ export def "federation-followers followers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6005,7 +6214,7 @@ export def "federation-followers followers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/following
@@ -6021,6 +6230,7 @@ export def "federation-following following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6034,7 +6244,7 @@ export def "federation-following following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/instances
@@ -6050,6 +6260,7 @@ export def "federation-instances instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --host: string # Omit or use `null` to not filter by host. (nullable)
   --blocked: oneof<nothing, bool> # nullable
   --notResponding: oneof<nothing, bool> # nullable
@@ -6070,7 +6281,7 @@ export def "federation-instances instances" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/instances
@@ -6086,6 +6297,7 @@ export def "federation-instances instances-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --host: string # Omit or use `null` to not filter by host. (nullable)
   --blocked: oneof<nothing, bool> # nullable
   --notResponding: oneof<nothing, bool> # nullable
@@ -6106,7 +6318,7 @@ export def "federation-instances instances-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/show-instance
@@ -6122,6 +6334,7 @@ export def "federation-show-instance show-instance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
 ]: any -> record {
   let input = $in
@@ -6132,7 +6345,7 @@ export def "federation-show-instance show-instance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/stats
@@ -6148,6 +6361,7 @@ export def "federation-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
 ]: any -> record<topSubInstances: table<id: string, firstRetrievedAt: string, host: string, usersCount: float, notesCount: float, followingCount: float, followersCount: float, isNotResponding: bool, isSuspended: bool, suspensionState: string, isBlocked: bool, softwareName: string, softwareVersion: string, openRegistrations: bool, name: string, description: string, maintainerName: string, maintainerEmail: string, isSilenced: bool, isSensitiveMedia: bool, iconUrl: string, faviconUrl: string, themeColor: string, infoUpdatedAt: string, latestRequestReceivedAt: string, moderationNote: string>, otherFollowersCount: float, topPubInstances: table<id: string, firstRetrievedAt: string, host: string, usersCount: float, notesCount: float, followingCount: float, followersCount: float, isNotResponding: bool, isSuspended: bool, suspensionState: string, isBlocked: bool, softwareName: string, softwareVersion: string, openRegistrations: bool, name: string, description: string, maintainerName: string, maintainerEmail: string, isSilenced: bool, isSensitiveMedia: bool, iconUrl: string, faviconUrl: string, themeColor: string, infoUpdatedAt: string, latestRequestReceivedAt: string, moderationNote: string>, otherFollowingCount: float> {
   let input = $in
@@ -6158,7 +6372,7 @@ export def "federation-stats stats" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/stats
@@ -6174,6 +6388,7 @@ export def "federation-stats stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
 ]: any -> record<topSubInstances: table<id: string, firstRetrievedAt: string, host: string, usersCount: float, notesCount: float, followingCount: float, followersCount: float, isNotResponding: bool, isSuspended: bool, suspensionState: string, isBlocked: bool, softwareName: string, softwareVersion: string, openRegistrations: bool, name: string, description: string, maintainerName: string, maintainerEmail: string, isSilenced: bool, isSensitiveMedia: bool, iconUrl: string, faviconUrl: string, themeColor: string, infoUpdatedAt: string, latestRequestReceivedAt: string, moderationNote: string>, otherFollowersCount: float, topPubInstances: table<id: string, firstRetrievedAt: string, host: string, usersCount: float, notesCount: float, followingCount: float, followersCount: float, isNotResponding: bool, isSuspended: bool, suspensionState: string, isBlocked: bool, softwareName: string, softwareVersion: string, openRegistrations: bool, name: string, description: string, maintainerName: string, maintainerEmail: string, isSilenced: bool, isSensitiveMedia: bool, iconUrl: string, faviconUrl: string, themeColor: string, infoUpdatedAt: string, latestRequestReceivedAt: string, moderationNote: string>, otherFollowingCount: float> {
   let input = $in
@@ -6184,7 +6399,7 @@ export def "federation-stats stats-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/update-remote-user
@@ -6200,6 +6415,7 @@ export def "federation-update-remote-user update-remote-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6210,7 +6426,7 @@ export def "federation-update-remote-user update-remote-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # federation/users
@@ -6226,6 +6442,7 @@ export def "federation-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   host: string
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6239,7 +6456,7 @@ export def "federation-users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # fetch-external-resources
@@ -6255,6 +6472,7 @@ export def "fetch-external-resources fetch-external-resources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string
   hash: string
 ]: any -> record<type: string, data: string> {
@@ -6266,7 +6484,7 @@ export def "fetch-external-resources fetch-external-resources" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # fetch-rss
@@ -6282,6 +6500,7 @@ export def "fetch-rss fetch-rss" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string
 ]: any -> record<image: record<link: string, url: string, title: string>, paginationLinks: record<self: string, first: string, next: string, last: string, prev: string>, link: string, title: string, items: table<link: string, guid: string, title: string, pubDate: string, creator: string, summary: string, content: string, isoDate: string, categories: list, contentSnippet: string, enclosure: record>, feedUrl: string, description: string, itunes: record<image: string, owner: record<name: string, email: string>, author: string, summary: string, explicit: string, categories: list<string>, keywords: list<string>>> {
   let input = $in
@@ -6292,7 +6511,7 @@ export def "fetch-rss fetch-rss" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # fetch-rss
@@ -6308,6 +6527,7 @@ export def "fetch-rss fetch-rss-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string
 ]: any -> record<image: record<link: string, url: string, title: string>, paginationLinks: record<self: string, first: string, next: string, last: string, prev: string>, link: string, title: string, items: table<link: string, guid: string, title: string, pubDate: string, creator: string, summary: string, content: string, isoDate: string, categories: list, contentSnippet: string, enclosure: record>, feedUrl: string, description: string, itunes: record<image: string, owner: record<name: string, email: string>, author: string, summary: string, explicit: string, categories: list<string>, keywords: list<string>>> {
   let input = $in
@@ -6318,7 +6538,7 @@ export def "fetch-rss fetch-rss-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/create
@@ -6334,6 +6554,7 @@ export def "flash-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string
   summary: string
   script: string
@@ -6348,7 +6569,7 @@ export def "flash-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/delete
@@ -6364,6 +6585,7 @@ export def "flash-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   flashId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6374,7 +6596,7 @@ export def "flash-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/featured
@@ -6390,6 +6612,7 @@ export def "flash-featured featured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # default: 0
   --limit: int # default: 10
 ]: any -> table<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, title: string, summary: string, script: string, visibility: string, likedCount: float, isLiked: bool> {
@@ -6401,7 +6624,7 @@ export def "flash-featured featured" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/like
@@ -6417,6 +6640,7 @@ export def "flash-like like" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   flashId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6427,7 +6651,7 @@ export def "flash-like like" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/my
@@ -6443,6 +6667,7 @@ export def "flash-my my" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6455,7 +6680,7 @@ export def "flash-my my" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/my-likes
@@ -6471,6 +6696,7 @@ export def "flash-my-likes my-likes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6483,7 +6709,7 @@ export def "flash-my-likes my-likes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/show
@@ -6499,6 +6725,7 @@ export def "flash-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   flashId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, title: string, summary: string, script: string, visibility: string, likedCount: float, isLiked: bool> {
   let input = $in
@@ -6509,7 +6736,7 @@ export def "flash-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/unlike
@@ -6525,6 +6752,7 @@ export def "flash-unlike unlike" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   flashId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6535,7 +6763,7 @@ export def "flash-unlike unlike" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # flash/update
@@ -6551,6 +6779,7 @@ export def "flash-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   flashId: string # format: misskey:id
   --title: string
   --summary: string
@@ -6566,7 +6795,7 @@ export def "flash-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/create
@@ -6582,6 +6811,7 @@ export def "following-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --withReplies: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
@@ -6593,7 +6823,7 @@ export def "following-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/delete
@@ -6609,6 +6839,7 @@ export def "following-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
   let input = $in
@@ -6619,7 +6850,7 @@ export def "following-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/invalidate
@@ -6635,6 +6866,7 @@ export def "following-invalidate invalidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
   let input = $in
@@ -6645,7 +6877,7 @@ export def "following-invalidate invalidate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/requests/accept
@@ -6661,6 +6893,7 @@ export def "following-requests-accept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6671,7 +6904,7 @@ export def "following-requests-accept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/requests/cancel
@@ -6687,6 +6920,7 @@ export def "following-requests-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
   let input = $in
@@ -6697,7 +6931,7 @@ export def "following-requests-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/requests/list
@@ -6713,6 +6947,7 @@ export def "following-requests-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -6725,7 +6960,7 @@ export def "following-requests-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/requests/reject
@@ -6741,6 +6976,7 @@ export def "following-requests-reject reject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6751,7 +6987,7 @@ export def "following-requests-reject reject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/requests/sent
@@ -6767,6 +7003,7 @@ export def "following-requests-sent sent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -6779,7 +7016,7 @@ export def "following-requests-sent sent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/update
@@ -6795,6 +7032,7 @@ export def "following-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --notify: string@notify-completer
   --withReplies: oneof<nothing, bool>
@@ -6807,7 +7045,7 @@ export def "following-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # following/update-all
@@ -6823,6 +7061,7 @@ export def "following-update-all update-all" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notify: string@notify-completer
   --withReplies: oneof<nothing, bool>
 ]: any -> any {
@@ -6834,7 +7073,7 @@ export def "following-update-all update-all" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/featured
@@ -6850,6 +7089,7 @@ export def "gallery-featured featured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --untilId: string # format: misskey:id
 ]: any -> table<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, title: string, description: string, fileIds: list<string>, files: list<record>, tags: list<string>, isSensitive: bool, likedCount: float, isLiked: bool> {
@@ -6861,7 +7101,7 @@ export def "gallery-featured featured" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/popular
@@ -6877,13 +7117,14 @@ export def "gallery-popular popular" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, title: string, description: string, fileIds: list<string>, files: list<record>, tags: list<string>, isSensitive: bool, likedCount: float, isLiked: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gallery/popular")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # gallery/posts
@@ -6899,6 +7140,7 @@ export def "gallery-posts posts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -6911,7 +7153,7 @@ export def "gallery-posts posts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/create
@@ -6927,6 +7169,7 @@ export def "gallery-posts-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string
   --description: string # nullable
   fileIds: list
@@ -6940,7 +7183,7 @@ export def "gallery-posts-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/delete
@@ -6956,6 +7199,7 @@ export def "gallery-posts-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   postId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6966,7 +7210,7 @@ export def "gallery-posts-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/like
@@ -6982,6 +7226,7 @@ export def "gallery-posts-like like" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   postId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -6992,7 +7237,7 @@ export def "gallery-posts-like like" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/show
@@ -7008,6 +7253,7 @@ export def "gallery-posts-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   postId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, title: string, description: string, fileIds: list<string>, files: table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record>, tags: list<string>, isSensitive: bool, likedCount: float, isLiked: bool> {
   let input = $in
@@ -7018,7 +7264,7 @@ export def "gallery-posts-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/unlike
@@ -7034,6 +7280,7 @@ export def "gallery-posts-unlike unlike" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   postId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -7044,7 +7291,7 @@ export def "gallery-posts-unlike unlike" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # gallery/posts/update
@@ -7060,6 +7307,7 @@ export def "gallery-posts-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   postId: string # format: misskey:id
   --title: string
   --description: string # nullable
@@ -7074,7 +7322,7 @@ export def "gallery-posts-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get-avatar-decorations
@@ -7090,13 +7338,14 @@ export def "get-avatar-decorations get-avatar-decorations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, description: string, url: string, roleIdsThatCanBeUsedThisDecoration: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get-avatar-decorations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get-online-users-count
@@ -7112,13 +7361,14 @@ export def "get-online-users-count get-online-users-count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get-online-users-count")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get-online-users-count
@@ -7134,13 +7384,14 @@ export def "get-online-users-count get-online-users-count-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get-online-users-count")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # hashtags/list
@@ -7156,6 +7407,7 @@ export def "hashtags-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --attachedToUserOnly: oneof<nothing, bool> # default: false
   --attachedToLocalUserOnly: oneof<nothing, bool> # default: false
@@ -7170,7 +7422,7 @@ export def "hashtags-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # hashtags/search
@@ -7186,6 +7438,7 @@ export def "hashtags-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --body-query: string
   --offset: int # default: 0
@@ -7198,7 +7451,7 @@ export def "hashtags-search search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # hashtags/show
@@ -7214,6 +7467,7 @@ export def "hashtags-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tag: string
 ]: any -> record<tag: string, mentionedUsersCount: float, mentionedLocalUsersCount: float, mentionedRemoteUsersCount: float, attachedUsersCount: float, attachedLocalUsersCount: float, attachedRemoteUsersCount: float> {
   let input = $in
@@ -7224,7 +7478,7 @@ export def "hashtags-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # hashtags/trend
@@ -7240,13 +7494,14 @@ export def "hashtags-trend trend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<tag: string, chart: list<float>, usersCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hashtags/trend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # hashtags/trend
@@ -7262,13 +7517,14 @@ export def "hashtags-trend trend-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<tag: string, chart: list<float>, usersCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hashtags/trend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # hashtags/users
@@ -7284,6 +7540,7 @@ export def "hashtags-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tag: string
   --limit: int # default: 10
   --body-sort: string@sort-completer-6
@@ -7300,7 +7557,7 @@ export def "hashtags-users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i
@@ -7316,13 +7573,14 @@ export def "i i" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/2fa/done
@@ -7338,6 +7596,7 @@ export def "i-2fa-done done" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
 ]: any -> record<backupCodes: list<string>> {
   let input = $in
@@ -7348,7 +7607,7 @@ export def "i-2fa-done done" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/key-done
@@ -7364,6 +7623,7 @@ export def "i-2fa-key-done key-done" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
   name: string
@@ -7377,7 +7637,7 @@ export def "i-2fa-key-done key-done" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/password-less
@@ -7393,6 +7653,7 @@ export def "i-2fa-password-less password-less" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --value: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
@@ -7403,7 +7664,7 @@ export def "i-2fa-password-less password-less" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/register
@@ -7419,6 +7680,7 @@ export def "i-2fa-register register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
 ]: any -> record<qr: string, url: string, secret: string, label: string, issuer: string> {
@@ -7430,7 +7692,7 @@ export def "i-2fa-register register" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/register-key
@@ -7446,6 +7708,7 @@ export def "i-2fa-register-key register-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
 ]: any -> record<rp: record<id: string>, user: record<id: string, name: string, displayName: string>, challenge: string, pubKeyCredParams: table<type: string, alg: float>, timeout: float, excludeCredentials: table<id: string, type: string, transports: list>, authenticatorSelection: record<authenticatorAttachment: string, requireResidentKey: bool, userVerification: string>, attestation: string, extensions: record<appid: string, credProps: bool, hmacCreateSecret: bool>> {
@@ -7457,7 +7720,7 @@ export def "i-2fa-register-key register-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/remove-key
@@ -7473,6 +7736,7 @@ export def "i-2fa-remove-key remove-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
   credentialId: string
@@ -7485,7 +7749,7 @@ export def "i-2fa-remove-key remove-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/unregister
@@ -7501,6 +7765,7 @@ export def "i-2fa-unregister unregister" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
 ]: any -> any {
@@ -7512,7 +7777,7 @@ export def "i-2fa-unregister unregister" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/2fa/update-key
@@ -7528,6 +7793,7 @@ export def "i-2fa-update-key update-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   credentialId: string
 ]: any -> any {
@@ -7539,7 +7805,7 @@ export def "i-2fa-update-key update-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/apps
@@ -7555,6 +7821,7 @@ export def "i-apps apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-sort: string@sort-completer-7
 ]: any -> table<id: string, name: string, createdAt: string, lastUsedAt: string, permission: list<string>> {
   let input = $in
@@ -7565,7 +7832,7 @@ export def "i-apps apps" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/authorized-apps
@@ -7581,6 +7848,7 @@ export def "i-authorized-apps authorized-apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --body-sort: string@sort-completer-8 # default: desc
@@ -7593,7 +7861,7 @@ export def "i-authorized-apps authorized-apps" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/change-password
@@ -7609,6 +7877,7 @@ export def "i-change-password change-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currentPassword: string
   newPassword: string
   --body-token: string # nullable
@@ -7621,7 +7890,7 @@ export def "i-change-password change-password" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/claim-achievement
@@ -7637,6 +7906,7 @@ export def "i-claim-achievement claim-achievement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string@name-completer
 ]: any -> any {
   let input = $in
@@ -7647,7 +7917,7 @@ export def "i-claim-achievement claim-achievement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/delete-account
@@ -7663,6 +7933,7 @@ export def "i-delete-account delete-account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --body-token: string # nullable
 ]: any -> any {
@@ -7674,7 +7945,7 @@ export def "i-delete-account delete-account" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/export-antennas
@@ -7690,13 +7961,14 @@ export def "i-export-antennas export-antennas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-antennas")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-blocking
@@ -7712,13 +7984,14 @@ export def "i-export-blocking export-blocking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-blocking")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-clips
@@ -7734,13 +8007,14 @@ export def "i-export-clips export-clips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-clips")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-favorites
@@ -7756,13 +8030,14 @@ export def "i-export-favorites export-favorites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-favorites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-following
@@ -7778,6 +8053,7 @@ export def "i-export-following export-following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --excludeMuting: oneof<nothing, bool> # default: false
   --excludeInactive: oneof<nothing, bool> # default: false
 ]: any -> any {
@@ -7789,7 +8065,7 @@ export def "i-export-following export-following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/export-mute
@@ -7805,13 +8081,14 @@ export def "i-export-mute export-mute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-mute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-notes
@@ -7827,13 +8104,14 @@ export def "i-export-notes export-notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-notes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/export-user-lists
@@ -7849,13 +8127,14 @@ export def "i-export-user-lists export-user-lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/export-user-lists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/favorites
@@ -7871,6 +8150,7 @@ export def "i-favorites favorites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -7883,7 +8163,7 @@ export def "i-favorites favorites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/gallery/likes
@@ -7899,6 +8179,7 @@ export def "i-gallery-likes likes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -7911,7 +8192,7 @@ export def "i-gallery-likes likes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/gallery/posts
@@ -7927,6 +8208,7 @@ export def "i-gallery-posts posts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -7939,7 +8221,7 @@ export def "i-gallery-posts posts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/import-antennas
@@ -7955,6 +8237,7 @@ export def "i-import-antennas import-antennas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -7965,7 +8248,7 @@ export def "i-import-antennas import-antennas" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/import-blocking
@@ -7981,6 +8264,7 @@ export def "i-import-blocking import-blocking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -7991,7 +8275,7 @@ export def "i-import-blocking import-blocking" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/import-following
@@ -8007,6 +8291,7 @@ export def "i-import-following import-following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
   --withReplies: oneof<nothing, bool>
 ]: any -> any {
@@ -8018,7 +8303,7 @@ export def "i-import-following import-following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/import-muting
@@ -8034,6 +8319,7 @@ export def "i-import-muting import-muting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -8044,7 +8330,7 @@ export def "i-import-muting import-muting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/import-user-lists
@@ -8060,6 +8346,7 @@ export def "i-import-user-lists import-user-lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fileId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -8070,7 +8357,7 @@ export def "i-import-user-lists import-user-lists" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/move
@@ -8086,6 +8373,7 @@ export def "i-move move" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   moveToAccount: string
 ]: any -> record {
   let input = $in
@@ -8096,7 +8384,7 @@ export def "i-move move" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/notifications
@@ -8112,6 +8400,7 @@ export def "i-notifications notifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8127,7 +8416,7 @@ export def "i-notifications notifications" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/notifications-grouped
@@ -8143,6 +8432,7 @@ export def "i-notifications-grouped notifications-grouped" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8158,7 +8448,7 @@ export def "i-notifications-grouped notifications-grouped" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/page-likes
@@ -8174,6 +8464,7 @@ export def "i-page-likes page-likes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8186,7 +8477,7 @@ export def "i-page-likes page-likes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/pages
@@ -8202,6 +8493,7 @@ export def "i-pages pages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8214,7 +8506,7 @@ export def "i-pages pages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/pin
@@ -8230,6 +8522,7 @@ export def "i-pin pin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -8240,7 +8533,7 @@ export def "i-pin pin" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/purge-timeline-cache
@@ -8256,6 +8549,7 @@ export def "i-purge-timeline-cache purge-timeline-cache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   --listId: string # nullable, format: misskey:id
   --antennaId: string # nullable, format: misskey:id
@@ -8268,7 +8562,7 @@ export def "i-purge-timeline-cache purge-timeline-cache" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/read-announcement
@@ -8284,6 +8578,7 @@ export def "i-read-announcement read-announcement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   announcementId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -8294,7 +8589,7 @@ export def "i-read-announcement read-announcement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/regenerate-token
@@ -8310,6 +8605,7 @@ export def "i-regenerate-token regenerate-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
 ]: any -> any {
   let input = $in
@@ -8320,7 +8616,7 @@ export def "i-regenerate-token regenerate-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/get
@@ -8336,6 +8632,7 @@ export def "i-registry-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   scope: list # default: []
   --domain: string # nullable
@@ -8348,7 +8645,7 @@ export def "i-registry-get get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/get-all
@@ -8364,6 +8661,7 @@ export def "i-registry-get-all get-all" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: list # default: []
   --domain: string # nullable
 ]: any -> record {
@@ -8375,7 +8673,7 @@ export def "i-registry-get-all get-all" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/get-detail
@@ -8391,6 +8689,7 @@ export def "i-registry-get-detail get-detail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   scope: list # default: []
   --domain: string # nullable
@@ -8403,7 +8702,7 @@ export def "i-registry-get-detail get-detail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/keys
@@ -8419,6 +8718,7 @@ export def "i-registry-keys keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: list # default: []
   --domain: string # nullable
 ]: any -> list<string> {
@@ -8430,7 +8730,7 @@ export def "i-registry-keys keys" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/keys-with-type
@@ -8446,6 +8746,7 @@ export def "i-registry-keys-with-type keys-with-type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: list # default: []
   --domain: string # nullable
 ]: any -> record {
@@ -8457,7 +8758,7 @@ export def "i-registry-keys-with-type keys-with-type" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/remove
@@ -8473,6 +8774,7 @@ export def "i-registry-remove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   scope: list # default: []
   --domain: string # nullable
@@ -8485,7 +8787,7 @@ export def "i-registry-remove remove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/registry/scopes-with-domain
@@ -8501,13 +8803,14 @@ export def "i-registry-scopes-with-domain scopes-with-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<scopes: list<list>, domain: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/registry/scopes-with-domain")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/registry/set
@@ -8523,6 +8826,7 @@ export def "i-registry-set set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string
   value: any
   scope: list # default: []
@@ -8536,7 +8840,7 @@ export def "i-registry-set set" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/revoke-token
@@ -8552,6 +8856,7 @@ export def "i-revoke-token revoke-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenId: string # format: misskey:id
   --body-token: string # nullable
 ]: any -> any {
@@ -8563,7 +8868,7 @@ export def "i-revoke-token revoke-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/signin-history
@@ -8579,6 +8884,7 @@ export def "i-signin-history signin-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8591,7 +8897,7 @@ export def "i-signin-history signin-history" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/unpin
@@ -8607,6 +8913,7 @@ export def "i-unpin unpin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -8617,7 +8924,7 @@ export def "i-unpin unpin" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/update
@@ -8637,6 +8944,7 @@ export def "i-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --description: string # nullable
   --followedMessage: string # nullable
@@ -8687,7 +8995,7 @@ export def "i-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/update-email
@@ -8703,6 +9011,7 @@ export def "i-update-email update-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --email: string # nullable
   --body-token: string # nullable
@@ -8715,7 +9024,7 @@ export def "i-update-email update-email" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/webhooks/create
@@ -8731,6 +9040,7 @@ export def "i-webhooks-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --body-url: string
   --secret: string # default: 
@@ -8744,7 +9054,7 @@ export def "i-webhooks-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/webhooks/delete
@@ -8760,6 +9070,7 @@ export def "i-webhooks-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -8770,7 +9081,7 @@ export def "i-webhooks-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/webhooks/list
@@ -8786,13 +9097,14 @@ export def "i-webhooks-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, userId: string, name: string, on: list<string>, url: string, secret: string, active: bool, latestSentAt: string, latestStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/i/webhooks/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # i/webhooks/show
@@ -8808,6 +9120,7 @@ export def "i-webhooks-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookId: string # format: misskey:id
 ]: any -> record<id: string, userId: string, name: string, on: list<string>, url: string, secret: string, active: bool, latestSentAt: string, latestStatus: int> {
   let input = $in
@@ -8818,7 +9131,7 @@ export def "i-webhooks-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/webhooks/test
@@ -8835,6 +9148,7 @@ export def "i-webhooks-test test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookId: string # format: misskey:id
   type: string@type-completer-7
   --override: record # shape: {url?: string, secret?: string}
@@ -8847,7 +9161,7 @@ export def "i-webhooks-test test" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # i/webhooks/update
@@ -8863,6 +9177,7 @@ export def "i-webhooks-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookId: string # format: misskey:id
   --name: string
   --body-url: string
@@ -8878,7 +9193,7 @@ export def "i-webhooks-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # invite/create
@@ -8894,13 +9209,14 @@ export def "invite-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, code: string, expiresAt: string, createdAt: string, createdBy: record, usedBy: record, usedAt: string, used: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invite/create")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # invite/delete
@@ -8916,6 +9232,7 @@ export def "invite-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   inviteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -8926,7 +9243,7 @@ export def "invite-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # invite/limit
@@ -8942,13 +9259,14 @@ export def "invite-limit limit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<remaining: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invite/limit")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # invite/list
@@ -8964,6 +9282,7 @@ export def "invite-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 30
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -8976,7 +9295,7 @@ export def "invite-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # meta
@@ -8992,6 +9311,7 @@ export def "meta meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detail: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
@@ -9002,7 +9322,7 @@ export def "meta meta" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # meta
@@ -9018,6 +9338,7 @@ export def "meta meta-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detail: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
@@ -9028,7 +9349,7 @@ export def "meta meta-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # miauth/gen-token
@@ -9044,6 +9365,7 @@ export def "miauth-gen-token gen-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --session: string # nullable
   --name: string # nullable
   --description: string # nullable
@@ -9058,7 +9380,7 @@ export def "miauth-gen-token gen-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # mute/create
@@ -9074,6 +9396,7 @@ export def "mute-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --expiresAt: int # A Unix Epoch timestamp that must lie in the future. `null` means an indefinite mute. (nullable)
 ]: any -> any {
@@ -9085,7 +9408,7 @@ export def "mute-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # mute/delete
@@ -9101,6 +9424,7 @@ export def "mute-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9111,7 +9435,7 @@ export def "mute-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # mute/list
@@ -9127,6 +9451,7 @@ export def "mute-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 30
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9139,7 +9464,7 @@ export def "mute-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # my/apps
@@ -9155,6 +9480,7 @@ export def "my-apps apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
 ]: any -> table<id: string, name: string, callbackUrl: string, permission: list<string>, secret: string, isAuthorized: bool> {
@@ -9166,7 +9492,7 @@ export def "my-apps apps" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes
@@ -9182,6 +9508,7 @@ export def "notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --local: oneof<nothing, bool> # default: false
   --reply: oneof<nothing, bool>
   --renote: oneof<nothing, bool>
@@ -9199,7 +9526,7 @@ export def "notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/children
@@ -9215,6 +9542,7 @@ export def "notes-children children" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -9228,7 +9556,7 @@ export def "notes-children children" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/clips
@@ -9244,6 +9572,7 @@ export def "notes-clips clips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> table<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let input = $in
@@ -9254,7 +9583,7 @@ export def "notes-clips clips" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/conversation
@@ -9270,6 +9599,7 @@ export def "notes-conversation conversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --limit: int # default: 10
   --offset: int # default: 0
@@ -9282,7 +9612,7 @@ export def "notes-conversation conversation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/create
@@ -9299,6 +9629,7 @@ export def "notes-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer-1 # default: public
   --visibleUserIds: list
   --cw: string # nullable
@@ -9327,7 +9658,7 @@ export def "notes-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/delete
@@ -9343,6 +9674,7 @@ export def "notes-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9353,7 +9685,7 @@ export def "notes-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/favorites/create
@@ -9369,6 +9701,7 @@ export def "notes-favorites-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9379,7 +9712,7 @@ export def "notes-favorites-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/favorites/delete
@@ -9395,6 +9728,7 @@ export def "notes-favorites-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9405,7 +9739,7 @@ export def "notes-favorites-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/featured
@@ -9421,6 +9755,7 @@ export def "notes-featured featured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --untilId: string # format: misskey:id
   --channelId: string # nullable, format: misskey:id
@@ -9433,7 +9768,7 @@ export def "notes-featured featured" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/featured
@@ -9449,6 +9784,7 @@ export def "notes-featured featured-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --untilId: string # format: misskey:id
   --channelId: string # nullable, format: misskey:id
@@ -9461,7 +9797,7 @@ export def "notes-featured featured-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/global-timeline
@@ -9477,6 +9813,7 @@ export def "notes-global-timeline global-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withFiles: oneof<nothing, bool> # default: false
   --withRenotes: oneof<nothing, bool> # default: true
   --limit: int # default: 10
@@ -9494,7 +9831,7 @@ export def "notes-global-timeline global-timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/hybrid-timeline
@@ -9510,6 +9847,7 @@ export def "notes-hybrid-timeline hybrid-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9532,7 +9870,7 @@ export def "notes-hybrid-timeline hybrid-timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/local-timeline
@@ -9548,6 +9886,7 @@ export def "notes-local-timeline local-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withFiles: oneof<nothing, bool> # default: false
   --withRenotes: oneof<nothing, bool> # default: true
   --withReplies: oneof<nothing, bool> # default: false
@@ -9567,7 +9906,7 @@ export def "notes-local-timeline local-timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/mentions
@@ -9583,6 +9922,7 @@ export def "notes-mentions mentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --following: oneof<nothing, bool> # default: false
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -9597,7 +9937,7 @@ export def "notes-mentions mentions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/polls/recommendation
@@ -9613,6 +9953,7 @@ export def "notes-polls-recommendation recommendation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --excludeChannels: oneof<nothing, bool> # default: false
@@ -9625,7 +9966,7 @@ export def "notes-polls-recommendation recommendation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/polls/vote
@@ -9641,6 +9982,7 @@ export def "notes-polls-vote vote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   choice: int
 ]: any -> any {
@@ -9652,7 +9994,7 @@ export def "notes-polls-vote vote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/reactions
@@ -9668,6 +10010,7 @@ export def "notes-reactions reactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --type: string # nullable
   --limit: int # default: 10
@@ -9682,7 +10025,7 @@ export def "notes-reactions reactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/reactions
@@ -9698,6 +10041,7 @@ export def "notes-reactions reactions-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --type: string # nullable
   --limit: int # default: 10
@@ -9712,7 +10056,7 @@ export def "notes-reactions reactions-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/reactions/create
@@ -9728,6 +10072,7 @@ export def "notes-reactions-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   reaction: string
 ]: any -> any {
@@ -9739,7 +10084,7 @@ export def "notes-reactions-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/reactions/delete
@@ -9755,6 +10100,7 @@ export def "notes-reactions-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9765,7 +10111,7 @@ export def "notes-reactions-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/renotes
@@ -9781,6 +10127,7 @@ export def "notes-renotes renotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -9794,7 +10141,7 @@ export def "notes-renotes renotes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/replies
@@ -9810,6 +10157,7 @@ export def "notes-replies replies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9823,7 +10171,7 @@ export def "notes-replies replies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/scheduled/cancel
@@ -9839,6 +10187,7 @@ export def "notes-scheduled-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   draftId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -9849,7 +10198,7 @@ export def "notes-scheduled-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/scheduled/list
@@ -9865,6 +10214,7 @@ export def "notes-scheduled-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
 ]: any -> table<id: string, updatedAt: string, scheduledAt: string, reason: string, channel: record<id: string, name: string>, renote: record<id: string, text: string, user: record>, reply: record<id: string, text: string, user: record>, data: record<text: string, useCw: bool, cw: string, visibility: string, localOnly: bool, lang: string, dimension: int, files: list, poll: record, visibleUserIds: list>> {
@@ -9876,7 +10226,7 @@ export def "notes-scheduled-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/search
@@ -9892,6 +10242,7 @@ export def "notes-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9909,7 +10260,7 @@ export def "notes-search search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/search-by-tag
@@ -9925,6 +10276,7 @@ export def "notes-search-by-tag search-by-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --local: oneof<nothing, bool> # nullable
   --reply: oneof<nothing, bool> # nullable
   --renote: oneof<nothing, bool> # nullable
@@ -9944,7 +10296,7 @@ export def "notes-search-by-tag search-by-tag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/show
@@ -9960,6 +10312,7 @@ export def "notes-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list<record>>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
@@ -9970,7 +10323,7 @@ export def "notes-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/state
@@ -9986,6 +10339,7 @@ export def "notes-state state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> record<isFavorited: bool, isMutedThread: bool> {
   let input = $in
@@ -9996,7 +10350,7 @@ export def "notes-state state" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/thread-muting/create
@@ -10012,6 +10366,7 @@ export def "notes-thread-muting-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10022,7 +10377,7 @@ export def "notes-thread-muting-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/thread-muting/delete
@@ -10038,6 +10393,7 @@ export def "notes-thread-muting-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10048,7 +10404,7 @@ export def "notes-thread-muting-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/timeline
@@ -10064,6 +10420,7 @@ export def "notes-timeline timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -10085,7 +10442,7 @@ export def "notes-timeline timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/translate
@@ -10101,6 +10458,7 @@ export def "notes-translate translate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
   targetLang: string
 ]: any -> record<sourceLang: string, text: string> {
@@ -10112,7 +10470,7 @@ export def "notes-translate translate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/unrenote
@@ -10128,6 +10486,7 @@ export def "notes-unrenote unrenote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10138,7 +10497,7 @@ export def "notes-unrenote unrenote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notes/user-list-timeline
@@ -10154,6 +10513,7 @@ export def "notes-user-list-timeline user-list-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -10175,7 +10535,7 @@ export def "notes-user-list-timeline user-list-timeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notifications/create
@@ -10191,6 +10551,7 @@ export def "notifications-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string
   --header: string # nullable
   --icon: string # nullable
@@ -10203,7 +10564,7 @@ export def "notifications-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # notifications/flush
@@ -10219,13 +10580,14 @@ export def "notifications-flush flush" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/flush")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # notifications/mark-all-as-read
@@ -10241,13 +10603,14 @@ export def "notifications-mark-all-as-read mark-all-as-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/mark-all-as-read")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # notifications/test-notification
@@ -10263,13 +10626,14 @@ export def "notifications-test-notification test-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/test-notification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # page-push
@@ -10285,6 +10649,7 @@ export def "page-push page-push" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pageId: string # format: misskey:id
   event: string
   --var: any
@@ -10297,7 +10662,7 @@ export def "page-push page-push" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/create
@@ -10313,6 +10678,7 @@ export def "pages-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string
   name: string
   --summary: string # nullable
@@ -10333,7 +10699,7 @@ export def "pages-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/delete
@@ -10349,6 +10715,7 @@ export def "pages-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pageId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10359,7 +10726,7 @@ export def "pages-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/featured
@@ -10375,13 +10742,14 @@ export def "pages-featured featured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, content: list<record>, variables: list<record>, title: string, name: string, summary: string, hideTitleWhenPinned: bool, alignCenter: bool, font: string, script: string, eyeCatchingImageId: string, eyeCatchingImage: record, attachedFiles: list<record>, likedCount: float, isLiked: bool, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pages/featured")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # pages/like
@@ -10397,6 +10765,7 @@ export def "pages-like like" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pageId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10407,7 +10776,7 @@ export def "pages-like like" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/show
@@ -10423,6 +10792,7 @@ export def "pages-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageId: string # format: misskey:id
   --name: string
   --username: string
@@ -10435,7 +10805,7 @@ export def "pages-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/unlike
@@ -10451,6 +10821,7 @@ export def "pages-unlike unlike" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pageId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10461,7 +10832,7 @@ export def "pages-unlike unlike" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pages/update
@@ -10477,6 +10848,7 @@ export def "pages-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pageId: string # format: misskey:id
   --title: string
   --name: string
@@ -10498,7 +10870,7 @@ export def "pages-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ping
@@ -10514,13 +10886,14 @@ export def "ping ping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pong: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # pinned-users
@@ -10536,13 +10909,14 @@ export def "pinned-users pinned-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pinned-users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # promo/read
@@ -10558,6 +10932,7 @@ export def "promo-read read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   noteId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10568,7 +10943,7 @@ export def "promo-read read" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # renote-mute/create
@@ -10584,6 +10959,7 @@ export def "renote-mute-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10594,7 +10970,7 @@ export def "renote-mute-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # renote-mute/delete
@@ -10610,6 +10986,7 @@ export def "renote-mute-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10620,7 +10997,7 @@ export def "renote-mute-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # renote-mute/list
@@ -10636,6 +11013,7 @@ export def "renote-mute-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 30
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -10648,7 +11026,7 @@ export def "renote-mute-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # request-reset-password
@@ -10664,6 +11042,7 @@ export def "request-reset-password request-reset-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string
   email: string
 ]: any -> any {
@@ -10675,7 +11054,7 @@ export def "request-reset-password request-reset-password" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reset-db
@@ -10691,13 +11070,14 @@ export def "reset-db reset-db" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reset-db")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # reset-password
@@ -10713,6 +11093,7 @@ export def "reset-password reset-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
   password: string
 ]: any -> any {
@@ -10724,7 +11105,7 @@ export def "reset-password reset-password" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # retention
@@ -10740,13 +11121,14 @@ export def "retention retention" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<createdAt: string, users: float, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retention")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # retention
@@ -10762,13 +11144,14 @@ export def "retention retention-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<createdAt: string, users: float, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retention")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # reversi/cancel-match
@@ -10784,6 +11167,7 @@ export def "reversi-cancel-match cancel-match" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # nullable, format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10794,7 +11178,7 @@ export def "reversi-cancel-match cancel-match" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reversi/games
@@ -10810,6 +11194,7 @@ export def "reversi-games games" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -10823,7 +11208,7 @@ export def "reversi-games games" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reversi/invitations
@@ -10839,13 +11224,14 @@ export def "reversi-invitations invitations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reversi/invitations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # reversi/match
@@ -10861,6 +11247,7 @@ export def "reversi-match match" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # nullable, format: misskey:id
   --noIrregularRules: oneof<nothing, bool> # default: false
   --multiple: oneof<nothing, bool> # default: false
@@ -10873,7 +11260,7 @@ export def "reversi-match match" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reversi/show-game
@@ -10889,6 +11276,7 @@ export def "reversi-show-game show-game" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gameId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, startedAt: string, endedAt: string, isStarted: bool, isEnded: bool, form1: record, form2: record, user1Ready: bool, user2Ready: bool, user1Id: string, user2Id: string, user1: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, user2: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, winnerId: string, winner: record, surrenderedUserId: string, timeoutUserId: string, black: float, bw: string, noIrregularRules: bool, isLlotheo: bool, canPutEverywhere: bool, loopedBoard: bool, timeLimitForEachTurn: float, logs: list<list<float>>, map: list<string>> {
   let input = $in
@@ -10899,7 +11287,7 @@ export def "reversi-show-game show-game" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reversi/surrender
@@ -10915,6 +11303,7 @@ export def "reversi-surrender surrender" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gameId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -10925,7 +11314,7 @@ export def "reversi-surrender surrender" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # reversi/verify
@@ -10941,6 +11330,7 @@ export def "reversi-verify verify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gameId: string # format: misskey:id
   crc32: string
 ]: any -> record<desynced: bool, game: record> {
@@ -10952,7 +11342,7 @@ export def "reversi-verify verify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # roles/list
@@ -10968,13 +11358,14 @@ export def "roles-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # roles/notes
@@ -10990,6 +11381,7 @@ export def "roles-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -11006,7 +11398,7 @@ export def "roles-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # roles/show
@@ -11022,6 +11414,7 @@ export def "roles-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
 ]: any -> record {
   let input = $in
@@ -11032,7 +11425,7 @@ export def "roles-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # roles/users
@@ -11048,6 +11441,7 @@ export def "roles-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   roleId: string # format: misskey:id
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -11061,7 +11455,7 @@ export def "roles-users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # stats
@@ -11077,13 +11471,14 @@ export def "stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<notesCount: float, originalNotesCount: float, usersCount: float, originalUsersCount: float, instances: float, driveUsageLocal: float, driveUsageRemote: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # stats
@@ -11099,13 +11494,14 @@ export def "stats stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<notesCount: float, originalNotesCount: float, usersCount: float, originalUsersCount: float, instances: float, driveUsageLocal: float, driveUsageRemote: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # sw/register
@@ -11121,6 +11517,7 @@ export def "sw-register register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endpoint: string
   --body-auth: string
   publickey: string
@@ -11134,7 +11531,7 @@ export def "sw-register register" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # sw/show-registration
@@ -11150,6 +11547,7 @@ export def "sw-show-registration show-registration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endpoint: string
 ]: any -> record<userId: string, endpoint: string, sendReadMessage: bool> {
   let input = $in
@@ -11160,7 +11558,7 @@ export def "sw-show-registration show-registration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # sw/unregister
@@ -11176,6 +11574,7 @@ export def "sw-unregister unregister" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endpoint: string
 ]: any -> any {
   let input = $in
@@ -11186,7 +11585,7 @@ export def "sw-unregister unregister" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # sw/update-registration
@@ -11202,6 +11601,7 @@ export def "sw-update-registration update-registration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endpoint: string
   --sendReadMessage: oneof<nothing, bool>
 ]: any -> record<userId: string, endpoint: string, sendReadMessage: bool> {
@@ -11213,7 +11613,7 @@ export def "sw-update-registration update-registration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # test
@@ -11229,6 +11629,7 @@ export def "test test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --required: oneof<nothing, bool>
   --string: string
   --default: string # default: hello
@@ -11243,7 +11644,7 @@ export def "test test" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # username/available
@@ -11259,6 +11660,7 @@ export def "username-available available" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string
 ]: any -> record<available: bool> {
   let input = $in
@@ -11269,7 +11671,7 @@ export def "username-available available" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users
@@ -11285,6 +11687,7 @@ export def "users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   --body-sort: string@sort-completer-9
@@ -11300,7 +11703,7 @@ export def "users users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/achievements
@@ -11316,6 +11719,7 @@ export def "users-achievements achievements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> table<name: string, unlockedAt: float> {
   let input = $in
@@ -11326,7 +11730,7 @@ export def "users-achievements achievements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/clips
@@ -11342,6 +11746,7 @@ export def "users-clips clips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -11355,7 +11760,7 @@ export def "users-clips clips" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/featured-notes
@@ -11371,6 +11776,7 @@ export def "users-featured-notes featured-notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --untilId: string # format: misskey:id
   userId: string # format: misskey:id
@@ -11383,7 +11789,7 @@ export def "users-featured-notes featured-notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/featured-notes
@@ -11399,6 +11805,7 @@ export def "users-featured-notes featured-notes-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --untilId: string # format: misskey:id
   userId: string # format: misskey:id
@@ -11411,7 +11818,7 @@ export def "users-featured-notes featured-notes-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/flashs
@@ -11427,6 +11834,7 @@ export def "users-flashs flashs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -11440,7 +11848,7 @@ export def "users-flashs flashs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/followers
@@ -11456,6 +11864,7 @@ export def "users-followers followers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -11471,7 +11880,7 @@ export def "users-followers followers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/following
@@ -11487,6 +11896,7 @@ export def "users-following following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -11503,7 +11913,7 @@ export def "users-following following" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/gallery/posts
@@ -11519,6 +11929,7 @@ export def "users-gallery-posts posts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -11532,7 +11943,7 @@ export def "users-gallery-posts posts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/get-following-birthday-users
@@ -11549,6 +11960,7 @@ export def "users-get-following-birthday-users get-following-birthday-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
   birthday: record # shape: {month?: int, day?: int, begin?: record, end?: record}
@@ -11561,7 +11973,7 @@ export def "users-get-following-birthday-users get-following-birthday-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/get-frequently-replied-users
@@ -11577,6 +11989,7 @@ export def "users-get-frequently-replied-users get-frequently-replied-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
 ]: any -> table<user: any, weight: float> {
@@ -11588,7 +12001,7 @@ export def "users-get-frequently-replied-users get-frequently-replied-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/get-security-info
@@ -11604,6 +12017,7 @@ export def "users-get-security-info get-security-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string
   password: string
 ]: any -> record<twoFactorEnabled: bool, usePasswordLessLogin: bool, securityKeys: bool> {
@@ -11615,7 +12029,7 @@ export def "users-get-security-info get-security-info" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/get-skeb-status
@@ -11631,6 +12045,7 @@ export def "users-get-skeb-status get-skeb-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<screenName: string, isCreator: bool, isAcceptable: bool, creatorRequestCount: int, clientRequestCount: int, skills: table<amount: int, genre: string>> {
   let input = $in
@@ -11641,7 +12056,7 @@ export def "users-get-skeb-status get-skeb-status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/get-skeb-status
@@ -11657,6 +12072,7 @@ export def "users-get-skeb-status get-skeb-status-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<screenName: string, isCreator: bool, isAcceptable: bool, creatorRequestCount: int, clientRequestCount: int, skills: table<amount: int, genre: string>> {
   let input = $in
@@ -11667,7 +12083,7 @@ export def "users-get-skeb-status get-skeb-status-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/create
@@ -11683,6 +12099,7 @@ export def "users-lists-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> record<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
   let input = $in
@@ -11693,7 +12110,7 @@ export def "users-lists-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/create-from-public
@@ -11709,6 +12126,7 @@ export def "users-lists-create-from-public create-from-public" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   listId: string # format: misskey:id
 ]: any -> record<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
@@ -11720,7 +12138,7 @@ export def "users-lists-create-from-public create-from-public" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/delete
@@ -11736,6 +12154,7 @@ export def "users-lists-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -11746,7 +12165,7 @@ export def "users-lists-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/favorite
@@ -11762,6 +12181,7 @@ export def "users-lists-favorite favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -11772,7 +12192,7 @@ export def "users-lists-favorite favorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/get-memberships
@@ -11788,6 +12208,7 @@ export def "users-lists-get-memberships get-memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   --forPublic: oneof<nothing, bool> # default: false
   --limit: int # default: 30
@@ -11802,7 +12223,7 @@ export def "users-lists-get-memberships get-memberships" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/list
@@ -11818,6 +12239,7 @@ export def "users-lists-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # format: misskey:id
 ]: any -> table<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
   let input = $in
@@ -11828,7 +12250,7 @@ export def "users-lists-list list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/pull
@@ -11844,6 +12266,7 @@ export def "users-lists-pull pull" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   userId: string # format: misskey:id
 ]: any -> any {
@@ -11855,7 +12278,7 @@ export def "users-lists-pull pull" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/push
@@ -11871,6 +12294,7 @@ export def "users-lists-push push" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   userId: string # format: misskey:id
 ]: any -> any {
@@ -11882,7 +12306,7 @@ export def "users-lists-push push" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/show
@@ -11898,6 +12322,7 @@ export def "users-lists-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   --forPublic: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
@@ -11909,7 +12334,7 @@ export def "users-lists-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/unfavorite
@@ -11925,6 +12350,7 @@ export def "users-lists-unfavorite unfavorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
 ]: any -> any {
   let input = $in
@@ -11935,7 +12361,7 @@ export def "users-lists-unfavorite unfavorite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/update
@@ -11951,6 +12377,7 @@ export def "users-lists-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   --name: string
   --isPublic: oneof<nothing, bool>
@@ -11963,7 +12390,7 @@ export def "users-lists-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/lists/update-membership
@@ -11979,6 +12406,7 @@ export def "users-lists-update-membership update-membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: string # format: misskey:id
   userId: string # format: misskey:id
   --withReplies: oneof<nothing, bool>
@@ -11991,7 +12419,7 @@ export def "users-lists-update-membership update-membership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/notes
@@ -12007,6 +12435,7 @@ export def "users-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --withReplies: oneof<nothing, bool> # default: false
   --withRenotes: oneof<nothing, bool> # default: true
@@ -12027,7 +12456,7 @@ export def "users-notes notes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/pages
@@ -12043,6 +12472,7 @@ export def "users-pages pages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -12056,7 +12486,7 @@ export def "users-pages pages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/reactions
@@ -12072,6 +12502,7 @@ export def "users-reactions reactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
@@ -12087,7 +12518,7 @@ export def "users-reactions reactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/recommendation
@@ -12103,6 +12534,7 @@ export def "users-recommendation recommendation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --offset: int # default: 0
 ]: any -> list<any> {
@@ -12114,7 +12546,7 @@ export def "users-recommendation recommendation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/relation
@@ -12130,6 +12562,7 @@ export def "users-relation relation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: any
 ]: any -> any {
   let input = $in
@@ -12140,7 +12573,7 @@ export def "users-relation relation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/report-abuse
@@ -12156,6 +12589,7 @@ export def "users-report-abuse report-abuse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   comment: string
   --category: string@category-completer # default: other
@@ -12168,7 +12602,7 @@ export def "users-report-abuse report-abuse" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/search
@@ -12184,6 +12618,7 @@ export def "users-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string
   --offset: int # default: 0
   --limit: int # default: 10
@@ -12198,7 +12633,7 @@ export def "users-search search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/search-by-username-and-host
@@ -12214,6 +12649,7 @@ export def "users-search-by-username-and-host search-by-username-and-host" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 10
   --detail: oneof<nothing, bool> # default: true
   --username: string # nullable
@@ -12227,7 +12663,7 @@ export def "users-search-by-username-and-host search-by-username-and-host" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/show
@@ -12243,6 +12679,7 @@ export def "users-show show" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # format: misskey:id
   --userIds: list
   --username: string
@@ -12257,7 +12694,7 @@ export def "users-show show" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/stats
@@ -12273,6 +12710,7 @@ export def "users-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
 ]: any -> record<notesCount: int, repliesCount: int, renotesCount: int, repliedCount: int, renotedCount: int, pollVotesCount: int, pollVotedCount: int, localFollowingCount: int, remoteFollowingCount: int, localFollowersCount: int, remoteFollowersCount: int, followingCount: int, followersCount: int, sentReactionsCount: int, receivedReactionsCount: int, noteFavoritesCount: int, pageLikesCount: int, pageLikedCount: int, driveFilesCount: int, driveUsage: int> {
   let input = $in
@@ -12283,7 +12721,7 @@ export def "users-stats stats" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # users/update-memo
@@ -12299,6 +12737,7 @@ export def "users-update-memo update-memo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: string # format: misskey:id
   --memo: string # A personal memo for the target user. If null or empty, delete the memo. (nullable)
 ]: any -> any {
@@ -12310,7 +12749,7 @@ export def "users-update-memo update-memo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # v2/admin/emoji/list
@@ -12327,6 +12766,7 @@ export def "admin-emoji-list list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # nullable — shape: {updatedAtFrom?: string, updatedAtTo?: string, name?: string, host?: string, uri?: string, publicUrl?: string, originalUrl?: string, type?: string, aliases?: string, category?: string, license?: string, isSensitive?: bool, localOnly?: bool, hostType?: "local"|"remote"|"all", roleIds?: list}
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -12342,5 +12782,5 @@ export def "admin-emoji-list list-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

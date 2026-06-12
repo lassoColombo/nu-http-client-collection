@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def kind-completer [] { ["fhir" "fhir-R4" "fhir-Stu3"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-healthcare-apis-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "providers-microsoft-healthcare-apis-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -110,7 +112,7 @@ export def "providers-microsoft-healthcare-apis-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.HealthcareApis/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if a service instance name is available.
@@ -126,6 +128,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-check-name-availab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   name: string # The name of the service instance to check.
   type: string # The fully qualified resource type which includes provider namespace.
@@ -139,7 +142,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-check-name-availab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the operation result for a long running operation.
@@ -157,6 +160,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-locations-operatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, name: string, properties: any, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -165,7 +169,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-locations-operatio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.HealthcareApis/locations/($locationName)/operationresults/($operationResultId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the service instances in a subscription.
@@ -181,6 +185,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-services List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -189,7 +194,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-services List" [
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.HealthcareApis/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the service instances in a resource group.
@@ -206,6 +211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -214,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HealthcareApis/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a service instance.
@@ -232,6 +238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<error: record<code: string, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -240,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HealthcareApis/services/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the metadata of a service instance.
@@ -258,6 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<accessPolicies: list<record>, authenticationConfiguration: record<audience: string, authority: string, smartProxyEnabled: bool>, corsConfiguration: record<allowCredentials: bool, headers: list, maxAge: int, methods: list, origins: list>, cosmosDbConfiguration: record<offerThroughput: int>, provisioningState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -266,7 +274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HealthcareApis/services/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the metadata of a service instance.
@@ -284,6 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --tags: record # Instance tags
 ]: any -> record<properties: record<accessPolicies: list<record>, authenticationConfiguration: record<audience: string, authority: string, smartProxyEnabled: bool>, corsConfiguration: record<allowCredentials: bool, headers: list, maxAge: int, methods: list, origins: list>, cosmosDbConfiguration: record<offerThroughput: int>, provisioningState: string>> {
@@ -296,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update the metadata of a service instance.
@@ -315,6 +324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: record # The properties of a service instance. — shape: {accessPolicies: list, authenticationConfiguration?: record, corsConfiguration?: record, cosmosDbConfiguration?: record}
   --etag: string # An etag associated with the resource, used for optimistic concurrency when editing it.
@@ -331,5 +341,5 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

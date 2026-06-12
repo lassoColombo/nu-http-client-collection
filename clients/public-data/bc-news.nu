@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "facebook-posts-by-uri GetByUri" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "facebook-posts-by-uri GetByUri" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --uri: string # default: 
   --api-version: string # The requested API version (default: 1.0)
@@ -111,7 +113,7 @@ export def "facebook-posts-by-uri GetByUri" [
   let full_url = (build-url $base "/api/FacebookPosts/ByUri" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the top level content for the home page
@@ -126,6 +128,7 @@ export def "home Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<featurePostKey: string, liveWebcastFlashMediaManifestUrl: string, liveWebcastM3uPlaylist: string, name: string, topPostKey: string> {
@@ -135,7 +138,7 @@ export def "home Get" [
   let full_url = (build-url $base "/api/Home" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all ministries
@@ -150,6 +153,7 @@ export def "ministries GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: list<record>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: list<record>, topPostKey: string, topicLinks: list<record>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string> {
@@ -159,7 +163,7 @@ export def "ministries GetAll" [
   let full_url = (build-url $base "/api/Ministries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Ministry associated with the ministry key
@@ -175,6 +179,7 @@ export def "ministries GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: table<uri: string>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: table<uri: string>, topPostKey: string, topicLinks: table<uri: string>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string> {
@@ -184,7 +189,7 @@ export def "ministries GetOne" [
   let full_url = (build-url $base $"/api/Ministries/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Minister associated with the ministry key
@@ -200,6 +205,7 @@ export def "ministries-minister GetMinister" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<details: string, emailHtml: string, headline: string, photo: string, post: string, summary: string> {
@@ -209,7 +215,7 @@ export def "ministries-minister GetMinister" [
   let full_url = (build-url $base $"/api/Ministries/($key)/Minister" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all newsletters
@@ -224,6 +230,7 @@ export def "newsletters GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<description: string, editions: list<record>, ministryName: string, name: string> {
@@ -233,7 +240,7 @@ export def "newsletters GetAll" [
   let full_url = (build-url $base "/api/Newsletters" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the image object reference by of a Newsletter Edition associated with the image guid
@@ -249,6 +256,7 @@ export def "newsletters-images GetImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<fileName: string, imageBytes: string, imageType: string> {
@@ -258,7 +266,7 @@ export def "newsletters-images GetImage" [
   let full_url = (build-url $base $"/api/Newsletters/Images/($guid)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific newsletter
@@ -274,6 +282,7 @@ export def "newsletters GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<description: string, editions: table<key: string, value: string>, ministryName: string, name: string> {
@@ -283,7 +292,7 @@ export def "newsletters GetOne" [
   let full_url = (build-url $base $"/api/Newsletters/($newsletterKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a specific edition of a newsletter
@@ -300,6 +309,7 @@ export def "newsletters-editions GetEdition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<htmlBody: string, name: string> {
@@ -309,7 +319,7 @@ export def "newsletters-editions GetEdition" [
   let full_url = (build-url $base $"/api/Newsletters/($newsletterKey)/Editions/($editionKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an article belonging to a Newsletter edition
@@ -327,6 +337,7 @@ export def "newsletters-editions-articles GetArticle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<editionName: string, htmlBody: string> {
@@ -336,7 +347,7 @@ export def "newsletters-editions-articles GetArticle" [
   let full_url = (build-url $base $"/api/Newsletters/($newsletterKey)/Editions/($editionKey)/Articles/($articleKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the posts associated with the keys in the list passed in.
@@ -351,6 +362,7 @@ export def "posts Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --postKeys: list # default: 
   --api-version: string # The requested API version (default: 1.0)
@@ -361,7 +373,7 @@ export def "posts Get" [
   let full_url = (build-url $base "/api/Posts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all keys for the specified index (newsroom or category)
@@ -378,6 +390,7 @@ export def "posts-keys GetAllKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --postKind: string # One of: releases, stories, factsheets, updates or default (releases+stories+factsheets) (default: )
   --count: int # number of posts to return (format: int32, default: )
@@ -390,7 +403,7 @@ export def "posts-keys GetAllKeys" [
   let full_url = (build-url $base $"/api/Posts/Keys/($indexKind)/($indexKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the post key associated with the reference.
@@ -406,6 +419,7 @@ export def "posts-keys GetKeyFromReference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<key: string, value: string> {
@@ -415,7 +429,7 @@ export def "posts-keys GetKeyFromReference" [
   let full_url = (build-url $base $"/api/Posts/Keys/($reference)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the latest posts of postKind for the specified index (default or category)
@@ -432,6 +446,7 @@ export def "posts-latest GetLatest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --postKind: string # One of: releases, stories, factsheets, updates or default (releases+stories except top/feature) (default: )
   --count: int # number of posts to return (format: int32, default: )
@@ -444,7 +459,7 @@ export def "posts-latest GetLatest" [
   let full_url = (build-url $base $"/api/Posts/Latest/($indexKind)/($indexKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the latest Social Media post for the social media type passed in.
@@ -460,6 +475,7 @@ export def "posts-latest-media-uri GetLatestMediaUri" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> string {
@@ -469,7 +485,7 @@ export def "posts-latest-media-uri GetLatestMediaUri" [
   let full_url = (build-url $base $"/api/Posts/LatestMediaUri/($mediaType)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the post associated with the key
@@ -485,6 +501,7 @@ export def "posts GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<assetUrl: string, atomId: string, azureAssets: table<key: string, label: string, length: int>, documents: table<byline: string, contacts: list, detailsHtml: string, headline: string, languageId: int, pageTitle: string, subheadline: string>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string> {
@@ -494,7 +511,7 @@ export def "posts GetOne" [
   let full_url = (build-url $base $"/api/Posts/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all resource links
@@ -509,6 +526,7 @@ export def "resource-links GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<uri: string> {
@@ -518,7 +536,7 @@ export def "resource-links GetAll" [
   let full_url = (build-url $base "/api/ResourceLinks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Sectors
@@ -533,6 +551,7 @@ export def "sectors GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -542,7 +561,7 @@ export def "sectors GetAll" [
   let full_url = (build-url $base "/api/Sectors" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the sector associated with the key
@@ -558,6 +577,7 @@ export def "sectors GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -567,7 +587,7 @@ export def "sectors GetOne" [
   let full_url = (build-url $base $"/api/Sectors/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Services
@@ -582,6 +602,7 @@ export def "services GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -591,7 +612,7 @@ export def "services GetAll" [
   let full_url = (build-url $base "/api/Services" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the service associated with the passed key
@@ -607,6 +628,7 @@ export def "services GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -616,7 +638,7 @@ export def "services GetOne" [
   let full_url = (build-url $base $"/api/Services/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Slides
@@ -631,6 +653,7 @@ export def "slides GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string> {
@@ -640,7 +663,7 @@ export def "slides GetAll" [
   let full_url = (build-url $base "/api/Slides" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the slide associated to the id
@@ -656,6 +679,7 @@ export def "slides GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string> {
@@ -665,7 +689,7 @@ export def "slides GetOne" [
   let full_url = (build-url $base $"/api/Slides/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Tags
@@ -680,6 +704,7 @@ export def "tags GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -689,7 +714,7 @@ export def "tags GetAll" [
   let full_url = (build-url $base "/api/Tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Tag associated with the key
@@ -705,6 +730,7 @@ export def "tags GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -714,7 +740,7 @@ export def "tags GetOne" [
   let full_url = (build-url $base $"/api/Tags/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Themes
@@ -729,6 +755,7 @@ export def "themes GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -738,7 +765,7 @@ export def "themes GetAll" [
   let full_url = (build-url $base "/api/Themes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Theme associated with the key
@@ -754,6 +781,7 @@ export def "themes GetOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
@@ -763,5 +791,5 @@ export def "themes GetOne" [
   let full_url = (build-url $base $"/api/Themes/($key)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

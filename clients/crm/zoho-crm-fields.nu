@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def type-completer [] { ["all" "unused" "used"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "settings-fields list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "settings-fields list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
   --include: string@include-completer # To include additional information about the field's permissions to update.
   --type: string@type-completer # The usage type of the field.
@@ -113,7 +115,7 @@ export def "settings-fields list" [
   let full_url = (build-url $base "/settings/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Fields
@@ -129,6 +131,7 @@ export def "settings-fields post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
   --body-fields: list # List of fields to be created — item shape: {field_label: string, data_type: "text"|"textarea"|"email"|"phone"|"picklist"|"multiselectpicklist"|"date"|"datetime"|"integer"|"autonumber"|"currency"|"percent"|"bigint"|"double"|"website"|"boolean"|"fileupload"|"imageupload"|"lookup"|"userlookup"|"multiselectlookup"|"multiuserlookup"|"formula"|"rollup_summary"|"address", length?: int, filterable?: bool, tooltip?: record, profiles?: list, external?: record, crypt?: any, encrypt_case?: "uppercase"|"lowercase", textarea?: record, unique?: any, hipaa_compliance_enabled?: bool, private?: record, pick_list_values?: list, enable_record_state?: bool, default_value?: string, pick_list_values_sorted_lexically?: bool, enable_colour_code?: bool, global_picklist?: record, history_tracking_enabled?: bool, history_tracking?: record, separator?: bool, auto_number?: record, _update_existing_records?: bool, formula?: record, decimal_place?: float, number_separator?: bool, currency?: record, rollup_summary?: record, lookup?: record, multiselectlookup?: record}
 ]: any -> record<fields: table<code: string, details: record, message: string, status: string>> {
@@ -141,7 +144,7 @@ export def "settings-fields post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Fields
@@ -157,6 +160,7 @@ export def "settings-fields patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
   --body-fields: list # List of fields to be created — item shape: {field_label?: string, id?: string, length?: int, profiles?: list, unique?: any, lookup?: record, pick_list_values?: list, global_picklist?: any, sharing_properties?: record, history_tracking_enabled?: bool, history_tracking?: record, formula?: record, decimal_place?: float, currency?: record, rollup_summary?: record}
 ]: any -> record<fields: table<code: string, details: record, message: string, status: string>> {
@@ -169,7 +173,7 @@ export def "settings-fields patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Field by ID
@@ -185,6 +189,7 @@ export def "settings-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
   --include: string@include-completer # To include additional information about the field's permissions to update.
   --type: string@type-completer # The usage type of the field.
@@ -195,7 +200,7 @@ export def "settings-fields get" [
   let full_url = (build-url $base $"/settings/fields/($fieldId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Field by ID
@@ -212,6 +217,7 @@ export def "settings-fields patch-by-fieldId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
   --body-fields: list # List of fields to be created — item shape: {field_label?: string, id?: string, length?: int, profiles?: list, unique?: any, lookup?: record, pick_list_values?: list, global_picklist?: any, sharing_properties?: record, history_tracking_enabled?: bool, history_tracking?: record, formula?: record, decimal_place?: float, currency?: record, rollup_summary?: record}
 ]: any -> record<fields: table<code: string, details: record, message: string, status: string>> {
@@ -224,7 +230,7 @@ export def "settings-fields patch-by-fieldId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Custom Field
@@ -240,6 +246,7 @@ export def "settings-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-module: string # The API name of the module to which the field belongs.
 ]: nothing -> record<fields: table<code: string, details: record, message: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -248,5 +255,5 @@ export def "settings-fields delete" [
   let full_url = (build-url $base $"/settings/fields/($fieldId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

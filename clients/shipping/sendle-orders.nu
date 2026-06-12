@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def contents-type-completer [] { ["Documents" "Gift" "Merchandise" "Other" "Retu
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders createOrder" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,6 +113,7 @@ export def "orders createOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Client-provided key to make order creation idempotent.
   sender: record # shape: {contact?: record, address?: record, instructions?: string, tax_ids?: record}
   receiver: record # shape: {contact?: record, address?: record, instructions?: string, tax_ids?: record}
@@ -140,7 +142,7 @@ export def "orders createOrder" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View An Order
@@ -156,13 +158,14 @@ export def "orders viewOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order_id: string, state: string, order_url: string, sendle_reference: string, tracking_url: string, metadata: record, labels: table<format: string, size: string, url: string>, scheduling: record<is_cancellable: bool, pickup_date: string, picked_up_on: string, delivered_on: string, estimated_delivery_date_minimum: string, estimated_delivery_date_maximum: string>, hide_pickup_address: bool, description: string, weight: record<value: string, units: string>, volume: record<value: string, units: string>, dimensions: record<length: string, width: string, height: string, units: string>, customer_reference: string, sender: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, receiver: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, route: record<description: string, type: string, delivery_guarantee_status: string>, price: record<gross: record<amount: float, currency: string>, net: record<amount: float, currency: string>, tax: record<amount: float, currency: string>>, price_breakdown: record, tax_breakdown: record, cover: record<total_cover: record<amount: float>, price: record<gross: record, net: record, tax: record>>, packaging_type: string, parcel_contents: table<description: string, value: string, quantity: int, country_of_origin: string, hs_code: string, manufacturer_id: string>, contents_type: string, product: record<code: string, name: string, first_mile_option: string, service: string, atl_only: bool>, expires_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel An Order
@@ -178,13 +181,14 @@ export def "orders-cancel cancelOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order_id: string, state: string, order_url: string, cancelled_at: string, cancellable: bool, cancellation_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return An Order
@@ -201,6 +205,7 @@ export def "orders-return returnOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-reference: string
   --receiver: record # shape: {instructions?: string}
 ]: any -> record<order_id: string, state: string, order_url: string, sendle_reference: string, tracking_url: string, metadata: record, labels: table<format: string, size: string, url: string>, scheduling: record<is_cancellable: bool, pickup_date: string, picked_up_on: string, delivered_on: string, estimated_delivery_date_minimum: string, estimated_delivery_date_maximum: string>, hide_pickup_address: bool, description: string, weight: record<value: string, units: string>, volume: record<value: string, units: string>, dimensions: record<length: string, width: string, height: string, units: string>, customer_reference: string, sender: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, receiver: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, route: record<description: string, type: string, delivery_guarantee_status: string>, price: record<gross: record<amount: float, currency: string>, net: record<amount: float, currency: string>, tax: record<amount: float, currency: string>>, price_breakdown: record, tax_breakdown: record, cover: record<total_cover: record<amount: float>, price: record<gross: record, net: record, tax: record>>, packaging_type: string, parcel_contents: table<description: string, value: string, quantity: int, country_of_origin: string, hs_code: string, manufacturer_id: string>, contents_type: string, product: record<code: string, name: string, first_mile_option: string, service: string, atl_only: bool>, expires_at: string> {
@@ -212,7 +217,7 @@ export def "orders-return returnOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View A Return Order
@@ -228,11 +233,12 @@ export def "orders-return viewReturnOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order_id: string, state: string, order_url: string, sendle_reference: string, tracking_url: string, metadata: record, labels: table<format: string, size: string, url: string>, scheduling: record<is_cancellable: bool, pickup_date: string, picked_up_on: string, delivered_on: string, estimated_delivery_date_minimum: string, estimated_delivery_date_maximum: string>, hide_pickup_address: bool, description: string, weight: record<value: string, units: string>, volume: record<value: string, units: string>, dimensions: record<length: string, width: string, height: string, units: string>, customer_reference: string, sender: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, receiver: record<contact: record<name: string, phone: string, email: string, company: string, sendle_id: string>, address: record<address_line1: string, address_line2: string, suburb: string, postcode: string, state_name: string, country: string>, instructions: string, tax_ids: record<ioss: string>>, route: record<description: string, type: string, delivery_guarantee_status: string>, price: record<gross: record<amount: float, currency: string>, net: record<amount: float, currency: string>, tax: record<amount: float, currency: string>>, price_breakdown: record, tax_breakdown: record, cover: record<total_cover: record<amount: float>, price: record<gross: record, net: record, tax: record>>, packaging_type: string, parcel_contents: table<description: string, value: string, quantity: int, country_of_origin: string, hs_code: string, manufacturer_id: string>, contents_type: string, product: record<code: string, name: string, first_mile_option: string, service: string, atl_only: bool>, expires_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($id)/return")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

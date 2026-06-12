@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def action-completer [] { ["Acquire" "Break" "Change" "Release" "Renew"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -113,7 +115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all containers and does not support a prefix like data plane. Also SRP today does not return continuation token.
@@ -131,6 +133,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --skipToken: string # Optional. Continuation token for the list operation.
   --maxpagesize: string # Optional. Specified maximum number of containers that can be included in the list.
@@ -142,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes specified container under its account.
@@ -161,6 +164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -169,7 +173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets properties of a specified container. 
@@ -188,6 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -196,7 +201,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates container properties as specified in request body. Properties not mentioned in the request will be unchanged. Update fails if the specified container doesn't already exist. 
@@ -216,6 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
 ]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
@@ -228,7 +234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new container under the specified account as described by request body. The container resource includes metadata and properties for that container. It does not include a list of the blobs contained by the container. 
@@ -248,6 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
 ]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
@@ -260,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clears legal hold tags. Clearing the same or non-existent tag results in an idempotent operation. ClearLegalHold clears out only the specified tags in the request.
@@ -279,6 +286,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   tags: list # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
 ]: any -> record<hasLegalHold: bool, tags: list<string>> {
@@ -291,7 +299,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Extends the immutabilityPeriodSinceCreationInDays of a locked immutabilityPolicy. The only action allowed on a Locked policy will be this action. ETag in If-Match is required for this operation.
@@ -311,6 +319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
@@ -326,7 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sets the ImmutabilityPolicy to Locked state. The only action allowed on a Locked policy is ExtendImmutabilityPolicy action. ETag in If-Match is required for this operation.
@@ -345,6 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
@@ -356,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Aborts an unlocked immutability policy. The response of delete has immutabilityPeriodSinceCreationInDays set to 0. ETag in If-Match is required for this operation. Deleting a locked immutability policy is not allowed, only way is to delete the container after deleting all blobs inside the container.
@@ -376,6 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
@@ -387,7 +398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the existing immutability policy along with the corresponding ETag in response headers and body.
@@ -407,6 +418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
@@ -418,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an unlocked immutability policy. ETag in If-Match is honored if given but not required for this operation.
@@ -439,6 +451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
@@ -454,7 +467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # The Lease Container operation establishes and manages a lock on a container for delete operations. The lock duration can be 15 to 60 seconds, or can be infinite.
@@ -473,6 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   action: string@action-completer # Specifies the lease action. Can be one of the available actions.
   --breakPeriod: int # Optional. For a break action, proposed duration the lease should continue before it is broken, in seconds, between 0 and 60.
@@ -489,7 +503,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sets legal hold tags. Setting the same tag results in an idempotent operation. SetLegalHold follows an append pattern and does not clear out the existing tags that are not specified in the request.
@@ -508,6 +522,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   tags: list # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
 ]: any -> record<hasLegalHold: bool, tags: list<string>> {
@@ -520,7 +535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the properties of a storage account’s Blob service, including properties for Storage Analytics and CORS (Cross-Origin Resource Sharing) rules.
@@ -539,6 +554,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -547,7 +563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/($BlobServicesName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the properties of a storage account’s Blob service, including properties for Storage Analytics and CORS (Cross-Origin Resource Sharing) rules. 
@@ -567,6 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties of a storage account’s Blob service. — shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
 ]: any -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
@@ -579,5 +596,5 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

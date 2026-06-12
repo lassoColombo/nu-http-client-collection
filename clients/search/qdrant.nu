@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections-shards key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "collections-shards key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   shard_key: any
   --shards-number: int # How many shards to create for this key If not specified, will use the default value from config (nullable, format: uint32)
@@ -122,7 +124,7 @@ export def "collections-shards key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shard keys
@@ -138,13 +140,14 @@ export def "collections-shards keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<shard_keys: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/shards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete shard key
@@ -160,6 +163,7 @@ export def "collections-shards-delete key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   shard_key: any
 ]: any -> record<usage: any, time: float, status: string, result: bool> {
@@ -172,7 +176,7 @@ export def "collections-shards-delete key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about the running Qdrant instance
@@ -187,13 +191,14 @@ export def "service root" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<title: string, version: string, commit: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collect telemetry data
@@ -208,6 +213,7 @@ export def "telemetry telemetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anonymize: oneof<nothing, bool> # If true, anonymize result
   --details-level: int # Level of details in telemetry data. Minimal level is 0, maximal is infinity
   --per-collection: oneof<nothing, bool> # If true, include per-collection request statistics in the response
@@ -219,7 +225,7 @@ export def "telemetry telemetry" [
   let full_url = (build-url $base "/telemetry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collect Prometheus metrics data
@@ -234,6 +240,7 @@ export def "metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anonymize: oneof<nothing, bool> # If true, anonymize result
   --per-collection: oneof<nothing, bool> # If true, include per-collection request metrics with a collection label instead of global request metrics
   --timeout: int # Timeout for this request (default: 60)
@@ -244,7 +251,7 @@ export def "metrics metrics" [
   let full_url = (build-url $base "/metrics" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Kubernetes healthz endpoint
@@ -259,13 +266,14 @@ export def "healthz healthz" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/healthz")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Kubernetes livez endpoint
@@ -280,13 +288,14 @@ export def "livez livez" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/livez")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Kubernetes readyz endpoint
@@ -301,13 +310,14 @@ export def "readyz readyz" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/readyz")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues
@@ -322,13 +332,14 @@ export def "issues issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear issues
@@ -343,13 +354,14 @@ export def "issues issues-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cluster status info
@@ -364,13 +376,14 @@ export def "cluster status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collect cluster telemetry data
@@ -385,6 +398,7 @@ export def "cluster-telemetry telemetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --details-level: int # The level of detail to include in the response
   --timeout: int # Timeout for this request (default: 60)
 ]: nothing -> record<usage: any, time: float, status: string, result: record<collections: record, cluster: any>> {
@@ -394,7 +408,7 @@ export def "cluster-telemetry telemetry" [
   let full_url = (build-url $base "/cluster/telemetry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tries to recover current peer Raft state.
@@ -409,13 +423,14 @@ export def "cluster-recover peer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster/recover")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove peer from the cluster
@@ -431,6 +446,7 @@ export def "cluster-peer peer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   --force: oneof<nothing, bool> # If true - removes peer even if it has shards/replicas on it. (default: false)
 ]: nothing -> record<usage: any, time: float, status: string, result: bool> {
@@ -440,7 +456,7 @@ export def "cluster-peer peer" [
   let full_url = (build-url $base $"/cluster/peer/($peer_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List collections
@@ -455,13 +471,14 @@ export def "collections collections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<collections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collection info
@@ -477,13 +494,14 @@ export def "collections collection-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<status: string, optimizer_status: any, warnings: list<record>, indexed_vectors_count: int, points_count: int, segments_count: int, config: record<params: record, hnsw_config: record, optimizer_config: record, wal_config: any, quantization_config: any, strict_mode_config: any, metadata: any>, payload_schema: record, update_queue: any>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create collection
@@ -499,6 +517,7 @@ export def "collections collection-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   --vectors: any # Vector params separator for single and multiple vector modes Single mode:  { "size": 128, "distance": "Cosine" }  or multiple mode:  { "default": { "size": 128, "distance": "Cosine" } }
   --shard-number: int # For auto sharding: Number of shards in collection. - Default is 1 for standalone, otherwise equal to the number of nodes - Minimum is 1  For custom sharding: Number of shards in collection per shard group. - Default is 1, meaning that each shard key will be mapped to a single shard - Minimum is 1 (nullable, format: uint32)
@@ -523,7 +542,7 @@ export def "collections collection-by-collection_name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update collection parameters
@@ -539,6 +558,7 @@ export def "collections collection-by-collection_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   --vectors: any # Map of vector data parameters to update for each named vector. To update parameters in a collection having a single unnamed vector, use an empty string as name.
   --optimizers-config: any # Custom params for Optimizers.  If none - it is left unchanged. This operation is blocking, it will only proceed once all current optimizations are complete
@@ -558,7 +578,7 @@ export def "collections collection-by-collection_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete collection
@@ -574,6 +594,7 @@ export def "collections collection-by-collection_name-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
 ]: nothing -> record<usage: any, time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -582,7 +603,7 @@ export def "collections collection-by-collection_name-3" [
   let full_url = (build-url $base $"/collections/($collection_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update aliases of the collections
@@ -597,6 +618,7 @@ export def "collections-aliases aliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   actions: list
 ]: any -> record<usage: any, time: float, status: string, result: bool> {
@@ -609,7 +631,7 @@ export def "collections-aliases aliases" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create index for field in collection
@@ -625,6 +647,7 @@ export def "collections-index index-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -640,7 +663,7 @@ export def "collections-index index-by-collection_name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check the existence of a collection
@@ -656,13 +679,14 @@ export def "collections-exists exists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<exists: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/exists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete index for field in collection
@@ -679,6 +703,7 @@ export def "collections-index index-by-collection_name-field_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -689,7 +714,7 @@ export def "collections-index index-by-collection_name-field_name" [
   let full_url = (build-url $base $"/collections/($collection_name)/index/($field_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create named vector
@@ -708,6 +733,7 @@ export def "collections-vectors name-by-collection_name-vector_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -723,7 +749,7 @@ export def "collections-vectors name-by-collection_name-vector_name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete named vector
@@ -740,6 +766,7 @@ export def "collections-vectors name-by-collection_name-vector_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -750,7 +777,7 @@ export def "collections-vectors name-by-collection_name-vector_name-1" [
   let full_url = (build-url $base $"/collections/($collection_name)/vectors/($vector_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collection cluster info
@@ -766,13 +793,14 @@ export def "collections-cluster info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<peer_id: int, shard_count: int, local_shards: list<record>, remote_shards: list<record>, shard_transfers: list<record>, resharding_operations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/cluster")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update collection cluster setup
@@ -797,6 +825,7 @@ export def "collections-cluster cluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
   --move-shard: record # shape: {shard_id: int, to_peer_id: int, from_peer_id: int, method?: any}
   --replicate-shard: record # shape: {shard_id: int, to_peer_id: int, from_peer_id: int, method?: any}
@@ -818,7 +847,7 @@ export def "collections-cluster cluster" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get optimization progress
@@ -834,6 +863,7 @@ export def "collections-optimizations optimizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with: string # Comma-separated list of optional fields to include in the response. Possible values: queued, completed, idle_segments.
   --completed-limit: int # Maximum number of completed optimizations to return. Ignored if `completed` is not in the `with` parameter. (default: 16)
 ]: nothing -> record<usage: any, time: float, status: string, result: record<summary: record<queued_optimizations: int, queued_segments: int, queued_points: int, idle_segments: int>, running: list<record>, queued: list<record>, completed: list<record>, idle_segments: list<record>>> {
@@ -843,7 +873,7 @@ export def "collections-optimizations optimizations" [
   let full_url = (build-url $base $"/collections/($collection_name)/optimizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List aliases for collection
@@ -859,13 +889,14 @@ export def "collections-aliases aliases-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<aliases: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/aliases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List collections aliases
@@ -880,13 +911,14 @@ export def "aliases aliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: record<aliases: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aliases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recover from an uploaded snapshot
@@ -902,6 +934,7 @@ export def "collections-snapshots-upload snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
@@ -916,7 +949,7 @@ export def "collections-snapshots-upload snapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Recover from a snapshot
@@ -932,6 +965,7 @@ export def "collections-snapshots-recover snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   location: string # Examples: - URL `http://localhost:8080/collections/my_collection/snapshots/my_snapshot` - Local path `file:///qdrant/snapshots/test_collection-2022-08-04-10-49-10.snapshot` (format: uri)
   --priority: any # Defines which data should be used as a source of truth if there are other replicas in the cluster. If set to `Snapshot`, the snapshot will be used as a source of truth, and the current state will be overwritten. If set to `Replica`, the current state will be used as a source of truth, and after recovery if will be synchronized with the snapshot.
@@ -947,7 +981,7 @@ export def "collections-snapshots-recover snapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List collection snapshots
@@ -963,13 +997,14 @@ export def "collections-snapshots snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: table<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/snapshots")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create collection snapshot
@@ -985,6 +1020,7 @@ export def "collections-snapshots snapshot-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -993,7 +1029,7 @@ export def "collections-snapshots snapshot-by-collection_name" [
   let full_url = (build-url $base $"/collections/($collection_name)/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete collection snapshot
@@ -1010,6 +1046,7 @@ export def "collections-snapshots snapshot-by-collection_name-snapshot_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1018,7 +1055,7 @@ export def "collections-snapshots snapshot-by-collection_name-snapshot_name" [
   let full_url = (build-url $base $"/collections/($collection_name)/snapshots/($snapshot_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download collection snapshot
@@ -1035,6 +1072,7 @@ export def "collections-snapshots snapshot-by-collection_name-snapshot_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<time: float, status: record<error: string>, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1042,7 +1080,7 @@ export def "collections-snapshots snapshot-by-collection_name-snapshot_name-1" [
   let full_url = (build-url $base $"/collections/($collection_name)/snapshots/($snapshot_name)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of storage snapshots
@@ -1057,13 +1095,14 @@ export def "snapshots snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: table<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/snapshots")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create storage snapshot
@@ -1078,6 +1117,7 @@ export def "snapshots snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1086,7 +1126,7 @@ export def "snapshots snapshot" [
   let full_url = (build-url $base "/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete storage snapshot
@@ -1102,6 +1142,7 @@ export def "snapshots snapshot-by-snapshot_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1110,7 +1151,7 @@ export def "snapshots snapshot-by-snapshot_name" [
   let full_url = (build-url $base $"/snapshots/($snapshot_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download storage snapshot
@@ -1126,6 +1167,7 @@ export def "snapshots snapshot-by-snapshot_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<time: float, status: record<error: string>, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1133,7 +1175,7 @@ export def "snapshots snapshot-by-snapshot_name-1" [
   let full_url = (build-url $base $"/snapshots/($snapshot_name)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download shard snapshot
@@ -1150,6 +1192,7 @@ export def "collections-shards-snapshot snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<time: float, status: record<error: string>, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1157,7 +1200,7 @@ export def "collections-shards-snapshot snapshot" [
   let full_url = (build-url $base $"/collections/($collection_name)/shards/($shard_id)/snapshot")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recover shard from an uploaded snapshot
@@ -1174,6 +1217,7 @@ export def "collections-shards-snapshots-upload snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
@@ -1188,7 +1232,7 @@ export def "collections-shards-snapshots-upload snapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Recover from a snapshot
@@ -1205,6 +1249,7 @@ export def "collections-shards-snapshots-recover snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   location: any
   --priority: any
@@ -1220,7 +1265,7 @@ export def "collections-shards-snapshots-recover snapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shards snapshots for a collection
@@ -1237,13 +1282,14 @@ export def "collections-shards-snapshots snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<usage: any, time: float, status: string, result: table<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collection_name)/shards/($shard_id)/snapshots")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shard snapshot
@@ -1260,6 +1306,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1268,7 +1315,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id" [
   let full_url = (build-url $base $"/collections/($collection_name)/shards/($shard_id)/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete shard snapshot
@@ -1286,6 +1333,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id-sn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1294,7 +1342,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id-sn
   let full_url = (build-url $base $"/collections/($collection_name)/shards/($shard_id)/snapshots/($snapshot_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download collection snapshot
@@ -1312,6 +1360,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id-sn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<time: float, status: record<error: string>, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1319,7 +1368,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id-sn
   let full_url = (build-url $base $"/collections/($collection_name)/shards/($shard_id)/snapshots/($snapshot_name)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get point
@@ -1336,6 +1385,7 @@ export def "collections-points point" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
 ]: nothing -> record<usage: any, time: float, status: string, result: record<id: any, payload: any, vector: any, shard_key: any, order_value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1344,7 +1394,7 @@ export def "collections-points point" [
   let full_url = (build-url $base $"/collections/($collection_name)/points/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get points
@@ -1360,6 +1410,7 @@ export def "collections-points points-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1376,7 +1427,7 @@ export def "collections-points points-by-collection_name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upsert points
@@ -1394,6 +1445,7 @@ export def "collections-points points-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1412,7 +1464,7 @@ export def "collections-points points-by-collection_name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete points
@@ -1429,6 +1481,7 @@ export def "collections-points-delete points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1445,7 +1498,7 @@ export def "collections-points-delete points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update vectors
@@ -1462,6 +1515,7 @@ export def "collections-points-vectors vectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1478,7 +1532,7 @@ export def "collections-points-vectors vectors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete vectors
@@ -1494,6 +1548,7 @@ export def "collections-points-vectors-delete vectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1511,7 +1566,7 @@ export def "collections-points-vectors-delete vectors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set payload
@@ -1527,6 +1582,7 @@ export def "collections-points-payload payload-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1545,7 +1601,7 @@ export def "collections-points-payload payload-by-collection_name" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Overwrite payload
@@ -1561,6 +1617,7 @@ export def "collections-points-payload payload-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1579,7 +1636,7 @@ export def "collections-points-payload payload-by-collection_name-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete payload
@@ -1595,6 +1652,7 @@ export def "collections-points-payload-delete payload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1612,7 +1670,7 @@ export def "collections-points-payload-delete payload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clear payload
@@ -1629,6 +1687,7 @@ export def "collections-points-payload-clear payload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1645,7 +1704,7 @@ export def "collections-points-payload-clear payload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch update points
@@ -1661,6 +1720,7 @@ export def "collections-points-batch update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
@@ -1675,7 +1735,7 @@ export def "collections-points-batch update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Scroll points
@@ -1691,6 +1751,7 @@ export def "collections-points-scroll points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1710,7 +1771,7 @@ export def "collections-points-scroll points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search points
@@ -1728,6 +1789,7 @@ export def "collections-points-search points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1749,7 +1811,7 @@ export def "collections-points-search points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search batch points
@@ -1768,6 +1830,7 @@ export def "collections-points-search-batch points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   searches: list # item shape: {shard_key?: any, vector: any, filter?: any, params?: any, limit: int, offset?: int, with_payload?: any, with_vector?: any, score_threshold?: float}
@@ -1781,7 +1844,7 @@ export def "collections-points-search-batch points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search point groups
@@ -1799,6 +1862,7 @@ export def "collections-points-search-groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1822,7 +1886,7 @@ export def "collections-points-search-groups groups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recommend points
@@ -1840,6 +1904,7 @@ export def "collections-points-recommend points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1865,7 +1930,7 @@ export def "collections-points-recommend points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recommend batch points
@@ -1884,6 +1949,7 @@ export def "collections-points-recommend-batch points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   searches: list # item shape: {shard_key?: any, positive?: list, negative?: list, strategy?: any, filter?: any, params?: any, limit: int, offset?: int, with_payload?: any, with_vector?: any, score_threshold?: float, using?: any, lookup_from?: any}
@@ -1897,7 +1963,7 @@ export def "collections-points-recommend-batch points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recommend point groups
@@ -1915,6 +1981,7 @@ export def "collections-points-recommend-groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1942,7 +2009,7 @@ export def "collections-points-recommend-groups groups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Discover points
@@ -1961,6 +2028,7 @@ export def "collections-points-discover points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -1984,7 +2052,7 @@ export def "collections-points-discover points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Discover batch points
@@ -2003,6 +2071,7 @@ export def "collections-points-discover-batch points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   searches: list # item shape: {shard_key?: any, target?: any, context?: list, filter?: any, params?: any, limit: int, offset?: int, with_payload?: any, with_vector?: any, using?: any, lookup_from?: any}
@@ -2016,7 +2085,7 @@ export def "collections-points-discover-batch points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Count points
@@ -2032,6 +2101,7 @@ export def "collections-points-count points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -2047,7 +2117,7 @@ export def "collections-points-count points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Facet a payload key with a given filter.
@@ -2063,6 +2133,7 @@ export def "collections-facet facet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any
@@ -2080,7 +2151,7 @@ export def "collections-facet facet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query points
@@ -2096,6 +2167,7 @@ export def "collections-points-query points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any
@@ -2120,7 +2192,7 @@ export def "collections-points-query points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query points in batch
@@ -2137,6 +2209,7 @@ export def "collections-points-query-batch points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   searches: list # item shape: {shard_key?: any, prefetch?: any, query?: any, using?: string, filter?: any, params?: any, score_threshold?: float, limit?: int, offset?: int, with_vector?: any, with_payload?: any, lookup_from?: any}
@@ -2150,7 +2223,7 @@ export def "collections-points-query-batch points" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query points, grouped by a given payload field
@@ -2166,6 +2239,7 @@ export def "collections-points-query-groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any
@@ -2192,7 +2266,7 @@ export def "collections-points-query-groups groups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search points matrix distance pairs
@@ -2208,6 +2282,7 @@ export def "collections-points-search-matrix-pairs pairs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -2225,7 +2300,7 @@ export def "collections-points-search-matrix-pairs pairs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search points matrix distance offsets
@@ -2241,6 +2316,7 @@ export def "collections-points-search-matrix-offsets offsets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consistency: string # Define read consistency guarantees for the operation
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
@@ -2258,5 +2334,5 @@ export def "collections-points-search-matrix-offsets offsets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

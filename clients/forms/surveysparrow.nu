@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -101,7 +102,7 @@ def channelType-completer [] { ["EMAIL" "EMBED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "audit-logs list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -134,6 +135,7 @@ export def "audit-logs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventType: string@eventType-completer
   --page: float # default: 1
   --maxResults: float # default: 100
@@ -147,7 +149,7 @@ export def "audit-logs list" [
   let full_url = (build-url $base "/v1/audit-logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contact lists
@@ -162,13 +164,14 @@ export def "contactlist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/contactlist")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create contact list
@@ -183,6 +186,7 @@ export def "contactlist post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --description: string
 ]: any -> string {
@@ -194,7 +198,7 @@ export def "contactlist post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 #  Get Contacts
@@ -209,6 +213,7 @@ export def "contacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float # default: 1
   --type: string@type-completer # filters type of contact
@@ -223,7 +228,7 @@ export def "contacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create contact
@@ -238,6 +243,7 @@ export def "contacts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
   --name: string # Full Name of contact (e.g. Jane Doe)
   --phone: string # Phone number of the contact (e.g. 91234567833)
@@ -257,7 +263,7 @@ export def "contacts post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List roles
@@ -272,13 +278,14 @@ export def "roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/roles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get surveys
@@ -293,6 +300,7 @@ export def "surveys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float
   --surveyTypes: string
@@ -304,7 +312,7 @@ export def "surveys get" [
   let full_url = (build-url $base "/v1/surveys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create survey
@@ -320,6 +328,7 @@ export def "surveys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   surveyType: string@surveyType-completer
   --workspace-id: float
@@ -339,7 +348,7 @@ export def "surveys post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get public themes for a Survey
@@ -354,6 +363,7 @@ export def "surveythemes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --surveyType: string@surveyType-completer-1
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -362,7 +372,7 @@ export def "surveythemes get" [
   let full_url = (build-url $base "/v1/surveythemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List targets
@@ -377,6 +387,7 @@ export def "targets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float
 ]: nothing -> string {
@@ -386,7 +397,7 @@ export def "targets get" [
   let full_url = (build-url $base "/v1/targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List teams
@@ -401,13 +412,14 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/teams")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create team
@@ -422,6 +434,7 @@ export def "teams post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --type: string@type-completer-1 # Team type, if not provided will be "SURVEY" by default (default: SURVEY)
   --userIds: list
@@ -434,7 +447,7 @@ export def "teams post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List users
@@ -449,13 +462,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -470,6 +484,7 @@ export def "users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   email: string
   role_id: float
@@ -482,7 +497,7 @@ export def "users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List webhooks
@@ -497,6 +512,7 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float
 ]: nothing -> string {
@@ -506,7 +522,7 @@ export def "webhooks get" [
   let full_url = (build-url $base "/v1/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -521,6 +537,7 @@ export def "webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --body-url: string
@@ -541,7 +558,7 @@ export def "webhooks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List workspaces
@@ -556,6 +573,7 @@ export def "workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float
 ]: nothing -> string {
@@ -565,7 +583,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/v1/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create workspace
@@ -580,6 +598,7 @@ export def "workspaces post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teams: list
   --users: list
   name: string
@@ -593,7 +612,7 @@ export def "workspaces post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit logs
@@ -608,6 +627,7 @@ export def "audit-logs logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-type: string@event-type-completer # type of audit logs
   --page: float # The page number to start searching audit logs. Default page number is 1 (default: 1)
   --limit: float # The maximum number of audit logs response per page. Defaults is 100 if not provided. Maximum allowed value is 500. (default: 100)
@@ -620,7 +640,7 @@ export def "audit-logs logs" [
   let full_url = (build-url $base "/v3/audit_logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all channels
@@ -635,6 +655,7 @@ export def "channels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
   --limit: float # default: 50
   --page: float
@@ -646,7 +667,7 @@ export def "channels list" [
   let full_url = (build-url $base "/v3/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a channel
@@ -669,6 +690,7 @@ export def "channels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3 # Type of the channel
   --mode: string@mode-completer # Mode of the channel, not required when type is LINK and OFFLINE (default: BLAST)
   --channel-id: float # Deprecated, please use update channel instead
@@ -697,7 +719,7 @@ export def "channels post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all contact lists
@@ -712,13 +734,14 @@ export def "contact-lists lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: float, name: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/contact_lists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a contact list
@@ -733,6 +756,7 @@ export def "contact-lists lists-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --description: string
 ]: any -> record<data: record<id: float, name: string, description: string>> {
@@ -744,7 +768,7 @@ export def "contact-lists lists-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all contact properties
@@ -759,13 +783,14 @@ export def "contact-properties properties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: float, name: string, label: string, type: string, description: string, contact_property_group_id: float, group: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/contact_properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a contact property
@@ -780,6 +805,7 @@ export def "contact-properties properties-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-4
   label: string
   --description: string
@@ -793,7 +819,7 @@ export def "contact-properties properties-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all Contacts
@@ -808,6 +834,7 @@ export def "contacts get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contact-list-id: float # Contact List Id
   --type: string@type-completer # Filters type of contact
   --search: string # Search string which will search all the properties of a contact for a matching value
@@ -823,7 +850,7 @@ export def "contacts get-1" [
   let full_url = (build-url $base "/v3/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a contact
@@ -838,6 +865,7 @@ export def "contacts post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --full-name: string # Full Name of contact (e.g. Jane Doe)
   --email: string # Email of contact. Can be optional only if anonymous contact feature is enabled. (e.g. janedoe@surveysparrow.com)
   --phone: string # Phone number of the contact (e.g. 91234567833)
@@ -857,7 +885,7 @@ export def "contacts post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get email themes
@@ -872,13 +900,14 @@ export def "email-themes themes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: float, name: string, created_at: string, updated_at: string, properties: record, is_public: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/email_themes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all survey expressions
@@ -893,6 +922,7 @@ export def "expressions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of Survey
   --limit: float # Record limit per request; default is 50, maximum is 100. (default: 50)
   --page: float # Page of results
@@ -903,7 +933,7 @@ export def "expressions get" [
   let full_url = (build-url $base "/v3/expressions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all languages available for translation
@@ -918,13 +948,14 @@ export def "languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<standardLanguages: list<record>, customLanguages: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metrics
@@ -939,6 +970,7 @@ export def "metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-5 # Value should be one of NPS
   --survey-id: float # If survey_id is not passed, metrics for all CX surveys in the account will be fetched
   --dategte: string # format: date
@@ -950,7 +982,7 @@ export def "metrics get" [
   let full_url = (build-url $base "/v3/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all survey questions
@@ -965,6 +997,7 @@ export def "questions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # default: 50
   --page: float # default: 1
   --tag-name: string
@@ -977,7 +1010,7 @@ export def "questions get" [
   let full_url = (build-url $base "/v3/questions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a question
@@ -993,6 +1026,7 @@ export def "questions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Survey Id (e.g. 1)
   --section-id: float # Section Id (e.g. 2)
   question: record # shape: {text: string, description?: string, type: "FileInput"|"TextInput"|"OpinionScale"|"MultiChoice"|"BipolarMatrix"|"CameraInput"|"Consent"|"ConstantSum"|"ContactForm"|"DateTime"|"Dropdown"|"EmailInput"|"GroupRating"|"Matrix"|"Message"|"NumberInput"|"PhoneNumber"|"RankOrder"|"Rating"|"Signature"|"Slider"|"URLInput"|"YesNo"|"GroupRank"|"AudioInput"|"PaymentQuestion"|"NPSFeedback"|"CESFeedback"|"CSATFeedback", required?: bool, randomized?: bool, tags?: list, multiple_answers?: bool, choices?: list, hasScore?: bool, other?: bool, all_of_the_above?: bool, none_of_the_above?: bool, other_text?: record, all_of_the_above_text?: record, none_of_the_above_text?: record, properties?: record, column?: list, row?: list, display_logic?: record}
@@ -1005,7 +1039,7 @@ export def "questions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Channel reminders
@@ -1020,6 +1054,7 @@ export def "reminders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --channel-id: float # Id of the channel
   --limit: float # default: 50
@@ -1031,7 +1066,7 @@ export def "reminders list" [
   let full_url = (build-url $base "/v3/reminders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Reminder for a channel
@@ -1047,6 +1082,7 @@ export def "reminders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channel_id: float # Id of the channel (e.g. 1)
   survey_id: float # Id of Survey (e.g. 1)
   --body-body: string
@@ -1065,7 +1101,7 @@ export def "reminders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get responses report public link
@@ -1080,6 +1116,7 @@ export def "reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # ID of the survey
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1088,7 +1125,7 @@ export def "reports get" [
   let full_url = (build-url $base "/v3/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get response properties
@@ -1103,13 +1140,14 @@ export def "response-properties properties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/response_properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all responses
@@ -1124,6 +1162,7 @@ export def "responses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # default: 50
   --survey-id: float
   --contact-id: float
@@ -1146,7 +1185,7 @@ export def "responses list" [
   let full_url = (build-url $base "/v3/responses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a response
@@ -1163,6 +1202,7 @@ export def "responses post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
   --contact-id: float # ID of the contact (e.g. 2)
   --channel-id: float # ID of the channel (e.g. 3)
@@ -1179,7 +1219,7 @@ export def "responses post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all roles
@@ -1194,6 +1234,7 @@ export def "roles get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Number of records you would like in a request (default: 50)
   --page: float # Page of results
 ]: nothing -> record<data: table<id: float, name: string, label: string, description: string, account_id: float, created_at: string, updated_at: string, deleted_at: string>, has_next_page: bool> {
@@ -1203,7 +1244,7 @@ export def "roles get-1" [
   let full_url = (build-url $base "/v3/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all survey folders
@@ -1218,6 +1259,7 @@ export def "survey-folders folders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # default: 50
   --page: float
   --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
@@ -1228,7 +1270,7 @@ export def "survey-folders folders" [
   let full_url = (build-url $base "/v3/survey_folders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a survey folder
@@ -1243,6 +1285,7 @@ export def "survey-folders folders-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
   --teams: list
   --users: list
@@ -1259,7 +1302,7 @@ export def "survey-folders folders-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all surveys
@@ -1274,6 +1317,7 @@ export def "surveys get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-type: string@survey-type-completer # Type of survey
   --archived: oneof<nothing, bool> # Is the survey archived (default: false)
   --survey-folder-id: float # Survey folder Id of the survey
@@ -1290,7 +1334,7 @@ export def "surveys get-1" [
   let full_url = (build-url $base "/v3/surveys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a survey
@@ -1307,6 +1351,7 @@ export def "surveys post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # e.g. Employee satisfaction survey
   survey_type: string@survey-type-completer-1
   --workspace-id: float # "workspace" has been renamed to "survey folder". We suggest using survey_folder_id instead of workspace_id
@@ -1328,7 +1373,7 @@ export def "surveys post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List targets
@@ -1343,6 +1388,7 @@ export def "targets get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Number of records you would like in a request (default: 50)
   --page: float # Page of results (default: 1)
 ]: nothing -> record<data: record<targets: list<string>, page: float, count: float, has_next_page: bool>> {
@@ -1352,7 +1398,7 @@ export def "targets get-1" [
   let full_url = (build-url $base "/v3/targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all teams
@@ -1367,6 +1413,7 @@ export def "teams get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Number of records you would like in a request (default: 50)
   --page: float # Page of results
   --type: string@type-completer-1 # Type of team
@@ -1377,7 +1424,7 @@ export def "teams get-1" [
   let full_url = (build-url $base "/v3/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a team
@@ -1392,6 +1439,7 @@ export def "teams post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Team name (e.g. Avengers)
   --type: string@type-completer-1 # Team type, if not provided will be "SURVEY" by default (default: SURVEY)
   --user-id: list # Id of users who should be added to the team (e.g. [1, 2, 3])
@@ -1405,7 +1453,7 @@ export def "teams post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all ticket templates
@@ -1420,6 +1468,7 @@ export def "templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # Page of results
 ]: nothing -> record<data: table<id: float, name: string, description: string, created_at: string, updated_at: string, deleted_at: string, fields: list>, has_next_page: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1428,7 +1477,7 @@ export def "templates get" [
   let full_url = (build-url $base "/v3/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all ticket fields
@@ -1443,6 +1492,7 @@ export def "ticket-fields fields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created-dategte: string # Ticket field created date greater than or equal to. Should be in the format YYYY-MM-DDTHH:MM:SS (format: date)
   --created-datelte: string # Ticket field created date less than or equal to. Should be in the format YYYY-MM-DDTHH:MM:SS (format: date)
   --updated-dategte: string # Ticket field updated date greater than or equal to. Should be in the format YYYY-MM-DDTHH:MM:SS (format: date)
@@ -1456,7 +1506,7 @@ export def "ticket-fields fields" [
   let full_url = (build-url $base "/v3/ticket_fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all tickets
@@ -1471,6 +1521,7 @@ export def "tickets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Record limit per request; default is 50, maximum is 100. (default: 50)
   --page: float # Page of results
   --requester-id: float # Ticket requester's contact id
@@ -1490,7 +1541,7 @@ export def "tickets list" [
   let full_url = (build-url $base "/v3/tickets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a ticket
@@ -1505,6 +1556,7 @@ export def "tickets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requester-id: float # Ticket requester's contact id (e.g. 1)
   --email: string # Ticket requester's contact email (e.g. abc@ymail.com)
   --phone: string # Ticket requester's contact phone (e.g. + 123 23)
@@ -1533,7 +1585,7 @@ export def "tickets post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all users
@@ -1548,6 +1600,7 @@ export def "users get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # number of records to be fetched (default: 50)
   --page: float # Page of the contacts
 ]: nothing -> record<data: table<id: float, name: string, email: string, phone: string, admin: bool, owner: bool, agency_owner: bool, verified: bool, role_id: float>, has_next_page: bool> {
@@ -1557,7 +1610,7 @@ export def "users get-1" [
   let full_url = (build-url $base "/v3/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -1572,6 +1625,7 @@ export def "users post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   email: string
   role_id: float
@@ -1584,7 +1638,7 @@ export def "users post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all survey variables
@@ -1599,6 +1653,7 @@ export def "variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of Survey
   --limit: float # Number of records you would like in a request (default: 50)
   --page: float # Page of results
@@ -1609,7 +1664,7 @@ export def "variables get" [
   let full_url = (build-url $base "/v3/variables" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a survey variable
@@ -1624,6 +1679,7 @@ export def "variables post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 1)
   label: string
   name: string
@@ -1638,7 +1694,7 @@ export def "variables post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks
@@ -1653,6 +1709,7 @@ export def "webhooks get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum results per page (default: 50)
   --page: float # Page number in pagination
   --survey-id: float # Id of Survey
@@ -1663,7 +1720,7 @@ export def "webhooks get-1" [
   let full_url = (build-url $base "/v3/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook
@@ -1678,6 +1735,7 @@ export def "webhooks post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --body-url: string
@@ -1698,7 +1756,7 @@ export def "webhooks post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List subscribed events
@@ -1713,6 +1771,7 @@ export def "audit-logs-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventType: string@eventType-completer
   --page: float # default: 1
   --maxResults: float # default: 50
@@ -1723,7 +1782,7 @@ export def "audit-logs-events get" [
   let full_url = (build-url $base "/v1/audit-logs/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get audit log
@@ -1739,13 +1798,14 @@ export def "audit-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/audit-logs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contact properties
@@ -1760,13 +1820,14 @@ export def "contacts-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/contacts/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create contact property
@@ -1781,6 +1842,7 @@ export def "contacts-properties post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-4
   label: string
   --description: string
@@ -1794,7 +1856,7 @@ export def "contacts-properties post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get contact
@@ -1810,6 +1872,7 @@ export def "contacts get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
 ]: nothing -> record<id: float, name: string, email: string, active: bool, unsubscribed: bool, unsubscribed_at: string, phone: string, mobile: string, jobTitle: string, list: table<id: float, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1819,7 +1882,7 @@ export def "contacts get-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update contact
@@ -1835,6 +1898,7 @@ export def "contacts put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
   --name: string # Full Name of contact (e.g. Jane Doe)
   --email: string # Email of contact (e.g. janedoe@surveysparrow.com)
@@ -1852,7 +1916,7 @@ export def "contacts put-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete contact
@@ -1868,6 +1932,7 @@ export def "contacts delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1877,7 +1942,7 @@ export def "contacts delete-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey
@@ -1893,6 +1958,7 @@ export def "surveys get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reportShareToken: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1901,7 +1967,7 @@ export def "surveys get-by-id" [
   let full_url = (build-url $base $"/v1/surveys/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update survey details
@@ -1918,6 +1984,7 @@ export def "surveys put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --workspace-id: float
   --theme-id: float
@@ -1937,7 +2004,7 @@ export def "surveys put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user
@@ -1953,13 +2020,14 @@ export def "users get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user
@@ -1975,6 +2043,7 @@ export def "users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --role-id: float
 ]: any -> string {
@@ -1986,7 +2055,7 @@ export def "users put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user
@@ -2002,13 +2071,14 @@ export def "users delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workspace
@@ -2024,13 +2094,14 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/workspaces/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update workspace
@@ -2046,6 +2117,7 @@ export def "workspaces put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer-1
   --teams: list
   --users: list
@@ -2059,7 +2131,7 @@ export def "workspaces put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete workspace
@@ -2075,13 +2147,14 @@ export def "workspaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/workspaces/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subscribed events
@@ -2096,6 +2169,7 @@ export def "audit-logs-events logsEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-type: string@event-type-completer # Type of the event
   --page: float # The page number to start searching audit log event. Default page number is 1 (default: 1)
   --limit: float # The maximum number of audit log event response per page. Defaults is 50 if not provided. Maximum allowed value is 100. (default: 50)
@@ -2106,7 +2180,7 @@ export def "audit-logs-events logsEvents" [
   let full_url = (build-url $base "/v3/audit_logs/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create subscribed event
@@ -2122,6 +2196,7 @@ export def "audit-logs-events logsEvents-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list # Array of event names (e.g. [{name: SURVEY_CREATED}]) — item shape: {name?: "SURVEY_CREATED"|"SURVEY_EDITED"|"SURVEY_DELETED"|"THEME_ADDED"|"THEME_EDITED"|"THEME_DELETED"|"USER_CREATED"|"USER_DELETED"|"USER_EDITED"|"CONTACT_CREATED"|"CONTACT_UPDATED"|"CONTACT_DELETED"|"CONTACT_PROPERTY_CREATED"|"CONTACT_PROPERTY_EDITED"|"CONTACT_PROPERTY_DELETED"|"WORKSPACE_CREATED"|"WORKSPACE_DELETED"|"WORKSPACE_EDITED"|"SYNC_DEVICES"|"SURVEY_RESPONSE_IMPORT"|"SURVEY_RESPONSE_DELETION"|"SURVEY_CLOSED"|"SURVEY_RESTORED"|"SURVEY_OWNERSHIP_TRANSFER"|"FOLDER_USER_ACCESS_GRANT"|"FOLDER_USER_ACCESS_REMOVE"|"FOLDER_TEAM_ACCESS_GRANT"|"FOLDER_TEAM_ACCESS_REMOVE"|"SURVEY_MOVED"|"SURVEY_PASSWORD_CREATED"|"SURVEY_PASSWORD_DELETED"|"SURVEY_PASSWORD_EDITED"|"QUESTION_CATALOG_CREATED"|"QUESTION_CATALOG_DELETED"|"LOGIN"|"LOGOUT"|"TICKET_TEMPLATE_CREATED"|"TICKET_TEMPLATE_UPDATED"|"TICKET_TEMPLATE_DELETED"|"SANDBOX_SURVEY_CLONED_TO_SANDBOX"|"SANDBOX_SURVEY_CLONED_TO_MAIN"|"SANDBOX_BULK_CLONE_TO_SANDBOX"|"SANDBOX_ACCOUNT_CREATED"|"SANDBOX_USERS_ADDED"|"SANDBOX_SURVEY_SYNCED"|"FIREWALL_RULE_CREATED"|"FIREWALL_RULE_UPDATED"|"FIREWALL_RULE_DELETED"|"CUSTOM_RESPONSE_RATE_SWITCHED"|"CUSTOM_METRIC_CREATED"|"CUSTOM_METRIC_UPDATED"|"CUSTOM_METRIC_DELETED"|"SURVEY_FOLDER_MOVED"}
   http_method: string@http-method-completer-1 # The HTTP method for the request (GET, PUT, POST, or DELETE). (e.g. POST)
   --body-url: string # URL of audit webhook event (e.g. https://subscribed.com/data)
@@ -2135,7 +2210,7 @@ export def "audit-logs-events logsEvents-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get audit log
@@ -2151,13 +2226,14 @@ export def "audit-logs logsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/audit_logs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a channel
@@ -2173,6 +2249,7 @@ export def "channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
 ]: nothing -> record<data: record<id: float, name: string, status: string, type: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2181,7 +2258,7 @@ export def "channels get" [
   let full_url = (build-url $base $"/v3/channels/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a channel
@@ -2197,6 +2274,7 @@ export def "channels put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of the survey
 ]: any -> record<data: record<id: float, name: string, status: string, type: string, properties: record>> {
   let input = $in
@@ -2207,7 +2285,7 @@ export def "channels put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a channel
@@ -2223,6 +2301,7 @@ export def "channels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2231,7 +2310,7 @@ export def "channels delete" [
   let full_url = (build-url $base $"/v3/channels/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a contact list
@@ -2247,13 +2326,14 @@ export def "contact-lists listsId-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, name: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contact_lists/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a contact list
@@ -2269,13 +2349,14 @@ export def "contact-lists listsId-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contact_lists/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a contact list
@@ -2291,6 +2372,7 @@ export def "contact-lists listsId-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
 ]: any -> record<data: record<id: float, name: string, description: string>> {
@@ -2302,7 +2384,7 @@ export def "contact-lists listsId-by-id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a contact
@@ -2318,13 +2400,14 @@ export def "contacts get-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contacts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a contact
@@ -2340,6 +2423,7 @@ export def "contacts put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --full-name: string # Full Name of contact (e.g. Jane Doe)
   --email: string # Email of contact. Can be optional only if anonymous contact feature is enabled. (e.g. janedoe@surveysparrow.com)
   --phone: string # Phone number of the contact (e.g. 91234567833)
@@ -2357,7 +2441,7 @@ export def "contacts put-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact
@@ -2373,13 +2457,14 @@ export def "contacts delete-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contacts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List respones based on metrics of CX surveys
@@ -2394,6 +2479,7 @@ export def "metrics-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string # format: date
   --datelte: string # format: date
   --limit: float # Maximum results a page can have
@@ -2408,7 +2494,7 @@ export def "metrics-responses get" [
   let full_url = (build-url $base "/v3/metrics/responses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Channel reminder
@@ -2424,6 +2510,7 @@ export def "reminders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --channel-id: float # Id of the channel
 ]: nothing -> record<data: record<id: float, subject: string, frequency: string, type: string, after_days: float, sent_count: float, created_at: string, updated_at: string, survey_id: float, account_id: float, message: string>> {
@@ -2433,7 +2520,7 @@ export def "reminders get" [
   let full_url = (build-url $base $"/v3/reminders/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a channel reminder
@@ -2449,6 +2536,7 @@ export def "reminders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --channel-id: float # Id of the channel
 ]: nothing -> string {
@@ -2458,7 +2546,7 @@ export def "reminders delete" [
   let full_url = (build-url $base $"/v3/reminders/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get report of the question in a survey
@@ -2473,6 +2561,7 @@ export def "reports-question get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # ID of the survey
   --question-id: float # ID of the question
   --start-date: string # Start date of the date range
@@ -2484,7 +2573,7 @@ export def "reports-question get" [
   let full_url = (build-url $base "/v3/reports/question" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all app platforms
@@ -2499,6 +2588,7 @@ export def "reputation-app-platforms platforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # Page of results (default: 1)
   --limit: float # Number of records you would like in a request (default: 50)
 ]: nothing -> record<has_next_page: bool, data: table<id: float, data_fetch_address: string, location: string, is_active: bool, platform_id: float, created_at: string, updated_at: string>> {
@@ -2508,7 +2598,7 @@ export def "reputation-app-platforms platforms" [
   let full_url = (build-url $base "/v3/reputation/app_platforms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all platforms
@@ -2523,6 +2613,7 @@ export def "reputation-platforms list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Number of records you would like in a request (default: 50)
   --page: float # Page of results (default: 1)
 ]: nothing -> record<has_next_page: bool, data: table<id: float, label: string, type: string, logo_url: string>> {
@@ -2532,7 +2623,7 @@ export def "reputation-platforms list" [
   let full_url = (build-url $base "/v3/reputation/platforms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all reviews
@@ -2547,6 +2638,7 @@ export def "reputation-reviews list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-platform-id: float # Id of AppPlatform
   --ratinglte: float # Rating greater than filer is optional
   --ratinggte: float # Rating less than filter is optional
@@ -2561,7 +2653,7 @@ export def "reputation-reviews list" [
   let full_url = (build-url $base "/v3/reputation/reviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import a review for a custom location
@@ -2576,6 +2668,7 @@ export def "reputation-reviews post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-app-platform-id: float
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2584,7 +2677,7 @@ export def "reputation-reviews post" [
   let full_url = (build-url $base "/v3/reputation/reviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a response
@@ -2600,6 +2693,7 @@ export def "responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
   --preserve-format: oneof<nothing, bool> # default: false
   --response-url: oneof<nothing, bool> # default: false
@@ -2610,7 +2704,7 @@ export def "responses get" [
   let full_url = (build-url $base $"/v3/responses/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a response
@@ -2627,6 +2721,7 @@ export def "responses put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
   --contact-id: float # ID of the contact (e.g. 2)
   answers: list # item shape: {question_id: float, parent_question_id?: float, answer: string, other_txt?: string, matrix_txt?: list, matrix_int?: list, region_code?: string, time?: string, time_zone?: string}
@@ -2640,7 +2735,7 @@ export def "responses put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a response
@@ -2656,6 +2751,7 @@ export def "responses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
   --delete-quota: oneof<nothing, bool> # default: false
 ]: nothing -> string {
@@ -2665,7 +2761,7 @@ export def "responses delete" [
   let full_url = (build-url $base $"/v3/responses/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List approvers
@@ -2680,6 +2776,7 @@ export def "survey-approvers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --limit: float # default: 50
   --page: float
@@ -2690,7 +2787,7 @@ export def "survey-approvers list" [
   let full_url = (build-url $base "/v3/survey/approvers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Relations
@@ -2705,6 +2802,7 @@ export def "survey-relations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
 ]: nothing -> record<data: record<list: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2713,7 +2811,7 @@ export def "survey-relations get" [
   let full_url = (build-url $base "/v3/survey/relations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subjects
@@ -2728,6 +2826,7 @@ export def "survey-subjects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --limit: float # default: 50
   --page: float
@@ -2739,7 +2838,7 @@ export def "survey-subjects list" [
   let full_url = (build-url $base "/v3/survey/subjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a survey folder
@@ -2755,6 +2854,7 @@ export def "survey-folders foldersId-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
 ]: nothing -> record<data: record<id: float, name: string, description: string, auto_created: bool, visibility: string, teams: list<float>, surveys: list<record>, parent_survey_folder_id: float, users: list<float>, subfolders: list<record>, echoes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2763,7 +2863,7 @@ export def "survey-folders foldersId-by-id" [
   let full_url = (build-url $base $"/v3/survey_folders/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a survey folder
@@ -2779,6 +2879,7 @@ export def "survey-folders foldersId-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2787,7 +2888,7 @@ export def "survey-folders foldersId-by-id-1" [
   let full_url = (build-url $base $"/v3/survey_folders/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a survey folder
@@ -2803,6 +2904,7 @@ export def "survey-folders foldersId-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
   --visibility: string@visibility-completer-1
   --teams: list
@@ -2818,7 +2920,7 @@ export def "survey-folders foldersId-by-id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a survey
@@ -2834,13 +2936,14 @@ export def "surveys get-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, name: string, archived: bool, survey_type: string, created_at: string, updated_at: string, survey_folder_id: float, survey_folder_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/surveys/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a survey
@@ -2858,6 +2961,7 @@ export def "surveys patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --workspace-id: float
   --theme-id: float
@@ -2874,7 +2978,7 @@ export def "surveys patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a ticket field
@@ -2890,13 +2994,14 @@ export def "ticket-fields fieldsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, name: string, description: string, internal_name: string, type: string, is_default: bool, mandatory: bool, options: list<string>, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/ticket_fields/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a ticket
@@ -2912,13 +3017,14 @@ export def "tickets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, requester: record, subject: string, description: string, description_html: string, priority: record, status: record, template_id: float, custom_fields: record, source: record, agent: record, team: record, created_at: string, updated_at: string, deleted_at: string, first_response_due: string, resolution_due: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/tickets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a ticket
@@ -2934,6 +3040,7 @@ export def "tickets put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --priority: float # Ticket priority (e.g. 4)
   --status: float # Ticket status (e.g. 5)
   --assignee-id: float # Ticket agent's user id (e.g. 2)
@@ -2954,7 +3061,7 @@ export def "tickets put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a ticket
@@ -2970,13 +3077,14 @@ export def "tickets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/tickets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the specific language excel file
@@ -2991,6 +3099,7 @@ export def "translation-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Survey ID
   --language-code: string # Language code
   --include-labels: oneof<nothing, bool> # Include labels in the file (default: true)
@@ -3001,7 +3110,7 @@ export def "translation-export get" [
   let full_url = (build-url $base "/v3/translation/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -3017,13 +3126,14 @@ export def "users get-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, name: string, email: string, phone: string, admin: bool, owner: bool, agency_owner: bool, verified: bool, role_id: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/users/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user
@@ -3039,13 +3149,14 @@ export def "users delete-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/users/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -3061,6 +3172,7 @@ export def "users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the user (e.g. John Doe)
   --role-id: float # User role Id (e.g. 1)
 ]: any -> record<data: record<id: float, name: string, email: string, phone: string, admin: bool, owner: bool, agency_owner: bool, verified: bool, role_id: float>> {
@@ -3072,61 +3184,7 @@ export def "users patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# List survey responses
-#
-# GET /v1/ces/{survey_id}/responses
-# operationId: getV1CesSurvey_idResponses
-export def "ces-responses idResponses" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string
-  --datelte: string
-  --maxResults: float # default: 100
-  --page: float # default: 1
-  --npsChannelId: float
-  --format: string
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "npsChannelId" $npsChannelId "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get CES metrics
-#
-# GET /v1/ces/{survey_id}/metrics
-# operationId: getV1CesSurvey_idMetrics
-export def "ces-metrics idMetrics" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($survey_id)/metrics" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List CES channels
@@ -3142,6 +3200,7 @@ export def "ces-shares list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 100
   --page: float
   --type: string@type-completer-8
@@ -3153,7 +3212,63 @@ export def "ces-shares list" [
   let full_url = (build-url $base $"/v1/ces/($surveyId)/shares" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get CES metrics
+#
+# GET /v1/ces/{survey_id}/metrics
+# operationId: getV1CesSurvey_idMetrics
+export def "ces-metrics idMetrics" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($survey_id)/metrics" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List survey responses
+#
+# GET /v1/ces/{survey_id}/responses
+# operationId: getV1CesSurvey_idResponses
+export def "ces-responses idResponses" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string
+  --datelte: string
+  --maxResults: float # default: 100
+  --page: float # default: 1
+  --npsChannelId: float
+  --format: string
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "npsChannelId" $npsChannelId "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contacts in a list
@@ -3169,6 +3284,7 @@ export def "contactlist-contacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 50
   --page: float
 ]: nothing -> string {
@@ -3178,7 +3294,7 @@ export def "contactlist-contacts get" [
   let full_url = (build-url $base $"/v1/contactlist/($id)/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/Add Contacts to a Custom Label
@@ -3194,6 +3310,7 @@ export def "contactlist-contacts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
   --body: record
 ]: any -> record<status: string> {
@@ -3206,7 +3323,7 @@ export def "contactlist-contacts post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all shares of a contact
@@ -3222,6 +3339,7 @@ export def "contacts-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float
   --authorization: string # Custom Token generated from the App
 ]: nothing -> record<responded: table<sent_date: string, survey: record, share: record, submission: record>, pendingResponse: table<sent_date: string, survey: record, share: record, submission: string>, hasNextPage: bool> {
@@ -3233,61 +3351,7 @@ export def "contacts-shares get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List survey responses
-#
-# GET /v1/csat/{survey_id}/responses
-# operationId: getV1CsatSurvey_idResponses
-export def "csat-responses idResponses" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string
-  --datelte: string
-  --maxResults: float # default: 100
-  --page: float # default: 1
-  --npsChannelId: float
-  --format: string
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "npsChannelId" $npsChannelId "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get csat metrics
-#
-# GET /v1/csat/{survey_id}/metrics
-# operationId: getV1CsatSurvey_idMetrics
-export def "csat-metrics idMetrics" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($survey_id)/metrics" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List csat channels
@@ -3303,6 +3367,7 @@ export def "csat-shares list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: float # default: 100
   --page: float
   --type: string@type-completer-8
@@ -3314,41 +3379,14 @@ export def "csat-shares list" [
   let full_url = (build-url $base $"/v1/csat/($surveyId)/shares" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List NPS channels
+# Get csat metrics
 #
-# GET /v1/nps/{surveyId}/shares
-# operationId: getV1NpsSurveyidShares
-export def "nps-shares list" [
-  surveyId: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --maxResults: float # default: 100
-  --page: float
-  --type: string@type-completer-8
-  --mode: string@mode-completer-1
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($surveyId)/shares" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get NPS metrics
-#
-# GET /v1/nps/{survey_id}/metrics
-# operationId: getV1NpsSurvey_idMetrics
-export def "nps-metrics idMetrics" [
+# GET /v1/csat/{survey_id}/metrics
+# operationId: getV1CsatSurvey_idMetrics
+export def "csat-metrics idMetrics" [
   survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3357,16 +3395,47 @@ export def "nps-metrics idMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string # format: date
   --datelte: string # format: date
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($survey_id)/metrics" $qp)
+  let full_url = (build-url $base $"/v1/csat/($survey_id)/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List survey responses
+#
+# GET /v1/csat/{survey_id}/responses
+# operationId: getV1CsatSurvey_idResponses
+export def "csat-responses idResponses" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string
+  --datelte: string
+  --maxResults: float # default: 100
+  --page: float # default: 1
+  --npsChannelId: float
+  --format: string
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "npsChannelId" $npsChannelId "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List survey responses
@@ -3382,6 +3451,7 @@ export def "nps-responses idResponses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string
   --datelte: string
   --maxResults: float # default: 100
@@ -3395,15 +3465,15 @@ export def "nps-responses idResponses" [
   let full_url = (build-url $base $"/v1/nps/($survey_id)/responses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get survey integrations
+# Get NPS metrics
 #
-# GET /v1/survey/{surveyId}/integrations
-# operationId: getV1SurveySurveyidIntegrations
-export def "survey-integrations get" [
-  surveyId: any
+# GET /v1/nps/{survey_id}/metrics
+# operationId: getV1NpsSurvey_idMetrics
+export def "nps-metrics idMetrics" [
+  survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3411,20 +3481,24 @@ export def "survey-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/survey/($surveyId)/integrations")
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($survey_id)/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List subjects
+# List NPS channels
 #
-# GET /v1/survey/{surveyId}/subjects
-# operationId: getV1SurveySurveyidSubjects
-export def "survey-subjects get" [
+# GET /v1/nps/{surveyId}/shares
+# operationId: getV1NpsSurveyidShares
+export def "nps-shares list" [
   surveyId: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3433,17 +3507,19 @@ export def "survey-subjects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pageNo: float
-  --pageLimit: float
-  --email: string
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxResults: float # default: 100
+  --page: float
+  --type: string@type-completer-8
+  --mode: string@mode-completer-1
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNo" $pageNo "scalar") (serialize-qp "pageLimit" $pageLimit "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/survey/($surveyId)/subjects" $qp)
+  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($surveyId)/shares" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List approvers
@@ -3459,6 +3535,7 @@ export def "survey-approvers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNo: float
   --pageLimit: float
 ]: nothing -> string {
@@ -3468,15 +3545,15 @@ export def "survey-approvers get" [
   let full_url = (build-url $base $"/v1/survey/($surveyId)/approvers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List survey webhooks
+# List subjects
 #
-# GET /v1/surveys/{survey_id}/webhooks
-# operationId: getV1SurveysSurvey_idWebhooks
-export def "surveys-webhooks idWebhooks" [
-  survey_id: float
+# GET /v1/survey/{surveyId}/subjects
+# operationId: getV1SurveySurveyidSubjects
+export def "survey-subjects get" [
+  surveyId: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3484,24 +3561,26 @@ export def "surveys-webhooks idWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --maxResults: float # default: 50
-  --page: float
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --pageNo: float
+  --pageLimit: float
+  --email: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/surveys/($survey_id)/webhooks" $qp)
+  let qp = [(serialize-qp "pageNo" $pageNo "scalar") (serialize-qp "pageLimit" $pageLimit "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/survey/($surveyId)/subjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List survey variables
+# Get survey integrations
 #
-# GET /v1/surveys/{id}/variables
-# operationId: getV1SurveysIdVariables
-export def "surveys-variables get" [
-  id: float
+# GET /v1/survey/{surveyId}/integrations
+# operationId: getV1SurveySurveyidIntegrations
+export def "survey-integrations get" [
+  surveyId: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3509,145 +3588,14 @@ export def "surveys-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/surveys/($id)/variables")
+  let full_url = (build-url $base $"/v1/survey/($surveyId)/integrations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Create survey variable
-#
-# POST /v1/surveys/{id}/variables
-# operationId: postV1SurveysIdVariables
-export def "surveys-variables post" [
-  id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  label: string
-  name: string
-  --description: string
-  type: string@type-completer-7
-]: any -> string {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/surveys/($id)/variables")
-  let body = {label: $label, name: $name, description: $description, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# List all shares
-#
-# GET /v1/surveys/{survey_id}/shares
-# operationId: getV1SurveysSurvey_idShares
-export def "surveys-shares idShares" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --maxResults: float # default: 50
-  --page: float
-  --type: string@type-completer-2
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/surveys/($survey_id)/shares" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get survey responses
-#
-# GET /v1/surveys/{survey_id}/submissions
-# operationId: getV1SurveysSurvey_idSubmissions
-export def "surveys-submissions idSubmissions" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --maxResults: float # default: 50
-  --page: float
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --state: string@state-completer
-  --order-by: string@order-by-completer # default: completedTime
-  --order: string@order-completer # default: DESC
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/surveys/($survey_id)/submissions" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get survey questions
-#
-# GET /v1/surveys/{id}/questions
-# operationId: getV1SurveysIdQuestions
-export def "surveys-questions get" [
-  id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --maxResults: float # default: 50
-  --page: float
-  --tagName: string
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "tagName" $tagName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/surveys/($id)/questions" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# POST /v1/surveys/{id}/questions
-#
-# operationId: postV1SurveysIdQuestions
-export def "surveys-questions post" [
-  id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/surveys/($id)/questions")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Survey settings
@@ -3663,13 +3611,14 @@ export def "surveys-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($id)/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Survey settings
@@ -3685,6 +3634,7 @@ export def "surveys-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --partialSubmission: oneof<nothing, bool>
   --editResponse: oneof<nothing, bool>
   --anonymousResponses: oneof<nothing, bool>
@@ -3699,7 +3649,193 @@ export def "surveys-settings put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get survey questions
+#
+# GET /v1/surveys/{id}/questions
+# operationId: getV1SurveysIdQuestions
+export def "surveys-questions get" [
+  id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxResults: float # default: 50
+  --page: float
+  --tagName: string
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "tagName" $tagName "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/surveys/($id)/questions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# POST /v1/surveys/{id}/questions
+#
+# operationId: postV1SurveysIdQuestions
+export def "surveys-questions post" [
+  id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/surveys/($id)/questions")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get survey responses
+#
+# GET /v1/surveys/{survey_id}/submissions
+# operationId: getV1SurveysSurvey_idSubmissions
+export def "surveys-submissions idSubmissions" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxResults: float # default: 50
+  --page: float
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --state: string@state-completer
+  --order-by: string@order-by-completer # default: completedTime
+  --order: string@order-completer # default: DESC
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/surveys/($survey_id)/submissions" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all shares
+#
+# GET /v1/surveys/{survey_id}/shares
+# operationId: getV1SurveysSurvey_idShares
+export def "surveys-shares idShares" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxResults: float # default: 50
+  --page: float
+  --type: string@type-completer-2
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/surveys/($survey_id)/shares" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List survey variables
+#
+# GET /v1/surveys/{id}/variables
+# operationId: getV1SurveysIdVariables
+export def "surveys-variables get" [
+  id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/surveys/($id)/variables")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create survey variable
+#
+# POST /v1/surveys/{id}/variables
+# operationId: postV1SurveysIdVariables
+export def "surveys-variables post" [
+  id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  label: string
+  name: string
+  --description: string
+  type: string@type-completer-7
+]: any -> string {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/surveys/($id)/variables")
+  let body = {label: $label, name: $name, description: $description, type: $type} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# List survey webhooks
+#
+# GET /v1/surveys/{survey_id}/webhooks
+# operationId: getV1SurveysSurvey_idWebhooks
+export def "surveys-webhooks idWebhooks" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --maxResults: float # default: 50
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/surveys/($survey_id)/webhooks" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch contact creation status
@@ -3715,13 +3851,14 @@ export def "contacts-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contacts/status/($token)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a app platform
@@ -3737,13 +3874,14 @@ export def "reputation-app-platforms platformsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, data_fetch_address: string, location: string, is_active: bool, platform_id: float, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/reputation/app_platforms/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a platform
@@ -3759,13 +3897,14 @@ export def "reputation-platforms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: float, label: string, type: string, logo_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/reputation/platforms/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a review
@@ -3781,6 +3920,7 @@ export def "reputation-reviews get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-platform-id: float
 ]: nothing -> record<data: record<id: float, rating: float, review_title: string, review_content: string, review_date: string, reviewer_name: string, reviewer_photo_url: string, app_platform_id: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3789,7 +3929,7 @@ export def "reputation-reviews get" [
   let full_url = (build-url $base $"/v3/reputation/reviews/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch response creation status
@@ -3805,13 +3945,14 @@ export def "responses-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/responses/status/($token)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subject evaluators
@@ -3826,6 +3967,7 @@ export def "survey-subject-evaluators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --subject-id: float # Id of the subject
   --limit: float # default: 50
@@ -3837,7 +3979,7 @@ export def "survey-subject-evaluators get" [
   let full_url = (build-url $base "/v3/survey/subject/evaluators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject report
@@ -3852,6 +3994,7 @@ export def "survey-subject-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float # Id of the survey
   --subject-id: float # Id of the subject
 ]: nothing -> string {
@@ -3861,7 +4004,7 @@ export def "survey-subject-report get" [
   let full_url = (build-url $base "/v3/survey/subject/report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all ticket comments
@@ -3877,6 +4020,7 @@ export def "tickets-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --private: oneof<nothing, bool> # Comment visibility; true for private, false for public visibility.
   --limit: float # Record limit per request; default is 50, maximum is 100. (default: 50)
   --page: float # Page of results
@@ -3889,7 +4033,7 @@ export def "tickets-comments get" [
   let full_url = (build-url $base $"/v3/tickets/($id)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment
@@ -3905,6 +4049,7 @@ export def "tickets-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # The comment body. Supports HTML formatting with <b>, <i>, <u>, <a>, and <br /> tags. Supports mentioning contacts using @email format.
   --attachments: path # Following file types are allowed: pdf, png, jpeg, mp3, csv, wav. Maximum file size allowed is 15MB.
   --private: oneof<nothing, bool> # Comment visibility; true for private, false for public visibility. (default: false)
@@ -3917,111 +4062,7 @@ export def "tickets-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# Get CES Channel
-#
-# GET /v1/ces/{surveyId}/shares/{channelId}
-# operationId: getV1CesSurveyidSharesChannelid
-export def "ces-shares get" [
-  surveyId: float
-  channelId: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List HighEffort
-#
-# GET /v1/ces/{survey_id}/responses/highEffort
-# operationId: getV1CesSurvey_idResponsesHigheffort
-export def "ces-responses-high-effort idResponsesHigheffort" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/highEffort" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List lowEffort
-#
-# GET /v1/ces/{survey_id}/responses/lowEffort
-# operationId: getV1CesSurvey_idResponsesLoweffort
-export def "ces-responses-low-effort idResponsesLoweffort" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/lowEffort" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List Neutral
-#
-# GET /v1/ces/{survey_id}/responses/neutral
-# operationId: getV1CesSurvey_idResponsesNeutral
-export def "ces-responses-neutral idResponsesNeutral" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/neutral" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get response of an CES survey submission
@@ -4038,20 +4079,105 @@ export def "ces-submissions id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/ces/($survey_id)/submissions/($nps_submission_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get CSAT Channel
+# List Neutral
 #
-# GET /v1/csat/{surveyId}/shares/{channelId}
-# operationId: getV1CsatSurveyidSharesChannelid
-export def "csat-shares get" [
+# GET /v1/ces/{survey_id}/responses/neutral
+# operationId: getV1CesSurvey_idResponsesNeutral
+export def "ces-responses-neutral idResponsesNeutral" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/neutral" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List lowEffort
+#
+# GET /v1/ces/{survey_id}/responses/lowEffort
+# operationId: getV1CesSurvey_idResponsesLoweffort
+export def "ces-responses-low-effort idResponsesLoweffort" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/lowEffort" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List HighEffort
+#
+# GET /v1/ces/{survey_id}/responses/highEffort
+# operationId: getV1CesSurvey_idResponsesHigheffort
+export def "ces-responses-high-effort idResponsesHigheffort" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($survey_id)/responses/highEffort" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get CES Channel
+#
+# GET /v1/ces/{surveyId}/shares/{channelId}
+# operationId: getV1CesSurveyidSharesChannelid
+export def "ces-shares get" [
   surveyId: float
   channelId: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4061,94 +4187,14 @@ export def "csat-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)")
+  let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List Dissatisfied
-#
-# GET /v1/csat/{survey_id}/responses/dissatisfied
-# operationId: getV1CsatSurvey_idResponsesDissatisfied
-export def "csat-responses-dissatisfied idResponsesDissatisfied" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/dissatisfied" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List Satisfied
-#
-# GET /v1/csat/{survey_id}/responses/satisfied
-# operationId: getV1CsatSurvey_idResponsesSatisfied
-export def "csat-responses-satisfied idResponsesSatisfied" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/satisfied" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# List Neutral
-#
-# GET /v1/csat/{survey_id}/responses/neutral
-# operationId: getV1CsatSurvey_idResponsesNeutral
-export def "csat-responses-neutral idResponsesNeutral" [
-  survey_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dategte: string # format: date
-  --datelte: string # format: date
-  --maxResults: float
-  --page: float
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/neutral" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get response of an csat survey submission
@@ -4165,20 +4211,21 @@ export def "csat-submissions id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/csat/($survey_id)/submissions/($nps_submission_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List passives
+# List Neutral
 #
-# GET /v1/nps/{survey_id}/responses/passives
-# operationId: getV1NpsSurvey_idResponsesPassives
-export def "nps-responses-passives idResponsesPassives" [
+# GET /v1/csat/{survey_id}/responses/neutral
+# operationId: getV1CsatSurvey_idResponsesNeutral
+export def "csat-responses-neutral idResponsesNeutral" [
   survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4187,6 +4234,7 @@ export def "nps-responses-passives idResponsesPassives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string # format: date
   --datelte: string # format: date
   --maxResults: float
@@ -4195,17 +4243,17 @@ export def "nps-responses-passives idResponsesPassives" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/passives" $qp)
+  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/neutral" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List promoters
+# List Satisfied
 #
-# GET /v1/nps/{survey_id}/responses/promoters
-# operationId: getV1NpsSurvey_idResponsesPromoters
-export def "nps-responses-promoters idResponsesPromoters" [
+# GET /v1/csat/{survey_id}/responses/satisfied
+# operationId: getV1CsatSurvey_idResponsesSatisfied
+export def "csat-responses-satisfied idResponsesSatisfied" [
   survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4214,6 +4262,7 @@ export def "nps-responses-promoters idResponsesPromoters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string # format: date
   --datelte: string # format: date
   --maxResults: float
@@ -4222,17 +4271,17 @@ export def "nps-responses-promoters idResponsesPromoters" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/promoters" $qp)
+  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/satisfied" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List detractors
+# List Dissatisfied
 #
-# GET /v1/nps/{survey_id}/responses/detractors
-# operationId: getV1NpsSurvey_idResponsesDetractors
-export def "nps-responses-detractors idResponsesDetractors" [
+# GET /v1/csat/{survey_id}/responses/dissatisfied
+# operationId: getV1CsatSurvey_idResponsesDissatisfied
+export def "csat-responses-dissatisfied idResponsesDissatisfied" [
   survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4241,6 +4290,7 @@ export def "nps-responses-detractors idResponsesDetractors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dategte: string # format: date
   --datelte: string # format: date
   --maxResults: float
@@ -4249,10 +4299,34 @@ export def "nps-responses-detractors idResponsesDetractors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/detractors" $qp)
+  let full_url = (build-url $base $"/v1/csat/($survey_id)/responses/dissatisfied" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get CSAT Channel
+#
+# GET /v1/csat/{surveyId}/shares/{channelId}
+# operationId: getV1CsatSurveyidSharesChannelid
+export def "csat-shares get" [
+  surveyId: float
+  channelId: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NPS Channel
@@ -4269,43 +4343,21 @@ export def "nps-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/nps/($surveyId)/shares/($channelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get share details
+# List detractors
 #
-# GET /v1/surveys/{survey_id}/shares/{share_id}
-# operationId: getV1SurveysSurvey_idSharesShare_id
-export def "surveys-shares id" [
-  survey_id: float
-  share_id: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/surveys/($survey_id)/shares/($share_id)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get responses report public link
-#
-# GET /v1/surveys/{survey_id}/report/link
-# operationId: getV1SurveysSurvey_idReportLink
-export def "surveys-report-link idReportLink" [
+# GET /v1/nps/{survey_id}/responses/detractors
+# operationId: getV1NpsSurvey_idResponsesDetractors
+export def "nps-responses-detractors idResponsesDetractors" [
   survey_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4314,15 +4366,75 @@ export def "surveys-report-link idReportLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --report-id: float
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "report_id" $report_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/surveys/($survey_id)/report/link" $qp)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/detractors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List promoters
+#
+# GET /v1/nps/{survey_id}/responses/promoters
+# operationId: getV1NpsSurvey_idResponsesPromoters
+export def "nps-responses-promoters idResponsesPromoters" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/promoters" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List passives
+#
+# GET /v1/nps/{survey_id}/responses/passives
+# operationId: getV1NpsSurvey_idResponsesPassives
+export def "nps-responses-passives idResponsesPassives" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dategte: string # format: date
+  --datelte: string # format: date
+  --maxResults: float
+  --page: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date.gte" $dategte "scalar") (serialize-qp "date.lte" $datelte "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($survey_id)/responses/passives" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey response
@@ -4339,13 +4451,14 @@ export def "surveys-submissions idSubmissionsId-by-id-survey_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($survey_id)/submissions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete survey response
@@ -4362,13 +4475,63 @@ export def "surveys-submissions idSubmissionsId-by-id-survey_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($survey_id)/submissions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get responses report public link
+#
+# GET /v1/surveys/{survey_id}/report/link
+# operationId: getV1SurveysSurvey_idReportLink
+export def "surveys-report-link idReportLink" [
+  survey_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --report-id: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "report_id" $report_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/surveys/($survey_id)/report/link" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get share details
+#
+# GET /v1/surveys/{survey_id}/shares/{share_id}
+# operationId: getV1SurveysSurvey_idSharesShare_id
+export def "surveys-shares id" [
+  survey_id: float
+  share_id: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/surveys/($survey_id)/shares/($share_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch ticket creation status
@@ -4384,13 +4547,44 @@ export def "tickets-batch-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, data: table<status: string, result: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/tickets/batch/status/($token)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get CES Channel triggers
+#
+# GET /v1/ces/{surveyId}/shares/{channelId}/triggers
+# operationId: getV1CesSurveyidSharesChannelidTriggers
+export def "ces-shares-triggers get" [
+  surveyId: float
+  channelId: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --page: float # default: 1
+  --opened: oneof<nothing, bool>
+  --blocked: oneof<nothing, bool>
+  --throttled: oneof<nothing, bool>
+  --maxResults: float # default: 50
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "opened" $opened "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "throttled" $throttled "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)/triggers" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List CES reminders
@@ -4407,6 +4601,7 @@ export def "ces-shares-reminders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # default: 1
   --maxResults: float # default: 50
 ]: nothing -> any {
@@ -4416,7 +4611,7 @@ export def "ces-shares-reminders get" [
   let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)/reminders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reminder
@@ -4434,6 +4629,7 @@ export def "ces-shares-reminders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string
   --subject: string
   frequency: string@frequency-completer
@@ -4449,14 +4645,14 @@ export def "ces-shares-reminders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
-# Get CES Channel triggers
+# Get csat Channel triggers
 #
-# GET /v1/ces/{surveyId}/shares/{channelId}/triggers
-# operationId: getV1CesSurveyidSharesChannelidTriggers
-export def "ces-shares-triggers get" [
+# GET /v1/csat/{surveyId}/shares/{channelId}/triggers
+# operationId: getV1CsatSurveyidSharesChannelidTriggers
+export def "csat-shares-triggers get" [
   surveyId: float
   channelId: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4466,6 +4662,7 @@ export def "ces-shares-triggers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # default: 1
   --opened: oneof<nothing, bool>
   --blocked: oneof<nothing, bool>
@@ -4475,10 +4672,10 @@ export def "ces-shares-triggers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "opened" $opened "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "throttled" $throttled "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)/triggers" $qp)
+  let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)/triggers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List csat reminders
@@ -4495,6 +4692,7 @@ export def "csat-shares-reminders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # default: 1
   --maxResults: float # default: 50
 ]: nothing -> any {
@@ -4504,7 +4702,7 @@ export def "csat-shares-reminders get" [
   let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)/reminders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reminder
@@ -4522,6 +4720,7 @@ export def "csat-shares-reminders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string
   --subject: string
   frequency: string@frequency-completer
@@ -4537,65 +4736,7 @@ export def "csat-shares-reminders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# Get csat Channel triggers
-#
-# GET /v1/csat/{surveyId}/shares/{channelId}/triggers
-# operationId: getV1CsatSurveyidSharesChannelidTriggers
-export def "csat-shares-triggers get" [
-  surveyId: float
-  channelId: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --page: float # default: 1
-  --opened: oneof<nothing, bool>
-  --blocked: oneof<nothing, bool>
-  --throttled: oneof<nothing, bool>
-  --maxResults: float # default: 50
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "opened" $opened "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "throttled" $throttled "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)/triggers" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Get NPS Channel triggers
-#
-# GET /v1/nps/{surveyId}/shares/{channelId}/triggers
-# operationId: getV1NpsSurveyidSharesChannelidTriggers
-export def "nps-shares-triggers get" [
-  surveyId: float
-  channelId: float
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --page: float # default: 1
-  --opened: oneof<nothing, bool>
-  --blocked: oneof<nothing, bool>
-  --throttled: oneof<nothing, bool>
-  --maxResults: float # default: 50
-]: nothing -> string {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "opened" $opened "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "throttled" $throttled "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/nps/($surveyId)/shares/($channelId)/triggers" $qp)
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List NPS reminders
@@ -4612,6 +4753,7 @@ export def "nps-shares-reminders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # default: 1
   --maxResults: float # default: 50
 ]: nothing -> any {
@@ -4621,7 +4763,7 @@ export def "nps-shares-reminders get" [
   let full_url = (build-url $base $"/v1/nps/($surveyId)/shares/($channelId)/reminders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reminder
@@ -4639,6 +4781,7 @@ export def "nps-shares-reminders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string
   --subject: string
   frequency: string@frequency-completer
@@ -4654,16 +4797,16 @@ export def "nps-shares-reminders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
-# List subject evaluators
+# Get NPS Channel triggers
 #
-# GET /v1/survey/{surveyId}/subject/{subjectId}/evaluators
-# operationId: getV1SurveySurveyidSubjectSubjectidEvaluators
-export def "survey-subject-evaluators get-by-surveyId-subjectId" [
+# GET /v1/nps/{surveyId}/shares/{channelId}/triggers
+# operationId: getV1NpsSurveyidSharesChannelidTriggers
+export def "nps-shares-triggers get" [
   surveyId: float
-  subjectId: float
+  channelId: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4671,16 +4814,20 @@ export def "survey-subject-evaluators get-by-surveyId-subjectId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pageNo: float
-  --pageLimit: float
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --page: float # default: 1
+  --opened: oneof<nothing, bool>
+  --blocked: oneof<nothing, bool>
+  --throttled: oneof<nothing, bool>
+  --maxResults: float # default: 50
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNo" $pageNo "scalar") (serialize-qp "pageLimit" $pageLimit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/survey/($surveyId)/subject/($subjectId)/evaluators" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "opened" $opened "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "throttled" $throttled "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/nps/($surveyId)/shares/($channelId)/triggers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject report
@@ -4697,13 +4844,41 @@ export def "survey-subject-report get-by-surveyId-subjectId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/survey/($surveyId)/subject/($subjectId)/report")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List subject evaluators
+#
+# GET /v1/survey/{surveyId}/subject/{subjectId}/evaluators
+# operationId: getV1SurveySurveyidSubjectSubjectidEvaluators
+export def "survey-subject-evaluators get-by-surveyId-subjectId" [
+  surveyId: float
+  subjectId: float
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --pageNo: float
+  --pageLimit: float
+]: nothing -> string {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "pageNo" $pageNo "scalar") (serialize-qp "pageLimit" $pageLimit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/survey/($surveyId)/subject/($subjectId)/evaluators" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates CES Survey
@@ -4721,6 +4896,7 @@ export def "ces post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   surveyName: string
   --surveyType: string@surveyType-completer-2
   --visibility: string@visibility-completer # default: Public
@@ -4736,7 +4912,7 @@ export def "ces post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates csat Survey
@@ -4754,6 +4930,7 @@ export def "csat post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   surveyName: string
   --surveyType: string@surveyType-completer-3
   --visibility: string@visibility-completer # default: Public
@@ -4769,7 +4946,7 @@ export def "csat post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates NPS Survey
@@ -4787,6 +4964,7 @@ export def "nps post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   surveyName: string
   --surveyType: string@surveyType-completer-4
   --visibility: string@visibility-completer # default: Public
@@ -4802,7 +4980,7 @@ export def "nps post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create account
@@ -4818,6 +4996,7 @@ export def "signup post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accountName: string # The name of the account to be created
   companyName: string # The name of the account to be created
   --user: record # shape: {email: string, name: string, phone?: string, password?: string, strategy: "password"|"google"|"linkedin"}
@@ -4838,7 +5017,7 @@ export def "signup post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new custom language
@@ -4853,6 +5032,7 @@ export def "language post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   language_name: string # The language name must be between 3 and 16 characters long and can only contain uppercase and lowercase letters (A-Z, a-z) (e.g. SparrowLang)
   language_code: string # The language code must be exactly 3 lowercase letters (a-z) (e.g. ssl)
 ]: any -> record<data: record<message: string>> {
@@ -4864,7 +5044,7 @@ export def "language post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create survey section
@@ -4880,6 +5060,7 @@ export def "sections post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 12001)
   sections: list # Array of sections — item shape: {name?: string, description?: string, position?: float, properties?: record, display_logic?: record, questions?: list}
 ]: any -> string {
@@ -4891,7 +5072,7 @@ export def "sections post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new translation in a survey
@@ -4906,6 +5087,7 @@ export def "translation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Survey ID (e.g. 123456)
   language_codes: list # Array of language codes (e.g. [en, fr])
   --google-translate: oneof<nothing, bool> # Translate using Google Translate (default: false, e.g. false)
@@ -4918,7 +5100,7 @@ export def "translation post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update translation
@@ -4933,6 +5115,7 @@ export def "translation put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Survey ID (e.g. 123456)
   language_code: string # Language code (e.g. en)
   --google-translate: oneof<nothing, bool> # Translate using Google Translate (default: false, e.g. false)
@@ -4946,7 +5129,7 @@ export def "translation put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete translation
@@ -4961,6 +5144,7 @@ export def "translation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   language_code: string # Language code (e.g. en)
   survey_id: float # Survey ID (e.g. 123456)
 ]: any -> record<data: record<message: string>> {
@@ -4972,7 +5156,7 @@ export def "translation delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create unique survey links
@@ -4988,13 +5172,14 @@ export def "channels-create-unique-links links" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 1)
   channel_id: float # Id of Channel (e.g. 1)
   --contact-ids: list # Id's of Contact
   --contacts: list # Array of contact objects — item shape: {full_name?: string, phone?: string, mobile?: string, email?: string, job_title?: string, contact_type?: "contact"|"employee", variables?: record, expires_at?: string}
   --contact-list-ids: list # Id's of Contact Lists
   --short-url: oneof<nothing, bool> # Create short link for the survey (default: false, e.g. false)
-  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-12T09:02:55Z)
+  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-12T20:22:51Z)
   --body-variables: record
 ]: any -> record<data: table<contact_id: float, survey_link: string, short_url: string, variables: record, expires_at: string>> {
   let input = $in
@@ -5005,7 +5190,7 @@ export def "channels-create-unique-links links" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create contacts
@@ -5020,6 +5205,7 @@ export def "contacts-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<message: string, token: string> {
   let input = $in
@@ -5029,7 +5215,7 @@ export def "contacts-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch create responses
@@ -5045,6 +5231,7 @@ export def "responses-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
   responses: list # item shape: {contact_id?: float, contact?: record, variables?: record, trigger_workflow?: bool, channel_id?: float, meta_data?: record, answers: list}
 ]: any -> record<token: string, message: string> {
@@ -5056,7 +5243,7 @@ export def "responses-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a new response
@@ -5072,6 +5259,7 @@ export def "responses-new post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
   --contact-id: float # ID of the contact (e.g. 2)
   --channel-id: float # ID of the channel (e.g. 3)
@@ -5085,7 +5273,7 @@ export def "responses-new post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create invite
@@ -5104,6 +5292,7 @@ export def "survey-invite post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
   subject: record # shape: {full_name: string, email: string}
   evaluators: list # item shape: {full_name: string, email: string, relation: string}
@@ -5121,7 +5310,7 @@ export def "survey-invite post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create tickets in batch
@@ -5136,6 +5325,7 @@ export def "tickets-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<message: string, token: string> {
   let input = $in
@@ -5145,7 +5335,7 @@ export def "tickets-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create survey variables
@@ -5161,6 +5351,7 @@ export def "variables-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 1)
   --body-variables: list # item shape: {label: string, name: string, description?: string, type: "STRING"|"NUMBER"|"DATE"}
 ]: any -> record<data: table<id: float, label: string, name: string, description: string, type: string>> {
@@ -5172,7 +5363,7 @@ export def "variables-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create subscribed event
@@ -5188,6 +5379,7 @@ export def "audit-logs-events-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list # item shape: {name?: "SURVEY_CREATED"|"SURVEY_EDITED"|"SURVEY_DELETED"|"THEME_ADDED"|"THEME_EDITED"|"THEME_DELETED"|"USER_CREATED"|"USER_DELETED"|"USER_EDITED"|"CONTACT_CREATED"|"CONTACT_UPDATED"|"CONTACT_DELETED"|"CONTACT_PROPERTY_CREATED"|"CONTACT_PROPERTY_EDITED"|"CONTACT_PROPERTY_DELETED"|"WORKSPACE_CREATED"|"WORKSPACE_DELETED"|"WORKSPACE_EDITED"|"SYNC_DEVICES"|"SURVEY_RESPONSE_IMPORT"|"SURVEY_RESPONSE_DELETION"|"SURVEY_CLOSED"|"SURVEY_RESTORED"|"SURVEY_OWNERSHIP_TRANSFER"|"FOLDER_USER_ACCESS_GRANT"|"FOLDER_USER_ACCESS_REMOVE"|"FOLDER_TEAM_ACCESS_GRANT"|"FOLDER_TEAM_ACCESS_REMOVE"|"SURVEY_MOVED"|"SURVEY_PASSWORD_CREATED"|"SURVEY_PASSWORD_DELETED"|"SURVEY_PASSWORD_EDITED"|"QUESTION_CATALOG_CREATED"|"QUESTION_CATALOG_DELETED"|"LOGIN"|"LOGOUT"|"TICKET_TEMPLATE_CREATED"|"TICKET_TEMPLATE_UPDATED"|"TICKET_TEMPLATE_DELETED"|"SANDBOX_SURVEY_CLONED_TO_SANDBOX"|"SANDBOX_SURVEY_CLONED_TO_MAIN"|"SANDBOX_BULK_CLONE_TO_SANDBOX"|"SANDBOX_ACCOUNT_CREATED"|"SANDBOX_USERS_ADDED"|"SANDBOX_SURVEY_SYNCED"|"FIREWALL_RULE_CREATED"|"FIREWALL_RULE_UPDATED"|"FIREWALL_RULE_DELETED"|"CUSTOM_RESPONSE_RATE_SWITCHED"|"CUSTOM_METRIC_CREATED"|"CUSTOM_METRIC_UPDATED"|"CUSTOM_METRIC_DELETED"|"SURVEY_FOLDER_MOVED"}
   httpMethod: string@httpMethod-completer-1
   --body-url: string
@@ -5201,7 +5393,7 @@ export def "audit-logs-events-subscribe post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create SMS share
@@ -5219,6 +5411,7 @@ export def "ces-sms idSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5240,7 +5433,7 @@ export def "ces-sms idSms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create CES Email channel
@@ -5260,6 +5453,7 @@ export def "ces-email idEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5287,7 +5481,7 @@ export def "ces-email idEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create multiple contacts
@@ -5302,6 +5496,7 @@ export def "contactlist-active-contacts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Custom Token generated from the App
   --body: record
 ]: any -> record<status: string> {
@@ -5314,7 +5509,7 @@ export def "contactlist-active-contacts post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create SMS share
@@ -5332,6 +5527,7 @@ export def "csat-sms idSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5353,7 +5549,7 @@ export def "csat-sms idSms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create csat Email channel
@@ -5373,6 +5569,7 @@ export def "csat-email idEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5400,7 +5597,7 @@ export def "csat-email idEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create NPS Email channel
@@ -5420,6 +5617,7 @@ export def "nps-email idEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5447,7 +5645,7 @@ export def "nps-email idEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create SMS share
@@ -5465,6 +5663,7 @@ export def "nps-sms idSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --sendNow: oneof<nothing, bool> # default: true
@@ -5486,7 +5685,7 @@ export def "nps-sms idSms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create question
@@ -5502,13 +5701,14 @@ export def "sections-questions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/sections/($id)/questions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create email share
@@ -5524,6 +5724,7 @@ export def "shares-email id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list
   --lists: list
   --body-variables: record
@@ -5539,7 +5740,7 @@ export def "shares-email id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create invite
@@ -5559,6 +5760,7 @@ export def "survey-invite post-by-surveyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subject: record # shape: {fullName: string, email: string}
   evaluators: list # item shape: {fullName: string, email: string, relation: string}
   approver: record # shape: {fullName: string, email: string}
@@ -5574,7 +5776,7 @@ export def "survey-invite post-by-surveyId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a section
@@ -5593,6 +5795,7 @@ export def "surveys-sections post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --properties: record # shape: {label?: string, sectionRandomise?: bool}
@@ -5607,7 +5810,7 @@ export def "surveys-sections post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clone survey
@@ -5623,6 +5826,7 @@ export def "surveys-clone post-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --surveyType: string@surveyType-completer-1
   --name: string
 ]: any -> string {
@@ -5634,7 +5838,7 @@ export def "surveys-clone post-by-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get channel analytics metrics
@@ -5650,6 +5854,7 @@ export def "channels-summary post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of the survey (e.g. 1)
 ]: any -> string {
   let input = $in
@@ -5660,7 +5865,7 @@ export def "channels-summary post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clone a channel
@@ -5676,6 +5881,7 @@ export def "channels-clone post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of the survey (e.g. 1)
 ]: any -> record<data: record<id: float, name: string, status: string, type: string, properties: record>> {
   let input = $in
@@ -5686,7 +5892,7 @@ export def "channels-clone post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clone a survey
@@ -5702,6 +5908,7 @@ export def "surveys-clone post-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-type: string@survey-type-completer # Survey type to be Cloned. (e.g. Conversational)
   --name: string # Name of the Cloned Survey (e.g. Employee satisfaction survey)
 ]: any -> record<data: record<id: float, name: string, archived: bool, survey_type: string, created_at: string, updated_at: string, survey_folder_id: float, survey_folder_name: string>> {
@@ -5713,7 +5920,7 @@ export def "surveys-clone post-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send CES channel Blast
@@ -5731,6 +5938,7 @@ export def "ces-email id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --name: string
   --contactLists: list
@@ -5745,7 +5953,7 @@ export def "ces-email id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Share existing SMS Share
@@ -5763,6 +5971,7 @@ export def "ces-sms idSmsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --body-variables: record
@@ -5777,7 +5986,7 @@ export def "ces-sms idSmsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send csat channel Blast
@@ -5795,6 +6004,7 @@ export def "csat-email id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --name: string
   --contactLists: list
@@ -5809,7 +6019,7 @@ export def "csat-email id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Share existing SMS Share
@@ -5827,6 +6037,7 @@ export def "csat-sms idSmsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --body-variables: record
@@ -5841,7 +6052,7 @@ export def "csat-sms idSmsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Share existing SMS Share
@@ -5859,6 +6070,7 @@ export def "nps-sms idSmsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
   --body-variables: record
@@ -5873,7 +6085,7 @@ export def "nps-sms idSmsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send NPS channel Blast
@@ -5891,6 +6103,7 @@ export def "nps-email id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --name: string
   --contactLists: list
@@ -5905,7 +6118,7 @@ export def "nps-email id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create link share for Survey
@@ -5921,13 +6134,14 @@ export def "surveys-share-link idShareLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($survey_id)/share/link")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start submission
@@ -5944,6 +6158,7 @@ export def "surveys-submission-start idSubmissionStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contact-id: float
   --channel-id: float
   --metaData: record # shape: {os?: string, browser?: string, timeZone?: string, browserLanguage?: string, date_time?: string}
@@ -5956,7 +6171,7 @@ export def "surveys-submission-start idSubmissionStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trigger email share V2
@@ -5975,6 +6190,7 @@ export def "survey-shares-email id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email: string, variables?: record}
   --lists: list # item shape: {name: string, variables?: record}
   --body-variables: record
@@ -5990,7 +6206,7 @@ export def "survey-shares-email id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unique survey link for each contact
@@ -6007,6 +6223,7 @@ export def "survey-channels-contacts-survey-link idContactsSurveylink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contactIds: list
   --contactListIds: list
   --channelType: string@channelType-completer # default: EMAIL
@@ -6019,7 +6236,7 @@ export def "survey-channels-contacts-survey-link idContactsSurveylink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update contact list
@@ -6035,6 +6252,7 @@ export def "contactlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --description: string
 ]: any -> string {
@@ -6046,7 +6264,7 @@ export def "contactlist put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete contact list
@@ -6062,13 +6280,14 @@ export def "contactlist delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/contactlist/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -6084,6 +6303,7 @@ export def "webhooks put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --body-url: string
@@ -6099,7 +6319,7 @@ export def "webhooks put-by-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete webhook
@@ -6115,13 +6335,14 @@ export def "webhooks delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/webhooks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a question
@@ -6138,6 +6359,7 @@ export def "questions id-by-question_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Survey Id (e.g. 1)
   question: record # shape: {text?: string, description?: string, required?: bool, properties?: record, display_logic?: record, skip_logic?: record}
 ]: any -> record<data: record<id: float, type: string, position: string, hasDisplayLogic: bool, properties: record, survey_id: float, section_id: float, account_id: float, parent_question_id: float>> {
@@ -6149,7 +6371,7 @@ export def "questions id-by-question_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a question
@@ -6165,13 +6387,14 @@ export def "questions id-by-question_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/questions/($question_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update survey section
@@ -6188,6 +6411,7 @@ export def "sections id-by-section_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 12001)
   section: record # Section object is required — shape: {name?: string, description?: string, position?: float, properties?: record, display_logic?: record}
 ]: any -> string {
@@ -6199,7 +6423,7 @@ export def "sections id-by-section_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a section
@@ -6215,6 +6439,7 @@ export def "sections id-by-section_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # Id of Survey (e.g. 12001)
 ]: any -> string {
   let input = $in
@@ -6225,7 +6450,7 @@ export def "sections id-by-section_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a webhook
@@ -6241,6 +6466,7 @@ export def "webhooks put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --body-url: string
@@ -6257,7 +6483,7 @@ export def "webhooks put-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook
@@ -6273,13 +6499,14 @@ export def "webhooks delete-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/webhooks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update contact property
@@ -6295,6 +6522,7 @@ export def "contacts-properties put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4
   --label: string
   --description: string
@@ -6308,7 +6536,7 @@ export def "contacts-properties put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete contact property
@@ -6324,13 +6552,14 @@ export def "contacts-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/contacts/properties/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete response
@@ -6346,6 +6575,7 @@ export def "responses-complete idComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
 ]: any -> record<data: record<state: string, time_taken: float>> {
   let input = $in
@@ -6356,7 +6586,7 @@ export def "responses-complete idComplete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add answers for response
@@ -6373,6 +6603,7 @@ export def "responses-update idUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   survey_id: float # ID of the survey (e.g. 1)
   answers: list # item shape: {question_id: float, parent_question_id?: float, answer: string, other_txt?: string, matrix_txt?: list, matrix_int?: list, region_code?: string, time?: string, time_zone?: string}
   --body-variables: record
@@ -6385,7 +6616,7 @@ export def "responses-update idUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update invite
@@ -6401,6 +6632,7 @@ export def "survey-subject-updateinvite put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --survey-id: float
   --subject-id: float
   evaluators: list # item shape: {full_name: string, email: string, relation: string}
@@ -6414,7 +6646,7 @@ export def "survey-subject-updateinvite put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update question
@@ -6433,6 +6665,7 @@ export def "surveys-questions id-by-id-question_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string
   --description: string
   --required: oneof<nothing, bool>
@@ -6447,7 +6680,7 @@ export def "surveys-questions id-by-id-question_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete question
@@ -6464,13 +6697,14 @@ export def "surveys-questions id-by-id-question_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($id)/questions/($question_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update survey section
@@ -6489,6 +6723,7 @@ export def "surveys-sections id-by-section_id-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string
   --properties: record # shape: {label?: string, sectionRandomise?: bool}
@@ -6502,7 +6737,7 @@ export def "surveys-sections id-by-section_id-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a section
@@ -6519,13 +6754,14 @@ export def "surveys-sections id-by-id-section_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($id)/sections/($section_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update invite
@@ -6543,6 +6779,7 @@ export def "survey-subject-invite put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   evaluators: list # item shape: {fullName: string, email: string, relation: string}
 ]: any -> string {
   let input = $in
@@ -6553,7 +6790,7 @@ export def "survey-subject-invite put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update SMS share
@@ -6570,6 +6807,7 @@ export def "survey-shares-sms put-by-surveyId-channelId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list
   --contactList: list
   --message: string
@@ -6585,7 +6823,7 @@ export def "survey-shares-sms put-by-surveyId-channelId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete submission
@@ -6602,13 +6840,14 @@ export def "survey-submissions-complete idComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/survey/($survey_id)/submissions/($submission_id)/complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SMS survey V2
@@ -6627,6 +6866,7 @@ export def "survey-shares-sms put-by-surveyId-channelId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactList: list # item shape: {id: float, variables?: record}
   --message: string
@@ -6643,7 +6883,7 @@ export def "survey-shares-sms put-by-surveyId-channelId-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete account
@@ -6658,13 +6898,14 @@ export def "delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/delete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete survey response
@@ -6681,13 +6922,14 @@ export def "submissions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/submissions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a contact property
@@ -6703,13 +6945,14 @@ export def "contact-properties propertiesId-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/contact_properties/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a contact property
@@ -6725,6 +6968,7 @@ export def "contact-properties propertiesId-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4
   --label: string
   --description: string
@@ -6738,7 +6982,7 @@ export def "contact-properties propertiesId-by-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a survey variable
@@ -6754,13 +6998,14 @@ export def "variables id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/variables/($variable_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete subscribed event
@@ -6776,13 +7021,14 @@ export def "audit-logs-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/audit-logs/events/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete subscribed event
@@ -6798,13 +7044,14 @@ export def "audit-logs-events logsEventsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/audit_logs/events/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete survey variable
@@ -6821,13 +7068,14 @@ export def "surveys-variables id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/surveys/($id)/variables/($variable_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete CES reminder
@@ -6845,13 +7093,14 @@ export def "ces-shares-reminders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/ces/($surveyId)/shares/($channelId)/reminders/($reminderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete csat reminder
@@ -6869,13 +7118,14 @@ export def "csat-shares-reminders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<succsats: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/csat/($surveyId)/shares/($channelId)/reminders/($reminderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete NPS reminder
@@ -6893,11 +7143,12 @@ export def "nps-shares-reminders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/nps/($surveyId)/shares/($channelId)/reminders/($reminderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

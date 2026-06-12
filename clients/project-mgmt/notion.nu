@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def type-completer [] { ["board" "calendar" "chart" "dashboard" "form" "gallery"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "users-me get-self" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -107,6 +108,7 @@ export def "users-me get-self" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<id: string, object: string, name: any, avatar_url: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -116,7 +118,7 @@ export def "users-me get-self" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a user
@@ -132,6 +134,7 @@ export def "users get-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<id: string, object: string, name: any, avatar_url: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -141,7 +144,7 @@ export def "users get-user" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all users
@@ -156,6 +159,7 @@ export def "users get-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-cursor: string
   --page-size: float
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
@@ -168,7 +172,7 @@ export def "users get-users" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a page
@@ -183,6 +187,7 @@ export def "pages post-page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --parent: any
   --properties: record
@@ -204,7 +209,7 @@ export def "pages post-page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a page
@@ -220,6 +225,7 @@ export def "pages retrieve-a-page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter-properties: list
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
@@ -231,7 +237,7 @@ export def "pages retrieve-a-page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update page
@@ -247,6 +253,7 @@ export def "pages patch-page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --properties: record
   --icon: any
@@ -267,7 +274,7 @@ export def "pages patch-page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move a page
@@ -283,6 +290,7 @@ export def "pages-move move-page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   parent: any # The new parent of the page.
 ]: any -> any {
@@ -296,7 +304,7 @@ export def "pages-move move-page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a page property item
@@ -313,6 +321,7 @@ export def "pages-properties retrieve-a-page-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-cursor: string
   --page-size: int
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
@@ -325,7 +334,7 @@ export def "pages-properties retrieve-a-page-property" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a page as markdown
@@ -341,6 +350,7 @@ export def "pages-markdown retrieve-page-markdown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-transcript: oneof<nothing, bool>
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, markdown: string, truncated: bool, unknown_block_ids: list<string>> {
@@ -352,7 +362,7 @@ export def "pages-markdown retrieve-page-markdown" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a page's content as markdown
@@ -372,6 +382,7 @@ export def "pages-markdown update-page-markdown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --type: string # Always `insert_content`
   --insert-content: record # Insert new content into the page. — shape: {content: string, after?: string, position?: any}
@@ -389,7 +400,7 @@ export def "pages-markdown update-page-markdown" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a block
@@ -405,6 +416,7 @@ export def "blocks retrieve-a-block" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -414,7 +426,7 @@ export def "blocks retrieve-a-block" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a block
@@ -430,6 +442,7 @@ export def "blocks update-a-block" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --in-trash: oneof<nothing, bool>
 ]: any -> any {
@@ -443,7 +456,7 @@ export def "blocks update-a-block" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a block
@@ -459,6 +472,7 @@ export def "blocks delete-a-block" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -468,7 +482,7 @@ export def "blocks delete-a-block" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve block children
@@ -484,6 +498,7 @@ export def "blocks-children get-block-children" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-cursor: string # format: uuid
   --page-size: float
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
@@ -496,7 +511,7 @@ export def "blocks-children get-block-children" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Append block children
@@ -512,6 +527,7 @@ export def "blocks-children patch-block-children" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   children: list
   --position: any
@@ -526,7 +542,7 @@ export def "blocks-children patch-block-children" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a data source
@@ -542,6 +558,7 @@ export def "data-sources retrieve-a-data-source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -551,7 +568,7 @@ export def "data-sources retrieve-a-data-source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a data source
@@ -569,6 +586,7 @@ export def "data-sources update-a-data-source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --title: list # Title of data source as it appears in Notion. — item shape: {annotations?: record}
   --icon: any # Page icon.
@@ -586,7 +604,7 @@ export def "data-sources update-a-data-source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query a data source
@@ -602,6 +620,7 @@ export def "data-sources-query post-database-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter-properties: list
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --sorts: list
@@ -622,7 +641,7 @@ export def "data-sources-query post-database-query" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a data source
@@ -639,6 +658,7 @@ export def "data-sources create-a-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   parent: record # shape: {type?: string, database_id: string}
   properties: record # Property schema of data source.
@@ -655,7 +675,7 @@ export def "data-sources create-a-database" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List templates in a data source
@@ -671,6 +691,7 @@ export def "data-sources-templates list-data-source-templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --start-cursor: string
   --page-size: int
@@ -684,7 +705,7 @@ export def "data-sources-templates list-data-source-templates" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a database
@@ -700,6 +721,7 @@ export def "databases retrieve-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -709,7 +731,7 @@ export def "databases retrieve-database" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a database
@@ -727,6 +749,7 @@ export def "databases update-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --parent: any # The parent page or workspace to move the database to. If not provided, the database will not be moved.
   --title: list # The updated title of the database, if any. If not provided, the title will not be updated. — item shape: {annotations?: record}
@@ -747,7 +770,7 @@ export def "databases update-database" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a database
@@ -765,6 +788,7 @@ export def "databases create-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   parent: any # The parent page or workspace where the database will be created.
   --title: list # The title of the database. — item shape: {annotations?: record}
@@ -784,7 +808,7 @@ export def "databases create-database" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search by title
@@ -800,6 +824,7 @@ export def "search post-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --body-sort: any
   --body-query: string
@@ -817,7 +842,7 @@ export def "search post-search" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a comment
@@ -833,6 +858,7 @@ export def "comments create-a-comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --attachments: list # An array of files to attach to the comment. Maximum of 3 allowed. — item shape: {file_upload_id: string, type?: string}
   --display-name: any # Display name for the comment.
@@ -847,7 +873,7 @@ export def "comments create-a-comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List comments
@@ -862,6 +888,7 @@ export def "comments list-comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --block-id: string
   --start-cursor: string
   --page-size: int
@@ -875,7 +902,7 @@ export def "comments list-comments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a comment
@@ -891,6 +918,7 @@ export def "comments retrieve-comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -900,7 +928,7 @@ export def "comments retrieve-comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a comment
@@ -917,6 +945,7 @@ export def "comments update-a-comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --rich-text: list # An array of rich text objects that represent the updated content of the comment. — item shape: {annotations?: record}
   --markdown: string # The updated content of the comment as a Markdown string. Comment Markdown supports inline formatting only (bold, italic, strikethrough, code, links), inline equations ($expression$), and mentions. Block-level Markdown such as fenced code blocks, headings, lists, tables, and blockquotes does not render as structured blocks in comments.
@@ -931,7 +960,7 @@ export def "comments update-a-comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment
@@ -947,6 +976,7 @@ export def "comments delete-a-comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -956,7 +986,7 @@ export def "comments delete-a-comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a file upload
@@ -971,6 +1001,7 @@ export def "file-uploads create-file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --mode: string@mode-completer # How the file is being sent. Use `multi_part` for files larger than 20MB. Use `external_url` for files that are temporarily hosted publicly elsewhere. Default is `single_part`.
   --filename: string # Name of the file to be created. Required when `mode` is `multi_part`. Otherwise optional, and used to override the filename. Must include an extension, or have one inferred from the `content_type` parameter.
@@ -988,7 +1019,7 @@ export def "file-uploads create-file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List file uploads
@@ -1003,6 +1034,7 @@ export def "file-uploads list-file-uploads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
   --start-cursor: string
   --page-size: int
@@ -1016,7 +1048,7 @@ export def "file-uploads list-file-uploads" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a file
@@ -1032,6 +1064,7 @@ export def "file-uploads-send upload-file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   file: record # The raw binary file contents to upload.
   --part-number: string # When uploading files greater than 20MB in parts, this is the current part number. Must be an integer between 1 and 1,000.
@@ -1046,7 +1079,7 @@ export def "file-uploads-send upload-file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Complete a multi-part file upload
@@ -1062,6 +1095,7 @@ export def "file-uploads-complete complete-file-upload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, created_time: string, created_by: record<id: string, type: string>, last_edited_time: string, in_trash: bool, expiry_time: any, status: string, filename: any, content_type: any, content_length: any, upload_url: string, complete_url: string, file_import_result: record<imported_time: string>, number_of_parts: record<total: int, sent: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1071,7 +1105,7 @@ export def "file-uploads-complete complete-file-upload" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a file upload
@@ -1087,6 +1121,7 @@ export def "file-uploads retrieve-file-upload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, created_time: string, created_by: record<id: string, type: string>, last_edited_time: string, in_trash: bool, expiry_time: any, status: string, filename: any, content_type: any, content_length: any, upload_url: string, complete_url: string, file_import_result: record<imported_time: string>, number_of_parts: record<total: int, sent: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1096,7 +1131,7 @@ export def "file-uploads retrieve-file-upload" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List custom emojis
@@ -1111,6 +1146,7 @@ export def "custom-emojis list-custom-emojis" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-cursor: string
   --page-size: int
   --name: string
@@ -1124,7 +1160,7 @@ export def "custom-emojis list-custom-emojis" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List views
@@ -1139,6 +1175,7 @@ export def "views list-views" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --database-id: string
   --data-source-id: string
   --start-cursor: string
@@ -1153,7 +1190,7 @@ export def "views list-views" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a view
@@ -1169,6 +1206,7 @@ export def "views create-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   data_source_id: string
   name: string # The name of the view.
@@ -1193,7 +1231,7 @@ export def "views create-view" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a view
@@ -1209,6 +1247,7 @@ export def "views retrieve-a-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1218,7 +1257,7 @@ export def "views retrieve-a-view" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a view
@@ -1234,6 +1273,7 @@ export def "views update-a-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --name: string # New name for the view.
   --filter: any # Filter to apply to the view. Uses the same format as the data source query filter. Pass null to clear the filter.
@@ -1251,7 +1291,7 @@ export def "views update-a-view" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a view
@@ -1267,6 +1307,7 @@ export def "views delete-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, parent: record<type: string, database_id: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1276,7 +1317,7 @@ export def "views delete-view" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a view query
@@ -1292,6 +1333,7 @@ export def "views-queries create-view-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --page-size: int # The number of results to return per page. Maximum: 100
 ]: any -> record<object: string, id: string, view_id: string, expires_at: string, total_count: float, results: table<object: string, id: string>, next_cursor: any, has_more: bool, request_status: record<type: string, incomplete_reason: string>> {
@@ -1305,7 +1347,7 @@ export def "views-queries create-view-query" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get view query results
@@ -1322,6 +1364,7 @@ export def "views-queries get-view-query-results" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-cursor: string
   --page-size: int
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
@@ -1334,7 +1377,7 @@ export def "views-queries get-view-query-results" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a view query
@@ -1351,6 +1394,7 @@ export def "views-queries delete-view-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1360,7 +1404,7 @@ export def "views-queries delete-view-query" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query meeting notes
@@ -1377,6 +1421,7 @@ export def "blocks-meeting-notes-query query-meeting-notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --filter: record # Optional filter for querying meeting notes. Supports combinator (and/or) and property filters on title, attendees, created_time, created_by, last_edited_time, last_edited_by. — shape: {operator: "and"|"or", filters?: list}
   --body-sort: list # Optional sort order for the results. Each entry specifies a property name and direction. — item shape: {property: "title"|"attendees"|"created_time"|"created_by"|"last_edited_time"|"last_edited_by", direction: "ascending"|"descending"}
@@ -1392,7 +1437,7 @@ export def "blocks-meeting-notes-query query-meeting-notes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchange an authorization code for an access and refresh token
@@ -1408,6 +1453,7 @@ export def "oauth-token create-a-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --grant-type: string
   --code: string
@@ -1425,7 +1471,7 @@ export def "oauth-token create-a-token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke a token
@@ -1440,6 +1486,7 @@ export def "oauth-revoke revoke-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --body-token: string
 ]: any -> record<request_id: string> {
@@ -1453,7 +1500,7 @@ export def "oauth-revoke revoke-token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Introspect a token
@@ -1468,6 +1515,7 @@ export def "oauth-introspect introspect-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
   --body-token: string
 ]: any -> record<active: bool, scope: string, iat: int, request_id: string> {
@@ -1481,5 +1529,5 @@ export def "oauth-introspect introspect-token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

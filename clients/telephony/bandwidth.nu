@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -87,7 +88,7 @@ def status-completer-1 [] { ["CONNECTED" "DISCONNECTED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "users-media listMedia" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -121,6 +122,7 @@ export def "users-media listMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Continuation-Token: string # Continuation token used to retrieve subsequent media. (e.g. 1XEi2tsFtLo1JbtLwETnM1ZJ+PqAa8w6ENvC5QKvwyrCDYII663Gy5M4s40owR1tjkuWUif6qbWvFtQJR5/ipqbUnfAqL254LKNlPy6tATCzioKSuHuOqgzloDkSwRtX0LtcL2otHS69hK343m+SjdL+vlj71tT39)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -130,7 +132,7 @@ export def "users-media listMedia" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Media
@@ -147,13 +149,14 @@ export def "users-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/users/($accountId)/media/($mediaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Media
@@ -170,6 +173,7 @@ export def "users-media uploadMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # The media type of the entity-body. (e.g. audio/wav)
   --Cache-Control: string # General-header field is used to specify directives that MUST be obeyed by all caching mechanisms along the request/response chain. (e.g. no-cache)
   --body: record
@@ -183,7 +187,7 @@ export def "users-media uploadMedia" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Media
@@ -200,13 +204,14 @@ export def "users-media delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/users/($accountId)/media/($mediaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Messages
@@ -222,6 +227,7 @@ export def "users-messages listMessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messageId: string # The ID of the message to search for. Special characters need to be encoded using URL encoding. Message IDs could come in different formats, e.g., 9e0df4ca-b18d-40d7-a59f-82fcdf5ae8e6 and 1589228074636lm4k2je7j7jklbn2 are valid message ID formats. Note that you must include at least one query parameter. (e.g. 9e0df4ca-b18d-40d7-a59f-82fcdf5ae8e6)
   --sourceTn: string # The phone number that sent the message. Accepted values are: a single full phone number a comma separated list of full phone numbers (maximum of 10) or a single partial phone number (minimum of 5 characters e.g. '%2B1919'). (e.g. %2B15554443333)
   --destinationTn: string # The phone number that received the message. Accepted values are: a single full phone number a comma separated list of full phone numbers (maximum of 10) or a single partial phone number (minimum of 5 characters e.g. '%2B1919'). (e.g. %2B15554443333)
@@ -256,7 +262,7 @@ export def "users-messages listMessages" [
   let full_url = (build-url $base $"/users/($accountId)/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Message
@@ -272,6 +278,7 @@ export def "users-messages createMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   applicationId: string # The ID of the Application your from number or senderId is associated with in the Bandwidth App. (e.g. 93de2206-9669-4e07-948d-329f4b722ee2)
   --body-to: list # The phone number(s) the message should be sent to in E164 format. (e.g. [+15554443333, +15552223333])
   --body-from: string # Either an alphanumeric sender ID or the sender's Bandwidth phone number in E.164 format, which must be hosted within Bandwidth and linked to the account that is generating the message. Alphanumeric Sender IDs can contain up to 11 characters, upper-case letters A-Z, lower-case letters a-z, numbers 0-9, space, hyphen -, plus +, underscore _ and ampersand &. Alphanumeric Sender IDs must contain at least one letter. (e.g. +15551113333)
@@ -289,7 +296,7 @@ export def "users-messages createMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Multi-Channel Message
@@ -305,6 +312,7 @@ export def "users-messages-multi-channel createMultiChannelMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string # The phone number the message should be sent to in E164 format. (e.g. +15552223333)
   channelList: list # A list of message bodies. The messages will be attempted in the order they are listed. Once a message sends successfully, the others will be ignored.
   --tag: string # A custom string that will be included in callback events of the message. Max 1024 characters. (e.g. custom string)
@@ -319,7 +327,7 @@ export def "users-messages-multi-channel createMultiChannelMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Call
@@ -336,6 +344,7 @@ export def "accounts-calls createCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string # The destination to call (must be an E.164 formatted number (e.g. `+15555551212`) or a SIP URI (e.g. `sip:user@server.example`)). (e.g. +19195551234)
   --body-from: string # A Bandwidth phone number on your account the call should come from (must be in E.164 format, like `+15555551212`) even if `privacy` is set to true. (e.g. +15555551212)
   --privacy: oneof<nothing, bool> # Hide the calling number. The `displayName` field can be used to customize the displayed name. (nullable, e.g. false)
@@ -366,7 +375,7 @@ export def "accounts-calls createCall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Calls
@@ -382,6 +391,7 @@ export def "accounts-calls listCalls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-to: string # Filter results by the `to` field. (e.g. %2b19195551234)
   --qp-from: string # Filter results by the `from` field. (e.g. %2b19195554321)
   --minStartTime: string # Filter results to calls which have a `startTime` after or including `minStartTime` (in ISO8601 format). (e.g. 2022-06-21T19:13:21Z)
@@ -396,7 +406,7 @@ export def "accounts-calls listCalls" [
   let full_url = (build-url $base $"/accounts/($accountId)/calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call State Information
@@ -413,13 +423,14 @@ export def "accounts-calls get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Call
@@ -436,6 +447,7 @@ export def "accounts-calls updateCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The call state. Possible values:<br>`active` to redirect the call (default)<br>`completed` to hang up the call if it is answered, cancel it if it is an unanswered outbound call, or reject it if it an unanswered inbound call (nullable, default: active, e.g. completed)
   --redirectUrl: string # The URL to send the [Redirect](/docs/voice/bxml/redirect) event to which will provide new BXML.  Required if `state` is `active`.  Not allowed if `state` is `completed`. (nullable, format: uri, e.g. https://myServer.example/bandwidth/webhooks/redirect)
   --redirectMethod: string@redirectMethod-completer # The HTTP method to use for the request to `redirectUrl`. GET or POST. Default value is POST.<br><br>Not allowed if `state` is `completed`. (nullable, default: POST, e.g. POST)
@@ -455,7 +467,7 @@ export def "accounts-calls updateCall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Call BXML
@@ -472,6 +484,7 @@ export def "accounts-calls-bxml updateCallBxml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -481,7 +494,7 @@ export def "accounts-calls-bxml updateCallBxml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/xml" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/xml" $body
 }
 
 # Get Conferences
@@ -497,6 +510,7 @@ export def "accounts-conferences listConferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter results by the `name` field. (e.g. my-custom-name)
   --minCreatedTime: string # Filter results to conferences which have a `createdTime` after or at `minCreatedTime` (in ISO8601 format). (e.g. 2022-06-21T19:13:21Z)
   --maxCreatedTime: string # Filter results to conferences which have a `createdTime` before or at `maxCreatedTime` (in ISO8601 format). (e.g. 2022-06-21T19:13:21Z)
@@ -509,7 +523,7 @@ export def "accounts-conferences listConferences" [
   let full_url = (build-url $base $"/accounts/($accountId)/conferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conference Information
@@ -526,13 +540,14 @@ export def "accounts-conferences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/conferences/($conferenceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Conference
@@ -549,6 +564,7 @@ export def "accounts-conferences updateConference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Setting the conference state to `completed` ends the conference and ejects all members. (nullable, default: active, e.g. completed)
   --redirectUrl: string # The URL to send the [conferenceRedirect](/docs/voice/webhooks/conferenceRedirect) event which will provide new BXML. Not allowed if `state` is `completed`, but required if `state` is `active`. (nullable, format: uri, e.g. https://myServer.example/bandwidth/webhooks/conferenceRedirect)
   --redirectMethod: string@redirectMethod-completer # The HTTP method to use for the request to `redirectUrl`. GET or POST. Default value is POST.<br><br>Not allowed if `state` is `completed`. (nullable, default: POST, e.g. POST)
@@ -567,7 +583,7 @@ export def "accounts-conferences updateConference" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Conference BXML
@@ -584,6 +600,7 @@ export def "accounts-conferences-bxml updateConferenceBxml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -593,7 +610,7 @@ export def "accounts-conferences-bxml updateConferenceBxml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/xml" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/xml" $body
 }
 
 # Get Conference Member
@@ -611,13 +628,14 @@ export def "accounts-conferences-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/conferences/($conferenceId)/members/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Conference Member
@@ -635,6 +653,7 @@ export def "accounts-conferences-members updateConferenceMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mute: oneof<nothing, bool> # Whether or not this member is currently muted. Members who are muted are still able to hear other participants.  Updates this member's mute status. Has no effect if omitted. (e.g. false)
   --hold: oneof<nothing, bool> # Whether or not this member is currently on hold. Members who are on hold are not able to hear or speak in the conference.  Updates this member's hold status. Has no effect if omitted. (e.g. false)
   --callIdsToCoach: list # If this member had a value set for `callIdsToCoach` in its [Conference](/docs/voice/bxml/conference) verb or this list was added with a previous PUT request to modify the member, this is that list of calls.  Modifies the calls that this member is coaching. Has no effect if omitted. See the documentation for the [Conference](/docs/voice/bxml/conference) verb for more details about coaching.  Note that this will not add the matching calls to the conference; each call must individually execute a Conference verb to join. (nullable, e.g. [c-25ac29a2-1331029c-2cb0-4a07-b215-b22865662d85])
@@ -647,7 +666,7 @@ export def "accounts-conferences-members updateConferenceMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Conference Recordings
@@ -664,13 +683,14 @@ export def "accounts-conferences-recordings listConferenceRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/conferences/($conferenceId)/recordings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conference Recording Information
@@ -688,13 +708,14 @@ export def "accounts-conferences-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/conferences/($conferenceId)/recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Conference Recording
@@ -712,13 +733,14 @@ export def "accounts-conferences-recordings-media downloadConferenceRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/conferences/($conferenceId)/recordings/($recordingId)/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Recordings
@@ -734,6 +756,7 @@ export def "accounts-recordings listAccountCallRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-to: string # Filter results by the `to` field. (e.g. %2b19195551234)
   --qp-from: string # Filter results by the `from` field. (e.g. %2b19195554321)
   --minStartTime: string # Filter results to recordings which have a `startTime` after or including `minStartTime` (in ISO8601 format). (e.g. 2022-06-21T19:13:21Z)
@@ -745,7 +768,7 @@ export def "accounts-recordings listAccountCallRecordings" [
   let full_url = (build-url $base $"/accounts/($accountId)/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Recording
@@ -762,6 +785,7 @@ export def "accounts-calls-recording updateCallRecordingState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   state: string@state-completer-1 # The recording state. Possible values:  `paused` to pause an active recording  `recording` to resume a paused recording (e.g. paused)
 ]: any -> any {
   let input = $in
@@ -772,7 +796,7 @@ export def "accounts-calls-recording updateCallRecordingState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Call Recordings
@@ -789,13 +813,14 @@ export def "accounts-calls-recordings listCallRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Call Recording
@@ -813,13 +838,14 @@ export def "accounts-calls-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Recording
@@ -837,13 +863,14 @@ export def "accounts-calls-recordings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Recording
@@ -861,13 +888,14 @@ export def "accounts-calls-recordings-media downloadCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Recording Media
@@ -885,13 +913,14 @@ export def "accounts-calls-recordings-media delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Transcription
@@ -909,13 +938,14 @@ export def "accounts-calls-recordings-transcription get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)/transcription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Transcription Request
@@ -933,6 +963,7 @@ export def "accounts-calls-recordings-transcription transcribeCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callbackUrl: string # The URL to send the [TranscriptionAvailable](/docs/voice/webhooks/transcriptionAvailable) event to. You should not include sensitive or personally-identifiable information in the callbackUrl field! Always use the proper username and password fields for authorization. (format: uri, e.g. https://myServer.example/bandwidth/webhooks/transcriptionAvailable)
   --callbackMethod: string@callbackMethod-completer # The HTTP method to use to deliver the callback. GET or POST. Default value is POST. (nullable, default: POST, e.g. POST)
   --username: string # Basic auth username. (nullable, e.g. mySecretUsername)
@@ -949,7 +980,7 @@ export def "accounts-calls-recordings-transcription transcribeCallRecording" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Transcription
@@ -967,13 +998,14 @@ export def "accounts-calls-recordings-transcription delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/recordings/($recordingId)/transcription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Account Statistics
@@ -989,13 +1021,14 @@ export def "accounts-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/statistics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Real-time Transcriptions
@@ -1012,13 +1045,14 @@ export def "accounts-calls-transcriptions listRealTimeTranscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/transcriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Real-time Transcription
@@ -1036,13 +1070,14 @@ export def "accounts-calls-transcriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/transcriptions/($transcriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Real-time Transcription
@@ -1060,13 +1095,14 @@ export def "accounts-calls-transcriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/calls/($callId)/transcriptions/($transcriptionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Voice Authentication Code
@@ -1082,6 +1118,7 @@ export def "accounts-code-voice generateVoiceCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string # The phone number to send the mfa code to. (e.g. +19195551234)
   --body-from: string # The application phone number, the sender of the mfa code. (e.g. +19195554321)
   applicationId: string # The application unique ID, obtained from Bandwidth. (e.g. 66fd98ae-ac8d-a00f-7fcd-ba3280aeb9b1)
@@ -1097,7 +1134,7 @@ export def "accounts-code-voice generateVoiceCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Messaging Authentication Code
@@ -1113,6 +1150,7 @@ export def "accounts-code-messaging generateMessagingCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string # The phone number to send the mfa code to. (e.g. +19195551234)
   --body-from: string # The application phone number, the sender of the mfa code. (e.g. +19195554321)
   applicationId: string # The application unique ID, obtained from Bandwidth. (e.g. 66fd98ae-ac8d-a00f-7fcd-ba3280aeb9b1)
@@ -1128,7 +1166,7 @@ export def "accounts-code-messaging generateMessagingCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Authentication Code
@@ -1144,6 +1182,7 @@ export def "accounts-code-verify verifyCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-to: string # The phone number to send the mfa code to. (e.g. +19195551234)
   --scope: string # An optional field to denote what scope or action the mfa code is addressing.  If not supplied, defaults to "2FA". (e.g. 2FA)
   expirationTimeInMinutes: float # The time period, in minutes, to validate the mfa code.  By setting this to 3 minutes, it will mean any code generated within the last 3 minutes are still valid.  The valid range for expiration time is between 0 and 15 minutes, exclusively and inclusively, respectively. (e.g. 3)
@@ -1157,7 +1196,7 @@ export def "accounts-code-verify verifyCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Synchronous Number Lookup
@@ -1173,6 +1212,7 @@ export def "accounts-phone-number-lookup createSyncLookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phoneNumbers: list # Telephone numbers in E.164 format.
   --rcsAgent: string # Override the default RCS sender/agent ID used when checking RCS capabilities. When provided, this value is used as the `sender` in the RCS capability-check request instead of the account default. Must be 1–40 characters and contain only letters, digits, underscores, or hyphens. (e.g. MyCustomRcsAgent)
 ]: any -> any {
@@ -1184,7 +1224,7 @@ export def "accounts-phone-number-lookup createSyncLookup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Asynchronous Bulk Number Lookup
@@ -1200,6 +1240,7 @@ export def "accounts-phone-number-lookup-bulk createAsyncBulkLookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phoneNumbers: list # Telephone numbers in E.164 format.
 ]: any -> any {
   let input = $in
@@ -1210,7 +1251,7 @@ export def "accounts-phone-number-lookup-bulk createAsyncBulkLookup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Asynchronous Bulk Number Lookup
@@ -1227,13 +1268,14 @@ export def "accounts-phone-number-lookup-bulk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/phoneNumberLookup/bulk/($requestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request Toll-Free Verification
@@ -1252,6 +1294,7 @@ export def "accounts-toll-free-verification requestTollFreeVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   businessAddress: record # shape: {name: string, addr1: string, addr2?: string, city: string, state: string, zip: string, url: string}
   businessContact: record # shape: {firstName: string, lastName: string, email: string, phoneNumber: string}
   messageVolume: int # Estimated monthly volume of messages from the toll-free number. (e.g. 10000)
@@ -1281,7 +1324,7 @@ export def "accounts-toll-free-verification requestTollFreeVerification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Toll-Free Verification Status
@@ -1298,13 +1341,14 @@ export def "accounts-phone-numbers-toll-free-verification get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/phoneNumbers/($phoneNumber)/tollFreeVerification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Toll-Free Verification Request
@@ -1322,6 +1366,7 @@ export def "accounts-phone-numbers-toll-free-verification updateTollFreeVerifica
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --submission: record # shape: {businessAddress: record, businessContact: record, messageVolume: int, useCase: string, useCaseSummary: string, productionMessageContent: string, optInWorkflow: record, additionalInformation?: string, isvReseller?: string, privacyPolicyUrl?: string, termsAndConditionsUrl?: string, businessDba?: string, businessRegistrationNumber?: string, businessRegistrationType?: "EIN"|"CBN"|"NEQ"|"PROVINCIAL_NUMBER"|"CRN"|"VAT"|"ACN"|"ABN"|"BRN"|"SIREN"|"SIRET"|"NZBN"|"UST_IDNR"|"CIF"|"NIF"|"CNPJ"|"UID"|"OTHER", businessEntityType?: "SOLE_PROPRIETOR"|"PRIVATE_PROFIT"|"PUBLIC_PROFIT"|"NON_PROFIT"|"GOVERNMENT", businessRegistrationIssuingCountry?: string, helpMessageResponse?: string, ageGatedContent?: bool, cvToken?: string}
 ]: any -> any {
   let input = $in
@@ -1332,7 +1377,7 @@ export def "accounts-phone-numbers-toll-free-verification updateTollFreeVerifica
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Toll-Free Verification Submission
@@ -1349,13 +1394,14 @@ export def "accounts-phone-numbers-toll-free-verification delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/phoneNumbers/($phoneNumber)/tollFreeVerification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Webhook Subscriptions
@@ -1371,13 +1417,14 @@ export def "accounts-toll-free-verification-webhooks-subscriptions listWebhookSu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/tollFreeVerification/webhooks/subscriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webhook Subscription
@@ -1394,6 +1441,7 @@ export def "accounts-toll-free-verification-webhooks-subscriptions createWebhook
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --basicAuthentication: record # shape: {username: string, password: string}
   --callbackUrl: string # Callback URL to receive status updates from Bandwidth. When a webhook subscription is registered with Bandwidth under a given account ID, it will be used to send status updates for all requests submitted under that account ID. (nullable, format: url, e.g. https://www.example.com/path/to/resource)
   --sharedSecretKey: string # An ASCII string submitted by the user as a shared secret key for generating an HMAC header for callbacks. (nullable, e.g. This is my $3cret)
@@ -1406,7 +1454,7 @@ export def "accounts-toll-free-verification-webhooks-subscriptions createWebhook
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Webhook Subscription
@@ -1423,13 +1471,14 @@ export def "accounts-toll-free-verification-webhooks-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/api/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/tollFreeVerification/webhooks/subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webhook Subscription
@@ -1447,6 +1496,7 @@ export def "accounts-toll-free-verification-webhooks-subscriptions updateWebhook
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --basicAuthentication: record # shape: {username: string, password: string}
   --callbackUrl: string # Callback URL to receive status updates from Bandwidth. When a webhook subscription is registered with Bandwidth under a given account ID, it will be used to send status updates for all requests submitted under that account ID. (nullable, format: url, e.g. https://www.example.com/path/to/resource)
   --sharedSecretKey: string # An ASCII string submitted by the user as a shared secret key for generating an HMAC header for callbacks. (nullable, e.g. This is my $3cret)
@@ -1459,7 +1509,7 @@ export def "accounts-toll-free-verification-webhooks-subscriptions updateWebhook
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Toll-Free Use Cases
@@ -1474,13 +1524,14 @@ export def "toll-free-verification-use-cases listTollFreeUseCases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/api/v2")
   let full_url = (build-url $base "/tollFreeVerification/useCases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Endpoints
@@ -1496,6 +1547,7 @@ export def "accounts-endpoints listEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # The type of endpoint.
   --status: string@status-completer-1 # The status of the endpoint.
   --afterCursor: string # The cursor to use for pagination. This is the value of the `next` link in the previous response. (e.g. TWF5IHRoZSBmb3JjZSBiZSB3aXRoIHlvdQ==)
@@ -1507,7 +1559,7 @@ export def "accounts-endpoints listEndpoints" [
   let full_url = (build-url $base $"/accounts/($accountId)/endpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Endpoint
@@ -1524,6 +1576,7 @@ export def "accounts-endpoints createEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1533,7 +1586,7 @@ export def "accounts-endpoints createEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Endpoint
@@ -1550,13 +1603,14 @@ export def "accounts-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/endpoints/($endpointId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Endpoint
@@ -1573,13 +1627,14 @@ export def "accounts-endpoints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.bandwidth.com/v2")
   let full_url = (build-url $base $"/accounts/($accountId)/endpoints/($endpointId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Endpoint BXML
@@ -1596,6 +1651,7 @@ export def "accounts-endpoints-bxml updateEndpointBxml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1605,5 +1661,5 @@ export def "accounts-endpoints-bxml updateEndpointBxml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/xml" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/xml" $body
 }

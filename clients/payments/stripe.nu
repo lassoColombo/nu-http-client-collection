@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -185,7 +186,7 @@ def api-version-completer [] { ["2011-01-01" "2011-06-21" "2011-06-28" "2011-08-
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account GetAccount" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -218,6 +219,7 @@ export def "account GetAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<business_profile: any, business_type: string, capabilities: record<acss_debit_payments: string, affirm_payments: string, afterpay_clearpay_payments: string, alma_payments: string, amazon_pay_payments: string, app_distribution: string, au_becs_debit_payments: string, bacs_debit_payments: string, bancontact_payments: string, bank_transfer_payments: string, billie_payments: string, bizum_payments: string, blik_payments: string, boleto_payments: string, card_issuing: string, card_payments: string, cartes_bancaires_payments: string, cashapp_payments: string, crypto_payments: string, eps_payments: string, fpx_payments: string, gb_bank_transfer_payments: string, giropay_payments: string, grabpay_payments: string, ideal_payments: string, india_international_payments: string, jcb_payments: string, jp_bank_transfer_payments: string, kakao_pay_payments: string, klarna_payments: string, konbini_payments: string, kr_card_payments: string, legacy_payments: string, link_payments: string, mb_way_payments: string, mobilepay_payments: string, multibanco_payments: string, mx_bank_transfer_payments: string, naver_pay_payments: string, nz_bank_account_becs_debit_payments: string, oxxo_payments: string, p24_payments: string, pay_by_bank_payments: string, payco_payments: string, paynow_payments: string, payto_payments: string, pix_payments: string, promptpay_payments: string, revolut_pay_payments: string, samsung_pay_payments: string, satispay_payments: string, scalapay_payments: string, sepa_bank_transfer_payments: string, sepa_debit_payments: string, sofort_payments: string, sunbit_payments: string, swish_payments: string, tax_reporting_us_1099_k: string, tax_reporting_us_1099_misc: string, transfers: string, treasury: string, twint_payments: string, upi_payments: string, us_bank_account_ach_payments: string, us_bank_transfer_payments: string, zip_payments: string>, charges_enabled: bool, company: record<address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, directors_provided: bool, directorship_declaration: any, executives_provided: bool, export_license_id: string, export_purpose_code: string, name: string, name_kana: string, name_kanji: string, owners_provided: bool, ownership_declaration: any, ownership_exemption_reason: string, phone: string, registration_date: record<day: int, month: int, year: int>, representative_declaration: any, structure: string, tax_id_provided: bool, tax_id_registrar: string, vat_id_provided: bool, verification: any>, controller: record<fees: record<payer: string>, is_controller: bool, losses: record<payments: string>, requirement_collection: string, stripe_dashboard: record<type: string>, type: string>, country: string, created: int, default_currency: string, details_submitted: bool, email: string, external_accounts: record<data: list<any>, has_more: bool, object: string, url: string>, future_requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, groups: any, id: string, individual: record<account: string, additional_tos_acceptances: record<account: any>, address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, created: int, dob: record<day: int, month: int, year: int>, email: string, first_name: string, first_name_kana: string, first_name_kanji: string, full_name_aliases: list<string>, future_requirements: any, gender: string, id: string, id_number_provided: bool, id_number_secondary_provided: bool, last_name: string, last_name_kana: string, last_name_kanji: string, maiden_name: string, metadata: record, nationality: string, object: string, phone: string, political_exposure: string, registered_address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, relationship: record<authorizer: bool, director: bool, executive: bool, legal_guardian: bool, owner: bool, percent_ownership: float, representative: bool, title: string>, requirements: any, ssn_last_4_provided: bool, us_cfpb_data: any, verification: record<additional_document: any, details: string, details_code: string, document: record, status: string>>, metadata: record, object: string, payouts_enabled: bool, requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, settings: any, tos_acceptance: record<date: int, ip: string, service_agreement: string, user_agent: string>, type: string> {
@@ -229,7 +231,7 @@ export def "account GetAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an account link
@@ -245,6 +247,7 @@ export def "account-links PostAccountLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account: string # The identifier of the account to create an account link for.
   --collect: string@collect-completer # The collect parameter is deprecated. Use `collection_options` instead.
   --collection-options: record # Specifies the requirements that Stripe collects from connected accounts in the Connect Onboarding flow. — shape: {fields?: "currently_due"|"eventually_due", future_requirements?: "include"|"omit"}
@@ -261,7 +264,7 @@ export def "account-links PostAccountLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an Account Session
@@ -277,6 +280,7 @@ export def "account-sessions PostAccountSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account: string # The identifier of the account to create an Account Session for.
   components: record # Each key of the dictionary represents an embedded component, and each embedded component maps to its configuration (e.g. whether it has been enabled or not). — shape: {account_management?: record, account_onboarding?: record, balance_report?: record, balances?: record, disputes_list?: record, documents?: record, financial_account?: record, financial_account_transactions?: record, instant_payouts_promotion?: record, issuing_card?: record, issuing_cards_list?: record, notification_banner?: record, payment_details?: record, payment_disputes?: record, payments?: record, payout_details?: record, payout_reconciliation_report?: record, payouts?: record, payouts_list?: record, tax_registrations?: record, tax_settings?: record}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -289,7 +293,7 @@ export def "account-sessions PostAccountSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all connected accounts
@@ -304,6 +308,7 @@ export def "accounts GetAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return connected accounts that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -319,7 +324,7 @@ export def "accounts GetAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>With <a href="/docs/connect">Connect</a>, you can create Stripe accounts for your users. To do this, you’ll first need to <a href="https://dashboard.stripe.com/account/applications/settings">register your platform</a>.</p>  <p>If you’ve already collected information for your connected accounts, you <a href="/docs/connect/best-practices#onboarding">can prefill that information</a> when creating the account. Connect Onboarding won’t ask for the prefilled information during account onboarding. You can prefill any information on the account.</p>
@@ -343,6 +348,7 @@ export def "accounts PostAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-token: string # An [account token](https://api.stripe.com#create_account_token), used to securely provide details to the account.
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --business-profile: record # Business information about the account. — shape: {annual_revenue?: record, estimated_worker_count?: int, mcc?: string, minority_owned_business_designation?: list, monthly_estimated_revenue?: record, name?: string, product_description?: string, support_address?: record, support_email?: string, support_phone?: string, support_url?: any, url?: string}
@@ -371,7 +377,7 @@ export def "accounts PostAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an account
@@ -387,6 +393,7 @@ export def "accounts DeleteAccountsAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -396,7 +403,7 @@ export def "accounts DeleteAccountsAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve account
@@ -412,6 +419,7 @@ export def "accounts GetAccountsAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<business_profile: any, business_type: string, capabilities: record<acss_debit_payments: string, affirm_payments: string, afterpay_clearpay_payments: string, alma_payments: string, amazon_pay_payments: string, app_distribution: string, au_becs_debit_payments: string, bacs_debit_payments: string, bancontact_payments: string, bank_transfer_payments: string, billie_payments: string, bizum_payments: string, blik_payments: string, boleto_payments: string, card_issuing: string, card_payments: string, cartes_bancaires_payments: string, cashapp_payments: string, crypto_payments: string, eps_payments: string, fpx_payments: string, gb_bank_transfer_payments: string, giropay_payments: string, grabpay_payments: string, ideal_payments: string, india_international_payments: string, jcb_payments: string, jp_bank_transfer_payments: string, kakao_pay_payments: string, klarna_payments: string, konbini_payments: string, kr_card_payments: string, legacy_payments: string, link_payments: string, mb_way_payments: string, mobilepay_payments: string, multibanco_payments: string, mx_bank_transfer_payments: string, naver_pay_payments: string, nz_bank_account_becs_debit_payments: string, oxxo_payments: string, p24_payments: string, pay_by_bank_payments: string, payco_payments: string, paynow_payments: string, payto_payments: string, pix_payments: string, promptpay_payments: string, revolut_pay_payments: string, samsung_pay_payments: string, satispay_payments: string, scalapay_payments: string, sepa_bank_transfer_payments: string, sepa_debit_payments: string, sofort_payments: string, sunbit_payments: string, swish_payments: string, tax_reporting_us_1099_k: string, tax_reporting_us_1099_misc: string, transfers: string, treasury: string, twint_payments: string, upi_payments: string, us_bank_account_ach_payments: string, us_bank_transfer_payments: string, zip_payments: string>, charges_enabled: bool, company: record<address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, directors_provided: bool, directorship_declaration: any, executives_provided: bool, export_license_id: string, export_purpose_code: string, name: string, name_kana: string, name_kanji: string, owners_provided: bool, ownership_declaration: any, ownership_exemption_reason: string, phone: string, registration_date: record<day: int, month: int, year: int>, representative_declaration: any, structure: string, tax_id_provided: bool, tax_id_registrar: string, vat_id_provided: bool, verification: any>, controller: record<fees: record<payer: string>, is_controller: bool, losses: record<payments: string>, requirement_collection: string, stripe_dashboard: record<type: string>, type: string>, country: string, created: int, default_currency: string, details_submitted: bool, email: string, external_accounts: record<data: list<any>, has_more: bool, object: string, url: string>, future_requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, groups: any, id: string, individual: record<account: string, additional_tos_acceptances: record<account: any>, address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, created: int, dob: record<day: int, month: int, year: int>, email: string, first_name: string, first_name_kana: string, first_name_kanji: string, full_name_aliases: list<string>, future_requirements: any, gender: string, id: string, id_number_provided: bool, id_number_secondary_provided: bool, last_name: string, last_name_kana: string, last_name_kanji: string, maiden_name: string, metadata: record, nationality: string, object: string, phone: string, political_exposure: string, registered_address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, relationship: record<authorizer: bool, director: bool, executive: bool, legal_guardian: bool, owner: bool, percent_ownership: float, representative: bool, title: string>, requirements: any, ssn_last_4_provided: bool, us_cfpb_data: any, verification: record<additional_document: any, details: string, details_code: string, document: record, status: string>>, metadata: record, object: string, payouts_enabled: bool, requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, settings: any, tos_acceptance: record<date: int, ip: string, service_agreement: string, user_agent: string>, type: string> {
@@ -423,7 +431,7 @@ export def "accounts GetAccountsAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an account
@@ -447,6 +455,7 @@ export def "accounts PostAccountsAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-token: string # An [account token](https://api.stripe.com#create_account_token), used to securely provide details to the account.
   --business-profile: record # Business information about the account. — shape: {annual_revenue?: record, estimated_worker_count?: int, mcc?: string, minority_owned_business_designation?: list, monthly_estimated_revenue?: record, name?: string, product_description?: string, support_address?: record, support_email?: string, support_phone?: string, support_url?: any, url?: string}
   --business-type: string@business-type-completer # The business type. Once you create an [Account Link](/api/account_links) or [Account Session](/api/account_sessions), this property can only be updated for accounts where [controller.requirement_collection](/api/accounts/object#account_object-controller-requirement_collection) is `application`, which includes Custom accounts.
@@ -471,7 +480,7 @@ export def "accounts PostAccountsAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an external account
@@ -487,6 +496,7 @@ export def "accounts-bank-accounts PostAccountsAccountBankAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --default-for-currency: oneof<nothing, bool> # When set to true, or if this is the first external account added in this currency, this account becomes the default external account for its currency.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -501,7 +511,7 @@ export def "accounts-bank-accounts PostAccountsAccountBankAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an external account
@@ -518,6 +528,7 @@ export def "accounts-bank-accounts DeleteAccountsAccountBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -527,7 +538,7 @@ export def "accounts-bank-accounts DeleteAccountsAccountBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an external account
@@ -544,6 +555,7 @@ export def "accounts-bank-accounts GetAccountsAccountBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -555,7 +567,7 @@ export def "accounts-bank-accounts GetAccountsAccountBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Updates the metadata, account holder name, account holder type of a bank account belonging to a connected account and optionally sets it as the default for its currency. Other bank account details are not editable by design.</p>  <p>You can only update bank accounts when <a href="/api/accounts/object#account_object-controller-requirement_collection">account.controller.requirement_collection</a> is <code>application</code>, which includes <a href="/connect/custom-accounts">Custom accounts</a>.</p>  <p>You can re-enable a disabled bank account by performing an update call without providing any arguments or changes.</p>
@@ -573,6 +585,7 @@ export def "accounts-bank-accounts PostAccountsAccountBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer # The type of entity that holds the account. This can be either `individual` or `company`.
   --account-type: string@account-type-completer # The bank account type. This can only be `checking` or `savings` in most countries. In Japan, this can only be `futsu` or `toza`.
@@ -598,7 +611,7 @@ export def "accounts-bank-accounts PostAccountsAccountBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all account capabilities
@@ -614,6 +627,7 @@ export def "accounts-capabilities GetAccountsAccountCapabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<data: table<account: any, future_requirements: record, id: string, object: string, requested: bool, requested_at: int, requirements: record, status: string>, has_more: bool, object: string, url: string> {
@@ -625,7 +639,7 @@ export def "accounts-capabilities GetAccountsAccountCapabilities" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an Account Capability
@@ -642,6 +656,7 @@ export def "accounts-capabilities GetAccountsAccountCapabilitiesCapability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: any, future_requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, id: string, object: string, requested: bool, requested_at: int, requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, status: string> {
@@ -653,7 +668,7 @@ export def "accounts-capabilities GetAccountsAccountCapabilitiesCapability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an Account Capability
@@ -670,6 +685,7 @@ export def "accounts-capabilities PostAccountsAccountCapabilitiesCapability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --requested: oneof<nothing, bool> # To request a new capability for an account, pass true. There can be a delay before the requested capability becomes active. If the capability has any activation requirements, the response includes them in the `requirements` arrays.  If a capability isn't permanent, you can remove it from the account by passing false. Some capabilities are permanent after they've been requested. Attempting to remove a permanent capability returns an error.
 ]: any -> record<account: any, future_requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, id: string, object: string, requested: bool, requested_at: int, requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, status: string> {
@@ -681,7 +697,7 @@ export def "accounts-capabilities PostAccountsAccountCapabilitiesCapability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all external accounts
@@ -697,6 +713,7 @@ export def "accounts-external-accounts GetAccountsAccountExternalAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -712,7 +729,7 @@ export def "accounts-external-accounts GetAccountsAccountExternalAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an external account
@@ -728,6 +745,7 @@ export def "accounts-external-accounts PostAccountsAccountExternalAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --default-for-currency: oneof<nothing, bool> # When set to true, or if this is the first external account added in this currency, this account becomes the default external account for its currency.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -742,7 +760,7 @@ export def "accounts-external-accounts PostAccountsAccountExternalAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an external account
@@ -759,6 +777,7 @@ export def "accounts-external-accounts DeleteAccountsAccountExternalAccountsId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -768,7 +787,7 @@ export def "accounts-external-accounts DeleteAccountsAccountExternalAccountsId" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an external account
@@ -785,6 +804,7 @@ export def "accounts-external-accounts GetAccountsAccountExternalAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -796,7 +816,7 @@ export def "accounts-external-accounts GetAccountsAccountExternalAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Updates the metadata, account holder name, account holder type of a bank account belonging to a connected account and optionally sets it as the default for its currency. Other bank account details are not editable by design.</p>  <p>You can only update bank accounts when <a href="/api/accounts/object#account_object-controller-requirement_collection">account.controller.requirement_collection</a> is <code>application</code>, which includes <a href="/connect/custom-accounts">Custom accounts</a>.</p>  <p>You can re-enable a disabled bank account by performing an update call without providing any arguments or changes.</p>
@@ -814,6 +834,7 @@ export def "accounts-external-accounts PostAccountsAccountExternalAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer # The type of entity that holds the account. This can be either `individual` or `company`.
   --account-type: string@account-type-completer # The bank account type. This can only be `checking` or `savings` in most countries. In Japan, this can only be `futsu` or `toza`.
@@ -839,7 +860,7 @@ export def "accounts-external-accounts PostAccountsAccountExternalAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a login link
@@ -855,6 +876,7 @@ export def "accounts-login-links PostAccountsAccountLoginLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, object: string, url: string> {
   let input = $in
@@ -865,7 +887,7 @@ export def "accounts-login-links PostAccountsAccountLoginLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all persons
@@ -881,6 +903,7 @@ export def "accounts-people GetAccountsAccountPeople" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -896,7 +919,7 @@ export def "accounts-people GetAccountsAccountPeople" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a person
@@ -921,6 +944,7 @@ export def "accounts-people PostAccountsAccountPeople" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-tos-acceptances: record # Details on the legal guardian's or authorizer's acceptance of the required Stripe agreements. — shape: {account?: record}
   --address: record # The person's address. — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the person's address (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -959,7 +983,7 @@ export def "accounts-people PostAccountsAccountPeople" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a person
@@ -976,6 +1000,7 @@ export def "accounts-people DeleteAccountsAccountPeoplePerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -985,7 +1010,7 @@ export def "accounts-people DeleteAccountsAccountPeoplePerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a person
@@ -1002,6 +1027,7 @@ export def "accounts-people GetAccountsAccountPeoplePerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: string, additional_tos_acceptances: record<account: any>, address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, created: int, dob: record<day: int, month: int, year: int>, email: string, first_name: string, first_name_kana: string, first_name_kanji: string, full_name_aliases: list<string>, future_requirements: any, gender: string, id: string, id_number_provided: bool, id_number_secondary_provided: bool, last_name: string, last_name_kana: string, last_name_kanji: string, maiden_name: string, metadata: record, nationality: string, object: string, phone: string, political_exposure: string, registered_address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, relationship: record<authorizer: bool, director: bool, executive: bool, legal_guardian: bool, owner: bool, percent_ownership: float, representative: bool, title: string>, requirements: any, ssn_last_4_provided: bool, us_cfpb_data: any, verification: record<additional_document: any, details: string, details_code: string, document: record<back: any, details: string, details_code: string, front: any>, status: string>> {
@@ -1013,7 +1039,7 @@ export def "accounts-people GetAccountsAccountPeoplePerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a person
@@ -1039,6 +1065,7 @@ export def "accounts-people PostAccountsAccountPeoplePerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-tos-acceptances: record # Details on the legal guardian's or authorizer's acceptance of the required Stripe agreements. — shape: {account?: record}
   --address: record # The person's address. — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the person's address (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -1077,7 +1104,7 @@ export def "accounts-people PostAccountsAccountPeoplePerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all persons
@@ -1093,6 +1120,7 @@ export def "accounts-persons GetAccountsAccountPersons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -1108,7 +1136,7 @@ export def "accounts-persons GetAccountsAccountPersons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a person
@@ -1133,6 +1161,7 @@ export def "accounts-persons PostAccountsAccountPersons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-tos-acceptances: record # Details on the legal guardian's or authorizer's acceptance of the required Stripe agreements. — shape: {account?: record}
   --address: record # The person's address. — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the person's address (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -1171,7 +1200,7 @@ export def "accounts-persons PostAccountsAccountPersons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a person
@@ -1188,6 +1217,7 @@ export def "accounts-persons DeleteAccountsAccountPersonsPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -1197,7 +1227,7 @@ export def "accounts-persons DeleteAccountsAccountPersonsPerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a person
@@ -1214,6 +1244,7 @@ export def "accounts-persons GetAccountsAccountPersonsPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: string, additional_tos_acceptances: record<account: any>, address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, created: int, dob: record<day: int, month: int, year: int>, email: string, first_name: string, first_name_kana: string, first_name_kanji: string, full_name_aliases: list<string>, future_requirements: any, gender: string, id: string, id_number_provided: bool, id_number_secondary_provided: bool, last_name: string, last_name_kana: string, last_name_kanji: string, maiden_name: string, metadata: record, nationality: string, object: string, phone: string, political_exposure: string, registered_address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, relationship: record<authorizer: bool, director: bool, executive: bool, legal_guardian: bool, owner: bool, percent_ownership: float, representative: bool, title: string>, requirements: any, ssn_last_4_provided: bool, us_cfpb_data: any, verification: record<additional_document: any, details: string, details_code: string, document: record<back: any, details: string, details_code: string, front: any>, status: string>> {
@@ -1225,7 +1256,7 @@ export def "accounts-persons GetAccountsAccountPersonsPerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a person
@@ -1251,6 +1282,7 @@ export def "accounts-persons PostAccountsAccountPersonsPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-tos-acceptances: record # Details on the legal guardian's or authorizer's acceptance of the required Stripe agreements. — shape: {account?: record}
   --address: record # The person's address. — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the person's address (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -1289,7 +1321,7 @@ export def "accounts-persons PostAccountsAccountPersonsPerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reject an account
@@ -1305,6 +1337,7 @@ export def "accounts-reject PostAccountsAccountReject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   reason: string # The reason for rejecting the account. Can be `fraud`, `terms_of_service`, or `other`.
 ]: any -> record<business_profile: any, business_type: string, capabilities: record<acss_debit_payments: string, affirm_payments: string, afterpay_clearpay_payments: string, alma_payments: string, amazon_pay_payments: string, app_distribution: string, au_becs_debit_payments: string, bacs_debit_payments: string, bancontact_payments: string, bank_transfer_payments: string, billie_payments: string, bizum_payments: string, blik_payments: string, boleto_payments: string, card_issuing: string, card_payments: string, cartes_bancaires_payments: string, cashapp_payments: string, crypto_payments: string, eps_payments: string, fpx_payments: string, gb_bank_transfer_payments: string, giropay_payments: string, grabpay_payments: string, ideal_payments: string, india_international_payments: string, jcb_payments: string, jp_bank_transfer_payments: string, kakao_pay_payments: string, klarna_payments: string, konbini_payments: string, kr_card_payments: string, legacy_payments: string, link_payments: string, mb_way_payments: string, mobilepay_payments: string, multibanco_payments: string, mx_bank_transfer_payments: string, naver_pay_payments: string, nz_bank_account_becs_debit_payments: string, oxxo_payments: string, p24_payments: string, pay_by_bank_payments: string, payco_payments: string, paynow_payments: string, payto_payments: string, pix_payments: string, promptpay_payments: string, revolut_pay_payments: string, samsung_pay_payments: string, satispay_payments: string, scalapay_payments: string, sepa_bank_transfer_payments: string, sepa_debit_payments: string, sofort_payments: string, sunbit_payments: string, swish_payments: string, tax_reporting_us_1099_k: string, tax_reporting_us_1099_misc: string, transfers: string, treasury: string, twint_payments: string, upi_payments: string, us_bank_account_ach_payments: string, us_bank_transfer_payments: string, zip_payments: string>, charges_enabled: bool, company: record<address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, directors_provided: bool, directorship_declaration: any, executives_provided: bool, export_license_id: string, export_purpose_code: string, name: string, name_kana: string, name_kanji: string, owners_provided: bool, ownership_declaration: any, ownership_exemption_reason: string, phone: string, registration_date: record<day: int, month: int, year: int>, representative_declaration: any, structure: string, tax_id_provided: bool, tax_id_registrar: string, vat_id_provided: bool, verification: any>, controller: record<fees: record<payer: string>, is_controller: bool, losses: record<payments: string>, requirement_collection: string, stripe_dashboard: record<type: string>, type: string>, country: string, created: int, default_currency: string, details_submitted: bool, email: string, external_accounts: record<data: list<any>, has_more: bool, object: string, url: string>, future_requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, groups: any, id: string, individual: record<account: string, additional_tos_acceptances: record<account: any>, address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, address_kana: any, address_kanji: any, created: int, dob: record<day: int, month: int, year: int>, email: string, first_name: string, first_name_kana: string, first_name_kanji: string, full_name_aliases: list<string>, future_requirements: any, gender: string, id: string, id_number_provided: bool, id_number_secondary_provided: bool, last_name: string, last_name_kana: string, last_name_kanji: string, maiden_name: string, metadata: record, nationality: string, object: string, phone: string, political_exposure: string, registered_address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>, relationship: record<authorizer: bool, director: bool, executive: bool, legal_guardian: bool, owner: bool, percent_ownership: float, representative: bool, title: string>, requirements: any, ssn_last_4_provided: bool, us_cfpb_data: any, verification: record<additional_document: any, details: string, details_code: string, document: record, status: string>>, metadata: record, object: string, payouts_enabled: bool, requirements: record<alternatives: list<record>, current_deadline: int, currently_due: list<string>, disabled_reason: string, errors: list<record>, eventually_due: list<string>, past_due: list<string>, pending_verification: list<string>>, settings: any, tos_acceptance: record<date: int, ip: string, service_agreement: string, user_agent: string>, type: string> {
@@ -1316,7 +1349,7 @@ export def "accounts-reject PostAccountsAccountReject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>List apple pay domains.</p>
@@ -1331,6 +1364,7 @@ export def "apple-pay-domains GetApplePayDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -1346,7 +1380,7 @@ export def "apple-pay-domains GetApplePayDomains" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Create an apple pay domain.</p>
@@ -1361,6 +1395,7 @@ export def "apple-pay-domains PostApplePayDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain_name: string
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, domain_name: string, id: string, livemode: bool, object: string> {
@@ -1372,7 +1407,7 @@ export def "apple-pay-domains PostApplePayDomains" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Delete an apple pay domain.</p>
@@ -1388,6 +1423,7 @@ export def "apple-pay-domains DeleteApplePayDomainsDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -1397,7 +1433,7 @@ export def "apple-pay-domains DeleteApplePayDomainsDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Retrieve an apple pay domain.</p>
@@ -1413,6 +1449,7 @@ export def "apple-pay-domains GetApplePayDomainsDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, domain_name: string, id: string, livemode: bool, object: string> {
@@ -1424,7 +1461,7 @@ export def "apple-pay-domains GetApplePayDomainsDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all application fees
@@ -1439,6 +1476,7 @@ export def "application-fees GetApplicationFees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --charge: string # Only return application fees for the charge specified by this charge ID.
   --created: string # Only return applications fees that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -1455,7 +1493,7 @@ export def "application-fees GetApplicationFees" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an application fee refund
@@ -1472,6 +1510,7 @@ export def "application-fees-refunds GetApplicationFeesFeeRefundsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, fee: any, id: string, metadata: record, object: string> {
@@ -1483,7 +1522,7 @@ export def "application-fees-refunds GetApplicationFeesFeeRefundsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an application fee refund
@@ -1500,6 +1539,7 @@ export def "application-fees-refunds PostApplicationFeesFeeRefundsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, fee: any, id: string, metadata: record, object: string> {
@@ -1511,7 +1551,7 @@ export def "application-fees-refunds PostApplicationFeesFeeRefundsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an application fee
@@ -1527,6 +1567,7 @@ export def "application-fees GetApplicationFeesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: any, amount: int, amount_refunded: int, application: any, balance_transaction: any, charge: any, created: int, currency: string, fee_source: any, id: string, livemode: bool, object: string, originating_transaction: any, refunded: bool, refunds: record<data: list<record>, has_more: bool, object: string, url: string>> {
@@ -1538,7 +1579,7 @@ export def "application-fees GetApplicationFeesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # POST /v1/application_fees/{id}/refund
@@ -1553,6 +1594,7 @@ export def "application-fees-refund PostApplicationFeesIdRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int
   --directive: string
   --expand: list # Specifies which fields in the response should be expanded.
@@ -1565,7 +1607,7 @@ export def "application-fees-refund PostApplicationFeesIdRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all application fee refunds
@@ -1581,6 +1623,7 @@ export def "application-fees-refunds GetApplicationFeesIdRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -1595,7 +1638,7 @@ export def "application-fees-refunds GetApplicationFeesIdRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an application fee refund
@@ -1611,6 +1654,7 @@ export def "application-fees-refunds PostApplicationFeesIdRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # A positive integer, in _cents (or local equivalent)_, representing how much of this fee to refund. Can refund only up to the remaining unrefunded amount of the fee.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -1623,7 +1667,7 @@ export def "application-fees-refunds PostApplicationFeesIdRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List secrets
@@ -1638,6 +1682,7 @@ export def "apps-secrets GetAppsSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -1653,7 +1698,7 @@ export def "apps-secrets GetAppsSecrets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set a Secret
@@ -1669,6 +1714,7 @@ export def "apps-secrets PostAppsSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: int # The Unix timestamp for the expiry time of the secret, after which the secret deletes. (format: unix-time)
   name: string # A name for the secret that's unique within the scope.
@@ -1683,7 +1729,7 @@ export def "apps-secrets PostAppsSecrets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Secret
@@ -1699,6 +1745,7 @@ export def "apps-secrets-delete PostAppsSecretsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   name: string # A name for the secret that's unique within the scope.
   scope: record # Specifies the scoping of the secret. Requests originating from UI extensions can only access account-scoped secrets or secrets scoped to their own user. — shape: {type: "account"|"user", user?: string}
@@ -1711,7 +1758,7 @@ export def "apps-secrets-delete PostAppsSecretsDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Find a Secret
@@ -1726,6 +1773,7 @@ export def "apps-secrets-find GetAppsSecretsFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --name: string # A name for the secret that's unique within the scope.
   --scope: record # Specifies the scoping of the secret. Requests originating from UI extensions can only access account-scoped secrets or secrets scoped to their own user.
@@ -1739,7 +1787,7 @@ export def "apps-secrets-find GetAppsSecretsFind" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve balance
@@ -1754,6 +1802,7 @@ export def "balance GetBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<available: table<amount: int, currency: string, source_types: record>, connect_reserved: table<amount: int, currency: string, source_types: record>, instant_available: table<amount: int, currency: string, net_available: list, source_types: record>, issuing: record<available: list<record>>, livemode: bool, object: string, pending: table<amount: int, currency: string, source_types: record>, refund_and_dispute_prefunding: record<available: list<record>, pending: list<record>>> {
@@ -1765,7 +1814,7 @@ export def "balance GetBalance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all balance transactions
@@ -1780,6 +1829,7 @@ export def "balance-history GetBalanceHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return transactions that were created during the given date interval.
   --currency: string # Only return transactions in a certain currency. Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -1799,7 +1849,7 @@ export def "balance-history GetBalanceHistory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a balance transaction
@@ -1815,6 +1865,7 @@ export def "balance-history GetBalanceHistoryId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: table<amount: int, application: string, currency: string, description: string, type: string>, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string> {
@@ -1826,7 +1877,7 @@ export def "balance-history GetBalanceHistoryId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve balance settings
@@ -1841,6 +1892,7 @@ export def "balance-settings GetBalanceSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<object: string, payments: record<debit_negative_balances: bool, payouts: any, settlement_timing: record<delay_days: int, delay_days_override: int, start_of_day: any>>> {
@@ -1852,7 +1904,7 @@ export def "balance-settings GetBalanceSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update balance settings
@@ -1868,6 +1920,7 @@ export def "balance-settings PostBalanceSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --payments: record # Settings that apply to the [Payments Balance](https://docs.stripe.com/api/balance). — shape: {debit_negative_balances?: bool, payouts?: record, settlement_timing?: record}
 ]: any -> record<object: string, payments: record<debit_negative_balances: bool, payouts: any, settlement_timing: record<delay_days: int, delay_days_override: int, start_of_day: any>>> {
@@ -1879,7 +1932,7 @@ export def "balance-settings PostBalanceSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all balance transactions
@@ -1894,6 +1947,7 @@ export def "balance-transactions GetBalanceTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return transactions that were created during the given date interval.
   --currency: string # Only return transactions in a certain currency. Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -1913,7 +1967,7 @@ export def "balance-transactions GetBalanceTransactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a balance transaction
@@ -1929,6 +1983,7 @@ export def "balance-transactions GetBalanceTransactionsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: table<amount: int, application: string, currency: string, description: string, type: string>, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string> {
@@ -1940,7 +1995,7 @@ export def "balance-transactions GetBalanceTransactionsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List billing alerts
@@ -1955,6 +2010,7 @@ export def "billing-alerts GetBillingAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alert-type: string@alert-type-completer # Filter results to only include this type of alert.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -1971,7 +2027,7 @@ export def "billing-alerts GetBillingAlerts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a billing alert
@@ -1987,6 +2043,7 @@ export def "billing-alerts PostBillingAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alert_type: string@alert-type-completer # The type of alert to create.
   --expand: list # Specifies which fields in the response should be expanded.
   title: string # The title of the alert.
@@ -2000,7 +2057,7 @@ export def "billing-alerts PostBillingAlerts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a billing alert
@@ -2016,6 +2073,7 @@ export def "billing-alerts GetBillingAlertsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<alert_type: string, id: string, livemode: bool, object: string, status: string, title: string, usage_threshold: any> {
@@ -2027,7 +2085,7 @@ export def "billing-alerts GetBillingAlertsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Activate a billing alert
@@ -2043,6 +2101,7 @@ export def "billing-alerts-activate PostBillingAlertsIdActivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<alert_type: string, id: string, livemode: bool, object: string, status: string, title: string, usage_threshold: any> {
   let input = $in
@@ -2053,7 +2112,7 @@ export def "billing-alerts-activate PostBillingAlertsIdActivate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Archive a billing alert
@@ -2069,6 +2128,7 @@ export def "billing-alerts-archive PostBillingAlertsIdArchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<alert_type: string, id: string, livemode: bool, object: string, status: string, title: string, usage_threshold: any> {
   let input = $in
@@ -2079,7 +2139,7 @@ export def "billing-alerts-archive PostBillingAlertsIdArchive" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deactivate a billing alert
@@ -2095,6 +2155,7 @@ export def "billing-alerts-deactivate PostBillingAlertsIdDeactivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<alert_type: string, id: string, livemode: bool, object: string, status: string, title: string, usage_threshold: any> {
   let input = $in
@@ -2105,7 +2166,7 @@ export def "billing-alerts-deactivate PostBillingAlertsIdDeactivate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve the credit balance summary for a customer
@@ -2120,6 +2181,7 @@ export def "billing-credit-balance-summary GetBillingCreditBalanceSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The customer whose credit balance summary you're retrieving.
   --customer-account: string # The account representing the customer whose credit balance summary you're retrieving.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -2134,7 +2196,7 @@ export def "billing-credit-balance-summary GetBillingCreditBalanceSummary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List credit balance transactions
@@ -2149,6 +2211,7 @@ export def "billing-credit-balance-transactions GetBillingCreditBalanceTransacti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credit-grant: string # The credit grant for which to fetch credit balance transactions.
   --customer: string # The customer whose credit balance transactions you're retrieving.
   --customer-account: string # The account representing the customer whose credit balance transactions you're retrieving.
@@ -2166,7 +2229,7 @@ export def "billing-credit-balance-transactions GetBillingCreditBalanceTransacti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit balance transaction
@@ -2182,6 +2245,7 @@ export def "billing-credit-balance-transactions GetBillingCreditBalanceTransacti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, credit: any, credit_grant: any, debit: any, effective_at: int, id: string, livemode: bool, object: string, test_clock: any, type: string> {
@@ -2193,7 +2257,7 @@ export def "billing-credit-balance-transactions GetBillingCreditBalanceTransacti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List credit grants
@@ -2208,6 +2272,7 @@ export def "billing-credit-grants GetBillingCreditGrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # Only return credit grants for this customer.
   --customer-account: string # Only return credit grants for this account representing the customer.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -2224,7 +2289,7 @@ export def "billing-credit-grants GetBillingCreditGrants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a credit grant
@@ -2241,6 +2306,7 @@ export def "billing-credit-grants PostBillingCreditGrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # Amount of this credit grant. — shape: {monetary?: record, type: "monetary"}
   applicability_config: record # Configuration specifying what this credit grant applies to. We currently only support `metered` prices that have a [Billing Meter](https://docs.stripe.com/api/billing/meter) attached to them. — shape: {scope: record}
   --category: string@category-completer # The category of this credit grant. It defaults to `paid` if not specified.
@@ -2261,7 +2327,7 @@ export def "billing-credit-grants PostBillingCreditGrants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit grant
@@ -2277,6 +2343,7 @@ export def "billing-credit-grants GetBillingCreditGrantsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: record<monetary: any, type: string>, applicability_config: record<scope: record<price_type: string, prices: list>>, category: string, created: int, customer: any, customer_account: string, effective_at: int, expires_at: int, id: string, livemode: bool, metadata: record, name: string, object: string, priority: int, test_clock: any, updated: int, voided_at: int> {
@@ -2288,7 +2355,7 @@ export def "billing-credit-grants GetBillingCreditGrantsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a credit grant
@@ -2304,6 +2371,7 @@ export def "billing-credit-grants PostBillingCreditGrantsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: any # The time when the billing credits created by this credit grant expire. If set to empty, the billing credits never expire.
   --metadata: record # Set of key-value pairs you can attach to an object. You can use this to store additional information about the object (for example, cost basis) in a structured format.
@@ -2316,7 +2384,7 @@ export def "billing-credit-grants PostBillingCreditGrantsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Expire a credit grant
@@ -2332,6 +2400,7 @@ export def "billing-credit-grants-expire PostBillingCreditGrantsIdExpire" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: record<monetary: any, type: string>, applicability_config: record<scope: record<price_type: string, prices: list>>, category: string, created: int, customer: any, customer_account: string, effective_at: int, expires_at: int, id: string, livemode: bool, metadata: record, name: string, object: string, priority: int, test_clock: any, updated: int, voided_at: int> {
   let input = $in
@@ -2342,7 +2411,7 @@ export def "billing-credit-grants-expire PostBillingCreditGrantsIdExpire" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Void a credit grant
@@ -2358,6 +2427,7 @@ export def "billing-credit-grants-void PostBillingCreditGrantsIdVoid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: record<monetary: any, type: string>, applicability_config: record<scope: record<price_type: string, prices: list>>, category: string, created: int, customer: any, customer_account: string, effective_at: int, expires_at: int, id: string, livemode: bool, metadata: record, name: string, object: string, priority: int, test_clock: any, updated: int, voided_at: int> {
   let input = $in
@@ -2368,7 +2438,7 @@ export def "billing-credit-grants-void PostBillingCreditGrantsIdVoid" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a billing meter event adjustment
@@ -2384,6 +2454,7 @@ export def "billing-meter-event-adjustments PostBillingMeterEventAdjustments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancel: record # Specifies which event to cancel. — shape: {identifier?: string}
   event_name: string # The name of the meter event. Corresponds with the `event_name` field on a meter.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -2397,7 +2468,7 @@ export def "billing-meter-event-adjustments PostBillingMeterEventAdjustments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a billing meter event
@@ -2412,6 +2483,7 @@ export def "billing-meter-events PostBillingMeterEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event_name: string # The name of the meter event. Corresponds with the `event_name` field on a meter.
   --expand: list # Specifies which fields in the response should be expanded.
   --identifier: string # A unique identifier for the event. If not provided, one is generated. We recommend using UUID-like identifiers. Stripe enforces uniqueness within a rolling period of at least 24 hours. The enforcement of uniqueness primarily addresses issues arising from accidental retries or other problems occurring within extremely brief time intervals. This approach helps prevent duplicate entries and ensures data integrity in high-frequency operations.
@@ -2426,7 +2498,7 @@ export def "billing-meter-events PostBillingMeterEvents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List billing meters
@@ -2441,6 +2513,7 @@ export def "billing-meters GetBillingMeters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -2456,7 +2529,7 @@ export def "billing-meters GetBillingMeters" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a billing meter
@@ -2474,6 +2547,7 @@ export def "billing-meters PostBillingMeters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-mapping: record # Fields that specify how to map a meter event to a customer. — shape: {event_payload_key: string, type: "by_id"}
   default_aggregation: record # The default settings to aggregate a meter's events with. — shape: {formula: "count"|"last"|"sum"}
   display_name: string # The meter’s name. Not visible to the customer.
@@ -2490,7 +2564,7 @@ export def "billing-meters PostBillingMeters" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a billing meter
@@ -2506,6 +2580,7 @@ export def "billing-meters GetBillingMetersId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, customer_mapping: record<event_payload_key: string, type: string>, default_aggregation: record<formula: string>, display_name: string, event_name: string, event_time_window: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<deactivated_at: int>, updated: int, value_settings: record<event_payload_key: string>> {
@@ -2517,7 +2592,7 @@ export def "billing-meters GetBillingMetersId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a billing meter
@@ -2533,6 +2608,7 @@ export def "billing-meters PostBillingMetersId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --display-name: string # The meter’s name. Not visible to the customer.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, customer_mapping: record<event_payload_key: string, type: string>, default_aggregation: record<formula: string>, display_name: string, event_name: string, event_time_window: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<deactivated_at: int>, updated: int, value_settings: record<event_payload_key: string>> {
@@ -2544,7 +2620,7 @@ export def "billing-meters PostBillingMetersId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deactivate a billing meter
@@ -2560,6 +2636,7 @@ export def "billing-meters-deactivate PostBillingMetersIdDeactivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, customer_mapping: record<event_payload_key: string, type: string>, default_aggregation: record<formula: string>, display_name: string, event_name: string, event_time_window: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<deactivated_at: int>, updated: int, value_settings: record<event_payload_key: string>> {
   let input = $in
@@ -2570,7 +2647,7 @@ export def "billing-meters-deactivate PostBillingMetersIdDeactivate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List billing meter event summaries
@@ -2586,6 +2663,7 @@ export def "billing-meters-event-summaries GetBillingMetersIdEventSummaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The customer for which to fetch event summaries.
   --end-time: int # The timestamp from when to stop aggregating meter events (exclusive). Must be aligned with minute boundaries. (format: unix-time)
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -2604,7 +2682,7 @@ export def "billing-meters-event-summaries GetBillingMetersIdEventSummaries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reactivate a billing meter
@@ -2620,6 +2698,7 @@ export def "billing-meters-reactivate PostBillingMetersIdReactivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, customer_mapping: record<event_payload_key: string, type: string>, default_aggregation: record<formula: string>, display_name: string, event_name: string, event_time_window: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<deactivated_at: int>, updated: int, value_settings: record<event_payload_key: string>> {
   let input = $in
@@ -2630,7 +2709,7 @@ export def "billing-meters-reactivate PostBillingMetersIdReactivate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List portal configurations
@@ -2645,6 +2724,7 @@ export def "billing-portal-configurations GetBillingPortalConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return configurations that are active or inactive (e.g., pass `true` to only list active configurations).
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -2661,7 +2741,7 @@ export def "billing-portal-configurations GetBillingPortalConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a portal configuration
@@ -2679,6 +2759,7 @@ export def "billing-portal-configurations PostBillingPortalConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --business-profile: record # The business information shown to customers in the portal. — shape: {headline?: any, privacy_policy_url?: string, terms_of_service_url?: string}
   --default-return-url: any # The default URL to redirect customers to when they click on the portal's link to return to your website. This can be [overriden](https://docs.stripe.com/api/customer_portal/sessions/create#create_portal_session-return_url) when creating the session.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -2695,7 +2776,7 @@ export def "billing-portal-configurations PostBillingPortalConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a portal configuration
@@ -2711,6 +2792,7 @@ export def "billing-portal-configurations GetBillingPortalConfigurationsConfigur
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, application: any, business_profile: record<headline: string, privacy_policy_url: string, terms_of_service_url: string>, created: int, default_return_url: string, features: record<customer_update: record<allowed_updates: list, enabled: bool>, invoice_history: record<enabled: bool>, payment_method_update: record<enabled: bool, payment_method_configuration: string>, subscription_cancel: record<cancellation_reason: record, enabled: bool, mode: string, proration_behavior: string>, subscription_update: record<billing_cycle_anchor: string, default_allowed_updates: list, enabled: bool, products: list, proration_behavior: string, schedule_at_period_end: record, trial_update_behavior: string>>, id: string, is_default: bool, livemode: bool, login_page: record<enabled: bool, url: string>, metadata: record, name: string, object: string, updated: int> {
@@ -2722,7 +2804,7 @@ export def "billing-portal-configurations GetBillingPortalConfigurationsConfigur
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a portal configuration
@@ -2741,6 +2823,7 @@ export def "billing-portal-configurations PostBillingPortalConfigurationsConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the configuration is active and can be used to create portal sessions.
   --business-profile: record # The business information shown to customers in the portal. — shape: {headline?: any, privacy_policy_url?: any, terms_of_service_url?: any}
   --default-return-url: any # The default URL to redirect customers to when they click on the portal's link to return to your website. This can be [overriden](https://docs.stripe.com/api/customer_portal/sessions/create#create_portal_session-return_url) when creating the session.
@@ -2758,7 +2841,7 @@ export def "billing-portal-configurations PostBillingPortalConfigurationsConfigu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a portal session
@@ -2774,6 +2857,7 @@ export def "billing-portal-sessions PostBillingPortalSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --configuration: string # The ID of an existing [configuration](https://docs.stripe.com/api/customer_portal/configurations) to use for this session, describing its functionality and features. If not specified, the session uses the default configuration.
   --customer: string # The ID of an existing customer.
   --customer-account: string # The ID of an existing account.
@@ -2791,7 +2875,7 @@ export def "billing-portal-sessions PostBillingPortalSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all charges
@@ -2806,6 +2890,7 @@ export def "charges GetCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return charges that were created during the given date interval.
   --customer: string # Only return charges for the customer specified by this customer ID.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -2824,7 +2909,7 @@ export def "charges GetCharges" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>This method is no longer recommended—use the <a href="/docs/api/payment_intents">Payment Intents API</a> to initiate a new payment instead. Confirmation of the PaymentIntent creates the <code>Charge</code> object used to request payment.</p>
@@ -2842,6 +2927,7 @@ export def "charges PostCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Amount intended to be collected by this payment. A positive integer representing how much to charge in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) (e.g., 100 cents to charge $1.00 or 100 to charge ¥100, a zero-decimal currency). The minimum amount is $0.50 US or [equivalent in charge currency](https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts). The amount value supports up to eight digits (e.g., a value of 99999999 for a USD charge of $999,999.99).
   --application-fee: int
   --application-fee-amount: int # A fee in cents (or local equivalent) that will be applied to the charge and transferred to the application owner's Stripe account. The request must be made with an OAuth key or the `Stripe-Account` header in order to take an application fee. For more information, see the application fees [documentation](https://docs.stripe.com/connect/direct-charges#collect-fees).
@@ -2871,7 +2957,7 @@ export def "charges PostCharges" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search charges
@@ -2886,6 +2972,7 @@ export def "charges-search GetChargesSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -2900,7 +2987,7 @@ export def "charges-search GetChargesSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a charge
@@ -2916,6 +3003,7 @@ export def "charges GetChargesCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, amount_captured: int, amount_refunded: int, application: any, application_fee: any, application_fee_amount: int, balance_transaction: any, billing_details: record<address: any, email: string, name: string, phone: string, tax_id: string>, calculated_statement_descriptor: string, captured: bool, created: int, currency: string, customer: any, description: string, disputed: bool, failure_balance_transaction: any, failure_code: string, failure_message: string, fraud_details: any, id: string, livemode: bool, metadata: record, object: string, on_behalf_of: any, outcome: any, paid: bool, payment_intent: any, payment_method: string, payment_method_details: any, presentment_details: record<presentment_amount: int, presentment_currency: string>, radar_options: record<session: string>, receipt_email: string, receipt_number: string, receipt_url: string, refunded: bool, refunds: record<data: list<record>, has_more: bool, object: string, url: string>, review: any, shipping: any, source_transfer: any, statement_descriptor: string, statement_descriptor_suffix: string, status: string, transfer: any, transfer_data: any, transfer_group: string> {
@@ -2927,7 +3015,7 @@ export def "charges GetChargesCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a charge
@@ -2945,6 +3033,7 @@ export def "charges PostChargesCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The ID of an existing customer that will be associated with this request. This field may only be updated if there is no existing associated customer with this charge.
   --description: string # An arbitrary string which you can attach to a charge object. It is displayed when in the web interface alongside the charge. Note that if you use Stripe to send automatic email receipts to your customers, your receipt emails will include the `description` of the charge(s) that they are describing.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -2962,7 +3051,7 @@ export def "charges PostChargesCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Capture a payment
@@ -2979,6 +3068,7 @@ export def "charges-capture PostChargesChargeCapture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The amount to capture, which must be less than or equal to the original amount.
   --application-fee: int # An application fee to add on to this charge.
   --application-fee-amount: int # An application fee amount to add on to this charge, which must be less than or equal to the original amount.
@@ -2997,7 +3087,7 @@ export def "charges-capture PostChargesChargeCapture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Retrieve a dispute for a specified charge.</p>
@@ -3013,6 +3103,7 @@ export def "charges-dispute GetChargesChargeDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, charge: any, created: int, currency: string, enhanced_eligibility_types: list<string>, evidence: record<access_activity_log: string, billing_address: string, cancellation_policy: any, cancellation_policy_disclosure: string, cancellation_rebuttal: string, customer_communication: any, customer_email_address: string, customer_name: string, customer_purchase_ip: string, customer_signature: any, duplicate_charge_documentation: any, duplicate_charge_explanation: string, duplicate_charge_id: string, enhanced_evidence: record<visa_compelling_evidence_3: record, visa_compliance: record>, product_description: string, receipt: any, refund_policy: any, refund_policy_disclosure: string, refund_refusal_explanation: string, service_date: string, service_documentation: any, shipping_address: string, shipping_carrier: string, shipping_date: string, shipping_documentation: any, shipping_tracking_number: string, uncategorized_file: any, uncategorized_text: string>, evidence_details: record<due_by: int, enhanced_eligibility: record<visa_compelling_evidence_3: record, visa_compliance: record>, has_evidence: bool, past_due: bool, submission_count: int>, id: string, is_charge_refundable: bool, livemode: bool, metadata: record, object: string, payment_intent: any, payment_method_details: record<amazon_pay: record<dispute_type: string>, card: record<brand: string, case_type: string, network_reason_code: string>, klarna: record<chargeback_loss_reason_code: string, reason_code: string>, paypal: record<case_id: string, reason_code: string>, type: string>, reason: string, status: string> {
@@ -3024,7 +3115,7 @@ export def "charges-dispute GetChargesChargeDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # POST /v1/charges/{charge}/dispute
@@ -3040,6 +3131,7 @@ export def "charges-dispute PostChargesChargeDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --evidence: record # Evidence to upload, to respond to a dispute. Updating any field in the hash will submit all fields in the hash for review. The combined character count of all fields is limited to 150,000. — shape: {access_activity_log?: string, billing_address?: string, cancellation_policy?: string, cancellation_policy_disclosure?: string, cancellation_rebuttal?: string, customer_communication?: string, customer_email_address?: string, customer_name?: string, customer_purchase_ip?: string, customer_signature?: string, duplicate_charge_documentation?: string, duplicate_charge_explanation?: string, duplicate_charge_id?: string, enhanced_evidence?: any, product_description?: string, receipt?: string, refund_policy?: string, refund_policy_disclosure?: string, refund_refusal_explanation?: string, service_date?: string, service_documentation?: string, shipping_address?: string, shipping_carrier?: string, shipping_date?: string, shipping_documentation?: string, shipping_tracking_number?: string, uncategorized_file?: string, uncategorized_text?: string}
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -3053,7 +3145,7 @@ export def "charges-dispute PostChargesChargeDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # POST /v1/charges/{charge}/dispute/close
@@ -3068,6 +3160,7 @@ export def "charges-dispute-close PostChargesChargeDisputeClose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, charge: any, created: int, currency: string, enhanced_eligibility_types: list<string>, evidence: record<access_activity_log: string, billing_address: string, cancellation_policy: any, cancellation_policy_disclosure: string, cancellation_rebuttal: string, customer_communication: any, customer_email_address: string, customer_name: string, customer_purchase_ip: string, customer_signature: any, duplicate_charge_documentation: any, duplicate_charge_explanation: string, duplicate_charge_id: string, enhanced_evidence: record<visa_compelling_evidence_3: record, visa_compliance: record>, product_description: string, receipt: any, refund_policy: any, refund_policy_disclosure: string, refund_refusal_explanation: string, service_date: string, service_documentation: any, shipping_address: string, shipping_carrier: string, shipping_date: string, shipping_documentation: any, shipping_tracking_number: string, uncategorized_file: any, uncategorized_text: string>, evidence_details: record<due_by: int, enhanced_eligibility: record<visa_compelling_evidence_3: record, visa_compliance: record>, has_evidence: bool, past_due: bool, submission_count: int>, id: string, is_charge_refundable: bool, livemode: bool, metadata: record, object: string, payment_intent: any, payment_method_details: record<amazon_pay: record<dispute_type: string>, card: record<brand: string, case_type: string, network_reason_code: string>, klarna: record<chargeback_loss_reason_code: string, reason_code: string>, paypal: record<case_id: string, reason_code: string>, type: string>, reason: string, status: string> {
   let input = $in
@@ -3078,7 +3171,7 @@ export def "charges-dispute-close PostChargesChargeDisputeClose" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a refund
@@ -3094,6 +3187,7 @@ export def "charges-refund PostChargesChargeRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # A positive integer in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) representing how much of this charge to refund. Can refund only up to the remaining, unrefunded amount of the charge.
   --expand: list # Specifies which fields in the response should be expanded.
   --instructions-email: string # For payment methods without native refund support (e.g., Konbini, PromptPay), use this email from the customer to receive refund instructions.
@@ -3111,7 +3205,7 @@ export def "charges-refund PostChargesChargeRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all refunds
@@ -3127,6 +3221,7 @@ export def "charges-refunds GetChargesChargeRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3141,7 +3236,7 @@ export def "charges-refunds GetChargesChargeRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create customer balance refund
@@ -3157,6 +3252,7 @@ export def "charges-refunds PostChargesChargeRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int
   --currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --customer: string # Customer whose customer balance to refund from.
@@ -3177,7 +3273,7 @@ export def "charges-refunds PostChargesChargeRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Retrieves the details of an existing refund.</p>
@@ -3194,6 +3290,7 @@ export def "charges-refunds GetChargesChargeRefundsRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
@@ -3205,7 +3302,7 @@ export def "charges-refunds GetChargesChargeRefundsRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Update a specified refund.</p>
@@ -3222,6 +3319,7 @@ export def "charges-refunds PostChargesChargeRefundsRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
@@ -3233,7 +3331,7 @@ export def "charges-refunds PostChargesChargeRefundsRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Checkout Sessions
@@ -3248,6 +3346,7 @@ export def "checkout-sessions GetCheckoutSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return Checkout Sessions that were created during the given date interval.
   --customer: string # Only return the Checkout Sessions for the Customer specified.
   --customer-account: string # Only return the Checkout Sessions for the Account specified.
@@ -3270,7 +3369,7 @@ export def "checkout-sessions GetCheckoutSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Checkout Session
@@ -3311,6 +3410,7 @@ export def "checkout-sessions PostCheckoutSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --adaptive-pricing: record # Settings for price localization with [Adaptive Pricing](https://docs.stripe.com/payments/checkout/adaptive-pricing). — shape: {enabled?: bool}
   --after-expiration: record # Configure actions after a Checkout Session has expired. You can't set this parameter if `ui_mode` is `elements`. — shape: {recovery?: record}
   --allow-promotion-codes: oneof<nothing, bool> # Enables user redeemable promotion codes.
@@ -3371,7 +3471,7 @@ export def "checkout-sessions PostCheckoutSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Checkout Session
@@ -3387,6 +3487,7 @@ export def "checkout-sessions GetCheckoutSessionsSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<adaptive_pricing: any, after_expiration: any, allow_promotion_codes: bool, amount_subtotal: int, amount_total: int, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, billing_address_collection: string, branding_settings: record<background_color: string, border_style: string, button_color: string, display_name: string, font_family: string, icon: any, logo: any>, cancel_url: string, client_reference_id: string, client_secret: string, collected_information: any, consent: any, consent_collection: any, created: int, currency: string, currency_conversion: any, custom_fields: table<dropdown: record, key: string, label: record, numeric: record, optional: bool, text: record, type: string>, custom_text: record<after_submit: any, shipping_address: any, submit: any, terms_of_service_acceptance: any>, customer: any, customer_account: string, customer_creation: string, customer_details: any, customer_email: string, discounts: table<coupon: any, promotion_code: any>, excluded_payment_method_types: list<string>, expires_at: int, id: string, integration_identifier: string, invoice: any, invoice_creation: any, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, locale: string, managed_payments: any, metadata: record, mode: string, name_collection: record<business: record<enabled: bool, optional: bool>, individual: record<enabled: bool, optional: bool>>, object: string, optional_items: table<adjustable_quantity: any, price: string, quantity: int>, origin_context: string, payment_intent: any, payment_link: any, payment_method_collection: string, payment_method_configuration_details: any, payment_method_options: any, payment_method_types: list<string>, payment_status: string, permissions: any, phone_number_collection: record<enabled: bool>, presentment_details: record<presentment_amount: int, presentment_currency: string>, recovered_from: string, redirect_on_completion: string, return_url: string, saved_payment_method_options: any, setup_intent: any, shipping_address_collection: any, shipping_cost: any, shipping_options: table<shipping_amount: int, shipping_rate: any>, status: string, submit_type: string, subscription: any, success_url: string, tax_id_collection: record<enabled: bool, required: string>, total_details: any, ui_mode: string, url: string, wallet_options: any> {
@@ -3398,7 +3499,7 @@ export def "checkout-sessions GetCheckoutSessionsSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a Checkout Session
@@ -3416,6 +3517,7 @@ export def "checkout-sessions PostCheckoutSessionsSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collected-information: record # Information about the customer collected within the Checkout Session. Can only be set when updating `embedded` or `custom` sessions. — shape: {shipping_details?: record}
   --expand: list # Specifies which fields in the response should be expanded.
   --line-items: list # A list of items the customer is purchasing.  When updating line items, you must retransmit the entire array of line items.  To retain an existing line item, specify its `id`.  To update an existing line item, specify its `id` along with the new values of the fields to update.  To add a new line item, specify one of `price` or `price_data` and `quantity`.  To remove an existing line item, omit the line item's ID from the retransmitted array.  To reorder a line item, specify it at the desired position in the retransmitted array. — item shape: {adjustable_quantity?: record, id?: string, metadata?: any, price?: string, price_data?: record, quantity?: int, tax_rates?: any}
@@ -3430,7 +3532,7 @@ export def "checkout-sessions PostCheckoutSessionsSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Expire a Checkout Session
@@ -3446,6 +3548,7 @@ export def "checkout-sessions-expire PostCheckoutSessionsSessionExpire" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<adaptive_pricing: any, after_expiration: any, allow_promotion_codes: bool, amount_subtotal: int, amount_total: int, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, billing_address_collection: string, branding_settings: record<background_color: string, border_style: string, button_color: string, display_name: string, font_family: string, icon: any, logo: any>, cancel_url: string, client_reference_id: string, client_secret: string, collected_information: any, consent: any, consent_collection: any, created: int, currency: string, currency_conversion: any, custom_fields: table<dropdown: record, key: string, label: record, numeric: record, optional: bool, text: record, type: string>, custom_text: record<after_submit: any, shipping_address: any, submit: any, terms_of_service_acceptance: any>, customer: any, customer_account: string, customer_creation: string, customer_details: any, customer_email: string, discounts: table<coupon: any, promotion_code: any>, excluded_payment_method_types: list<string>, expires_at: int, id: string, integration_identifier: string, invoice: any, invoice_creation: any, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, locale: string, managed_payments: any, metadata: record, mode: string, name_collection: record<business: record<enabled: bool, optional: bool>, individual: record<enabled: bool, optional: bool>>, object: string, optional_items: table<adjustable_quantity: any, price: string, quantity: int>, origin_context: string, payment_intent: any, payment_link: any, payment_method_collection: string, payment_method_configuration_details: any, payment_method_options: any, payment_method_types: list<string>, payment_status: string, permissions: any, phone_number_collection: record<enabled: bool>, presentment_details: record<presentment_amount: int, presentment_currency: string>, recovered_from: string, redirect_on_completion: string, return_url: string, saved_payment_method_options: any, setup_intent: any, shipping_address_collection: any, shipping_cost: any, shipping_options: table<shipping_amount: int, shipping_rate: any>, status: string, submit_type: string, subscription: any, success_url: string, tax_id_collection: record<enabled: bool, required: string>, total_details: any, ui_mode: string, url: string, wallet_options: any> {
   let input = $in
@@ -3456,7 +3559,7 @@ export def "checkout-sessions-expire PostCheckoutSessionsSessionExpire" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Checkout Session's line items
@@ -3472,6 +3575,7 @@ export def "checkout-sessions-line-items GetCheckoutSessionsSessionLineItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3486,7 +3590,7 @@ export def "checkout-sessions-line-items GetCheckoutSessionsSessionLineItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List orders
@@ -3501,6 +3605,7 @@ export def "climate-orders GetClimateOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3515,7 +3620,7 @@ export def "climate-orders GetClimateOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an order
@@ -3531,6 +3636,7 @@ export def "climate-orders PostClimateOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Requested amount of carbon removal units. Either this or `metric_tons` must be specified.
   --beneficiary: record # Publicly sharable reference for the end beneficiary of carbon removal. Assumed to be the Stripe account if not set. — shape: {public_name: string}
   --currency: string # Request currency for the order as a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a supported [settlement currency for your account](https://stripe.com/docs/currencies). If omitted, the account's default currency will be used.
@@ -3547,7 +3653,7 @@ export def "climate-orders PostClimateOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an order
@@ -3563,6 +3669,7 @@ export def "climate-orders GetClimateOrdersOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount_fees: int, amount_subtotal: int, amount_total: int, beneficiary: record<public_name: string>, canceled_at: int, cancellation_reason: string, certificate: string, confirmed_at: int, created: int, currency: string, delayed_at: int, delivered_at: int, delivery_details: table<delivered_at: int, location: any, metric_tons: string, registry_url: string, supplier: record>, expected_delivery_year: int, id: string, livemode: bool, metadata: record, metric_tons: string, object: string, product: any, product_substituted_at: int, status: string> {
@@ -3574,7 +3681,7 @@ export def "climate-orders GetClimateOrdersOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an order
@@ -3590,6 +3697,7 @@ export def "climate-orders PostClimateOrdersOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --beneficiary: any # Publicly sharable reference for the end beneficiary of carbon removal. Assumed to be the Stripe account if not set.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -3602,7 +3710,7 @@ export def "climate-orders PostClimateOrdersOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel an order
@@ -3618,6 +3726,7 @@ export def "climate-orders-cancel PostClimateOrdersOrderCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount_fees: int, amount_subtotal: int, amount_total: int, beneficiary: record<public_name: string>, canceled_at: int, cancellation_reason: string, certificate: string, confirmed_at: int, created: int, currency: string, delayed_at: int, delivered_at: int, delivery_details: table<delivered_at: int, location: any, metric_tons: string, registry_url: string, supplier: record>, expected_delivery_year: int, id: string, livemode: bool, metadata: record, metric_tons: string, object: string, product: any, product_substituted_at: int, status: string> {
   let input = $in
@@ -3628,7 +3737,7 @@ export def "climate-orders-cancel PostClimateOrdersOrderCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List products
@@ -3643,6 +3752,7 @@ export def "climate-products GetClimateProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3657,7 +3767,7 @@ export def "climate-products GetClimateProducts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a product
@@ -3673,6 +3783,7 @@ export def "climate-products GetClimateProductsProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, current_prices_per_metric_ton: record, delivery_year: int, id: string, livemode: bool, metric_tons_available: string, name: string, object: string, suppliers: table<id: string, info_url: string, livemode: bool, locations: list, name: string, object: string, removal_pathway: string>> {
@@ -3684,7 +3795,7 @@ export def "climate-products GetClimateProductsProduct" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List suppliers
@@ -3699,6 +3810,7 @@ export def "climate-suppliers GetClimateSuppliers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3713,7 +3825,7 @@ export def "climate-suppliers GetClimateSuppliers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a supplier
@@ -3729,6 +3841,7 @@ export def "climate-suppliers GetClimateSuppliersSupplier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<id: string, info_url: string, livemode: bool, locations: table<city: string, country: string, latitude: float, longitude: float, region: string>, name: string, object: string, removal_pathway: string> {
@@ -3740,7 +3853,7 @@ export def "climate-suppliers GetClimateSuppliersSupplier" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a ConfirmationToken
@@ -3756,6 +3869,7 @@ export def "confirmation-tokens GetConfirmationTokensConfirmationToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, expires_at: int, id: string, livemode: bool, mandate_data: any, object: string, payment_intent: string, payment_method_options: any, payment_method_preview: any, return_url: string, setup_future_usage: string, setup_intent: string, shipping: any, use_stripe_sdk: bool> {
@@ -3767,7 +3881,7 @@ export def "confirmation-tokens GetConfirmationTokensConfirmationToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Country Specs
@@ -3782,6 +3896,7 @@ export def "country-specs GetCountrySpecs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -3796,7 +3911,7 @@ export def "country-specs GetCountrySpecs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Country Spec
@@ -3812,6 +3927,7 @@ export def "country-specs GetCountrySpecsCountry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<default_currency: string, id: string, object: string, supported_bank_account_currencies: record, supported_payment_currencies: list<string>, supported_payment_methods: list<string>, supported_transfer_countries: list<string>, verification_fields: record<company: record<additional: list, minimum: list>, individual: record<additional: list, minimum: list>>> {
@@ -3823,7 +3939,7 @@ export def "country-specs GetCountrySpecsCountry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all coupons
@@ -3838,6 +3954,7 @@ export def "coupons GetCoupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -3853,7 +3970,7 @@ export def "coupons GetCoupons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a coupon
@@ -3869,6 +3986,7 @@ export def "coupons PostCoupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount-off: int # A positive integer representing the amount to subtract from an invoice total (required if `percent_off` is not passed).
   --applies-to: record # A hash containing directions for what this Coupon will apply discounts to. — shape: {products?: list}
   --currency: string # Three-letter [ISO code for the currency](https://stripe.com/docs/currencies) of the `amount_off` parameter (required if `amount_off` is passed). (format: currency)
@@ -3891,7 +4009,7 @@ export def "coupons PostCoupons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a coupon
@@ -3907,6 +4025,7 @@ export def "coupons DeleteCouponsCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -3916,7 +4035,7 @@ export def "coupons DeleteCouponsCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a coupon
@@ -3932,6 +4051,7 @@ export def "coupons GetCouponsCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount_off: int, applies_to: record<products: list<string>>, created: int, currency: string, currency_options: record, duration: string, duration_in_months: int, id: string, livemode: bool, max_redemptions: int, metadata: record, name: string, object: string, percent_off: float, redeem_by: int, times_redeemed: int, valid: bool> {
@@ -3943,7 +4063,7 @@ export def "coupons GetCouponsCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a coupon
@@ -3959,6 +4079,7 @@ export def "coupons PostCouponsCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency-options: record # Coupons defined in each available currency option (only supported if the coupon is amount-based). Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies).
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -3972,7 +4093,7 @@ export def "coupons PostCouponsCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all credit notes
@@ -3987,6 +4108,7 @@ export def "credit-notes GetCreditNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return credit notes that were created during the given date interval.
   --customer: string # Only return credit notes for the customer specified by this customer ID.
   --customer-account: string # Only return credit notes for the account representing the customer specified by this account ID.
@@ -4005,7 +4127,7 @@ export def "credit-notes GetCreditNotes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a credit note
@@ -4023,6 +4145,7 @@ export def "credit-notes PostCreditNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) representing the total amount of the credit note. One of `amount`, `lines`, or `shipping_cost` must be provided.
   --credit-amount: int # The integer amount in cents (or local equivalent) representing the amount to credit the customer's balance, which will be automatically applied to their next invoice.
   --effective-at: int # The date when this credit note is in effect. Same as `created` unless overwritten. When defined, this value replaces the system-generated 'Date of issue' printed on the credit note PDF. (format: unix-time)
@@ -4046,7 +4169,7 @@ export def "credit-notes PostCreditNotes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Preview a credit note
@@ -4061,6 +4184,7 @@ export def "credit-notes-preview GetCreditNotesPreview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) representing the total amount of the credit note. One of `amount`, `lines`, or `shipping_cost` must be provided.
   --credit-amount: int # The integer amount in cents (or local equivalent) representing the amount to credit the customer's balance, which will be automatically applied to their next invoice.
   --effective-at: int # The date when this credit note is in effect. Same as `created` unless overwritten. When defined, this value replaces the system-generated 'Date of issue' printed on the credit note PDF. (format: unix-time)
@@ -4085,7 +4209,7 @@ export def "credit-notes-preview GetCreditNotesPreview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit note preview's line items
@@ -4100,6 +4224,7 @@ export def "credit-notes-preview-lines GetCreditNotesPreviewLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) representing the total amount of the credit note. One of `amount`, `lines`, or `shipping_cost` must be provided.
   --credit-amount: int # The integer amount in cents (or local equivalent) representing the amount to credit the customer's balance, which will be automatically applied to their next invoice.
   --effective-at: int # The date when this credit note is in effect. Same as `created` unless overwritten. When defined, this value replaces the system-generated 'Date of issue' printed on the credit note PDF. (format: unix-time)
@@ -4127,7 +4252,7 @@ export def "credit-notes-preview-lines GetCreditNotesPreviewLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit note's line items
@@ -4143,6 +4268,7 @@ export def "credit-notes-lines GetCreditNotesCreditNoteLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -4157,7 +4283,7 @@ export def "credit-notes-lines GetCreditNotesCreditNoteLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit note
@@ -4173,6 +4299,7 @@ export def "credit-notes GetCreditNotesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, amount_shipping: int, created: int, currency: string, customer: any, customer_account: string, customer_balance_transaction: any, discount_amount: int, discount_amounts: table<amount: int, discount: any>, effective_at: int, id: string, invoice: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, memo: string, metadata: record, number: string, object: string, out_of_band_amount: int, pdf: string, post_payment_amount: int, pre_payment_amount: int, pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, reason: string, refunds: table<amount_refunded: int, payment_record_refund: any, refund: any, type: string>, shipping_cost: any, status: string, subtotal: int, subtotal_excluding_tax: int, total: int, total_excluding_tax: int, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, type: string, voided_at: int> {
@@ -4184,7 +4311,7 @@ export def "credit-notes GetCreditNotesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a credit note
@@ -4200,6 +4327,7 @@ export def "credit-notes PostCreditNotesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --memo: string # Credit note memo.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -4212,7 +4340,7 @@ export def "credit-notes PostCreditNotesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Void a credit note
@@ -4228,6 +4356,7 @@ export def "credit-notes-void PostCreditNotesIdVoid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, amount_shipping: int, created: int, currency: string, customer: any, customer_account: string, customer_balance_transaction: any, discount_amount: int, discount_amounts: table<amount: int, discount: any>, effective_at: int, id: string, invoice: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, memo: string, metadata: record, number: string, object: string, out_of_band_amount: int, pdf: string, post_payment_amount: int, pre_payment_amount: int, pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, reason: string, refunds: table<amount_refunded: int, payment_record_refund: any, refund: any, type: string>, shipping_cost: any, status: string, subtotal: int, subtotal_excluding_tax: int, total: int, total_excluding_tax: int, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, type: string, voided_at: int> {
   let input = $in
@@ -4238,7 +4367,7 @@ export def "credit-notes-void PostCreditNotesIdVoid" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Customer Session
@@ -4254,6 +4383,7 @@ export def "customer-sessions PostCustomerSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   components: record # Configuration for each component. At least 1 component must be enabled. — shape: {buy_button?: record, customer_sheet?: record, mobile_payment_element?: record, payment_element?: record, pricing_table?: record}
   --customer: string # The ID of an existing customer for which to create the Customer Session.
   --customer-account: string # The ID of an existing Account for which to create the Customer Session.
@@ -4267,7 +4397,7 @@ export def "customer-sessions PostCustomerSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all customers
@@ -4282,6 +4412,7 @@ export def "customers GetCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return customers that were created during the given date interval.
   --email: string # A case-sensitive filter on the list based on the customer's `email` field. The value must be a string.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -4299,7 +4430,7 @@ export def "customers GetCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a customer
@@ -4318,6 +4449,7 @@ export def "customers PostCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: any # The customer's address. Learn about [country-specific requirements for calculating tax](https://docs.stripe.com/invoicing/taxes?dashboard-or-api=dashboard#set-up-customer).
   --balance: int # An integer amount in cents (or local equivalent) that represents the customer's current balance, which affect the customer's future invoices. A negative amount represents a credit that decreases the amount due on an invoice; a positive amount increases the amount due on an invoice.
   --business-name: any # The customer's business name. This may be up to *150 characters*.
@@ -4349,7 +4481,7 @@ export def "customers PostCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search customers
@@ -4364,6 +4496,7 @@ export def "customers-search GetCustomersSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -4378,7 +4511,7 @@ export def "customers-search GetCustomersSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer
@@ -4394,6 +4527,7 @@ export def "customers DeleteCustomersCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -4403,7 +4537,7 @@ export def "customers DeleteCustomersCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a customer
@@ -4419,6 +4553,7 @@ export def "customers GetCustomersCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -4430,7 +4565,7 @@ export def "customers GetCustomersCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a customer
@@ -4449,6 +4584,7 @@ export def "customers PostCustomersCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: any # The customer's address. Learn about [country-specific requirements for calculating tax](https://docs.stripe.com/invoicing/taxes?dashboard-or-api=dashboard#set-up-customer).
   --balance: int # An integer amount in cents (or local equivalent) that represents the customer's current balance, which affect the customer's future invoices. A negative amount represents a credit that decreases the amount due on an invoice; a positive amount increases the amount due on an invoice.
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
@@ -4483,7 +4619,7 @@ export def "customers PostCustomersCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List customer balance transactions
@@ -4499,6 +4635,7 @@ export def "customers-balance-transactions GetCustomersCustomerBalanceTransactio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return customer balance transactions that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -4515,7 +4652,7 @@ export def "customers-balance-transactions GetCustomersCustomerBalanceTransactio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a customer balance transaction
@@ -4531,6 +4668,7 @@ export def "customers-balance-transactions PostCustomersCustomerBalanceTransacti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # The integer amount in **cents (or local equivalent)** to apply to the customer's credit balance.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). Specifies the [`invoice_credit_balance`](https://docs.stripe.com/api/customers/object#customer_object-invoice_credit_balance) that this transaction will apply to. If the customer's `currency` is not set, it will be updated to this value. (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -4545,7 +4683,7 @@ export def "customers-balance-transactions PostCustomersCustomerBalanceTransacti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a customer balance transaction
@@ -4562,6 +4700,7 @@ export def "customers-balance-transactions GetCustomersCustomerBalanceTransactio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, checkout_session: any, created: int, credit_note: any, currency: string, customer: any, customer_account: string, description: string, ending_balance: int, id: string, invoice: any, livemode: bool, metadata: record, object: string, type: string> {
@@ -4573,7 +4712,7 @@ export def "customers-balance-transactions GetCustomersCustomerBalanceTransactio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a customer credit balance transaction
@@ -4590,6 +4729,7 @@ export def "customers-balance-transactions PostCustomersCustomerBalanceTransacti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -4602,7 +4742,7 @@ export def "customers-balance-transactions PostCustomersCustomerBalanceTransacti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all bank accounts
@@ -4620,6 +4760,7 @@ export def "customers-bank-accounts GetCustomersCustomerBankAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -4634,7 +4775,7 @@ export def "customers-bank-accounts GetCustomersCustomerBankAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a card
@@ -4650,6 +4791,7 @@ export def "customers-bank-accounts PostCustomersCustomerBankAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alipay-account: string # A token returned by [Stripe.js](https://stripe.com/docs/js) representing the user’s Alipay account details.
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --card: any # A token, like the ones returned by [Stripe.js](https://stripe.com/docs/js).
@@ -4665,7 +4807,7 @@ export def "customers-bank-accounts PostCustomersCustomerBankAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer source
@@ -4682,6 +4824,7 @@ export def "customers-bank-accounts DeleteCustomersCustomerBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> any {
   let input = $in
@@ -4692,7 +4835,7 @@ export def "customers-bank-accounts DeleteCustomersCustomerBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a bank account
@@ -4711,6 +4854,7 @@ export def "customers-bank-accounts GetCustomersCustomerBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: any, account_holder_name: string, account_holder_type: string, account_type: string, available_payout_methods: list<string>, bank_name: string, country: string, currency: string, customer: any, default_for_currency: bool, fingerprint: string, future_requirements: any, id: string, last4: string, metadata: record, object: string, requirements: any, routing_number: string, status: string> {
@@ -4722,7 +4866,7 @@ export def "customers-bank-accounts GetCustomersCustomerBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Update a specified source for a given customer.</p>
@@ -4740,6 +4884,7 @@ export def "customers-bank-accounts PostCustomersCustomerBankAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer-1 # The type of entity that holds the account. This can be either `individual` or `company`.
   --address-city: string # City/District/Suburb/Town/Village.
@@ -4763,7 +4908,7 @@ export def "customers-bank-accounts PostCustomersCustomerBankAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Verify a bank account
@@ -4780,6 +4925,7 @@ export def "customers-bank-accounts-verify PostCustomersCustomerBankAccountsIdVe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amounts: list # Two positive integers, in *cents*, equal to the values of the microdeposits sent to the bank account.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account: any, account_holder_name: string, account_holder_type: string, account_type: string, available_payout_methods: list<string>, bank_name: string, country: string, currency: string, customer: any, default_for_currency: bool, fingerprint: string, future_requirements: any, id: string, last4: string, metadata: record, object: string, requirements: any, routing_number: string, status: string> {
@@ -4791,7 +4937,7 @@ export def "customers-bank-accounts-verify PostCustomersCustomerBankAccountsIdVe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all cards
@@ -4809,6 +4955,7 @@ export def "customers-cards GetCustomersCustomerCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -4823,7 +4970,7 @@ export def "customers-cards GetCustomersCustomerCards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a card
@@ -4839,6 +4986,7 @@ export def "customers-cards PostCustomersCustomerCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alipay-account: string # A token returned by [Stripe.js](https://stripe.com/docs/js) representing the user’s Alipay account details.
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --card: any # A token, like the ones returned by [Stripe.js](https://stripe.com/docs/js).
@@ -4854,7 +5002,7 @@ export def "customers-cards PostCustomersCustomerCards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer source
@@ -4871,6 +5019,7 @@ export def "customers-cards DeleteCustomersCustomerCardsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> any {
   let input = $in
@@ -4881,7 +5030,7 @@ export def "customers-cards DeleteCustomersCustomerCardsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a card
@@ -4900,6 +5049,7 @@ export def "customers-cards GetCustomersCustomerCardsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: any, address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, allow_redisplay: string, available_payout_methods: list<string>, brand: string, country: string, currency: string, customer: any, cvc_check: string, default_for_currency: bool, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, iin: string, last4: string, metadata: record, name: string, networks: record<preferred: string>, object: string, regulated_status: string, status: string, tokenization_method: string> {
@@ -4911,7 +5061,7 @@ export def "customers-cards GetCustomersCustomerCardsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Update a specified source for a given customer.</p>
@@ -4929,6 +5079,7 @@ export def "customers-cards PostCustomersCustomerCardsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer-1 # The type of entity that holds the account. This can be either `individual` or `company`.
   --address-city: string # City/District/Suburb/Town/Village.
@@ -4952,7 +5103,7 @@ export def "customers-cards PostCustomersCustomerCardsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a cash balance
@@ -4968,6 +5119,7 @@ export def "customers-cash-balance GetCustomersCustomerCashBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<available: record, customer: string, customer_account: string, livemode: bool, object: string, settings: record<reconciliation_mode: string, using_merchant_default: bool>> {
@@ -4979,7 +5131,7 @@ export def "customers-cash-balance GetCustomersCustomerCashBalance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a cash balance's settings
@@ -4996,6 +5148,7 @@ export def "customers-cash-balance PostCustomersCustomerCashBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --settings: record # A hash of settings for this cash balance. — shape: {reconciliation_mode?: "automatic"|"manual"|"merchant_default"}
 ]: any -> record<available: record, customer: string, customer_account: string, livemode: bool, object: string, settings: record<reconciliation_mode: string, using_merchant_default: bool>> {
@@ -5007,7 +5160,7 @@ export def "customers-cash-balance PostCustomersCustomerCashBalance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List cash balance transactions
@@ -5023,6 +5176,7 @@ export def "customers-cash-balance-transactions GetCustomersCustomerCashBalanceT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -5037,7 +5191,7 @@ export def "customers-cash-balance-transactions GetCustomersCustomerCashBalanceT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a cash balance transaction
@@ -5054,6 +5208,7 @@ export def "customers-cash-balance-transactions GetCustomersCustomerCashBalanceT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<adjusted_for_overdraft: record<balance_transaction: any, linked_transaction: any>, applied_to_payment: record<payment_intent: any>, created: int, currency: string, customer: any, customer_account: string, ending_balance: int, funded: record<bank_transfer: record<eu_bank_transfer: record, gb_bank_transfer: record, jp_bank_transfer: record, reference: string, type: string, us_bank_transfer: record>>, id: string, livemode: bool, net_amount: int, object: string, refunded_from_payment: record<refund: any>, transferred_to_balance: record<balance_transaction: any>, type: string, unapplied_from_payment: record<payment_intent: any>> {
@@ -5065,7 +5220,7 @@ export def "customers-cash-balance-transactions GetCustomersCustomerCashBalanceT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer discount
@@ -5081,6 +5236,7 @@ export def "customers-discount DeleteCustomersCustomerDiscount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<checkout_session: string, customer: any, customer_account: string, deleted: bool, id: string, invoice: string, invoice_item: string, object: string, promotion_code: any, source: record<coupon: any, type: string>, start: int, subscription: string, subscription_item: string> {
   let input = $in
@@ -5090,7 +5246,7 @@ export def "customers-discount DeleteCustomersCustomerDiscount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/customers/{customer}/discount
@@ -5105,6 +5261,7 @@ export def "customers-discount GetCustomersCustomerDiscount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<checkout_session: string, customer: any, customer_account: string, end: int, id: string, invoice: string, invoice_item: string, object: string, promotion_code: any, source: record<coupon: any, type: string>, start: int, subscription: string, subscription_item: string> {
@@ -5116,7 +5273,7 @@ export def "customers-discount GetCustomersCustomerDiscount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create or retrieve funding instructions for a customer cash balance
@@ -5133,6 +5290,7 @@ export def "customers-funding-instructions PostCustomersCustomerFundingInstructi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   bank_transfer: record # Additional parameters for `bank_transfer` funding types — shape: {eu_bank_transfer?: record, requested_address_types?: list, type: "eu_bank_transfer"|"gb_bank_transfer"|"jp_bank_transfer"|"mx_bank_transfer"|"us_bank_transfer"}
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --expand: list # Specifies which fields in the response should be expanded.
@@ -5146,7 +5304,7 @@ export def "customers-funding-instructions PostCustomersCustomerFundingInstructi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List a Customer's PaymentMethods
@@ -5162,6 +5320,7 @@ export def "customers-payment-methods GetCustomersCustomerPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-redisplay: string@allow-redisplay-completer # This field indicates whether this payment method can be shown again to its customer in a checkout flow. Stripe products such as Checkout and Elements use this field to determine whether a payment method can be shown as a saved payment method in a checkout flow.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -5178,7 +5337,7 @@ export def "customers-payment-methods GetCustomersCustomerPaymentMethods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Customer's PaymentMethod
@@ -5195,6 +5354,7 @@ export def "customers-payment-methods GetCustomersCustomerPaymentMethodsPaymentM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<acss_debit: record<bank_name: string, fingerprint: string, institution_number: string, last4: string, transit_number: string>, affirm: record, afterpay_clearpay: record, alipay: record, allow_redisplay: string, alma: record, amazon_pay: record, au_becs_debit: record<bsb_number: string, fingerprint: string, last4: string>, bacs_debit: record<fingerprint: string, last4: string, sort_code: string>, bancontact: record, billie: record, billing_details: record<address: any, email: string, name: string, phone: string, tax_id: string>, bizum: record, blik: record, boleto: record<tax_id: string>, card: record<brand: string, checks: any, country: string, display_brand: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, generated_from: any, last4: string, networks: any, regulated_status: string, three_d_secure_usage: any, wallet: any>, card_present: record<brand: string, brand_product: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, offline: any, preferred_locales: list<string>, read_method: string, wallet: record<type: string>>, cashapp: record<buyer_id: string, cashtag: string>, created: int, crypto: record, custom: record<display_name: string, logo: any, type: string>, customer: any, customer_account: string, customer_balance: record, eps: record<bank: string>, fpx: record<bank: string>, giropay: record, grabpay: record, id: string, ideal: record<bank: string, bic: string>, interac_present: record<brand: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, preferred_locales: list<string>, read_method: string>, kakao_pay: record, klarna: record<dob: any>, konbini: record, kr_card: record<brand: string, last4: string>, link: record<email: string>, livemode: bool, mb_way: record, metadata: record, mobilepay: record, multibanco: record, naver_pay: record<buyer_id: string, funding: string>, nz_bank_account: record<account_holder_name: string, bank_code: string, bank_name: string, branch_code: string, last4: string, suffix: string>, object: string, oxxo: record, p24: record<bank: string>, pay_by_bank: record, payco: record, paynow: record, paypal: record<country: string, payer_email: string, payer_id: string>, payto: record<bsb_number: string, last4: string, pay_id: string>, pix: record, promptpay: record, radar_options: record<session: string>, revolut_pay: record, samsung_pay: record, satispay: record, scalapay: record, sepa_debit: record<bank_code: string, branch_code: string, country: string, fingerprint: string, generated_from: any, last4: string>, sofort: record<country: string>, sunbit: record, swish: record, twint: record, type: string, upi: record<vpa: string>, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, financial_connections_account: string, fingerprint: string, last4: string, networks: any, routing_number: string, status_details: any>, wechat_pay: record, zip: record> {
@@ -5206,7 +5366,7 @@ export def "customers-payment-methods GetCustomersCustomerPaymentMethodsPaymentM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>List sources for a specified customer.</p>
@@ -5222,6 +5382,7 @@ export def "customers-sources GetCustomersCustomerSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -5237,7 +5398,7 @@ export def "customers-sources GetCustomersCustomerSources" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a card
@@ -5253,6 +5414,7 @@ export def "customers-sources PostCustomersCustomerSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alipay-account: string # A token returned by [Stripe.js](https://stripe.com/docs/js) representing the user’s Alipay account details.
   --bank-account: any # Either a token, like the ones returned by [Stripe.js](https://stripe.com/docs/js), or a dictionary containing a user's bank account details.
   --card: any # A token, like the ones returned by [Stripe.js](https://stripe.com/docs/js).
@@ -5268,7 +5430,7 @@ export def "customers-sources PostCustomersCustomerSources" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer source
@@ -5285,6 +5447,7 @@ export def "customers-sources DeleteCustomersCustomerSourcesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> any {
   let input = $in
@@ -5295,7 +5458,7 @@ export def "customers-sources DeleteCustomersCustomerSourcesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Retrieve a specified source for a given customer.</p>
@@ -5312,6 +5475,7 @@ export def "customers-sources GetCustomersCustomerSourcesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -5323,7 +5487,7 @@ export def "customers-sources GetCustomersCustomerSourcesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Update a specified source for a given customer.</p>
@@ -5341,6 +5505,7 @@ export def "customers-sources PostCustomersCustomerSourcesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer-1 # The type of entity that holds the account. This can be either `individual` or `company`.
   --address-city: string # City/District/Suburb/Town/Village.
@@ -5364,7 +5529,7 @@ export def "customers-sources PostCustomersCustomerSourcesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Verify a bank account
@@ -5381,6 +5546,7 @@ export def "customers-sources-verify PostCustomersCustomerSourcesIdVerify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amounts: list # Two positive integers, in *cents*, equal to the values of the microdeposits sent to the bank account.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account: any, account_holder_name: string, account_holder_type: string, account_type: string, available_payout_methods: list<string>, bank_name: string, country: string, currency: string, customer: any, default_for_currency: bool, fingerprint: string, future_requirements: any, id: string, last4: string, metadata: record, object: string, requirements: any, routing_number: string, status: string> {
@@ -5392,7 +5558,7 @@ export def "customers-sources-verify PostCustomersCustomerSourcesIdVerify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List active subscriptions
@@ -5408,6 +5574,7 @@ export def "customers-subscriptions GetCustomersCustomerSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -5422,7 +5589,7 @@ export def "customers-subscriptions GetCustomersCustomerSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a subscription
@@ -5445,6 +5612,7 @@ export def "customers-subscriptions PostCustomersCustomerSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --add-invoice-items: list # A list of prices and quantities that will generate invoice items appended to the next invoice for this subscription. You may pass up to 20 items. — item shape: {discountable?: bool, discounts?: list, metadata?: record, period?: record, price?: string, price_data?: record, quantity?: int, tax_rates?: any}
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. The request must be made by a platform account on a connected account in order to set an application fee percentage. For more information, see the application fees [documentation](https://stripe.com/docs/connect/subscriptions#collecting-fees-on-subscriptions).
   --automatic-tax: record # Automatic tax settings for this subscription. — shape: {enabled: bool, liability?: record}
@@ -5483,7 +5651,7 @@ export def "customers-subscriptions PostCustomersCustomerSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a subscription
@@ -5500,6 +5668,7 @@ export def "customers-subscriptions DeleteCustomersCustomerSubscriptionsSubscrip
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-now: oneof<nothing, bool> # Can be set to `true` if `at_period_end` is not set to `true`. Will generate a final invoice that invoices for any un-invoiced metered usage and new/pending proration invoice items.
   --prorate: oneof<nothing, bool> # Can be set to `true` if `at_period_end` is not set to `true`. Will generate a proration invoice item that credits remaining unused time until the subscription period end.
@@ -5512,7 +5681,7 @@ export def "customers-subscriptions DeleteCustomersCustomerSubscriptionsSubscrip
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a subscription
@@ -5529,6 +5698,7 @@ export def "customers-subscriptions GetCustomersCustomerSubscriptionsSubscriptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<application: any, application_fee_percent: float, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any>, billing_cycle_anchor: int, billing_cycle_anchor_config: any, billing_mode: record<flexible: any, type: string, updated_at: int>, billing_schedules: table<applies_to: list, bill_until: record, key: string>, billing_thresholds: any, cancel_at: int, cancel_at_period_end: bool, canceled_at: int, cancellation_details: any, collection_method: string, created: int, currency: string, customer: any, customer_account: string, days_until_due: int, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, ended_at: int, id: string, invoice_settings: record<account_tax_ids: list<any>, issuer: record<account: any, type: string>>, items: record<data: list<record>, has_more: bool, object: string, url: string>, latest_invoice: any, livemode: bool, managed_payments: any, metadata: record, next_pending_invoice_item_invoice: int, object: string, on_behalf_of: any, pause_collection: any, payment_settings: any, pending_invoice_item_interval: any, pending_setup_intent: any, pending_update: any, presentment_details: record<presentment_currency: string>, schedule: any, start_date: int, status: string, test_clock: any, transfer_data: any, trial_end: int, trial_settings: any, trial_start: int> {
@@ -5540,7 +5710,7 @@ export def "customers-subscriptions GetCustomersCustomerSubscriptionsSubscriptio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a subscription on a customer
@@ -5564,6 +5734,7 @@ export def "customers-subscriptions PostCustomersCustomerSubscriptionsSubscripti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --add-invoice-items: list # A list of prices and quantities that will generate invoice items appended to the next invoice for this subscription. You may pass up to 20 items. — item shape: {discountable?: bool, discounts?: list, metadata?: record, period?: record, price?: string, price_data?: record, quantity?: int, tax_rates?: any}
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. The request must be made by a platform account on a connected account in order to set an application fee percentage. For more information, see the application fees [documentation](https://stripe.com/docs/connect/subscriptions#collecting-fees-on-subscriptions).
   --automatic-tax: record # Automatic tax settings for this subscription. We recommend you only include this parameter when the existing value is being changed. — shape: {enabled: bool, liability?: record}
@@ -5602,7 +5773,7 @@ export def "customers-subscriptions PostCustomersCustomerSubscriptionsSubscripti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer discount
@@ -5619,6 +5790,7 @@ export def "customers-subscriptions-discount DeleteCustomersCustomerSubscription
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<checkout_session: string, customer: any, customer_account: string, deleted: bool, id: string, invoice: string, invoice_item: string, object: string, promotion_code: any, source: record<coupon: any, type: string>, start: int, subscription: string, subscription_item: string> {
   let input = $in
@@ -5628,7 +5800,7 @@ export def "customers-subscriptions-discount DeleteCustomersCustomerSubscription
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/customers/{customer}/subscriptions/{subscription_exposed_id}/discount
@@ -5644,6 +5816,7 @@ export def "customers-subscriptions-discount GetCustomersCustomerSubscriptionsSu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<checkout_session: string, customer: any, customer_account: string, end: int, id: string, invoice: string, invoice_item: string, object: string, promotion_code: any, source: record<coupon: any, type: string>, start: int, subscription: string, subscription_item: string> {
@@ -5655,7 +5828,7 @@ export def "customers-subscriptions-discount GetCustomersCustomerSubscriptionsSu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Customer tax IDs
@@ -5671,6 +5844,7 @@ export def "customers-tax-ids GetCustomersCustomerTaxIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -5685,7 +5859,7 @@ export def "customers-tax-ids GetCustomersCustomerTaxIds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Customer tax ID
@@ -5701,6 +5875,7 @@ export def "customers-tax-ids PostCustomersCustomerTaxIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   type: string@type-completer-4 # Type of the tax ID, one of `ad_nrt`, `ae_trn`, `al_tin`, `am_tin`, `ao_tin`, `ar_cuit`, `au_abn`, `au_arn`, `aw_tin`, `az_tin`, `ba_tin`, `bb_tin`, `bd_bin`, `bf_ifu`, `bg_uic`, `bh_vat`, `bj_ifu`, `bo_tin`, `br_cnpj`, `br_cpf`, `bs_tin`, `by_tin`, `ca_bn`, `ca_gst_hst`, `ca_pst_bc`, `ca_pst_mb`, `ca_pst_sk`, `ca_qst`, `cd_nif`, `ch_uid`, `ch_vat`, `cl_tin`, `cm_niu`, `cn_tin`, `co_nit`, `cr_tin`, `cv_nif`, `de_stn`, `do_rcn`, `ec_ruc`, `eg_tin`, `es_cif`, `et_tin`, `eu_oss_vat`, `eu_vat`, `fo_vat`, `gb_vat`, `ge_vat`, `gi_tin`, `gn_nif`, `hk_br`, `hr_oib`, `hu_tin`, `id_npwp`, `il_vat`, `in_gst`, `is_vat`, `it_cf`, `jp_cn`, `jp_rn`, `jp_trn`, `ke_pin`, `kg_tin`, `kh_tin`, `kr_brn`, `kz_bin`, `la_tin`, `li_uid`, `li_vat`, `lk_vat`, `ma_vat`, `md_vat`, `me_pib`, `mk_vat`, `mr_nif`, `mx_rfc`, `my_frp`, `my_itn`, `my_sst`, `ng_tin`, `no_vat`, `no_voec`, `np_pan`, `nz_gst`, `om_vat`, `pe_ruc`, `ph_tin`, `pl_nip`, `py_ruc`, `ro_tin`, `rs_pib`, `ru_inn`, `ru_kpp`, `sa_vat`, `sg_gst`, `sg_uen`, `si_tin`, `sn_ninea`, `sr_fin`, `sv_nit`, `th_vat`, `tj_tin`, `tr_tin`, `tw_vat`, `tz_vat`, `ua_vat`, `ug_tin`, `us_ein`, `uy_ruc`, `uz_tin`, `uz_vat`, `ve_rif`, `vn_tin`, `za_vat`, `zm_tin`, or `zw_tin`
   value: string # Value of the tax ID.
@@ -5713,7 +5888,7 @@ export def "customers-tax-ids PostCustomersCustomerTaxIds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Customer tax ID
@@ -5730,6 +5905,7 @@ export def "customers-tax-ids DeleteCustomersCustomerTaxIdsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -5739,7 +5915,7 @@ export def "customers-tax-ids DeleteCustomersCustomerTaxIdsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Customer tax ID
@@ -5756,6 +5932,7 @@ export def "customers-tax-ids GetCustomersCustomerTaxIdsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<country: string, created: int, customer: any, customer_account: string, id: string, livemode: bool, object: string, owner: any, type: string, value: string, verification: any> {
@@ -5767,7 +5944,7 @@ export def "customers-tax-ids GetCustomersCustomerTaxIdsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all disputes
@@ -5782,6 +5959,7 @@ export def "disputes GetDisputes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --charge: string # Only return disputes associated to the charge specified by this charge ID.
   --created: string # Only return disputes that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -5799,7 +5977,7 @@ export def "disputes GetDisputes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a dispute
@@ -5815,6 +5993,7 @@ export def "disputes GetDisputesDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, charge: any, created: int, currency: string, enhanced_eligibility_types: list<string>, evidence: record<access_activity_log: string, billing_address: string, cancellation_policy: any, cancellation_policy_disclosure: string, cancellation_rebuttal: string, customer_communication: any, customer_email_address: string, customer_name: string, customer_purchase_ip: string, customer_signature: any, duplicate_charge_documentation: any, duplicate_charge_explanation: string, duplicate_charge_id: string, enhanced_evidence: record<visa_compelling_evidence_3: record, visa_compliance: record>, product_description: string, receipt: any, refund_policy: any, refund_policy_disclosure: string, refund_refusal_explanation: string, service_date: string, service_documentation: any, shipping_address: string, shipping_carrier: string, shipping_date: string, shipping_documentation: any, shipping_tracking_number: string, uncategorized_file: any, uncategorized_text: string>, evidence_details: record<due_by: int, enhanced_eligibility: record<visa_compelling_evidence_3: record, visa_compliance: record>, has_evidence: bool, past_due: bool, submission_count: int>, id: string, is_charge_refundable: bool, livemode: bool, metadata: record, object: string, payment_intent: any, payment_method_details: record<amazon_pay: record<dispute_type: string>, card: record<brand: string, case_type: string, network_reason_code: string>, klarna: record<chargeback_loss_reason_code: string, reason_code: string>, paypal: record<case_id: string, reason_code: string>, type: string>, reason: string, status: string> {
@@ -5826,7 +6005,7 @@ export def "disputes GetDisputesDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a dispute
@@ -5843,6 +6022,7 @@ export def "disputes PostDisputesDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --evidence: record # Evidence to upload, to respond to a dispute. Updating any field in the hash will submit all fields in the hash for review. The combined character count of all fields is limited to 150,000. — shape: {access_activity_log?: string, billing_address?: string, cancellation_policy?: string, cancellation_policy_disclosure?: string, cancellation_rebuttal?: string, customer_communication?: string, customer_email_address?: string, customer_name?: string, customer_purchase_ip?: string, customer_signature?: string, duplicate_charge_documentation?: string, duplicate_charge_explanation?: string, duplicate_charge_id?: string, enhanced_evidence?: any, product_description?: string, receipt?: string, refund_policy?: string, refund_policy_disclosure?: string, refund_refusal_explanation?: string, service_date?: string, service_documentation?: string, shipping_address?: string, shipping_carrier?: string, shipping_date?: string, shipping_documentation?: string, shipping_tracking_number?: string, uncategorized_file?: string, uncategorized_text?: string}
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -5856,7 +6036,7 @@ export def "disputes PostDisputesDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Close a dispute
@@ -5872,6 +6052,7 @@ export def "disputes-close PostDisputesDisputeClose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, charge: any, created: int, currency: string, enhanced_eligibility_types: list<string>, evidence: record<access_activity_log: string, billing_address: string, cancellation_policy: any, cancellation_policy_disclosure: string, cancellation_rebuttal: string, customer_communication: any, customer_email_address: string, customer_name: string, customer_purchase_ip: string, customer_signature: any, duplicate_charge_documentation: any, duplicate_charge_explanation: string, duplicate_charge_id: string, enhanced_evidence: record<visa_compelling_evidence_3: record, visa_compliance: record>, product_description: string, receipt: any, refund_policy: any, refund_policy_disclosure: string, refund_refusal_explanation: string, service_date: string, service_documentation: any, shipping_address: string, shipping_carrier: string, shipping_date: string, shipping_documentation: any, shipping_tracking_number: string, uncategorized_file: any, uncategorized_text: string>, evidence_details: record<due_by: int, enhanced_eligibility: record<visa_compelling_evidence_3: record, visa_compliance: record>, has_evidence: bool, past_due: bool, submission_count: int>, id: string, is_charge_refundable: bool, livemode: bool, metadata: record, object: string, payment_intent: any, payment_method_details: record<amazon_pay: record<dispute_type: string>, card: record<brand: string, case_type: string, network_reason_code: string>, klarna: record<chargeback_loss_reason_code: string, reason_code: string>, paypal: record<case_id: string, reason_code: string>, type: string>, reason: string, status: string> {
   let input = $in
@@ -5882,7 +6063,7 @@ export def "disputes-close PostDisputesDisputeClose" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all active entitlements
@@ -5897,6 +6078,7 @@ export def "entitlements-active-entitlements GetEntitlementsActiveEntitlements" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The ID of the customer.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -5912,7 +6094,7 @@ export def "entitlements-active-entitlements GetEntitlementsActiveEntitlements" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an active entitlement
@@ -5928,6 +6110,7 @@ export def "entitlements-active-entitlements GetEntitlementsActiveEntitlementsId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<feature: any, id: string, livemode: bool, lookup_key: string, object: string> {
@@ -5939,7 +6122,7 @@ export def "entitlements-active-entitlements GetEntitlementsActiveEntitlementsId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all features
@@ -5954,6 +6137,7 @@ export def "entitlements-features GetEntitlementsFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # If set, filter results to only include features with the given archive status.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -5970,7 +6154,7 @@ export def "entitlements-features GetEntitlementsFeatures" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a feature
@@ -5985,6 +6169,7 @@ export def "entitlements-features PostEntitlementsFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   lookup_key: string # A unique key you provide as your own system identifier. This may be up to 80 characters.
   --metadata: record # Set of key-value pairs that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
@@ -5998,7 +6183,7 @@ export def "entitlements-features PostEntitlementsFeatures" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a feature
@@ -6014,6 +6199,7 @@ export def "entitlements-features GetEntitlementsFeaturesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string> {
@@ -6025,7 +6211,7 @@ export def "entitlements-features GetEntitlementsFeaturesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Updates a feature
@@ -6041,6 +6227,7 @@ export def "entitlements-features PostEntitlementsFeaturesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Inactive features cannot be attached to new products and will not be returned from the features list endpoint.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of key-value pairs that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
@@ -6054,7 +6241,7 @@ export def "entitlements-features PostEntitlementsFeaturesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an ephemeral key
@@ -6069,6 +6256,7 @@ export def "ephemeral-keys PostEphemeralKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The ID of the Customer you'd like to modify using the resulting ephemeral key.
   --expand: list # Specifies which fields in the response should be expanded.
   --issuing-card: string # The ID of the Issuing Card you'd like to access using the resulting ephemeral key.
@@ -6083,7 +6271,7 @@ export def "ephemeral-keys PostEphemeralKeys" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Immediately invalidate an ephemeral key
@@ -6099,6 +6287,7 @@ export def "ephemeral-keys DeleteEphemeralKeysKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, expires: int, id: string, livemode: bool, object: string, secret: string> {
   let input = $in
@@ -6109,7 +6298,7 @@ export def "ephemeral-keys DeleteEphemeralKeysKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all events
@@ -6124,6 +6313,7 @@ export def "events GetEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return events that were created during the given date interval.
   --delivery-success: oneof<nothing, bool> # Filter events by whether all webhooks were successfully delivered. If false, events which are still pending or have failed all delivery attempts to a webhook endpoint will be returned.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -6142,7 +6332,7 @@ export def "events GetEvents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an event
@@ -6158,6 +6348,7 @@ export def "events GetEventsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: string, api_version: string, context: string, created: int, data: record<object: record, previous_attributes: record>, id: string, livemode: bool, object: string, pending_webhooks: int, request: any, type: string> {
@@ -6169,7 +6360,7 @@ export def "events GetEventsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all exchange rates
@@ -6184,6 +6375,7 @@ export def "exchange-rates GetExchangeRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is the currency that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with the exchange rate for currency X your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and total number of supported payout currencies, and the default is the max.
@@ -6198,7 +6390,7 @@ export def "exchange-rates GetExchangeRates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an exchange rate
@@ -6214,6 +6406,7 @@ export def "exchange-rates GetExchangeRatesRateId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<id: string, object: string, rates: record> {
@@ -6225,7 +6418,7 @@ export def "exchange-rates GetExchangeRatesRateId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Updates the metadata, account holder name, account holder type of a bank account belonging to a connected account and optionally sets it as the default for its currency. Other bank account details are not editable by design.</p>  <p>You can only update bank accounts when <a href="/api/accounts/object#account_object-controller-requirement_collection">account.controller.requirement_collection</a> is <code>application</code>, which includes <a href="/connect/custom-accounts">Custom accounts</a>.</p>  <p>You can re-enable a disabled bank account by performing an update call without providing any arguments or changes.</p>
@@ -6242,6 +6435,7 @@ export def "external-accounts PostExternalAccountsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-name: string # The name of the person or business that owns the bank account.
   --account-holder-type: string@account-holder-type-completer # The type of entity that holds the account. This can be either `individual` or `company`.
   --account-type: string@account-type-completer # The bank account type. This can only be `checking` or `savings` in most countries. In Japan, this can only be `futsu` or `toza`.
@@ -6267,7 +6461,7 @@ export def "external-accounts PostExternalAccountsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all file links
@@ -6282,6 +6476,7 @@ export def "file-links GetFileLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return links that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -6299,7 +6494,7 @@ export def "file-links GetFileLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a file link
@@ -6314,6 +6509,7 @@ export def "file-links PostFileLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: int # The link isn't usable after this future timestamp. (format: unix-time)
   file: string # The ID of the file. The file's `purpose` must be one of the following: `business_icon`, `business_logo`, `customer_signature`, `dispute_evidence`, `finance_report_run`, `financial_account_statement`, `identity_document_downloadable`, `issuing_regulatory_reporting`, `pci_document`, `selfie`, `sigma_scheduled_query`, `tax_document_user_upload`, `terminal_android_apk`, or `terminal_reader_splashscreen`.
@@ -6327,7 +6523,7 @@ export def "file-links PostFileLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a file link
@@ -6343,6 +6539,7 @@ export def "file-links GetFileLinksLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, expired: bool, expires_at: int, file: any, id: string, livemode: bool, metadata: record, object: string, url: string> {
@@ -6354,7 +6551,7 @@ export def "file-links GetFileLinksLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a file link
@@ -6370,6 +6567,7 @@ export def "file-links PostFileLinksLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: any # A future timestamp after which the link will no longer be usable, or `now` to expire the link immediately.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -6382,7 +6580,7 @@ export def "file-links PostFileLinksLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all files
@@ -6397,6 +6595,7 @@ export def "files GetFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return files that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -6413,7 +6612,7 @@ export def "files GetFiles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a file
@@ -6429,6 +6628,7 @@ export def "files PostFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   file: string # A file to upload. Make sure that the specifications follow RFC 2388, which defines file transfers for the `multipart/form-data` protocol. (format: binary)
   --file-link-data: record # Optional parameters that automatically create a [file link](https://api.stripe.com#file_links) for the newly created file. — shape: {create: bool, expires_at?: int, metadata?: any}
@@ -6442,7 +6642,7 @@ export def "files PostFiles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Retrieve a file
@@ -6458,6 +6658,7 @@ export def "files GetFilesFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, expires_at: int, filename: string, id: string, links: record<data: list<record>, has_more: bool, object: string, url: string>, object: string, purpose: string, size: int, title: string, type: string, url: string> {
@@ -6469,7 +6670,7 @@ export def "files GetFilesFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Accounts
@@ -6484,6 +6685,7 @@ export def "financial-connections-accounts GetFinancialConnectionsAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder: record # If present, only return accounts that belong to the specified account holder. `account_holder[customer]` and `account_holder[account]` are mutually exclusive.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -6500,7 +6702,7 @@ export def "financial-connections-accounts GetFinancialConnectionsAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an Account
@@ -6516,6 +6718,7 @@ export def "financial-connections-accounts GetFinancialConnectionsAccountsAccoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -6527,7 +6730,7 @@ export def "financial-connections-accounts GetFinancialConnectionsAccountsAccoun
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Disconnect an Account
@@ -6543,6 +6746,7 @@ export def "financial-connections-accounts-disconnect PostFinancialConnectionsAc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
   let input = $in
@@ -6553,7 +6757,7 @@ export def "financial-connections-accounts-disconnect PostFinancialConnectionsAc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Account Owners
@@ -6569,6 +6773,7 @@ export def "financial-connections-accounts-owners GetFinancialConnectionsAccount
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -6584,7 +6789,7 @@ export def "financial-connections-accounts-owners GetFinancialConnectionsAccount
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refresh Account data
@@ -6600,6 +6805,7 @@ export def "financial-connections-accounts-refresh PostFinancialConnectionsAccou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   features: list # The list of account features that you would like to refresh.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -6611,7 +6817,7 @@ export def "financial-connections-accounts-refresh PostFinancialConnectionsAccou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Subscribe to data refreshes for an Account
@@ -6627,6 +6833,7 @@ export def "financial-connections-accounts-subscribe PostFinancialConnectionsAcc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   features: list # The list of account features to which you would like to subscribe.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -6638,7 +6845,7 @@ export def "financial-connections-accounts-subscribe PostFinancialConnectionsAcc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unsubscribe from data refreshes for an Account
@@ -6654,6 +6861,7 @@ export def "financial-connections-accounts-unsubscribe PostFinancialConnectionsA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   features: list # The list of account features from which you would like to unsubscribe.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -6665,7 +6873,7 @@ export def "financial-connections-accounts-unsubscribe PostFinancialConnectionsA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Session
@@ -6682,6 +6890,7 @@ export def "financial-connections-sessions PostFinancialConnectionsSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_holder: record # The account holder to link accounts for. — shape: {account?: string, customer?: string, customer_account?: string, type: "account"|"customer"}
   --expand: list # Specifies which fields in the response should be expanded.
   --filters: record # Filters to restrict the kinds of accounts to collect. — shape: {account_subcategories?: list, countries?: list}
@@ -6697,7 +6906,7 @@ export def "financial-connections-sessions PostFinancialConnectionsSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Session
@@ -6713,6 +6922,7 @@ export def "financial-connections-sessions GetFinancialConnectionsSessionsSessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account_holder: any, accounts: record<data: list<record>, has_more: bool, object: string, url: string>, client_secret: string, filters: record<account_subcategories: list<string>, countries: list<string>>, id: string, livemode: bool, object: string, permissions: list<string>, prefetch: list<string>, return_url: string> {
@@ -6724,7 +6934,7 @@ export def "financial-connections-sessions GetFinancialConnectionsSessionsSessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Transactions
@@ -6739,6 +6949,7 @@ export def "financial-connections-transactions GetFinancialConnectionsTransactio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # The ID of the Financial Connections Account whose transactions will be retrieved.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -6756,7 +6967,7 @@ export def "financial-connections-transactions GetFinancialConnectionsTransactio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Transaction
@@ -6772,6 +6983,7 @@ export def "financial-connections-transactions GetFinancialConnectionsTransactio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account: string, amount: int, currency: string, description: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<posted_at: int, void_at: int>, transacted_at: int, transaction_refresh: string, updated: int> {
@@ -6783,7 +6995,7 @@ export def "financial-connections-transactions GetFinancialConnectionsTransactio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all ForwardingRequests
@@ -6798,6 +7010,7 @@ export def "forwarding-requests GetForwardingRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: record # Similar to other List endpoints, filters results based on created timestamp. You can pass gt, gte, lt, and lte timestamp values.
   --ending-before: string # A pagination cursor to fetch the previous page of the list. The value must be a ForwardingRequest ID.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -6813,7 +7026,7 @@ export def "forwarding-requests GetForwardingRequests" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a ForwardingRequest
@@ -6829,6 +7042,7 @@ export def "forwarding-requests PostForwardingRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   payment_method: string # The PaymentMethod to insert into the forwarded request. Forwarding previously consumed PaymentMethods is allowed.
@@ -6844,7 +7058,7 @@ export def "forwarding-requests PostForwardingRequests" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a ForwardingRequest
@@ -6860,6 +7074,7 @@ export def "forwarding-requests GetForwardingRequestsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, id: string, livemode: bool, metadata: record, object: string, payment_method: string, replacements: list<string>, request_context: any, request_details: any, response_details: any, url: string> {
@@ -6871,7 +7086,7 @@ export def "forwarding-requests GetForwardingRequestsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List VerificationReports
@@ -6886,6 +7101,7 @@ export def "identity-verification-reports GetIdentityVerificationReports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-reference-id: string # A string to reference this user. This can be a customer ID, a session ID, or similar, and can be used to reconcile this verification with your internal systems.
   --created: string # Only return VerificationReports that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -6904,7 +7120,7 @@ export def "identity-verification-reports GetIdentityVerificationReports" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a VerificationReport
@@ -6920,6 +7136,7 @@ export def "identity-verification-reports GetIdentityVerificationReportsReport" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<client_reference_id: string, created: int, document: record<address: any, dob: any, error: any, expiration_date: any, files: list<string>, first_name: string, issued_date: any, issuing_country: string, last_name: string, number: string, sex: string, status: string, type: string, unparsed_place_of_birth: string, unparsed_sex: string>, email: record<email: string, error: any, status: string>, id: string, id_number: record<dob: any, error: any, first_name: string, id_number: string, id_number_type: string, last_name: string, status: string>, livemode: bool, object: string, options: record<document: record<allowed_types: list, require_id_number: bool, require_live_capture: bool, require_matching_selfie: bool>, id_number: record>, phone: record<error: any, phone: string, status: string>, selfie: record<document: string, error: any, selfie: string, status: string>, type: string, verification_flow: string, verification_session: string> {
@@ -6931,7 +7148,7 @@ export def "identity-verification-reports GetIdentityVerificationReportsReport" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List VerificationSessions
@@ -6946,6 +7163,7 @@ export def "identity-verification-sessions GetIdentityVerificationSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-reference-id: string # A string to reference this user. This can be a customer ID, a session ID, or similar, and can be used to reconcile this verification with your internal systems.
   --created: string # Only return VerificationSessions that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -6965,7 +7183,7 @@ export def "identity-verification-sessions GetIdentityVerificationSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a VerificationSession
@@ -6983,6 +7201,7 @@ export def "identity-verification-sessions PostIdentityVerificationSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-reference-id: string # A string to reference this user. This can be a customer ID, a session ID, or similar, and can be used to reconcile this verification with your internal systems.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -7003,7 +7222,7 @@ export def "identity-verification-sessions PostIdentityVerificationSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a VerificationSession
@@ -7019,6 +7238,7 @@ export def "identity-verification-sessions GetIdentityVerificationSessionsSessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<client_reference_id: string, client_secret: string, created: int, id: string, last_error: any, last_verification_report: any, livemode: bool, metadata: record, object: string, options: any, provided_details: any, redaction: any, related_customer: string, related_customer_account: string, related_person: record<account: string, person: string>, status: string, type: string, url: string, verification_flow: string, verified_outputs: any> {
@@ -7030,7 +7250,7 @@ export def "identity-verification-sessions GetIdentityVerificationSessionsSessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a VerificationSession
@@ -7048,6 +7268,7 @@ export def "identity-verification-sessions PostIdentityVerificationSessionsSessi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   --options: record # A set of options for the session’s verification checks. — shape: {document?: any}
@@ -7062,7 +7283,7 @@ export def "identity-verification-sessions PostIdentityVerificationSessionsSessi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a VerificationSession
@@ -7078,6 +7299,7 @@ export def "identity-verification-sessions-cancel PostIdentityVerificationSessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<client_reference_id: string, client_secret: string, created: int, id: string, last_error: any, last_verification_report: any, livemode: bool, metadata: record, object: string, options: any, provided_details: any, redaction: any, related_customer: string, related_customer_account: string, related_person: record<account: string, person: string>, status: string, type: string, url: string, verification_flow: string, verified_outputs: any> {
   let input = $in
@@ -7088,7 +7310,7 @@ export def "identity-verification-sessions-cancel PostIdentityVerificationSessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Redact a VerificationSession
@@ -7104,6 +7326,7 @@ export def "identity-verification-sessions-redact PostIdentityVerificationSessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<client_reference_id: string, client_secret: string, created: int, id: string, last_error: any, last_verification_report: any, livemode: bool, metadata: record, object: string, options: any, provided_details: any, redaction: any, related_customer: string, related_customer_account: string, related_person: record<account: string, person: string>, status: string, type: string, url: string, verification_flow: string, verified_outputs: any> {
   let input = $in
@@ -7114,7 +7337,7 @@ export def "identity-verification-sessions-redact PostIdentityVerificationSessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all payments for an invoice
@@ -7129,6 +7352,7 @@ export def "invoice-payments GetInvoicePayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return invoice payments that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -7147,7 +7371,7 @@ export def "invoice-payments GetInvoicePayments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an InvoicePayment
@@ -7163,6 +7387,7 @@ export def "invoice-payments GetInvoicePaymentsInvoicePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount_paid: int, amount_requested: int, created: int, currency: string, id: string, invoice: any, is_default: bool, livemode: bool, object: string, payment: record<charge: any, payment_intent: any, payment_record: any, type: string>, status: string, status_transitions: record<canceled_at: int, paid_at: int>> {
@@ -7174,7 +7399,7 @@ export def "invoice-payments GetInvoicePaymentsInvoicePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all invoice rendering templates
@@ -7189,6 +7414,7 @@ export def "invoice-rendering-templates GetInvoiceRenderingTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -7204,7 +7430,7 @@ export def "invoice-rendering-templates GetInvoiceRenderingTemplates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an invoice rendering template
@@ -7220,6 +7446,7 @@ export def "invoice-rendering-templates GetInvoiceRenderingTemplatesTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --version: int
   --body: record
@@ -7232,7 +7459,7 @@ export def "invoice-rendering-templates GetInvoiceRenderingTemplatesTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Archive an invoice rendering template
@@ -7248,6 +7475,7 @@ export def "invoice-rendering-templates-archive PostInvoiceRenderingTemplatesTem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, id: string, livemode: bool, metadata: record, nickname: string, object: string, status: string, version: int> {
   let input = $in
@@ -7258,7 +7486,7 @@ export def "invoice-rendering-templates-archive PostInvoiceRenderingTemplatesTem
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unarchive an invoice rendering template
@@ -7274,6 +7502,7 @@ export def "invoice-rendering-templates-unarchive PostInvoiceRenderingTemplatesT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<created: int, id: string, livemode: bool, metadata: record, nickname: string, object: string, status: string, version: int> {
   let input = $in
@@ -7284,7 +7513,7 @@ export def "invoice-rendering-templates-unarchive PostInvoiceRenderingTemplatesT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all invoice items
@@ -7299,6 +7528,7 @@ export def "invoiceitems GetInvoiceitems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return invoice items that were created during the given date interval.
   --customer: string # The identifier of the customer whose invoice items to return. If none is provided, returns all invoice items.
   --customer-account: string # The identifier of the account representing the customer whose invoice items to return. If none is provided, returns all invoice items.
@@ -7318,7 +7548,7 @@ export def "invoiceitems GetInvoiceitems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an invoice item
@@ -7336,6 +7566,7 @@ export def "invoiceitems PostInvoiceitems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) of the charge to be applied to the upcoming invoice. Passing in a negative `amount` will reduce the `amount_due` on the invoice.
   --currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --customer: string # The ID of the customer to bill for this invoice item.
@@ -7365,7 +7596,7 @@ export def "invoiceitems PostInvoiceitems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an invoice item
@@ -7381,6 +7612,7 @@ export def "invoiceitems DeleteInvoiceitemsInvoiceitem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -7390,7 +7622,7 @@ export def "invoiceitems DeleteInvoiceitemsInvoiceitem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an invoice item
@@ -7406,6 +7638,7 @@ export def "invoiceitems GetInvoiceitemsInvoiceitem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, currency: string, customer: any, customer_account: string, date: int, description: string, discountable: bool, discounts: list<any>, id: string, invoice: any, livemode: bool, metadata: record, net_amount: int, object: string, parent: any, period: record<end: int, start: int>, pricing: any, proration: bool, proration_details: record<credited_items: any, discount_amounts: list<record>>, quantity: int, quantity_decimal: string, tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, test_clock: any> {
@@ -7417,7 +7650,7 @@ export def "invoiceitems GetInvoiceitemsInvoiceitem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an invoice item
@@ -7436,6 +7669,7 @@ export def "invoiceitems PostInvoiceitemsInvoiceitem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) of the charge to be applied to the upcoming invoice. If you want to apply a credit to the customer's account, pass a negative amount.
   --description: string # An arbitrary string which you can attach to the invoice item. The description is displayed in the invoice for easy tracking.
   --discountable: oneof<nothing, bool> # Controls whether discounts apply to this invoice item. Defaults to false for prorations or negative invoice items, and true for all other invoice items. Cannot be set to true for prorations.
@@ -7460,7 +7694,7 @@ export def "invoiceitems PostInvoiceitemsInvoiceitem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all invoices
@@ -7475,6 +7709,7 @@ export def "invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collection-method: string@collection-method-completer # The collection method of the invoice to retrieve. Either `charge_automatically` or `send_invoice`.
   --created: string # Only return invoices that were created during the given date interval.
   --customer: string # Only return invoices for the customer specified by this customer ID.
@@ -7496,7 +7731,7 @@ export def "invoices GetInvoices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an invoice
@@ -7519,6 +7754,7 @@ export def "invoices PostInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-tax-ids: any # The account tax IDs associated with the invoice. Only editable when the invoice is a draft.
   --application-fee-amount: int # A fee in cents (or local equivalent) that will be applied to the invoice and transferred to the application owner's Stripe account. The request must be made with an OAuth key or the Stripe-Account header in order to take an application fee. For more information, see the application fees [documentation](https://docs.stripe.com/billing/invoices/connect#collecting-fees).
   --auto-advance: oneof<nothing, bool> # Controls whether Stripe performs [automatic collection](https://docs.stripe.com/invoicing/integration/automatic-advancement-collection) of the invoice. If `false`, the invoice's state doesn't automatically advance without an explicit action. Defaults to false.
@@ -7561,7 +7797,7 @@ export def "invoices PostInvoices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a preview invoice
@@ -7582,6 +7818,7 @@ export def "invoices-create-preview PostInvoicesCreatePreview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automatic-tax: record # Settings for automatic tax lookup for this invoice preview. — shape: {enabled: bool, liability?: record}
   --currency: string # The currency to preview this invoice in. Defaults to that of `customer` if not specified. (format: currency)
   --customer: string # The identifier of the customer whose upcoming invoice you're retrieving. If `automatic_tax` is enabled then one of `customer`, `customer_details`, `subscription`, or `schedule` must be set.
@@ -7606,7 +7843,7 @@ export def "invoices-create-preview PostInvoicesCreatePreview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search invoices
@@ -7621,6 +7858,7 @@ export def "invoices-search GetInvoicesSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -7635,7 +7873,7 @@ export def "invoices-search GetInvoicesSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a draft invoice
@@ -7651,6 +7889,7 @@ export def "invoices DeleteInvoicesInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -7660,7 +7899,7 @@ export def "invoices DeleteInvoicesInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an invoice
@@ -7676,6 +7915,7 @@ export def "invoices GetInvoicesInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account_country: string, account_name: string, account_tax_ids: list<any>, amount_due: int, amount_overpaid: int, amount_paid: int, amount_paid_off_stripe: int, amount_remaining: int, amount_shipping: int, application: any, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any, provider: string, status: string>, automatically_finalizes_at: int, billing_reason: string, collection_method: string, confirmation_secret: any, created: int, currency: string, custom_fields: table<name: string, value: string>, customer: any, customer_account: string, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: table<type: string, value: string>, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, due_date: int, effective_at: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, issuer: record<account: any, type: string>, last_finalization_error: any, latest_revision: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, parent: any, payment_settings: record<default_mandate: string, payment_method_options: any, payment_method_types: list<string>>, payments: record<data: list<record>, has_more: bool, object: string, url: string>, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, receipt_number: string, rendering: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record<finalized_at: int, marked_uncollectible_at: int, paid_at: int, voided_at: int>, subtotal: int, subtotal_excluding_tax: int, test_clock: any, threshold_reason: record<amount_gte: int, item_reasons: list<record>>, total: int, total_discount_amounts: table<amount: int, discount: any>, total_excluding_tax: int, total_pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, webhooks_delivered_at: int> {
@@ -7687,7 +7927,7 @@ export def "invoices GetInvoicesInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an invoice
@@ -7707,6 +7947,7 @@ export def "invoices PostInvoicesInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-tax-ids: any # The account tax IDs associated with the invoice. Only editable when the invoice is a draft.
   --application-fee-amount: int # A fee in cents (or local equivalent) that will be applied to the invoice and transferred to the application owner's Stripe account. The request must be made with an OAuth key or the Stripe-Account header in order to take an application fee. For more information, see the application fees [documentation](https://docs.stripe.com/billing/invoices/connect#collecting-fees).
   --auto-advance: oneof<nothing, bool> # Controls whether Stripe performs [automatic collection](https://docs.stripe.com/invoicing/integration/automatic-advancement-collection) of the invoice.
@@ -7743,7 +7984,7 @@ export def "invoices PostInvoicesInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Bulk add invoice line items
@@ -7760,6 +8001,7 @@ export def "invoices-add-lines PostInvoicesInvoiceAddLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   lines: list # The line items to add. — item shape: {amount?: int, description?: string, discountable?: bool, discounts?: any, invoice_item?: string, metadata?: any, period?: record, price_data?: record, pricing?: record, quantity?: int, quantity_decimal?: string, tax_amounts?: any, tax_rates?: any}
@@ -7772,7 +8014,7 @@ export def "invoices-add-lines PostInvoicesInvoiceAddLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attach a payment to an Invoice
@@ -7788,6 +8030,7 @@ export def "invoices-attach-payment PostInvoicesInvoiceAttachPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --payment-intent: string # The ID of the PaymentIntent to attach to the invoice.
   --payment-record: string # The ID of the PaymentRecord to attach to the invoice.
@@ -7800,7 +8043,7 @@ export def "invoices-attach-payment PostInvoicesInvoiceAttachPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Finalize an invoice
@@ -7816,6 +8059,7 @@ export def "invoices-finalize PostInvoicesInvoiceFinalize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auto-advance: oneof<nothing, bool> # Controls whether Stripe performs [automatic collection](https://docs.stripe.com/invoicing/integration/automatic-advancement-collection) of the invoice. If `false`, the invoice's state doesn't automatically advance without an explicit action.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_country: string, account_name: string, account_tax_ids: list<any>, amount_due: int, amount_overpaid: int, amount_paid: int, amount_paid_off_stripe: int, amount_remaining: int, amount_shipping: int, application: any, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any, provider: string, status: string>, automatically_finalizes_at: int, billing_reason: string, collection_method: string, confirmation_secret: any, created: int, currency: string, custom_fields: table<name: string, value: string>, customer: any, customer_account: string, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: table<type: string, value: string>, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, due_date: int, effective_at: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, issuer: record<account: any, type: string>, last_finalization_error: any, latest_revision: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, parent: any, payment_settings: record<default_mandate: string, payment_method_options: any, payment_method_types: list<string>>, payments: record<data: list<record>, has_more: bool, object: string, url: string>, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, receipt_number: string, rendering: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record<finalized_at: int, marked_uncollectible_at: int, paid_at: int, voided_at: int>, subtotal: int, subtotal_excluding_tax: int, test_clock: any, threshold_reason: record<amount_gte: int, item_reasons: list<record>>, total: int, total_discount_amounts: table<amount: int, discount: any>, total_excluding_tax: int, total_pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, webhooks_delivered_at: int> {
@@ -7827,7 +8071,7 @@ export def "invoices-finalize PostInvoicesInvoiceFinalize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an invoice's line items
@@ -7843,6 +8087,7 @@ export def "invoices-lines GetInvoicesInvoiceLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -7857,7 +8102,7 @@ export def "invoices-lines GetInvoicesInvoiceLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an invoice's line item
@@ -7877,6 +8122,7 @@ export def "invoices-lines PostInvoicesInvoiceLinesLineItemId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The integer amount in cents (or local equivalent) of the charge to be applied to the upcoming invoice. If you want to apply a credit to the customer's account, pass a negative amount.
   --description: string # An arbitrary string which you can attach to the invoice item. The description is displayed in the invoice for easy tracking.
   --discountable: oneof<nothing, bool> # Controls whether discounts apply to this line item. Defaults to false for prorations or negative line items, and true for all other line items. Cannot be set to true for prorations.
@@ -7899,7 +8145,7 @@ export def "invoices-lines PostInvoicesInvoiceLinesLineItemId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Mark an invoice as uncollectible
@@ -7915,6 +8161,7 @@ export def "invoices-mark-uncollectible PostInvoicesInvoiceMarkUncollectible" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_country: string, account_name: string, account_tax_ids: list<any>, amount_due: int, amount_overpaid: int, amount_paid: int, amount_paid_off_stripe: int, amount_remaining: int, amount_shipping: int, application: any, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any, provider: string, status: string>, automatically_finalizes_at: int, billing_reason: string, collection_method: string, confirmation_secret: any, created: int, currency: string, custom_fields: table<name: string, value: string>, customer: any, customer_account: string, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: table<type: string, value: string>, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, due_date: int, effective_at: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, issuer: record<account: any, type: string>, last_finalization_error: any, latest_revision: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, parent: any, payment_settings: record<default_mandate: string, payment_method_options: any, payment_method_types: list<string>>, payments: record<data: list<record>, has_more: bool, object: string, url: string>, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, receipt_number: string, rendering: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record<finalized_at: int, marked_uncollectible_at: int, paid_at: int, voided_at: int>, subtotal: int, subtotal_excluding_tax: int, test_clock: any, threshold_reason: record<amount_gte: int, item_reasons: list<record>>, total: int, total_discount_amounts: table<amount: int, discount: any>, total_excluding_tax: int, total_pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, webhooks_delivered_at: int> {
   let input = $in
@@ -7925,7 +8172,7 @@ export def "invoices-mark-uncollectible PostInvoicesInvoiceMarkUncollectible" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Pay an invoice
@@ -7941,6 +8188,7 @@ export def "invoices-pay PostInvoicesInvoicePay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --forgive: oneof<nothing, bool> # In cases where the source used to pay the invoice has insufficient funds, passing `forgive=true` controls whether a charge should be attempted for the full amount available on the source, up to the amount to fully pay the invoice. This effectively forgives the difference between the amount available on the source and the amount due.   Passing `forgive=false` will fail the charge if the source hasn't been pre-funded with the right amount. An example for this case is with ACH Credit Transfers and wires: if the amount wired is less than the amount due by a small amount, you might want to forgive the difference. Defaults to `false`.
   --mandate: any # ID of the mandate to be used for this invoice. It must correspond to the payment method used to pay the invoice, including the payment_method param or the invoice's default_payment_method or default_source, if set.
@@ -7957,7 +8205,7 @@ export def "invoices-pay PostInvoicesInvoicePay" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Bulk remove invoice line items
@@ -7974,6 +8222,7 @@ export def "invoices-remove-lines PostInvoicesInvoiceRemoveLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   lines: list # The line items to remove. — item shape: {behavior: "delete"|"unassign", id: string}
@@ -7986,7 +8235,7 @@ export def "invoices-remove-lines PostInvoicesInvoiceRemoveLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Send an invoice for manual payment
@@ -8002,6 +8251,7 @@ export def "invoices-send PostInvoicesInvoiceSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_country: string, account_name: string, account_tax_ids: list<any>, amount_due: int, amount_overpaid: int, amount_paid: int, amount_paid_off_stripe: int, amount_remaining: int, amount_shipping: int, application: any, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any, provider: string, status: string>, automatically_finalizes_at: int, billing_reason: string, collection_method: string, confirmation_secret: any, created: int, currency: string, custom_fields: table<name: string, value: string>, customer: any, customer_account: string, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: table<type: string, value: string>, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, due_date: int, effective_at: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, issuer: record<account: any, type: string>, last_finalization_error: any, latest_revision: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, parent: any, payment_settings: record<default_mandate: string, payment_method_options: any, payment_method_types: list<string>>, payments: record<data: list<record>, has_more: bool, object: string, url: string>, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, receipt_number: string, rendering: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record<finalized_at: int, marked_uncollectible_at: int, paid_at: int, voided_at: int>, subtotal: int, subtotal_excluding_tax: int, test_clock: any, threshold_reason: record<amount_gte: int, item_reasons: list<record>>, total: int, total_discount_amounts: table<amount: int, discount: any>, total_excluding_tax: int, total_pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, webhooks_delivered_at: int> {
   let input = $in
@@ -8012,7 +8262,7 @@ export def "invoices-send PostInvoicesInvoiceSend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Bulk update invoice line items
@@ -8029,6 +8279,7 @@ export def "invoices-update-lines PostInvoicesInvoiceUpdateLines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`. For [type=subscription](https://docs.stripe.com/api/invoices/line_item#invoice_line_item_object-type) line items, the incoming metadata specified on the request is directly used to set this value, in contrast to [type=invoiceitem](api/invoices/line_item#invoice_line_item_object-type) line items, where any existing metadata on the invoice line is merged with the incoming data.
   lines: list # The line items to update. — item shape: {amount?: int, description?: string, discountable?: bool, discounts?: any, id: string, metadata?: any, period?: record, price_data?: record, pricing?: record, quantity?: int, quantity_decimal?: string, tax_amounts?: any, tax_rates?: any}
@@ -8041,7 +8292,7 @@ export def "invoices-update-lines PostInvoicesInvoiceUpdateLines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Void an invoice
@@ -8057,6 +8308,7 @@ export def "invoices-void PostInvoicesInvoiceVoid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_country: string, account_name: string, account_tax_ids: list<any>, amount_due: int, amount_overpaid: int, amount_paid: int, amount_paid_off_stripe: int, amount_remaining: int, amount_shipping: int, application: any, attempt_count: int, attempted: bool, auto_advance: bool, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any, provider: string, status: string>, automatically_finalizes_at: int, billing_reason: string, collection_method: string, confirmation_secret: any, created: int, currency: string, custom_fields: table<name: string, value: string>, customer: any, customer_account: string, customer_address: any, customer_email: string, customer_name: string, customer_phone: string, customer_shipping: any, customer_tax_exempt: string, customer_tax_ids: table<type: string, value: string>, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, due_date: int, effective_at: int, ending_balance: int, footer: string, from_invoice: any, hosted_invoice_url: string, id: string, invoice_pdf: string, issuer: record<account: any, type: string>, last_finalization_error: any, latest_revision: any, lines: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, next_payment_attempt: int, number: string, object: string, on_behalf_of: any, parent: any, payment_settings: record<default_mandate: string, payment_method_options: any, payment_method_types: list<string>>, payments: record<data: list<record>, has_more: bool, object: string, url: string>, period_end: int, period_start: int, post_payment_credit_notes_amount: int, pre_payment_credit_notes_amount: int, receipt_number: string, rendering: any, shipping_cost: any, shipping_details: any, starting_balance: int, statement_descriptor: string, status: string, status_transitions: record<finalized_at: int, marked_uncollectible_at: int, paid_at: int, voided_at: int>, subtotal: int, subtotal_excluding_tax: int, test_clock: any, threshold_reason: record<amount_gte: int, item_reasons: list<record>>, total: int, total_discount_amounts: table<amount: int, discount: any>, total_excluding_tax: int, total_pretax_credit_amounts: table<amount: int, credit_balance_transaction: any, discount: any, type: string>, total_taxes: table<amount: int, tax_behavior: string, tax_rate_details: any, taxability_reason: string, taxable_amount: int, type: string>, webhooks_delivered_at: int> {
   let input = $in
@@ -8067,7 +8319,7 @@ export def "invoices-void PostInvoicesInvoiceVoid" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all authorizations
@@ -8082,6 +8334,7 @@ export def "issuing-authorizations GetIssuingAuthorizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card: string # Only return authorizations that belong to the given card.
   --cardholder: string # Only return authorizations that belong to the given cardholder.
   --created: string # Only return authorizations that were created during the given date interval.
@@ -8100,7 +8353,7 @@ export def "issuing-authorizations GetIssuingAuthorizations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an authorization
@@ -8116,6 +8369,7 @@ export def "issuing-authorizations GetIssuingAuthorizationsAuthorization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
@@ -8127,7 +8381,7 @@ export def "issuing-authorizations GetIssuingAuthorizationsAuthorization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an authorization
@@ -8143,6 +8397,7 @@ export def "issuing-authorizations PostIssuingAuthorizationsAuthorization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
@@ -8154,7 +8409,7 @@ export def "issuing-authorizations PostIssuingAuthorizationsAuthorization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Approve an authorization
@@ -8172,6 +8427,7 @@ export def "issuing-authorizations-approve PostIssuingAuthorizationsAuthorizatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # If the authorization's `pending_request.is_amount_controllable` property is `true`, you may provide this value to control how much to hold for the authorization. Must be positive (use [`decline`](https://docs.stripe.com/api/issuing/authorizations/decline) to decline an authorization request).
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -8184,7 +8440,7 @@ export def "issuing-authorizations-approve PostIssuingAuthorizationsAuthorizatio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Decline an authorization
@@ -8202,6 +8458,7 @@ export def "issuing-authorizations-decline PostIssuingAuthorizationsAuthorizatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
@@ -8213,7 +8470,7 @@ export def "issuing-authorizations-decline PostIssuingAuthorizationsAuthorizatio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all cardholders
@@ -8228,6 +8485,7 @@ export def "issuing-cardholders GetIssuingCardholders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return cardholders that were created during the given date interval.
   --email: string # Only return cardholders that have the given email address.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -8247,7 +8505,7 @@ export def "issuing-cardholders GetIssuingCardholders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a cardholder
@@ -8266,6 +8524,7 @@ export def "issuing-cardholders PostIssuingCardholders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   billing: record # The cardholder's billing address. — shape: {address: record}
   --company: record # Additional information about a `company` cardholder. — shape: {tax_id?: string}
   --email: string # The cardholder's email address.
@@ -8287,7 +8546,7 @@ export def "issuing-cardholders PostIssuingCardholders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a cardholder
@@ -8303,6 +8562,7 @@ export def "issuing-cardholders GetIssuingCardholdersCardholder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<billing: record<address: record<city: string, country: string, line1: string, line2: string, postal_code: string, state: string>>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list<string>>, spending_controls: any, status: string, type: string> {
@@ -8314,7 +8574,7 @@ export def "issuing-cardholders GetIssuingCardholdersCardholder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a cardholder
@@ -8334,6 +8594,7 @@ export def "issuing-cardholders PostIssuingCardholdersCardholder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing: record # The cardholder's billing address. — shape: {address: record}
   --company: record # Additional information about a `company` cardholder. — shape: {tax_id?: string}
   --email: string # The cardholder's email address.
@@ -8353,7 +8614,7 @@ export def "issuing-cardholders PostIssuingCardholdersCardholder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all cards
@@ -8368,6 +8629,7 @@ export def "issuing-cards GetIssuingCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholder: string # Only return cards belonging to the Cardholder with the provided ID.
   --created: string # Only return cards that were issued during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -8390,7 +8652,7 @@ export def "issuing-cards GetIssuingCards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a card
@@ -8409,6 +8671,7 @@ export def "issuing-cards PostIssuingCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholder: string # The [Cardholder](https://docs.stripe.com/api#issuing_cardholder_object) object with which the card will be associated.
   currency: string # The currency for the card.
   --exp-month: int # The desired expiration month (1-12) for this card if [specifying a custom expiration date](/issuing/cards/virtual/issue-cards?testing-method=with-code#exp-dates).
@@ -8435,7 +8698,7 @@ export def "issuing-cards PostIssuingCards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a card
@@ -8451,6 +8714,7 @@ export def "issuing-cards GetIssuingCardsCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
@@ -8462,7 +8726,7 @@ export def "issuing-cards GetIssuingCardsCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a card
@@ -8481,6 +8745,7 @@ export def "issuing-cards PostIssuingCardsCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellation-reason: string@cancellation-reason-completer # Reason why the `status` of this card is `canceled`.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -8498,7 +8763,7 @@ export def "issuing-cards PostIssuingCardsCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all disputes
@@ -8513,6 +8778,7 @@ export def "issuing-disputes GetIssuingDisputes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return Issuing disputes that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -8530,7 +8796,7 @@ export def "issuing-disputes GetIssuingDisputes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a dispute
@@ -8547,6 +8813,7 @@ export def "issuing-disputes PostIssuingDisputes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The dispute amount in the card's currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal). If not set, defaults to the full transaction amount.
   --evidence: record # Evidence provided for the dispute. — shape: {canceled?: any, duplicate?: any, fraudulent?: any, merchandise_not_as_described?: any, no_valid_authorization?: any, not_received?: any, other?: any, reason?: "canceled"|"duplicate"|"fraudulent"|"merchandise_not_as_described"|"no_valid_authorization"|"not_received"|"other"|"service_not_as_described", service_not_as_described?: any}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -8562,7 +8829,7 @@ export def "issuing-disputes PostIssuingDisputes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a dispute
@@ -8578,6 +8845,7 @@ export def "issuing-disputes GetIssuingDisputesDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, created: int, currency: string, evidence: record<canceled: record<additional_documentation: any, canceled_at: int, cancellation_policy_provided: bool, cancellation_reason: string, expected_at: int, explanation: string, product_description: string, product_type: string, return_status: string, returned_at: int>, duplicate: record<additional_documentation: any, card_statement: any, cash_receipt: any, check_image: any, explanation: string, original_transaction: string>, fraudulent: record<additional_documentation: any, explanation: string>, merchandise_not_as_described: record<additional_documentation: any, explanation: string, received_at: int, return_description: string, return_status: string, returned_at: int>, no_valid_authorization: record<additional_documentation: any, explanation: string>, not_received: record<additional_documentation: any, expected_at: int, explanation: string, product_description: string, product_type: string>, other: record<additional_documentation: any, explanation: string, product_description: string, product_type: string>, reason: string, service_not_as_described: record<additional_documentation: any, canceled_at: int, cancellation_reason: string, explanation: string, received_at: int>>, id: string, livemode: bool, loss_reason: string, metadata: record, object: string, status: string, transaction: any, treasury: any> {
@@ -8589,7 +8857,7 @@ export def "issuing-disputes GetIssuingDisputesDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a dispute
@@ -8606,6 +8874,7 @@ export def "issuing-disputes PostIssuingDisputesDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The dispute amount in the card's currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   --evidence: record # Evidence provided for the dispute. — shape: {canceled?: any, duplicate?: any, fraudulent?: any, merchandise_not_as_described?: any, no_valid_authorization?: any, not_received?: any, other?: any, reason?: "canceled"|"duplicate"|"fraudulent"|"merchandise_not_as_described"|"no_valid_authorization"|"not_received"|"other"|"service_not_as_described", service_not_as_described?: any}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -8619,7 +8888,7 @@ export def "issuing-disputes PostIssuingDisputesDispute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Submit a dispute
@@ -8635,6 +8904,7 @@ export def "issuing-disputes-submit PostIssuingDisputesDisputeSubmit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, created: int, currency: string, evidence: record<canceled: record<additional_documentation: any, canceled_at: int, cancellation_policy_provided: bool, cancellation_reason: string, expected_at: int, explanation: string, product_description: string, product_type: string, return_status: string, returned_at: int>, duplicate: record<additional_documentation: any, card_statement: any, cash_receipt: any, check_image: any, explanation: string, original_transaction: string>, fraudulent: record<additional_documentation: any, explanation: string>, merchandise_not_as_described: record<additional_documentation: any, explanation: string, received_at: int, return_description: string, return_status: string, returned_at: int>, no_valid_authorization: record<additional_documentation: any, explanation: string>, not_received: record<additional_documentation: any, expected_at: int, explanation: string, product_description: string, product_type: string>, other: record<additional_documentation: any, explanation: string, product_description: string, product_type: string>, reason: string, service_not_as_described: record<additional_documentation: any, canceled_at: int, cancellation_reason: string, explanation: string, received_at: int>>, id: string, livemode: bool, loss_reason: string, metadata: record, object: string, status: string, transaction: any, treasury: any> {
@@ -8646,7 +8916,7 @@ export def "issuing-disputes-submit PostIssuingDisputesDisputeSubmit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all personalization designs
@@ -8661,6 +8931,7 @@ export def "issuing-personalization-designs GetIssuingPersonalizationDesigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -8678,7 +8949,7 @@ export def "issuing-personalization-designs GetIssuingPersonalizationDesigns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a personalization design
@@ -8695,6 +8966,7 @@ export def "issuing-personalization-designs PostIssuingPersonalizationDesigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card-logo: string # The file for the card logo, for use with physical bundles that support card logos. Must have a `purpose` value of `issuing_logo`.
   --carrier-text: record # Hash containing carrier text, for use with physical bundles that support carrier text. — shape: {footer_body?: any, footer_title?: any, header_body?: any, header_title?: any}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -8713,7 +8985,7 @@ export def "issuing-personalization-designs PostIssuingPersonalizationDesigns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a personalization design
@@ -8729,6 +9001,7 @@ export def "issuing-personalization-designs GetIssuingPersonalizationDesignsPers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<card_logo: any, carrier_text: any, created: int, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string, physical_bundle: any, preferences: record<is_default: bool, is_platform_default: bool>, rejection_reasons: record<card_logo: list<string>, carrier_text: list<string>>, status: string> {
@@ -8740,7 +9013,7 @@ export def "issuing-personalization-designs GetIssuingPersonalizationDesignsPers
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a personalization design
@@ -8757,6 +9030,7 @@ export def "issuing-personalization-designs PostIssuingPersonalizationDesignsPer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card-logo: any # The file for the card logo, for use with physical bundles that support card logos. Must have a `purpose` value of `issuing_logo`.
   --carrier-text: any # Hash containing carrier text, for use with physical bundles that support carrier text.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -8775,7 +9049,7 @@ export def "issuing-personalization-designs PostIssuingPersonalizationDesignsPer
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all physical bundles
@@ -8790,6 +9064,7 @@ export def "issuing-physical-bundles GetIssuingPhysicalBundles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -8806,7 +9081,7 @@ export def "issuing-physical-bundles GetIssuingPhysicalBundles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a physical bundle
@@ -8822,6 +9097,7 @@ export def "issuing-physical-bundles GetIssuingPhysicalBundlesPhysicalBundle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<features: record<card_logo: string, carrier_text: string, second_line: string>, id: string, livemode: bool, name: string, object: string, status: string, type: string> {
@@ -8833,7 +9109,7 @@ export def "issuing-physical-bundles GetIssuingPhysicalBundlesPhysicalBundle" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a settlement
@@ -8849,6 +9125,7 @@ export def "issuing-settlements GetIssuingSettlementsSettlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<bin: string, clearing_date: int, created: int, currency: string, id: string, interchange_fees_amount: int, livemode: bool, metadata: record, net_total_amount: int, network: string, network_fees_amount: int, network_settlement_identifier: string, object: string, settlement_service: string, status: string, transaction_amount: int, transaction_count: int> {
@@ -8860,7 +9137,7 @@ export def "issuing-settlements GetIssuingSettlementsSettlement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a settlement
@@ -8876,6 +9153,7 @@ export def "issuing-settlements PostIssuingSettlementsSettlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<bin: string, clearing_date: int, created: int, currency: string, id: string, interchange_fees_amount: int, livemode: bool, metadata: record, net_total_amount: int, network: string, network_fees_amount: int, network_settlement_identifier: string, object: string, settlement_service: string, status: string, transaction_amount: int, transaction_count: int> {
@@ -8887,7 +9165,7 @@ export def "issuing-settlements PostIssuingSettlementsSettlement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all issuing tokens for card
@@ -8902,6 +9180,7 @@ export def "issuing-tokens GetIssuingTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card: string # The Issuing card identifier to list tokens for.
   --created: string # Only return Issuing tokens that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -8919,7 +9198,7 @@ export def "issuing-tokens GetIssuingTokens" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an issuing token
@@ -8935,6 +9214,7 @@ export def "issuing-tokens GetIssuingTokensToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<card: any, created: int, device_fingerprint: string, id: string, last4: string, livemode: bool, network: string, network_data: record<device: record<device_fingerprint: string, ip_address: string, location: string, name: string, phone_number: string, type: string>, mastercard: record<card_reference_id: string, token_reference_id: string, token_requestor_id: string, token_requestor_name: string>, type: string, visa: record<card_reference_id: string, token_reference_id: string, token_requestor_id: string, token_risk_score: string>, wallet_provider: record<account_id: string, account_trust_score: int, card_number_source: string, cardholder_address: record, cardholder_name: string, device_trust_score: int, hashed_account_email_address: string, reason_codes: list, suggested_decision: string, suggested_decision_version: string>>, network_updated_at: int, object: string, status: string, wallet_provider: string> {
@@ -8946,7 +9226,7 @@ export def "issuing-tokens GetIssuingTokensToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a token status
@@ -8962,6 +9242,7 @@ export def "issuing-tokens PostIssuingTokensToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   status: string@status-completer-13 # Specifies which status the token should be updated to.
 ]: any -> record<card: any, created: int, device_fingerprint: string, id: string, last4: string, livemode: bool, network: string, network_data: record<device: record<device_fingerprint: string, ip_address: string, location: string, name: string, phone_number: string, type: string>, mastercard: record<card_reference_id: string, token_reference_id: string, token_requestor_id: string, token_requestor_name: string>, type: string, visa: record<card_reference_id: string, token_reference_id: string, token_requestor_id: string, token_risk_score: string>, wallet_provider: record<account_id: string, account_trust_score: int, card_number_source: string, cardholder_address: record, cardholder_name: string, device_trust_score: int, hashed_account_email_address: string, reason_codes: list, suggested_decision: string, suggested_decision_version: string>>, network_updated_at: int, object: string, status: string, wallet_provider: string> {
@@ -8973,7 +9254,7 @@ export def "issuing-tokens PostIssuingTokensToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all transactions
@@ -8988,6 +9269,7 @@ export def "issuing-transactions GetIssuingTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card: string # Only return transactions that belong to the given card.
   --cardholder: string # Only return transactions that belong to the given cardholder.
   --created: string # Only return transactions that were created during the given date interval.
@@ -9006,7 +9288,7 @@ export def "issuing-transactions GetIssuingTransactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a transaction
@@ -9022,6 +9304,7 @@ export def "issuing-transactions GetIssuingTransactionsTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string> {
@@ -9033,7 +9316,7 @@ export def "issuing-transactions GetIssuingTransactionsTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a transaction
@@ -9049,6 +9332,7 @@ export def "issuing-transactions PostIssuingTransactionsTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string> {
@@ -9060,7 +9344,7 @@ export def "issuing-transactions PostIssuingTransactionsTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Session
@@ -9077,6 +9361,7 @@ export def "link-account-sessions PostLinkAccountSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_holder: record # The account holder to link accounts for. — shape: {account?: string, customer?: string, customer_account?: string, type: "account"|"customer"}
   --expand: list # Specifies which fields in the response should be expanded.
   --filters: record # Filters to restrict the kinds of accounts to collect. — shape: {account_subcategories?: list, countries?: list}
@@ -9092,7 +9377,7 @@ export def "link-account-sessions PostLinkAccountSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Session
@@ -9108,6 +9393,7 @@ export def "link-account-sessions GetLinkAccountSessionsSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account_holder: any, accounts: record<data: list<record>, has_more: bool, object: string, url: string>, client_secret: string, filters: record<account_subcategories: list<string>, countries: list<string>>, id: string, livemode: bool, object: string, permissions: list<string>, prefetch: list<string>, return_url: string> {
@@ -9119,7 +9405,7 @@ export def "link-account-sessions GetLinkAccountSessionsSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Accounts
@@ -9134,6 +9420,7 @@ export def "linked-accounts GetLinkedAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder: record # If present, only return accounts that belong to the specified account holder. `account_holder[customer]` and `account_holder[account]` are mutually exclusive.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -9150,7 +9437,7 @@ export def "linked-accounts GetLinkedAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an Account
@@ -9166,6 +9453,7 @@ export def "linked-accounts GetLinkedAccountsAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -9177,7 +9465,7 @@ export def "linked-accounts GetLinkedAccountsAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Disconnect an Account
@@ -9193,6 +9481,7 @@ export def "linked-accounts-disconnect PostLinkedAccountsAccountDisconnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
   let input = $in
@@ -9203,7 +9492,7 @@ export def "linked-accounts-disconnect PostLinkedAccountsAccountDisconnect" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Account Owners
@@ -9219,6 +9508,7 @@ export def "linked-accounts-owners GetLinkedAccountsAccountOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -9234,7 +9524,7 @@ export def "linked-accounts-owners GetLinkedAccountsAccountOwners" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refresh Account data
@@ -9250,6 +9540,7 @@ export def "linked-accounts-refresh PostLinkedAccountsAccountRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   features: list # The list of account features that you would like to refresh.
 ]: any -> record<account_holder: any, account_numbers: table<expected_expiry_date: int, identifier_type: string, status: string, supported_networks: list>, balance: any, balance_refresh: any, category: string, created: int, display_name: string, id: string, institution_name: string, last4: string, livemode: bool, object: string, ownership: any, ownership_refresh: any, permissions: list<string>, status: string, subcategory: string, subscriptions: list<string>, supported_payment_method_types: list<string>, transaction_refresh: any> {
@@ -9261,7 +9552,7 @@ export def "linked-accounts-refresh PostLinkedAccountsAccountRefresh" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Mandate
@@ -9277,6 +9568,7 @@ export def "mandates GetMandatesMandate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<customer_acceptance: record<accepted_at: int, offline: record, online: record<ip_address: string, user_agent: string>, type: string>, id: string, livemode: bool, multi_use: record<amount: int, currency: string>, object: string, on_behalf_of: string, payment_method: any, payment_method_details: record<acss_debit: record<default_for: list, interval_description: string, payment_schedule: string, transaction_type: string>, amazon_pay: record, au_becs_debit: record<url: string>, bacs_debit: record<display_name: string, network_status: string, reference: string, revocation_reason: string, service_user_number: string, url: string>, card: record, cashapp: record, kakao_pay: record, klarna: record, kr_card: record, link: record, naver_pay: record, nz_bank_account: record, paypal: record<billing_agreement_id: string, payer_id: string>, payto: record<amount: int, amount_type: string, end_date: string, payment_schedule: string, payments_per_period: int, purpose: string, start_date: string>, pix: record<amount_includes_iof: string, amount_type: string, end_date: string, payment_schedule: string, reference: string, start_date: string>, revolut_pay: record, sepa_debit: record<reference: string, url: string>, twint: record, type: string, upi: record<amount: int, amount_type: string, description: string, end_date: int>, us_bank_account: record<collection_method: string>>, single_use: record<amount: int, currency: string>, status: string, type: string> {
@@ -9288,7 +9580,7 @@ export def "mandates GetMandatesMandate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Payment Attempt Records
@@ -9303,6 +9595,7 @@ export def "payment-attempt-records GetPaymentAttemptRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --payment-record: string # The ID of the Payment Record.
@@ -9317,7 +9610,7 @@ export def "payment-attempt-records GetPaymentAttemptRecords" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Payment Attempt Record
@@ -9333,6 +9626,7 @@ export def "payment-attempt-records GetPaymentAttemptRecordsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: record<currency: string, value: int>, amount_authorized: record<currency: string, value: int>, amount_canceled: record<currency: string, value: int>, amount_failed: record<currency: string, value: int>, amount_guaranteed: record<currency: string, value: int>, amount_refunded: record<currency: string, value: int>, amount_requested: record<currency: string, value: int>, application: string, created: int, customer_details: any, customer_presence: string, description: string, id: string, livemode: bool, metadata: record, object: string, payment_method_details: any, payment_record: string, processor_details: record<custom: record<payment_reference: string>, type: string>, reported_by: string, shipping_details: any> {
@@ -9344,7 +9638,7 @@ export def "payment-attempt-records GetPaymentAttemptRecordsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all PaymentIntents
@@ -9359,6 +9653,7 @@ export def "payment-intents GetPaymentIntents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp or a dictionary with a number of different query options.
   --customer: string # Only return PaymentIntents for the customer that this customer ID specifies.
   --customer-account: string # Only return PaymentIntents for the account representing the customer that this ID specifies.
@@ -9376,7 +9671,7 @@ export def "payment-intents GetPaymentIntents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a PaymentIntent
@@ -9400,6 +9695,7 @@ export def "payment-intents PostPaymentIntents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount intended to be collected by this PaymentIntent. A positive integer representing how much to charge in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) (e.g., 100 cents to charge $1.00 or 100 to charge ¥100, a zero-decimal currency). The minimum amount is $0.50 US or [equivalent in charge currency](https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts). The amount value supports up to eight digits (e.g., a value of 99999999 for a USD charge of $999,999.99).
   --amount-details: record # Provides industry-specific information about the amount. — shape: {discount_amount?: any, enforce_arithmetic_validation?: bool, line_items?: any, shipping?: any, tax?: any}
   --application-fee-amount: int # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. The amount of the application fee collected will be capped at the total amount captured. For more information, see the PaymentIntents [use case for connected accounts](https://docs.stripe.com/payments/connected-accounts).
@@ -9446,7 +9742,7 @@ export def "payment-intents PostPaymentIntents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search PaymentIntents
@@ -9461,6 +9757,7 @@ export def "payment-intents-search GetPaymentIntentsSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -9475,7 +9772,7 @@ export def "payment-intents-search GetPaymentIntentsSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a PaymentIntent
@@ -9491,6 +9788,7 @@ export def "payment-intents GetPaymentIntentsIntent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-secret: string # The client secret of the PaymentIntent. We require it if you use a publishable key to retrieve the source.
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
@@ -9503,7 +9801,7 @@ export def "payment-intents GetPaymentIntentsIntent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a PaymentIntent
@@ -9523,6 +9821,7 @@ export def "payment-intents PostPaymentIntentsIntent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Amount intended to be collected by this PaymentIntent. A positive integer representing how much to charge in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) (e.g., 100 cents to charge $1.00 or 100 to charge ¥100, a zero-decimal currency). The minimum amount is $0.50 US or [equivalent in charge currency](https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts). The amount value supports up to eight digits (e.g., a value of 99999999 for a USD charge of $999,999.99).
   --amount-details: any # Provides industry-specific information about the amount.
   --application-fee-amount: any # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. The amount of the application fee collected will be capped at the total amount captured. For more information, see the PaymentIntents [use case for connected accounts](https://docs.stripe.com/payments/connected-accounts).
@@ -9557,7 +9856,7 @@ export def "payment-intents PostPaymentIntentsIntent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all PaymentIntent LineItems
@@ -9573,6 +9872,7 @@ export def "payment-intents-amount-details-line-items GetPaymentIntentsIntentAmo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -9587,7 +9887,7 @@ export def "payment-intents-amount-details-line-items GetPaymentIntentsIntentAmo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reconcile a customer_balance PaymentIntent
@@ -9603,6 +9903,7 @@ export def "payment-intents-apply-customer-balance PostPaymentIntentsIntentApply
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Amount that you intend to apply to this PaymentIntent from the customer’s cash balance. If the PaymentIntent was created by an Invoice, the full amount of the PaymentIntent is applied regardless of this parameter.  A positive integer representing how much to charge in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) (for example, 100 cents to charge 1 USD or 100 to charge 100 JPY, a zero-decimal currency). The maximum amount is the amount of the PaymentIntent.  When you omit the amount, it defaults to the remaining amount requested on the PaymentIntent.
   --currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --expand: list # Specifies which fields in the response should be expanded.
@@ -9615,7 +9916,7 @@ export def "payment-intents-apply-customer-balance PostPaymentIntentsIntentApply
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a PaymentIntent
@@ -9631,6 +9932,7 @@ export def "payment-intents-cancel PostPaymentIntentsIntentCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellation-reason: string@cancellation-reason-completer-1 # Reason for canceling this PaymentIntent. Possible values are: `duplicate`, `fraudulent`, `requested_by_customer`, or `abandoned`
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, amount_capturable: int, amount_details: any, amount_received: int, application: any, application_fee_amount: int, automatic_payment_methods: any, canceled_at: int, cancellation_reason: string, capture_method: string, client_secret: string, confirmation_method: string, created: int, currency: string, customer: any, customer_account: string, description: string, excluded_payment_method_types: list<string>, hooks: record<inputs: record<tax: record>>, id: string, last_payment_error: any, latest_charge: any, livemode: bool, managed_payments: any, metadata: record, next_action: any, object: string, on_behalf_of: any, payment_details: record<customer_reference: string, order_reference: string>, payment_method: any, payment_method_configuration_details: any, payment_method_options: any, payment_method_types: list<string>, presentment_details: record<presentment_amount: int, presentment_currency: string>, processing: any, receipt_email: string, review: any, setup_future_usage: string, shipping: any, statement_descriptor: string, statement_descriptor_suffix: string, status: string, transfer_data: any, transfer_group: string> {
@@ -9642,7 +9944,7 @@ export def "payment-intents-cancel PostPaymentIntentsIntentCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Capture a PaymentIntent
@@ -9661,6 +9963,7 @@ export def "payment-intents-capture PostPaymentIntentsIntentCapture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount-details: record # Provides industry-specific information about the amount. — shape: {discount_amount?: any, enforce_arithmetic_validation?: bool, line_items?: any, shipping?: any, tax?: any}
   --amount-to-capture: int # The amount to capture from the PaymentIntent, which must be less than or equal to the original amount. Defaults to the full `amount_capturable` if it's not provided.
   --application-fee-amount: int # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. The amount of the application fee collected will be capped at the total amount captured. For more information, see the PaymentIntents [use case for connected accounts](https://docs.stripe.com/payments/connected-accounts).
@@ -9681,7 +9984,7 @@ export def "payment-intents-capture PostPaymentIntentsIntentCapture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Confirm a PaymentIntent
@@ -9701,6 +10004,7 @@ export def "payment-intents-confirm PostPaymentIntentsIntentConfirm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount-details: any # Provides industry-specific information about the amount.
   --amount-to-confirm: int # Amount to confirm on the PaymentIntent. Defaults to `amount` if not provided.
   --capture-method: string@capture-method-completer # Controls when the funds will be captured from the customer's account.
@@ -9733,7 +10037,7 @@ export def "payment-intents-confirm PostPaymentIntentsIntentConfirm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Increment an authorization
@@ -9753,6 +10057,7 @@ export def "payment-intents-increment-authorization PostPaymentIntentsIntentIncr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # The updated total amount that you intend to collect from the cardholder. This amount must be greater than the currently authorized amount.
   --amount-details: record # Provides industry-specific information about the amount. — shape: {discount_amount?: any, enforce_arithmetic_validation?: bool, line_items?: any, shipping?: any, tax?: any}
   --application-fee-amount: int # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. The amount of the application fee collected will be capped at the total amount captured. For more information, see the PaymentIntents [use case for connected accounts](https://docs.stripe.com/payments/connected-accounts).
@@ -9772,7 +10077,7 @@ export def "payment-intents-increment-authorization PostPaymentIntentsIntentIncr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Verify microdeposits on a PaymentIntent
@@ -9788,6 +10093,7 @@ export def "payment-intents-verify-microdeposits PostPaymentIntentsIntentVerifyM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amounts: list # Two positive integers, in *cents*, equal to the values of the microdeposits sent to the bank account.
   --client-secret: string # The client secret of the PaymentIntent.
   --descriptor-code: string # A six-character code starting with SM present in the microdeposit sent to the bank account.
@@ -9801,7 +10107,7 @@ export def "payment-intents-verify-microdeposits PostPaymentIntentsIntentVerifyM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all payment links
@@ -9816,6 +10122,7 @@ export def "payment-links GetPaymentLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return payment links that are active or inactive (e.g., pass `false` to list all inactive payment links).
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -9831,7 +10138,7 @@ export def "payment-links GetPaymentLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payment link
@@ -9865,6 +10172,7 @@ export def "payment-links PostPaymentLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after-completion: record # Behavior after the purchase is complete. — shape: {hosted_confirmation?: record, redirect?: record, type: "hosted_confirmation"|"redirect"}
   --allow-promotion-codes: oneof<nothing, bool> # Enables user redeemable promotion codes.
   --application-fee-amount: int # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. Can only be applied when there are no line items with recurring prices.
@@ -9906,7 +10214,7 @@ export def "payment-links PostPaymentLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve payment link
@@ -9922,6 +10230,7 @@ export def "payment-links GetPaymentLinksPaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, after_completion: record<hosted_confirmation: record<custom_message: string>, redirect: record<url: string>, type: string>, allow_promotion_codes: bool, application: any, application_fee_amount: int, application_fee_percent: float, automatic_tax: record<enabled: bool, liability: any>, billing_address_collection: string, consent_collection: any, currency: string, custom_fields: table<dropdown: record, key: string, label: record, numeric: record, optional: bool, text: record, type: string>, custom_text: record<after_submit: any, shipping_address: any, submit: any, terms_of_service_acceptance: any>, customer_creation: string, id: string, inactive_message: string, invoice_creation: any, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, managed_payments: any, metadata: record, name_collection: record<business: record<enabled: bool, optional: bool>, individual: record<enabled: bool, optional: bool>>, object: string, on_behalf_of: any, optional_items: table<adjustable_quantity: any, price: string, quantity: int>, payment_intent_data: any, payment_method_collection: string, payment_method_options: any, payment_method_types: list<string>, phone_number_collection: record<enabled: bool>, restrictions: any, shipping_address_collection: any, shipping_options: table<shipping_amount: int, shipping_rate: any>, submit_type: string, subscription_data: any, tax_id_collection: record<enabled: bool, required: string>, transfer_data: any, url: string> {
@@ -9933,7 +10242,7 @@ export def "payment-links GetPaymentLinksPaymentLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a payment link
@@ -9958,6 +10267,7 @@ export def "payment-links PostPaymentLinksPaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the payment link's `url` is active. If `false`, customers visiting the URL will be shown a page saying that the link has been deactivated.
   --after-completion: record # Behavior after the purchase is complete. — shape: {hosted_confirmation?: record, redirect?: record, type: "hosted_confirmation"|"redirect"}
   --allow-promotion-codes: oneof<nothing, bool> # Enables user redeemable promotion codes.
@@ -9992,7 +10302,7 @@ export def "payment-links PostPaymentLinksPaymentLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a payment link's line items
@@ -10008,6 +10318,7 @@ export def "payment-links-line-items GetPaymentLinksPaymentLinkLineItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -10022,7 +10333,7 @@ export def "payment-links-line-items GetPaymentLinksPaymentLinkLineItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List payment method configurations
@@ -10037,6 +10348,7 @@ export def "payment-method-configurations GetPaymentMethodConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the configuration is active.
   --application: string # The Connect application to filter by.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -10053,7 +10365,7 @@ export def "payment-method-configurations GetPaymentMethodConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payment method configuration
@@ -10128,6 +10440,7 @@ export def "payment-method-configurations PostPaymentMethodConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acss-debit: record # Canadian pre-authorized debit payments, check this [page](https://docs.stripe.com/payments/acss-debit) for more details like country availability. — shape: {display_preference?: record}
   --affirm: record # [Affirm](https://www.affirm.com/) gives your customers a way to split purchases over a series of payments. Depending on the purchase, they can pay with four interest-free payments (Split Pay) or pay over a longer term (Installments), which might include interest. Check this [page](https://docs.stripe.com/payments/affirm) for more details like country availability. — shape: {display_preference?: record}
   --afterpay-clearpay: record # Afterpay gives your customers a way to pay for purchases in installments, check this [page](https://docs.stripe.com/payments/afterpay-clearpay) for more details like country availability. Afterpay is particularly popular among businesses selling fashion, beauty, and sports products. — shape: {display_preference?: record}
@@ -10200,7 +10513,7 @@ export def "payment-method-configurations PostPaymentMethodConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve payment method configuration
@@ -10216,6 +10529,7 @@ export def "payment-method-configurations GetPaymentMethodConfigurationsConfigur
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<acss_debit: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, active: bool, affirm: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, afterpay_clearpay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, alipay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, alma: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, amazon_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, apple_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, application: string, au_becs_debit: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, bacs_debit: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, bancontact: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, billie: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, bizum: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, blik: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, boleto: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, card: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, cartes_bancaires: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, cashapp: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, crypto: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, customer_balance: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, eps: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, fpx: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, giropay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, google_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, grabpay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, id: string, ideal: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, is_default: bool, jcb: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, kakao_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, klarna: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, konbini: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, kr_card: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, link: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, livemode: bool, mb_way: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, mobilepay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, multibanco: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, name: string, naver_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, nz_bank_account: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, object: string, oxxo: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, p24: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, parent: string, pay_by_bank: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, payco: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, paynow: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, paypal: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, payto: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, pix: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, promptpay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, revolut_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, samsung_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, satispay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, scalapay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, sepa_debit: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, sofort: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, sunbit: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, swish: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, twint: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, upi: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, us_bank_account: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, wechat_pay: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>, zip: record<available: bool, display_preference: record<overridable: bool, preference: string, value: string>>> {
@@ -10227,7 +10541,7 @@ export def "payment-method-configurations GetPaymentMethodConfigurationsConfigur
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update payment method configuration
@@ -10303,6 +10617,7 @@ export def "payment-method-configurations PostPaymentMethodConfigurationsConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acss-debit: record # Canadian pre-authorized debit payments, check this [page](https://docs.stripe.com/payments/acss-debit) for more details like country availability. — shape: {display_preference?: record}
   --active: oneof<nothing, bool> # Whether the configuration can be used for new payments.
   --affirm: record # [Affirm](https://www.affirm.com/) gives your customers a way to split purchases over a series of payments. Depending on the purchase, they can pay with four interest-free payments (Split Pay) or pay over a longer term (Installments), which might include interest. Check this [page](https://docs.stripe.com/payments/affirm) for more details like country availability. — shape: {display_preference?: record}
@@ -10375,7 +10690,7 @@ export def "payment-method-configurations PostPaymentMethodConfigurationsConfigu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List payment method domains
@@ -10390,6 +10705,7 @@ export def "payment-method-domains GetPaymentMethodDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name that this payment method domain object represents.
   --enabled: oneof<nothing, bool> # Whether this payment method domain is enabled. If the domain is not enabled, payment methods will not appear in Elements or Embedded Checkout
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -10406,7 +10722,7 @@ export def "payment-method-domains GetPaymentMethodDomains" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payment method domain
@@ -10421,6 +10737,7 @@ export def "payment-method-domains PostPaymentMethodDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain_name: string # The domain name that this payment method domain object represents.
   --enabled: oneof<nothing, bool> # Whether this payment method domain is enabled. If the domain is not enabled, payment methods that require a payment method domain will not appear in Elements or Embedded Checkout.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -10433,7 +10750,7 @@ export def "payment-method-domains PostPaymentMethodDomains" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a payment method domain
@@ -10449,6 +10766,7 @@ export def "payment-method-domains GetPaymentMethodDomainsPaymentMethodDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amazon_pay: record<status: string, status_details: record<error_message: string>>, apple_pay: record<status: string, status_details: record<error_message: string>>, created: int, domain_name: string, enabled: bool, google_pay: record<status: string, status_details: record<error_message: string>>, id: string, klarna: record<status: string, status_details: record<error_message: string>>, link: record<status: string, status_details: record<error_message: string>>, livemode: bool, object: string, paypal: record<status: string, status_details: record<error_message: string>>> {
@@ -10460,7 +10778,7 @@ export def "payment-method-domains GetPaymentMethodDomainsPaymentMethodDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a payment method domain
@@ -10476,6 +10794,7 @@ export def "payment-method-domains PostPaymentMethodDomainsPaymentMethodDomain" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Whether this payment method domain is enabled. If the domain is not enabled, payment methods that require a payment method domain will not appear in Elements or Embedded Checkout.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amazon_pay: record<status: string, status_details: record<error_message: string>>, apple_pay: record<status: string, status_details: record<error_message: string>>, created: int, domain_name: string, enabled: bool, google_pay: record<status: string, status_details: record<error_message: string>>, id: string, klarna: record<status: string, status_details: record<error_message: string>>, link: record<status: string, status_details: record<error_message: string>>, livemode: bool, object: string, paypal: record<status: string, status_details: record<error_message: string>>> {
@@ -10487,7 +10806,7 @@ export def "payment-method-domains PostPaymentMethodDomainsPaymentMethodDomain" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Validate an existing payment method domain
@@ -10503,6 +10822,7 @@ export def "payment-method-domains-validate PostPaymentMethodDomainsPaymentMetho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amazon_pay: record<status: string, status_details: record<error_message: string>>, apple_pay: record<status: string, status_details: record<error_message: string>>, created: int, domain_name: string, enabled: bool, google_pay: record<status: string, status_details: record<error_message: string>>, id: string, klarna: record<status: string, status_details: record<error_message: string>>, link: record<status: string, status_details: record<error_message: string>>, livemode: bool, object: string, paypal: record<status: string, status_details: record<error_message: string>>> {
   let input = $in
@@ -10513,7 +10833,7 @@ export def "payment-method-domains-validate PostPaymentMethodDomainsPaymentMetho
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List PaymentMethods
@@ -10528,6 +10848,7 @@ export def "payment-methods GetPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-redisplay: string@allow-redisplay-completer # This field indicates whether this payment method can be shown again to its customer in a checkout flow. Stripe products such as Checkout and Elements use this field to determine whether a payment method can be shown as a saved payment method in a checkout flow.
   --customer: string # The ID of the customer whose PaymentMethods will be retrieved.
   --customer-account: string # The ID of the Account whose PaymentMethods will be retrieved.
@@ -10546,7 +10867,7 @@ export def "payment-methods GetPaymentMethods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Shares a PaymentMethod
@@ -10580,6 +10901,7 @@ export def "payment-methods PostPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acss-debit: record # If this is an `acss_debit` PaymentMethod, this hash contains details about the ACSS Debit payment method. — shape: {account_number: string, institution_number: string, transit_number: string}
   --affirm: record # If this is an `affirm` PaymentMethod, this hash contains details about the Affirm payment method.
   --afterpay-clearpay: record # If this is an `AfterpayClearpay` PaymentMethod, this hash contains details about the AfterpayClearpay payment method.
@@ -10653,7 +10975,7 @@ export def "payment-methods PostPaymentMethods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a PaymentMethod
@@ -10669,6 +10991,7 @@ export def "payment-methods GetPaymentMethodsPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<acss_debit: record<bank_name: string, fingerprint: string, institution_number: string, last4: string, transit_number: string>, affirm: record, afterpay_clearpay: record, alipay: record, allow_redisplay: string, alma: record, amazon_pay: record, au_becs_debit: record<bsb_number: string, fingerprint: string, last4: string>, bacs_debit: record<fingerprint: string, last4: string, sort_code: string>, bancontact: record, billie: record, billing_details: record<address: any, email: string, name: string, phone: string, tax_id: string>, bizum: record, blik: record, boleto: record<tax_id: string>, card: record<brand: string, checks: any, country: string, display_brand: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, generated_from: any, last4: string, networks: any, regulated_status: string, three_d_secure_usage: any, wallet: any>, card_present: record<brand: string, brand_product: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, offline: any, preferred_locales: list<string>, read_method: string, wallet: record<type: string>>, cashapp: record<buyer_id: string, cashtag: string>, created: int, crypto: record, custom: record<display_name: string, logo: any, type: string>, customer: any, customer_account: string, customer_balance: record, eps: record<bank: string>, fpx: record<bank: string>, giropay: record, grabpay: record, id: string, ideal: record<bank: string, bic: string>, interac_present: record<brand: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, preferred_locales: list<string>, read_method: string>, kakao_pay: record, klarna: record<dob: any>, konbini: record, kr_card: record<brand: string, last4: string>, link: record<email: string>, livemode: bool, mb_way: record, metadata: record, mobilepay: record, multibanco: record, naver_pay: record<buyer_id: string, funding: string>, nz_bank_account: record<account_holder_name: string, bank_code: string, bank_name: string, branch_code: string, last4: string, suffix: string>, object: string, oxxo: record, p24: record<bank: string>, pay_by_bank: record, payco: record, paynow: record, paypal: record<country: string, payer_email: string, payer_id: string>, payto: record<bsb_number: string, last4: string, pay_id: string>, pix: record, promptpay: record, radar_options: record<session: string>, revolut_pay: record, samsung_pay: record, satispay: record, scalapay: record, sepa_debit: record<bank_code: string, branch_code: string, country: string, fingerprint: string, generated_from: any, last4: string>, sofort: record<country: string>, sunbit: record, swish: record, twint: record, type: string, upi: record<vpa: string>, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, financial_connections_account: string, fingerprint: string, last4: string, networks: any, routing_number: string, status_details: any>, wechat_pay: record, zip: record> {
@@ -10680,7 +11003,7 @@ export def "payment-methods GetPaymentMethodsPaymentMethod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a PaymentMethod
@@ -10700,6 +11023,7 @@ export def "payment-methods PostPaymentMethodsPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-redisplay: string@allow-redisplay-completer # This field indicates whether this payment method can be shown again to its customer in a checkout flow. Stripe products such as Checkout and Elements use this field to determine whether a payment method can be shown as a saved payment method in a checkout flow. The field defaults to `unspecified`.
   --billing-details: record # Billing information associated with the PaymentMethod that may be used or required by particular types of payment methods. — shape: {address?: any, email?: any, name?: any, phone?: any, tax_id?: string}
   --card: record # If this is a `card` PaymentMethod, this hash contains the user's card details. — shape: {exp_month?: int, exp_year?: int, networks?: record}
@@ -10716,7 +11040,7 @@ export def "payment-methods PostPaymentMethodsPaymentMethod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attach a PaymentMethod to a Customer
@@ -10732,6 +11056,7 @@ export def "payment-methods-attach PostPaymentMethodsPaymentMethodAttach" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The ID of the customer to which to attach the PaymentMethod.
   --customer-account: string # The ID of the Account representing the customer to which to attach the PaymentMethod.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -10744,7 +11069,7 @@ export def "payment-methods-attach PostPaymentMethodsPaymentMethodAttach" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Detach a PaymentMethod from a Customer
@@ -10760,6 +11085,7 @@ export def "payment-methods-detach PostPaymentMethodsPaymentMethodDetach" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<acss_debit: record<bank_name: string, fingerprint: string, institution_number: string, last4: string, transit_number: string>, affirm: record, afterpay_clearpay: record, alipay: record, allow_redisplay: string, alma: record, amazon_pay: record, au_becs_debit: record<bsb_number: string, fingerprint: string, last4: string>, bacs_debit: record<fingerprint: string, last4: string, sort_code: string>, bancontact: record, billie: record, billing_details: record<address: any, email: string, name: string, phone: string, tax_id: string>, bizum: record, blik: record, boleto: record<tax_id: string>, card: record<brand: string, checks: any, country: string, display_brand: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, generated_from: any, last4: string, networks: any, regulated_status: string, three_d_secure_usage: any, wallet: any>, card_present: record<brand: string, brand_product: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, offline: any, preferred_locales: list<string>, read_method: string, wallet: record<type: string>>, cashapp: record<buyer_id: string, cashtag: string>, created: int, crypto: record, custom: record<display_name: string, logo: any, type: string>, customer: any, customer_account: string, customer_balance: record, eps: record<bank: string>, fpx: record<bank: string>, giropay: record, grabpay: record, id: string, ideal: record<bank: string, bic: string>, interac_present: record<brand: string, cardholder_name: string, country: string, description: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, issuer: string, last4: string, networks: any, preferred_locales: list<string>, read_method: string>, kakao_pay: record, klarna: record<dob: any>, konbini: record, kr_card: record<brand: string, last4: string>, link: record<email: string>, livemode: bool, mb_way: record, metadata: record, mobilepay: record, multibanco: record, naver_pay: record<buyer_id: string, funding: string>, nz_bank_account: record<account_holder_name: string, bank_code: string, bank_name: string, branch_code: string, last4: string, suffix: string>, object: string, oxxo: record, p24: record<bank: string>, pay_by_bank: record, payco: record, paynow: record, paypal: record<country: string, payer_email: string, payer_id: string>, payto: record<bsb_number: string, last4: string, pay_id: string>, pix: record, promptpay: record, radar_options: record<session: string>, revolut_pay: record, samsung_pay: record, satispay: record, scalapay: record, sepa_debit: record<bank_code: string, branch_code: string, country: string, fingerprint: string, generated_from: any, last4: string>, sofort: record<country: string>, sunbit: record, swish: record, twint: record, type: string, upi: record<vpa: string>, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, financial_connections_account: string, fingerprint: string, last4: string, networks: any, routing_number: string, status_details: any>, wechat_pay: record, zip: record> {
   let input = $in
@@ -10770,7 +11096,7 @@ export def "payment-methods-detach PostPaymentMethodsPaymentMethodDetach" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report a payment
@@ -10792,6 +11118,7 @@ export def "payment-records-report-payment PostPaymentRecordsReportPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount_requested: record # The amount you initially requested for this payment. — shape: {currency: string, value: int}
   --customer-details: record # Customer information for this payment. — shape: {customer?: string, email?: string, name?: string, phone?: string}
   --customer-presence: string@customer-presence-completer # Indicates whether the customer was present in your checkout flow during this payment.
@@ -10814,7 +11141,7 @@ export def "payment-records-report-payment PostPaymentRecordsReportPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Payment Record
@@ -10830,6 +11157,7 @@ export def "payment-records GetPaymentRecordsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: record<currency: string, value: int>, amount_authorized: record<currency: string, value: int>, amount_canceled: record<currency: string, value: int>, amount_failed: record<currency: string, value: int>, amount_guaranteed: record<currency: string, value: int>, amount_refunded: record<currency: string, value: int>, amount_requested: record<currency: string, value: int>, application: string, created: int, customer_details: any, customer_presence: string, description: string, id: string, latest_payment_attempt_record: string, livemode: bool, metadata: record, object: string, payment_method_details: any, processor_details: record<custom: record<payment_reference: string>, type: string>, reported_by: string, shipping_details: any> {
@@ -10841,7 +11169,7 @@ export def "payment-records GetPaymentRecordsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report a payment attempt
@@ -10861,6 +11189,7 @@ export def "payment-records-report-payment-attempt PostPaymentRecordsIdReportPay
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
   --expand: list # Specifies which fields in the response should be expanded.
   --failed: record # Information about the payment attempt failure. — shape: {failed_at: int}
@@ -10879,7 +11208,7 @@ export def "payment-records-report-payment-attempt PostPaymentRecordsIdReportPay
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report payment attempt canceled
@@ -10895,6 +11224,7 @@ export def "payment-records-report-payment-attempt-canceled PostPaymentRecordsId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   canceled_at: int # When the reported payment was canceled. Measured in seconds since the Unix epoch. (format: unix-time)
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -10907,7 +11237,7 @@ export def "payment-records-report-payment-attempt-canceled PostPaymentRecordsId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report payment attempt failed
@@ -10923,6 +11253,7 @@ export def "payment-records-report-payment-attempt-failed PostPaymentRecordsIdRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   failed_at: int # When the reported payment failed. Measured in seconds since the Unix epoch. (format: unix-time)
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -10935,7 +11266,7 @@ export def "payment-records-report-payment-attempt-failed PostPaymentRecordsIdRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report payment attempt guaranteed
@@ -10951,6 +11282,7 @@ export def "payment-records-report-payment-attempt-guaranteed PostPaymentRecords
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   guaranteed_at: int # When the reported payment was guaranteed. Measured in seconds since the Unix epoch. (format: unix-time)
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -10963,7 +11295,7 @@ export def "payment-records-report-payment-attempt-guaranteed PostPaymentRecords
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report payment attempt informational
@@ -10980,6 +11312,7 @@ export def "payment-records-report-payment-attempt-informational PostPaymentReco
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-details: record # Customer information for this payment. — shape: {customer?: string, email?: string, name?: string, phone?: string}
   --description: any # An arbitrary string attached to the object. Often useful for displaying to users.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -10994,7 +11327,7 @@ export def "payment-records-report-payment-attempt-informational PostPaymentReco
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Report a refund
@@ -11013,6 +11346,7 @@ export def "payment-records-report-refund PostPaymentRecordsIdReportRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # A positive integer in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) representing how much of this payment to refund. Can refund only up to the remaining, unrefunded amount of the payment. — shape: {currency: string, value: int}
   --expand: list # Specifies which fields in the response should be expanded.
   --initiated-at: int # When the reported refund was initiated. Measured in seconds since the Unix epoch. (format: unix-time)
@@ -11029,7 +11363,7 @@ export def "payment-records-report-refund PostPaymentRecordsIdReportRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all payouts
@@ -11044,6 +11378,7 @@ export def "payouts GetPayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arrival-date: string # Only return payouts that are expected to arrive during the given date interval.
   --created: string # Only return payouts that were created during the given date interval.
   --destination: string # The ID of an external account - only return payouts sent to this external account.
@@ -11062,7 +11397,7 @@ export def "payouts GetPayouts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payout
@@ -11077,6 +11412,7 @@ export def "payouts PostPayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # A positive integer in cents representing how much to payout.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -11096,7 +11432,7 @@ export def "payouts PostPayouts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a payout
@@ -11112,6 +11448,7 @@ export def "payouts GetPayoutsPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, application_fee: any, application_fee_amount: int, arrival_date: int, automatic: bool, balance_transaction: any, created: int, currency: string, description: string, destination: any, failure_balance_transaction: any, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, method: string, object: string, original_payout: any, payout_method: string, reconciliation_status: string, reversed_by: any, source_type: string, statement_descriptor: string, status: string, trace_id: any, type: string> {
@@ -11123,7 +11460,7 @@ export def "payouts GetPayoutsPayout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a payout
@@ -11139,6 +11476,7 @@ export def "payouts PostPayoutsPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, application_fee: any, application_fee_amount: int, arrival_date: int, automatic: bool, balance_transaction: any, created: int, currency: string, description: string, destination: any, failure_balance_transaction: any, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, method: string, object: string, original_payout: any, payout_method: string, reconciliation_status: string, reversed_by: any, source_type: string, statement_descriptor: string, status: string, trace_id: any, type: string> {
@@ -11150,7 +11488,7 @@ export def "payouts PostPayoutsPayout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a payout
@@ -11166,6 +11504,7 @@ export def "payouts-cancel PostPayoutsPayoutCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, application_fee: any, application_fee_amount: int, arrival_date: int, automatic: bool, balance_transaction: any, created: int, currency: string, description: string, destination: any, failure_balance_transaction: any, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, method: string, object: string, original_payout: any, payout_method: string, reconciliation_status: string, reversed_by: any, source_type: string, statement_descriptor: string, status: string, trace_id: any, type: string> {
   let input = $in
@@ -11176,7 +11515,7 @@ export def "payouts-cancel PostPayoutsPayoutCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reverse a payout
@@ -11192,6 +11531,7 @@ export def "payouts-reverse PostPayoutsPayoutReverse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, application_fee: any, application_fee_amount: int, arrival_date: int, automatic: bool, balance_transaction: any, created: int, currency: string, description: string, destination: any, failure_balance_transaction: any, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, method: string, object: string, original_payout: any, payout_method: string, reconciliation_status: string, reversed_by: any, source_type: string, statement_descriptor: string, status: string, trace_id: any, type: string> {
@@ -11203,7 +11543,7 @@ export def "payouts-reverse PostPayoutsPayoutReverse" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all plans
@@ -11218,6 +11558,7 @@ export def "plans GetPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return plans that are active or inactive (e.g., pass `false` to list all inactive plans).
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -11235,7 +11576,7 @@ export def "plans GetPlans" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a plan
@@ -11252,6 +11593,7 @@ export def "plans PostPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the plan is currently available for new subscriptions. Defaults to `true`.
   --amount: int # A positive integer in cents (or local equivalent) (or 0 for a free plan) representing how much to charge on a recurring basis.
   --amount-decimal: string # Same as `amount`, but accepts a decimal value with at most 12 decimal places. Only one of `amount` and `amount_decimal` can be set. (format: decimal)
@@ -11279,7 +11621,7 @@ export def "plans PostPlans" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a plan
@@ -11295,6 +11637,7 @@ export def "plans DeletePlansPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -11304,7 +11647,7 @@ export def "plans DeletePlansPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a plan
@@ -11320,6 +11663,7 @@ export def "plans GetPlansPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, amount: int, amount_decimal: string, billing_scheme: string, created: int, currency: string, id: string, interval: string, interval_count: int, livemode: bool, metadata: record, meter: string, nickname: string, object: string, product: any, tiers: table<flat_amount: int, flat_amount_decimal: string, unit_amount: int, unit_amount_decimal: string, up_to: int>, tiers_mode: string, transform_usage: any, trial_period_days: int, usage_type: string> {
@@ -11331,7 +11675,7 @@ export def "plans GetPlansPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a plan
@@ -11347,6 +11691,7 @@ export def "plans PostPlansPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the plan is currently available for new subscriptions.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -11362,7 +11707,7 @@ export def "plans PostPlansPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all prices
@@ -11377,6 +11722,7 @@ export def "prices GetPrices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return prices that are active or inactive (e.g., pass `false` to list all inactive prices).
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --currency: string # Only return prices for the given currency. (format: currency)
@@ -11398,7 +11744,7 @@ export def "prices GetPrices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a price
@@ -11418,6 +11764,7 @@ export def "prices PostPrices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the price can be used for new purchases. Defaults to `true`.
   --billing-scheme: string@billing-scheme-completer # Describes how to compute the price per period. Either `per_unit` or `tiered`. `per_unit` indicates that the fixed amount (specified in `unit_amount` or `unit_amount_decimal`) will be charged per unit in `quantity` (for prices with `usage_type=licensed`), or per unit of total usage (for prices with `usage_type=metered`). `tiered` indicates that the unit pricing will be computed using a tiering strategy as defined using the `tiers` and `tiers_mode` attributes.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
@@ -11446,7 +11793,7 @@ export def "prices PostPrices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search prices
@@ -11461,6 +11808,7 @@ export def "prices-search GetPricesSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -11475,7 +11823,7 @@ export def "prices-search GetPricesSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a price
@@ -11491,6 +11839,7 @@ export def "prices GetPricesPrice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, billing_scheme: string, created: int, currency: string, currency_options: record, custom_unit_amount: any, id: string, livemode: bool, lookup_key: string, metadata: record, nickname: string, object: string, product: any, recurring: any, tax_behavior: string, tiers: table<flat_amount: int, flat_amount_decimal: string, unit_amount: int, unit_amount_decimal: string, up_to: int>, tiers_mode: string, transform_quantity: any, type: string, unit_amount: int, unit_amount_decimal: string> {
@@ -11502,7 +11851,7 @@ export def "prices GetPricesPrice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a price
@@ -11518,6 +11867,7 @@ export def "prices PostPricesPrice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the price can be used for new purchases. Defaults to `true`.
   --currency-options: any # Prices defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies).
   --expand: list # Specifies which fields in the response should be expanded.
@@ -11535,7 +11885,7 @@ export def "prices PostPricesPrice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all products
@@ -11550,6 +11900,7 @@ export def "products GetProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return products that are active or inactive (e.g., pass `false` to list all inactive products).
   --created: string # Only return products that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -11569,7 +11920,7 @@ export def "products GetProducts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a product
@@ -11587,6 +11938,7 @@ export def "products PostProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the product is currently available for purchase. Defaults to `true`.
   --default-price-data: record # Data used to generate a new [Price](https://docs.stripe.com/api/prices) object. This Price will be set as the default price for this product. — shape: {currency: string, currency_options?: record, custom_unit_amount?: record, metadata?: record, recurring?: record, tax_behavior?: "exclusive"|"inclusive"|"unspecified", unit_amount?: int, unit_amount_decimal?: string}
   --description: string # The product's description, meant to be displayable to the customer. Use this field to optionally store a long form explanation of the product being sold for your own rendering purposes.
@@ -11611,7 +11963,7 @@ export def "products PostProducts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search products
@@ -11626,6 +11978,7 @@ export def "products-search GetProductsSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -11640,7 +11993,7 @@ export def "products-search GetProductsSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a product
@@ -11656,6 +12009,7 @@ export def "products DeleteProductsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -11665,7 +12019,7 @@ export def "products DeleteProductsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a product
@@ -11681,6 +12035,7 @@ export def "products GetProductsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, created: int, default_price: any, description: string, id: string, images: list<string>, livemode: bool, marketing_features: table<name: string>, metadata: record, name: string, object: string, package_dimensions: any, shippable: bool, statement_descriptor: string, tax_code: any, unit_label: string, updated: int, url: string> {
@@ -11692,7 +12047,7 @@ export def "products GetProductsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a product
@@ -11708,6 +12063,7 @@ export def "products PostProductsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the product is available for purchase.
   --default-price: string # The ID of the [Price](https://docs.stripe.com/api/prices) object that is the default price for this product.
   --description: any # The product's description, meant to be displayable to the customer. Use this field to optionally store a long form explanation of the product being sold for your own rendering purposes.
@@ -11731,7 +12087,7 @@ export def "products PostProductsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all features attached to a product
@@ -11747,6 +12103,7 @@ export def "products-features GetProductsProductFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -11761,7 +12118,7 @@ export def "products-features GetProductsProductFeatures" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attach a feature to a product
@@ -11777,6 +12134,7 @@ export def "products-features PostProductsProductFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entitlement_feature: string # The ID of the [Feature](https://docs.stripe.com/api/entitlements/feature) object attached to this product.
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<entitlement_feature: record<active: bool, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string>, id: string, livemode: bool, object: string> {
@@ -11788,7 +12146,7 @@ export def "products-features PostProductsProductFeatures" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a feature from a product
@@ -11805,6 +12163,7 @@ export def "products-features DeleteProductsProductFeaturesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -11814,7 +12173,7 @@ export def "products-features DeleteProductsProductFeaturesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a product_feature
@@ -11831,6 +12190,7 @@ export def "products-features GetProductsProductFeaturesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<entitlement_feature: record<active: bool, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string>, id: string, livemode: bool, object: string> {
@@ -11842,7 +12202,7 @@ export def "products-features GetProductsProductFeaturesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all promotion codes
@@ -11857,6 +12217,7 @@ export def "promotion-codes GetPromotionCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Filter promotion codes by whether they are active.
   --code: string # Only return promotion codes that have this case-insensitive code.
   --coupon: string # Only return promotion codes for this coupon.
@@ -11877,7 +12238,7 @@ export def "promotion-codes GetPromotionCodes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a promotion code
@@ -11894,6 +12255,7 @@ export def "promotion-codes PostPromotionCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the promotion code is currently active.
   --code: string # The customer-facing code. Regardless of case, this code must be unique across all active promotion codes for a specific customer. Valid characters are lower case letters (a-z), upper case letters (A-Z), digits (0-9), and dashes (-).  If left blank, we will generate one automatically.
   --customer: string # The customer who can use this promotion code. If not set, all customers can use the promotion code.
@@ -11913,7 +12275,7 @@ export def "promotion-codes PostPromotionCodes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a promotion code
@@ -11929,6 +12291,7 @@ export def "promotion-codes GetPromotionCodesPromotionCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, code: string, created: int, customer: any, customer_account: string, expires_at: int, id: string, livemode: bool, max_redemptions: int, metadata: record, object: string, promotion: record<coupon: any, type: string>, restrictions: record<currency_options: record, first_time_transaction: bool, minimum_amount: int, minimum_amount_currency: string>, times_redeemed: int> {
@@ -11940,7 +12303,7 @@ export def "promotion-codes GetPromotionCodesPromotionCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a promotion code
@@ -11957,6 +12320,7 @@ export def "promotion-codes PostPromotionCodesPromotionCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the promotion code is currently active. A promotion code can only be reactivated when the coupon is still valid and the promotion code is otherwise redeemable.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -11970,7 +12334,7 @@ export def "promotion-codes PostPromotionCodesPromotionCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all quotes
@@ -11985,6 +12349,7 @@ export def "quotes GetQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # The ID of the customer whose quotes you're retrieving.
   --customer-account: string # The ID of the account representing the customer whose quotes you're retrieving.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -12003,7 +12368,7 @@ export def "quotes GetQuotes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a quote
@@ -12023,6 +12388,7 @@ export def "quotes PostQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application-fee-amount: any # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. There cannot be any line items with recurring prices when using this field.
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. There must be at least 1 line item with a recurring price to use this field.
   --automatic-tax: record # Settings for automatic tax lookup for this quote and resulting invoices and subscriptions. — shape: {enabled: bool, liability?: record}
@@ -12053,7 +12419,7 @@ export def "quotes PostQuotes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a quote
@@ -12069,6 +12435,7 @@ export def "quotes GetQuotesQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount_subtotal: int, amount_total: int, application: any, application_fee_amount: int, application_fee_percent: float, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, collection_method: string, computed: record<recurring: any, upfront: record<amount_subtotal: int, amount_total: int, line_items: record, total_details: record>>, created: int, currency: string, customer: any, customer_account: string, default_tax_rates: list<any>, description: string, discounts: list<any>, expires_at: int, footer: string, from_quote: any, header: string, id: string, invoice: any, invoice_settings: record<days_until_due: int, issuer: record<account: any, type: string>>, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, number: string, object: string, on_behalf_of: any, status: string, status_transitions: record<accepted_at: int, canceled_at: int, finalized_at: int>, subscription: any, subscription_data: record<billing_mode: record<flexible: record, type: string>, description: string, effective_date: int, metadata: record, trial_period_days: int>, subscription_schedule: any, test_clock: any, total_details: record<amount_discount: int, amount_shipping: int, amount_tax: int, breakdown: record<discounts: list, taxes: list>>, transfer_data: any> {
@@ -12080,7 +12447,7 @@ export def "quotes GetQuotesQuote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a quote
@@ -12100,6 +12467,7 @@ export def "quotes PostQuotesQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application-fee-amount: any # The amount of the application fee (if any) that will be requested to be applied to the payment and transferred to the application owner's Stripe account. There cannot be any line items with recurring prices when using this field.
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. There must be at least 1 line item with a recurring price to use this field.
   --automatic-tax: record # Settings for automatic tax lookup for this quote and resulting invoices and subscriptions. — shape: {enabled: bool, liability?: record}
@@ -12128,7 +12496,7 @@ export def "quotes PostQuotesQuote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Accept a quote
@@ -12144,6 +12512,7 @@ export def "quotes-accept PostQuotesQuoteAccept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount_subtotal: int, amount_total: int, application: any, application_fee_amount: int, application_fee_percent: float, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, collection_method: string, computed: record<recurring: any, upfront: record<amount_subtotal: int, amount_total: int, line_items: record, total_details: record>>, created: int, currency: string, customer: any, customer_account: string, default_tax_rates: list<any>, description: string, discounts: list<any>, expires_at: int, footer: string, from_quote: any, header: string, id: string, invoice: any, invoice_settings: record<days_until_due: int, issuer: record<account: any, type: string>>, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, number: string, object: string, on_behalf_of: any, status: string, status_transitions: record<accepted_at: int, canceled_at: int, finalized_at: int>, subscription: any, subscription_data: record<billing_mode: record<flexible: record, type: string>, description: string, effective_date: int, metadata: record, trial_period_days: int>, subscription_schedule: any, test_clock: any, total_details: record<amount_discount: int, amount_shipping: int, amount_tax: int, breakdown: record<discounts: list, taxes: list>>, transfer_data: any> {
   let input = $in
@@ -12154,7 +12523,7 @@ export def "quotes-accept PostQuotesQuoteAccept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a quote
@@ -12170,6 +12539,7 @@ export def "quotes-cancel PostQuotesQuoteCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount_subtotal: int, amount_total: int, application: any, application_fee_amount: int, application_fee_percent: float, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, collection_method: string, computed: record<recurring: any, upfront: record<amount_subtotal: int, amount_total: int, line_items: record, total_details: record>>, created: int, currency: string, customer: any, customer_account: string, default_tax_rates: list<any>, description: string, discounts: list<any>, expires_at: int, footer: string, from_quote: any, header: string, id: string, invoice: any, invoice_settings: record<days_until_due: int, issuer: record<account: any, type: string>>, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, number: string, object: string, on_behalf_of: any, status: string, status_transitions: record<accepted_at: int, canceled_at: int, finalized_at: int>, subscription: any, subscription_data: record<billing_mode: record<flexible: record, type: string>, description: string, effective_date: int, metadata: record, trial_period_days: int>, subscription_schedule: any, test_clock: any, total_details: record<amount_discount: int, amount_shipping: int, amount_tax: int, breakdown: record<discounts: list, taxes: list>>, transfer_data: any> {
   let input = $in
@@ -12180,7 +12550,7 @@ export def "quotes-cancel PostQuotesQuoteCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a quote's upfront line items
@@ -12196,6 +12566,7 @@ export def "quotes-computed-upfront-line-items GetQuotesQuoteComputedUpfrontLine
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -12210,7 +12581,7 @@ export def "quotes-computed-upfront-line-items GetQuotesQuoteComputedUpfrontLine
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Finalize a quote
@@ -12226,6 +12597,7 @@ export def "quotes-finalize PostQuotesQuoteFinalize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: int # A future timestamp on which the quote will be canceled if in `open` or `draft` status. Measured in seconds since the Unix epoch. (format: unix-time)
 ]: any -> record<amount_subtotal: int, amount_total: int, application: any, application_fee_amount: int, application_fee_percent: float, automatic_tax: record<enabled: bool, liability: any, provider: string, status: string>, collection_method: string, computed: record<recurring: any, upfront: record<amount_subtotal: int, amount_total: int, line_items: record, total_details: record>>, created: int, currency: string, customer: any, customer_account: string, default_tax_rates: list<any>, description: string, discounts: list<any>, expires_at: int, footer: string, from_quote: any, header: string, id: string, invoice: any, invoice_settings: record<days_until_due: int, issuer: record<account: any, type: string>>, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, number: string, object: string, on_behalf_of: any, status: string, status_transitions: record<accepted_at: int, canceled_at: int, finalized_at: int>, subscription: any, subscription_data: record<billing_mode: record<flexible: record, type: string>, description: string, effective_date: int, metadata: record, trial_period_days: int>, subscription_schedule: any, test_clock: any, total_details: record<amount_discount: int, amount_shipping: int, amount_tax: int, breakdown: record<discounts: list, taxes: list>>, transfer_data: any> {
@@ -12237,7 +12609,7 @@ export def "quotes-finalize PostQuotesQuoteFinalize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a quote's line items
@@ -12253,6 +12625,7 @@ export def "quotes-line-items GetQuotesQuoteLineItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -12267,7 +12640,7 @@ export def "quotes-line-items GetQuotesQuoteLineItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Download quote PDF
@@ -12283,6 +12656,7 @@ export def "quotes-pdf GetQuotesQuotePdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
@@ -12295,7 +12669,7 @@ export def "quotes-pdf GetQuotesQuotePdf" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all early fraud warnings
@@ -12310,6 +12684,7 @@ export def "radar-early-fraud-warnings GetRadarEarlyFraudWarnings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --charge: string # Only return early fraud warnings for the charge specified by this charge ID.
   --created: string # Only return early fraud warnings that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -12327,7 +12702,7 @@ export def "radar-early-fraud-warnings GetRadarEarlyFraudWarnings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an early fraud warning
@@ -12343,6 +12718,7 @@ export def "radar-early-fraud-warnings GetRadarEarlyFraudWarningsEarlyFraudWarni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<actionable: bool, charge: any, created: int, fraud_type: string, id: string, livemode: bool, object: string, payment_intent: any> {
@@ -12354,7 +12730,7 @@ export def "radar-early-fraud-warnings GetRadarEarlyFraudWarningsEarlyFraudWarni
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Payment Evaluation
@@ -12372,6 +12748,7 @@ export def "radar-payment-evaluations PostRadarPaymentEvaluations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-device-metadata-details: record # Details about the Client Device Metadata to associate with the payment evaluation. — shape: {radar_session: string}
   customer_details: record # Details about the customer associated with the payment evaluation. — shape: {customer?: string, customer_account?: string, email?: string, name?: string, phone?: string}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -12386,7 +12763,7 @@ export def "radar-payment-evaluations PostRadarPaymentEvaluations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all value list items
@@ -12401,6 +12778,7 @@ export def "radar-value-list-items GetRadarValueListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return items that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -12418,7 +12796,7 @@ export def "radar-value-list-items GetRadarValueListItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a value list item
@@ -12433,6 +12811,7 @@ export def "radar-value-list-items PostRadarValueListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   value: string # The value of the item (whose type must match the type of the parent value list).
   value_list: string # The identifier of the value list which the created item will be added to.
@@ -12445,7 +12824,7 @@ export def "radar-value-list-items PostRadarValueListItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a value list item
@@ -12461,6 +12840,7 @@ export def "radar-value-list-items DeleteRadarValueListItemsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -12470,7 +12850,7 @@ export def "radar-value-list-items DeleteRadarValueListItemsItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a value list item
@@ -12486,6 +12866,7 @@ export def "radar-value-list-items GetRadarValueListItemsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, created_by: string, id: string, livemode: bool, object: string, value: string, value_list: string> {
@@ -12497,7 +12878,7 @@ export def "radar-value-list-items GetRadarValueListItemsItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all value lists
@@ -12512,6 +12893,7 @@ export def "radar-value-lists GetRadarValueLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string # The alias used to reference the value list when writing rules.
   --contains: string # A value contained within a value list - returns all value lists containing this value.
   --created: string # Only return value lists that were created during the given date interval.
@@ -12529,7 +12911,7 @@ export def "radar-value-lists GetRadarValueLists" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a value list
@@ -12544,6 +12926,7 @@ export def "radar-value-lists PostRadarValueLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alias: string # The name of the value list for use in rules.
   --expand: list # Specifies which fields in the response should be expanded.
   --item-type: string@item-type-completer # Type of the items in the value list. One of `card_fingerprint`, `card_bin`, `crypto_fingerprint`, `email`, `ip_address`, `country`, `string`, `case_sensitive_string`, `customer_id`, `account`, `sepa_debit_fingerprint`, or `us_bank_account_fingerprint`. Use `string` if the item type is unknown or mixed.
@@ -12558,7 +12941,7 @@ export def "radar-value-lists PostRadarValueLists" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a value list
@@ -12574,6 +12957,7 @@ export def "radar-value-lists DeleteRadarValueListsValueList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -12583,7 +12967,7 @@ export def "radar-value-lists DeleteRadarValueListsValueList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a value list
@@ -12599,6 +12983,7 @@ export def "radar-value-lists GetRadarValueListsValueList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<alias: string, created: int, created_by: string, id: string, item_type: string, list_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, name: string, object: string> {
@@ -12610,7 +12995,7 @@ export def "radar-value-lists GetRadarValueListsValueList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a value list
@@ -12626,6 +13011,7 @@ export def "radar-value-lists PostRadarValueListsValueList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string # The name of the value list for use in rules.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -12639,7 +13025,7 @@ export def "radar-value-lists PostRadarValueListsValueList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all refunds
@@ -12654,6 +13040,7 @@ export def "refunds GetRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --charge: string # Only return refunds for the charge specified by this charge ID.
   --created: string # Only return refunds that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -12671,7 +13058,7 @@ export def "refunds GetRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create customer balance refund
@@ -12686,6 +13073,7 @@ export def "refunds PostRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int
   --charge: string # The identifier of the charge to refund.
   --currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
@@ -12707,7 +13095,7 @@ export def "refunds PostRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a refund
@@ -12723,6 +13111,7 @@ export def "refunds GetRefundsRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
@@ -12734,7 +13123,7 @@ export def "refunds GetRefundsRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a refund
@@ -12750,6 +13139,7 @@ export def "refunds PostRefundsRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
@@ -12761,7 +13151,7 @@ export def "refunds PostRefundsRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a refund
@@ -12777,6 +13167,7 @@ export def "refunds-cancel PostRefundsRefundCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
   let input = $in
@@ -12787,7 +13178,7 @@ export def "refunds-cancel PostRefundsRefundCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Report Runs
@@ -12802,6 +13193,7 @@ export def "reporting-report-runs GetReportingReportRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return Report Runs that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -12817,7 +13209,7 @@ export def "reporting-report-runs GetReportingReportRuns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Report Run
@@ -12833,6 +13225,7 @@ export def "reporting-report-runs PostReportingReportRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --parameters: record # Parameters specifying how the report should be run. Different Report Types have different required and optional parameters, listed in the [API Access to Reports](https://docs.stripe.com/reporting/statements/api) documentation. — shape: {columns?: list, connected_account?: string, currency?: string, interval_end?: int, interval_start?: int, payout?: string, reporting_category?: "advance"|"advance_funding"|"anticipation_repayment"|"charge"|"charge_failure"|"climate_order_purchase"|"climate_order_refund"|"connect_collection_transfer"|"connect_reserved_funds"|"contribution"|"dispute"|"dispute_reversal"|"fee"|"financing_paydown"|"financing_paydown_reversal"|"financing_payout"|"financing_payout_reversal"|"issuing_authorization_hold"|"issuing_authorization_release"|"issuing_dispute"|"issuing_transaction"|"network_cost"|"other_adjustment"|"partial_capture_reversal"|"payout"|"payout_reversal"|"platform_earning"|"platform_earning_refund"|"refund"|"refund_failure"|"risk_reserved_funds"|"tax"|"topup"|"topup_reversal"|"transfer"|"transfer_reversal"|"unreconciled_customer_funds", timezone?: "Africa/Abidjan"|"Africa/Accra"|"Africa/Addis_Ababa"|"Africa/Algiers"|"Africa/Asmara"|"Africa/Asmera"|"Africa/Bamako"|"Africa/Bangui"|"Africa/Banjul"|"Africa/Bissau"|"Africa/Blantyre"|"Africa/Brazzaville"|"Africa/Bujumbura"|"Africa/Cairo"|"Africa/Casablanca"|"Africa/Ceuta"|"Africa/Conakry"|"Africa/Dakar"|"Africa/Dar_es_Salaam"|"Africa/Djibouti"|"Africa/Douala"|"Africa/El_Aaiun"|"Africa/Freetown"|"Africa/Gaborone"|"Africa/Harare"|"Africa/Johannesburg"|"Africa/Juba"|"Africa/Kampala"|"Africa/Khartoum"|"Africa/Kigali"|"Africa/Kinshasa"|"Africa/Lagos"|"Africa/Libreville"|"Africa/Lome"|"Africa/Luanda"|"Africa/Lubumbashi"|"Africa/Lusaka"|"Africa/Malabo"|"Africa/Maputo"|"Africa/Maseru"|"Africa/Mbabane"|"Africa/Mogadishu"|"Africa/Monrovia"|"Africa/Nairobi"|"Africa/Ndjamena"|"Africa/Niamey"|"Africa/Nouakchott"|"Africa/Ouagadougou"|"Africa/Porto-Novo"|"Africa/Sao_Tome"|"Africa/Timbuktu"|"Africa/Tripoli"|"Africa/Tunis"|"Africa/Windhoek"|"America/Adak"|"America/Anchorage"|"America/Anguilla"|"America/Antigua"|"America/Araguaina"|"America/Argentina/Buenos_Aires"|"America/Argentina/Catamarca"|"America/Argentina/ComodRivadavia"|"America/Argentina/Cordoba"|"America/Argentina/Jujuy"|"America/Argentina/La_Rioja"|"America/Argentina/Mendoza"|"America/Argentina/Rio_Gallegos"|"America/Argentina/Salta"|"America/Argentina/San_Juan"|"America/Argentina/San_Luis"|"America/Argentina/Tucuman"|"America/Argentina/Ushuaia"|"America/Aruba"|"America/Asuncion"|"America/Atikokan"|"America/Atka"|"America/Bahia"|"America/Bahia_Banderas"|"America/Barbados"|"America/Belem"|"America/Belize"|"America/Blanc-Sablon"|"America/Boa_Vista"|"America/Bogota"|"America/Boise"|"America/Buenos_Aires"|"America/Cambridge_Bay"|"America/Campo_Grande"|"America/Cancun"|"America/Caracas"|"America/Catamarca"|"America/Cayenne"|"America/Cayman"|"America/Chicago"|"America/Chihuahua"|"America/Ciudad_Juarez"|"America/Coral_Harbour"|"America/Cordoba"|"America/Costa_Rica"|"America/Coyhaique"|"America/Creston"|"America/Cuiaba"|"America/Curacao"|"America/Danmarkshavn"|"America/Dawson"|"America/Dawson_Creek"|"America/Denver"|"America/Detroit"|"America/Dominica"|"America/Edmonton"|"America/Eirunepe"|"America/El_Salvador"|"America/Ensenada"|"America/Fort_Nelson"|"America/Fort_Wayne"|"America/Fortaleza"|"America/Glace_Bay"|"America/Godthab"|"America/Goose_Bay"|"America/Grand_Turk"|"America/Grenada"|"America/Guadeloupe"|"America/Guatemala"|"America/Guayaquil"|"America/Guyana"|"America/Halifax"|"America/Havana"|"America/Hermosillo"|"America/Indiana/Indianapolis"|"America/Indiana/Knox"|"America/Indiana/Marengo"|"America/Indiana/Petersburg"|"America/Indiana/Tell_City"|"America/Indiana/Vevay"|"America/Indiana/Vincennes"|"America/Indiana/Winamac"|"America/Indianapolis"|"America/Inuvik"|"America/Iqaluit"|"America/Jamaica"|"America/Jujuy"|"America/Juneau"|"America/Kentucky/Louisville"|"America/Kentucky/Monticello"|"America/Knox_IN"|"America/Kralendijk"|"America/La_Paz"|"America/Lima"|"America/Los_Angeles"|"America/Louisville"|"America/Lower_Princes"|"America/Maceio"|"America/Managua"|"America/Manaus"|"America/Marigot"|"America/Martinique"|"America/Matamoros"|"America/Mazatlan"|"America/Mendoza"|"America/Menominee"|"America/Merida"|"America/Metlakatla"|"America/Mexico_City"|"America/Miquelon"|"America/Moncton"|"America/Monterrey"|"America/Montevideo"|"America/Montreal"|"America/Montserrat"|"America/Nassau"|"America/New_York"|"America/Nipigon"|"America/Nome"|"America/Noronha"|"America/North_Dakota/Beulah"|"America/North_Dakota/Center"|"America/North_Dakota/New_Salem"|"America/Nuuk"|"America/Ojinaga"|"America/Panama"|"America/Pangnirtung"|"America/Paramaribo"|"America/Phoenix"|"America/Port-au-Prince"|"America/Port_of_Spain"|"America/Porto_Acre"|"America/Porto_Velho"|"America/Puerto_Rico"|"America/Punta_Arenas"|"America/Rainy_River"|"America/Rankin_Inlet"|"America/Recife"|"America/Regina"|"America/Resolute"|"America/Rio_Branco"|"America/Rosario"|"America/Santa_Isabel"|"America/Santarem"|"America/Santiago"|"America/Santo_Domingo"|"America/Sao_Paulo"|"America/Scoresbysund"|"America/Shiprock"|"America/Sitka"|"America/St_Barthelemy"|"America/St_Johns"|"America/St_Kitts"|"America/St_Lucia"|"America/St_Thomas"|"America/St_Vincent"|"America/Swift_Current"|"America/Tegucigalpa"|"America/Thule"|"America/Thunder_Bay"|"America/Tijuana"|"America/Toronto"|"America/Tortola"|"America/Vancouver"|"America/Virgin"|"America/Whitehorse"|"America/Winnipeg"|"America/Yakutat"|"America/Yellowknife"|"Antarctica/Casey"|"Antarctica/Davis"|"Antarctica/DumontDUrville"|"Antarctica/Macquarie"|"Antarctica/Mawson"|"Antarctica/McMurdo"|"Antarctica/Palmer"|"Antarctica/Rothera"|"Antarctica/South_Pole"|"Antarctica/Syowa"|"Antarctica/Troll"|"Antarctica/Vostok"|"Arctic/Longyearbyen"|"Asia/Aden"|"Asia/Almaty"|"Asia/Amman"|"Asia/Anadyr"|"Asia/Aqtau"|"Asia/Aqtobe"|"Asia/Ashgabat"|"Asia/Ashkhabad"|"Asia/Atyrau"|"Asia/Baghdad"|"Asia/Bahrain"|"Asia/Baku"|"Asia/Bangkok"|"Asia/Barnaul"|"Asia/Beirut"|"Asia/Bishkek"|"Asia/Brunei"|"Asia/Calcutta"|"Asia/Chita"|"Asia/Choibalsan"|"Asia/Chongqing"|"Asia/Chungking"|"Asia/Colombo"|"Asia/Dacca"|"Asia/Damascus"|"Asia/Dhaka"|"Asia/Dili"|"Asia/Dubai"|"Asia/Dushanbe"|"Asia/Famagusta"|"Asia/Gaza"|"Asia/Harbin"|"Asia/Hebron"|"Asia/Ho_Chi_Minh"|"Asia/Hong_Kong"|"Asia/Hovd"|"Asia/Irkutsk"|"Asia/Istanbul"|"Asia/Jakarta"|"Asia/Jayapura"|"Asia/Jerusalem"|"Asia/Kabul"|"Asia/Kamchatka"|"Asia/Karachi"|"Asia/Kashgar"|"Asia/Kathmandu"|"Asia/Katmandu"|"Asia/Khandyga"|"Asia/Kolkata"|"Asia/Krasnoyarsk"|"Asia/Kuala_Lumpur"|"Asia/Kuching"|"Asia/Kuwait"|"Asia/Macao"|"Asia/Macau"|"Asia/Magadan"|"Asia/Makassar"|"Asia/Manila"|"Asia/Muscat"|"Asia/Nicosia"|"Asia/Novokuznetsk"|"Asia/Novosibirsk"|"Asia/Omsk"|"Asia/Oral"|"Asia/Phnom_Penh"|"Asia/Pontianak"|"Asia/Pyongyang"|"Asia/Qatar"|"Asia/Qostanay"|"Asia/Qyzylorda"|"Asia/Rangoon"|"Asia/Riyadh"|"Asia/Saigon"|"Asia/Sakhalin"|"Asia/Samarkand"|"Asia/Seoul"|"Asia/Shanghai"|"Asia/Singapore"|"Asia/Srednekolymsk"|"Asia/Taipei"|"Asia/Tashkent"|"Asia/Tbilisi"|"Asia/Tehran"|"Asia/Tel_Aviv"|"Asia/Thimbu"|"Asia/Thimphu"|"Asia/Tokyo"|"Asia/Tomsk"|"Asia/Ujung_Pandang"|"Asia/Ulaanbaatar"|"Asia/Ulan_Bator"|"Asia/Urumqi"|"Asia/Ust-Nera"|"Asia/Vientiane"|"Asia/Vladivostok"|"Asia/Yakutsk"|"Asia/Yangon"|"Asia/Yekaterinburg"|"Asia/Yerevan"|"Atlantic/Azores"|"Atlantic/Bermuda"|"Atlantic/Canary"|"Atlantic/Cape_Verde"|"Atlantic/Faeroe"|"Atlantic/Faroe"|"Atlantic/Jan_Mayen"|"Atlantic/Madeira"|"Atlantic/Reykjavik"|"Atlantic/South_Georgia"|"Atlantic/St_Helena"|"Atlantic/Stanley"|"Australia/ACT"|"Australia/Adelaide"|"Australia/Brisbane"|"Australia/Broken_Hill"|"Australia/Canberra"|"Australia/Currie"|"Australia/Darwin"|"Australia/Eucla"|"Australia/Hobart"|"Australia/LHI"|"Australia/Lindeman"|"Australia/Lord_Howe"|"Australia/Melbourne"|"Australia/NSW"|"Australia/North"|"Australia/Perth"|"Australia/Queensland"|"Australia/South"|"Australia/Sydney"|"Australia/Tasmania"|"Australia/Victoria"|"Australia/West"|"Australia/Yancowinna"|"Brazil/Acre"|"Brazil/DeNoronha"|"Brazil/East"|"Brazil/West"|"CET"|"CST6CDT"|"Canada/Atlantic"|"Canada/Central"|"Canada/Eastern"|"Canada/Mountain"|"Canada/Newfoundland"|"Canada/Pacific"|"Canada/Saskatchewan"|"Canada/Yukon"|"Chile/Continental"|"Chile/EasterIsland"|"Cuba"|"EET"|"EST"|"EST5EDT"|"Egypt"|"Eire"|"Etc/GMT"|"Etc/GMT+0"|"Etc/GMT+1"|"Etc/GMT+10"|"Etc/GMT+11"|"Etc/GMT+12"|"Etc/GMT+2"|"Etc/GMT+3"|"Etc/GMT+4"|"Etc/GMT+5"|"Etc/GMT+6"|"Etc/GMT+7"|"Etc/GMT+8"|"Etc/GMT+9"|"Etc/GMT-0"|"Etc/GMT-1"|"Etc/GMT-10"|"Etc/GMT-11"|"Etc/GMT-12"|"Etc/GMT-13"|"Etc/GMT-14"|"Etc/GMT-2"|"Etc/GMT-3"|"Etc/GMT-4"|"Etc/GMT-5"|"Etc/GMT-6"|"Etc/GMT-7"|"Etc/GMT-8"|"Etc/GMT-9"|"Etc/GMT0"|"Etc/Greenwich"|"Etc/UCT"|"Etc/UTC"|"Etc/Universal"|"Etc/Zulu"|"Europe/Amsterdam"|"Europe/Andorra"|"Europe/Astrakhan"|"Europe/Athens"|"Europe/Belfast"|"Europe/Belgrade"|"Europe/Berlin"|"Europe/Bratislava"|"Europe/Brussels"|"Europe/Bucharest"|"Europe/Budapest"|"Europe/Busingen"|"Europe/Chisinau"|"Europe/Copenhagen"|"Europe/Dublin"|"Europe/Gibraltar"|"Europe/Guernsey"|"Europe/Helsinki"|"Europe/Isle_of_Man"|"Europe/Istanbul"|"Europe/Jersey"|"Europe/Kaliningrad"|"Europe/Kiev"|"Europe/Kirov"|"Europe/Kyiv"|"Europe/Lisbon"|"Europe/Ljubljana"|"Europe/London"|"Europe/Luxembourg"|"Europe/Madrid"|"Europe/Malta"|"Europe/Mariehamn"|"Europe/Minsk"|"Europe/Monaco"|"Europe/Moscow"|"Europe/Nicosia"|"Europe/Oslo"|"Europe/Paris"|"Europe/Podgorica"|"Europe/Prague"|"Europe/Riga"|"Europe/Rome"|"Europe/Samara"|"Europe/San_Marino"|"Europe/Sarajevo"|"Europe/Saratov"|"Europe/Simferopol"|"Europe/Skopje"|"Europe/Sofia"|"Europe/Stockholm"|"Europe/Tallinn"|"Europe/Tirane"|"Europe/Tiraspol"|"Europe/Ulyanovsk"|"Europe/Uzhgorod"|"Europe/Vaduz"|"Europe/Vatican"|"Europe/Vienna"|"Europe/Vilnius"|"Europe/Volgograd"|"Europe/Warsaw"|"Europe/Zagreb"|"Europe/Zaporozhye"|"Europe/Zurich"|"Factory"|"GB"|"GB-Eire"|"GMT"|"GMT+0"|"GMT-0"|"GMT0"|"Greenwich"|"HST"|"Hongkong"|"Iceland"|"Indian/Antananarivo"|"Indian/Chagos"|"Indian/Christmas"|"Indian/Cocos"|"Indian/Comoro"|"Indian/Kerguelen"|"Indian/Mahe"|"Indian/Maldives"|"Indian/Mauritius"|"Indian/Mayotte"|"Indian/Reunion"|"Iran"|"Israel"|"Jamaica"|"Japan"|"Kwajalein"|"Libya"|"MET"|"MST"|"MST7MDT"|"Mexico/BajaNorte"|"Mexico/BajaSur"|"Mexico/General"|"NZ"|"NZ-CHAT"|"Navajo"|"PRC"|"PST8PDT"|"Pacific/Apia"|"Pacific/Auckland"|"Pacific/Bougainville"|"Pacific/Chatham"|"Pacific/Chuuk"|"Pacific/Easter"|"Pacific/Efate"|"Pacific/Enderbury"|"Pacific/Fakaofo"|"Pacific/Fiji"|"Pacific/Funafuti"|"Pacific/Galapagos"|"Pacific/Gambier"|"Pacific/Guadalcanal"|"Pacific/Guam"|"Pacific/Honolulu"|"Pacific/Johnston"|"Pacific/Kanton"|"Pacific/Kiritimati"|"Pacific/Kosrae"|"Pacific/Kwajalein"|"Pacific/Majuro"|"Pacific/Marquesas"|"Pacific/Midway"|"Pacific/Nauru"|"Pacific/Niue"|"Pacific/Norfolk"|"Pacific/Noumea"|"Pacific/Pago_Pago"|"Pacific/Palau"|"Pacific/Pitcairn"|"Pacific/Pohnpei"|"Pacific/Ponape"|"Pacific/Port_Moresby"|"Pacific/Rarotonga"|"Pacific/Saipan"|"Pacific/Samoa"|"Pacific/Tahiti"|"Pacific/Tarawa"|"Pacific/Tongatapu"|"Pacific/Truk"|"Pacific/Wake"|"Pacific/Wallis"|"Pacific/Yap"|"Poland"|"Portugal"|"ROC"|"ROK"|"Singapore"|"Turkey"|"UCT"|"US/Alaska"|"US/Aleutian"|"US/Arizona"|"US/Central"|"US/East-Indiana"|"US/Eastern"|"US/Hawaii"|"US/Indiana-Starke"|"US/Michigan"|"US/Mountain"|"US/Pacific"|"US/Pacific-New"|"US/Samoa"|"UTC"|"Universal"|"W-SU"|"WET"|"Zulu"}
   report_type: string # The ID of the [report type](https://docs.stripe.com/reporting/statements/api#report-types) to run, such as `"balance.summary.1"`.
@@ -12845,7 +13238,7 @@ export def "reporting-report-runs PostReportingReportRuns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Report Run
@@ -12861,6 +13254,7 @@ export def "reporting-report-runs GetReportingReportRunsReportRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, error: string, id: string, livemode: bool, object: string, parameters: record<columns: list<string>, connected_account: string, currency: string, interval_end: int, interval_start: int, payout: string, reporting_category: string, timezone: string>, report_type: string, result: any, status: string, succeeded_at: int> {
@@ -12872,7 +13266,7 @@ export def "reporting-report-runs GetReportingReportRunsReportRun" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Report Types
@@ -12887,6 +13281,7 @@ export def "reporting-report-types GetReportingReportTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<data: table<data_available_end: int, data_available_start: int, default_columns: list, id: string, livemode: bool, name: string, object: string, updated: int, version: int>, has_more: bool, object: string, url: string> {
@@ -12898,7 +13293,7 @@ export def "reporting-report-types GetReportingReportTypes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Report Type
@@ -12914,6 +13309,7 @@ export def "reporting-report-types GetReportingReportTypesReportType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<data_available_end: int, data_available_start: int, default_columns: list<string>, id: string, livemode: bool, name: string, object: string, updated: int, version: int> {
@@ -12925,7 +13321,7 @@ export def "reporting-report-types GetReportingReportTypesReportType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all open reviews
@@ -12940,6 +13336,7 @@ export def "reviews GetReviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return reviews that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -12955,7 +13352,7 @@ export def "reviews GetReviews" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a review
@@ -12971,6 +13368,7 @@ export def "reviews GetReviewsReview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<billing_zip: string, charge: any, closed_reason: string, created: int, id: string, ip_address: string, ip_address_location: any, livemode: bool, object: string, open: bool, opened_reason: string, payment_intent: any, reason: string, session: any> {
@@ -12982,7 +13380,7 @@ export def "reviews GetReviewsReview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Approve a review
@@ -12998,6 +13396,7 @@ export def "reviews-approve PostReviewsReviewApprove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<billing_zip: string, charge: any, closed_reason: string, created: int, id: string, ip_address: string, ip_address_location: any, livemode: bool, object: string, open: bool, opened_reason: string, payment_intent: any, reason: string, session: any> {
   let input = $in
@@ -13008,7 +13407,7 @@ export def "reviews-approve PostReviewsReviewApprove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all SetupAttempts
@@ -13023,6 +13422,7 @@ export def "setup-attempts GetSetupAttempts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp or a dictionary with a number of different query options.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -13039,7 +13439,7 @@ export def "setup-attempts GetSetupAttempts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all SetupIntents
@@ -13054,6 +13454,7 @@ export def "setup-intents GetSetupIntents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attach-to-self: oneof<nothing, bool> # If present, the SetupIntent's payment method will be attached to the in-context Stripe Account.  It can only be used for this Stripe Account’s own money movement flows like InboundTransfer and OutboundTransfers. It cannot be set to true when setting up a PaymentMethod for a Customer, and defaults to false when attaching a PaymentMethod to a Customer.
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --customer: string # Only return SetupIntents for the customer specified by this customer ID.
@@ -13073,7 +13474,7 @@ export def "setup-intents GetSetupIntents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a SetupIntent
@@ -13092,6 +13493,7 @@ export def "setup-intents PostSetupIntents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attach-to-self: oneof<nothing, bool> # If present, the SetupIntent's payment method will be attached to the in-context Stripe Account.  It can only be used for this Stripe Account’s own money movement flows like InboundTransfer and OutboundTransfers. It cannot be set to true when setting up a PaymentMethod for a Customer, and defaults to false when attaching a PaymentMethod to a Customer.
   --automatic-payment-methods: record # When you enable this parameter, this SetupIntent accepts payment methods that you enable in the Dashboard and that are compatible with its other parameters. — shape: {allow_redirects?: "always"|"never", enabled: bool}
   --confirm: oneof<nothing, bool> # Set to `true` to attempt to confirm this SetupIntent immediately. This parameter defaults to `false`. If a card is the attached payment method, you can provide a `return_url` in case further authentication is necessary.
@@ -13123,7 +13525,7 @@ export def "setup-intents PostSetupIntents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a SetupIntent
@@ -13139,6 +13541,7 @@ export def "setup-intents GetSetupIntentsIntent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-secret: string # The client secret of the SetupIntent. We require this string if you use a publishable key to retrieve the SetupIntent.
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
@@ -13151,7 +13554,7 @@ export def "setup-intents GetSetupIntentsIntent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a SetupIntent
@@ -13169,6 +13572,7 @@ export def "setup-intents PostSetupIntentsIntent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attach-to-self: oneof<nothing, bool> # If present, the SetupIntent's payment method will be attached to the in-context Stripe Account.  It can only be used for this Stripe Account’s own money movement flows like InboundTransfer and OutboundTransfers. It cannot be set to true when setting up a PaymentMethod for a Customer, and defaults to false when attaching a PaymentMethod to a Customer.
   --customer: string # ID of the Customer this SetupIntent belongs to, if one exists.  If present, the SetupIntent's payment method will be attached to the Customer on successful setup. Payment methods attached to other Customers cannot be used with this SetupIntent.
   --customer-account: string # ID of the Account this SetupIntent belongs to, if one exists.  If present, the SetupIntent's payment method will be attached to the Account on successful setup. Payment methods attached to other Accounts cannot be used with this SetupIntent.
@@ -13191,7 +13595,7 @@ export def "setup-intents PostSetupIntentsIntent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a SetupIntent
@@ -13207,6 +13611,7 @@ export def "setup-intents-cancel PostSetupIntentsIntentCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellation-reason: string@cancellation-reason-completer-2 # Reason for canceling this SetupIntent. Possible values are: `abandoned`, `requested_by_customer`, or `duplicate`
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<application: any, attach_to_self: bool, automatic_payment_methods: any, cancellation_reason: string, client_secret: string, created: int, customer: any, customer_account: string, description: string, excluded_payment_method_types: list<string>, flow_directions: list<string>, id: string, last_setup_error: any, latest_attempt: any, livemode: bool, managed_payments: any, mandate: any, metadata: record, next_action: any, object: string, on_behalf_of: any, payment_method: any, payment_method_configuration_details: any, payment_method_options: any, payment_method_types: list<string>, single_use_mandate: any, status: string, usage: string> {
@@ -13218,7 +13623,7 @@ export def "setup-intents-cancel PostSetupIntentsIntentCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Confirm a SetupIntent
@@ -13236,6 +13641,7 @@ export def "setup-intents-confirm PostSetupIntentsIntentConfirm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-secret: string # The client secret of the SetupIntent.
   --confirmation-token: string # ID of the ConfirmationToken used to confirm this SetupIntent.  If the provided ConfirmationToken contains properties that are also being provided in this request, such as `payment_method`, then the values in this request will take precedence.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -13254,7 +13660,7 @@ export def "setup-intents-confirm PostSetupIntentsIntentConfirm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Verify microdeposits on a SetupIntent
@@ -13270,6 +13676,7 @@ export def "setup-intents-verify-microdeposits PostSetupIntentsIntentVerifyMicro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amounts: list # Two positive integers, in *cents*, equal to the values of the microdeposits sent to the bank account.
   --client-secret: string # The client secret of the SetupIntent.
   --descriptor-code: string # A six-character code starting with SM present in the microdeposit sent to the bank account.
@@ -13283,7 +13690,7 @@ export def "setup-intents-verify-microdeposits PostSetupIntentsIntentVerifyMicro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all shipping rates
@@ -13298,6 +13705,7 @@ export def "shipping-rates GetShippingRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Only return shipping rates that are active or inactive.
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --currency: string # Only return shipping rates for the given currency. (format: currency)
@@ -13315,7 +13723,7 @@ export def "shipping-rates GetShippingRates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a shipping rate
@@ -13332,6 +13740,7 @@ export def "shipping-rates PostShippingRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delivery-estimate: record # The estimated range for how long shipping will take, meant to be displayable to the customer. This will appear on CheckoutSessions. — shape: {maximum?: record, minimum?: record}
   display_name: string # The name of the shipping rate, meant to be displayable to the customer. This will appear on CheckoutSessions.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -13349,7 +13758,7 @@ export def "shipping-rates PostShippingRates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a shipping rate
@@ -13365,6 +13774,7 @@ export def "shipping-rates GetShippingRatesShippingRateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, created: int, delivery_estimate: any, display_name: string, fixed_amount: record<amount: int, currency: string, currency_options: record>, id: string, livemode: bool, metadata: record, object: string, tax_behavior: string, tax_code: any, type: string> {
@@ -13376,7 +13786,7 @@ export def "shipping-rates GetShippingRatesShippingRateToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a shipping rate
@@ -13393,6 +13803,7 @@ export def "shipping-rates PostShippingRatesShippingRateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Whether the shipping rate can be used for new purchases. Defaults to `true`.
   --expand: list # Specifies which fields in the response should be expanded.
   --fixed-amount: record # Describes a fixed amount to charge for shipping. Must be present if type is `fixed_amount`. — shape: {currency_options?: record}
@@ -13407,7 +13818,7 @@ export def "shipping-rates PostShippingRatesShippingRateToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an existing Sigma Query
@@ -13423,6 +13834,7 @@ export def "sigma-saved-queries PostSigmaSavedQueriesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --name: string # The name of the query to update.
   --sql: string # The sql statement to update the specified query statement with. This should be a valid Trino SQL statement that can be run in Sigma.
@@ -13435,7 +13847,7 @@ export def "sigma-saved-queries PostSigmaSavedQueriesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all scheduled query runs
@@ -13450,6 +13862,7 @@ export def "sigma-scheduled-query-runs GetSigmaScheduledQueryRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -13464,7 +13877,7 @@ export def "sigma-scheduled-query-runs GetSigmaScheduledQueryRuns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a scheduled query run
@@ -13480,6 +13893,7 @@ export def "sigma-scheduled-query-runs GetSigmaScheduledQueryRunsScheduledQueryR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, data_load_time: int, error: record<message: string>, file: any, id: string, livemode: bool, object: string, result_available_until: int, sql: string, status: string, title: string> {
@@ -13491,7 +13905,7 @@ export def "sigma-scheduled-query-runs GetSigmaScheduledQueryRunsScheduledQueryR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Shares a source
@@ -13511,6 +13925,7 @@ export def "sources PostSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Amount associated with the source. This is the amount for which the source will be chargeable once ready. Required for `single_use` sources. Not supported for `receiver` type sources, where charge amount may not be specified until funds land.
   --currency: string # Three-letter [ISO code for the currency](https://stripe.com/docs/currencies) associated with the source. This is the currency for which the source will be chargeable once ready. (format: currency)
   --customer: string # The `Customer` to whom the original source is attached to. Must be set when the original source is not a `Source` (e.g., `Card`).
@@ -13536,7 +13951,7 @@ export def "sources PostSources" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a source
@@ -13552,6 +13967,7 @@ export def "sources GetSourcesSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-secret: string # The client secret of the source. Required if a publishable key is used to retrieve the source.
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
@@ -13564,7 +13980,7 @@ export def "sources GetSourcesSource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a source
@@ -13583,6 +13999,7 @@ export def "sources PostSourcesSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # Amount associated with the source.
   --expand: list # Specifies which fields in the response should be expanded.
   --mandate: record # Information about a mandate possibility attached to a source object (generally for bank debits) as well as its acceptance status. — shape: {acceptance?: record, amount?: any, currency?: string, interval?: "one_time"|"scheduled"|"variable", notification_method?: "deprecated_none"|"email"|"manual"|"none"|"stripe_email"}
@@ -13598,7 +14015,7 @@ export def "sources PostSourcesSource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Source MandateNotification
@@ -13615,6 +14032,7 @@ export def "sources-mandate-notifications GetSourcesSourceMandateNotificationsMa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<acss_debit: record<statement_descriptor: string>, amount: int, bacs_debit: record<last4: string>, created: int, id: string, livemode: bool, object: string, reason: string, sepa_debit: record<creditor_identifier: string, last4: string, mandate_reference: string>, source: record<ach_credit_transfer: record<account_number: string, bank_name: string, fingerprint: string, refund_account_holder_name: string, refund_account_holder_type: string, refund_routing_number: string, routing_number: string, swift_code: string>, ach_debit: record<bank_name: string, country: string, fingerprint: string, last4: string, routing_number: string, type: string>, acss_debit: record<bank_address_city: string, bank_address_line_1: string, bank_address_line_2: string, bank_address_postal_code: string, bank_name: string, category: string, country: string, fingerprint: string, last4: string, routing_number: string>, alipay: record<data_string: string, native_url: string, statement_descriptor: string>, allow_redisplay: string, amount: int, au_becs_debit: record<bsb_number: string, fingerprint: string, last4: string>, bancontact: record<bank_code: string, bank_name: string, bic: string, iban_last4: string, preferred_language: string, statement_descriptor: string>, card: record<address_line1_check: string, address_zip_check: string, brand: string, country: string, cvc_check: string, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, name: string, three_d_secure: string, tokenization_method: string>, card_present: record<application_cryptogram: string, application_preferred_name: string, authorization_code: string, authorization_response_code: string, brand: string, country: string, cvm_type: string, data_type: string, dedicated_file_name: string, emv_auth_data: string, evidence_customer_signature: string, evidence_transaction_certificate: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, pos_device_id: string, pos_entry_mode: string, read_method: string, reader: string, terminal_verification_results: string, transaction_status_information: string>, client_secret: string, code_verification: record<attempts_remaining: int, status: string>, created: int, currency: string, customer: string, eps: record<reference: string, statement_descriptor: string>, flow: string, giropay: record<bank_code: string, bank_name: string, bic: string, statement_descriptor: string>, id: string, ideal: record<bank: string, bic: string, iban_last4: string, statement_descriptor: string>, klarna: record<background_image_url: string, client_token: string, first_name: string, last_name: string, locale: string, logo_url: string, page_title: string, pay_later_asset_urls_descriptive: string, pay_later_asset_urls_standard: string, pay_later_name: string, pay_later_redirect_url: string, pay_now_asset_urls_descriptive: string, pay_now_asset_urls_standard: string, pay_now_name: string, pay_now_redirect_url: string, pay_over_time_asset_urls_descriptive: string, pay_over_time_asset_urls_standard: string, pay_over_time_name: string, pay_over_time_redirect_url: string, payment_method_categories: string, purchase_country: string, purchase_type: string, redirect_url: string, shipping_delay: int, shipping_first_name: string, shipping_last_name: string>, livemode: bool, metadata: record, multibanco: record<entity: string, reference: string, refund_account_holder_address_city: string, refund_account_holder_address_country: string, refund_account_holder_address_line1: string, refund_account_holder_address_line2: string, refund_account_holder_address_postal_code: string, refund_account_holder_address_state: string, refund_account_holder_name: string, refund_iban: string>, object: string, owner: any, p24: record<reference: string>, receiver: record<address: string, amount_charged: int, amount_received: int, amount_returned: int, refund_attributes_method: string, refund_attributes_status: string>, redirect: record<failure_reason: string, return_url: string, status: string, url: string>, sepa_debit: record<bank_code: string, branch_code: string, country: string, fingerprint: string, last4: string, mandate_reference: string, mandate_url: string>, sofort: record<bank_code: string, bank_name: string, bic: string, country: string, iban_last4: string, preferred_language: string, statement_descriptor: string>, source_order: record<amount: int, currency: string, email: string, items: list, shipping: record>, statement_descriptor: string, status: string, three_d_secure: record<address_line1_check: string, address_zip_check: string, authenticated: bool, brand: string, card: string, country: string, customer: string, cvc_check: string, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, name: string, three_d_secure: string, tokenization_method: string>, type: string, usage: string, wechat: record<prepay_id: string, qr_code_url: string, statement_descriptor: string>>, status: string, type: string> {
@@ -13626,7 +14044,7 @@ export def "sources-mandate-notifications GetSourcesSourceMandateNotificationsMa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>List source transactions for a given source.</p>
@@ -13642,6 +14060,7 @@ export def "sources-source-transactions GetSourcesSourceSourceTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -13656,7 +14075,7 @@ export def "sources-source-transactions GetSourcesSourceSourceTransactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a source transaction
@@ -13673,6 +14092,7 @@ export def "sources-source-transactions GetSourcesSourceSourceTransactionsSource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<ach_credit_transfer: record<customer_data: string, fingerprint: string, last4: string, routing_number: string>, amount: int, chf_credit_transfer: record<reference: string, sender_address_country: string, sender_address_line1: string, sender_iban: string, sender_name: string>, created: int, currency: string, gbp_credit_transfer: record<fingerprint: string, funding_method: string, last4: string, reference: string, sender_account_number: string, sender_name: string, sender_sort_code: string>, id: string, livemode: bool, object: string, paper_check: record<available_at: string, invoices: string>, sepa_credit_transfer: record<reference: string, sender_iban: string, sender_name: string>, source: string, status: string, type: string> {
@@ -13684,7 +14104,7 @@ export def "sources-source-transactions GetSourcesSourceSourceTransactionsSource
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # <p>Verify a given source.</p>
@@ -13700,6 +14120,7 @@ export def "sources-verify PostSourcesSourceVerify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   values: list # The values needed to verify the source.
 ]: any -> record<ach_credit_transfer: record<account_number: string, bank_name: string, fingerprint: string, refund_account_holder_name: string, refund_account_holder_type: string, refund_routing_number: string, routing_number: string, swift_code: string>, ach_debit: record<bank_name: string, country: string, fingerprint: string, last4: string, routing_number: string, type: string>, acss_debit: record<bank_address_city: string, bank_address_line_1: string, bank_address_line_2: string, bank_address_postal_code: string, bank_name: string, category: string, country: string, fingerprint: string, last4: string, routing_number: string>, alipay: record<data_string: string, native_url: string, statement_descriptor: string>, allow_redisplay: string, amount: int, au_becs_debit: record<bsb_number: string, fingerprint: string, last4: string>, bancontact: record<bank_code: string, bank_name: string, bic: string, iban_last4: string, preferred_language: string, statement_descriptor: string>, card: record<address_line1_check: string, address_zip_check: string, brand: string, country: string, cvc_check: string, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, name: string, three_d_secure: string, tokenization_method: string>, card_present: record<application_cryptogram: string, application_preferred_name: string, authorization_code: string, authorization_response_code: string, brand: string, country: string, cvm_type: string, data_type: string, dedicated_file_name: string, emv_auth_data: string, evidence_customer_signature: string, evidence_transaction_certificate: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, pos_device_id: string, pos_entry_mode: string, read_method: string, reader: string, terminal_verification_results: string, transaction_status_information: string>, client_secret: string, code_verification: record<attempts_remaining: int, status: string>, created: int, currency: string, customer: string, eps: record<reference: string, statement_descriptor: string>, flow: string, giropay: record<bank_code: string, bank_name: string, bic: string, statement_descriptor: string>, id: string, ideal: record<bank: string, bic: string, iban_last4: string, statement_descriptor: string>, klarna: record<background_image_url: string, client_token: string, first_name: string, last_name: string, locale: string, logo_url: string, page_title: string, pay_later_asset_urls_descriptive: string, pay_later_asset_urls_standard: string, pay_later_name: string, pay_later_redirect_url: string, pay_now_asset_urls_descriptive: string, pay_now_asset_urls_standard: string, pay_now_name: string, pay_now_redirect_url: string, pay_over_time_asset_urls_descriptive: string, pay_over_time_asset_urls_standard: string, pay_over_time_name: string, pay_over_time_redirect_url: string, payment_method_categories: string, purchase_country: string, purchase_type: string, redirect_url: string, shipping_delay: int, shipping_first_name: string, shipping_last_name: string>, livemode: bool, metadata: record, multibanco: record<entity: string, reference: string, refund_account_holder_address_city: string, refund_account_holder_address_country: string, refund_account_holder_address_line1: string, refund_account_holder_address_line2: string, refund_account_holder_address_postal_code: string, refund_account_holder_address_state: string, refund_account_holder_name: string, refund_iban: string>, object: string, owner: any, p24: record<reference: string>, receiver: record<address: string, amount_charged: int, amount_received: int, amount_returned: int, refund_attributes_method: string, refund_attributes_status: string>, redirect: record<failure_reason: string, return_url: string, status: string, url: string>, sepa_debit: record<bank_code: string, branch_code: string, country: string, fingerprint: string, last4: string, mandate_reference: string, mandate_url: string>, sofort: record<bank_code: string, bank_name: string, bic: string, country: string, iban_last4: string, preferred_language: string, statement_descriptor: string>, source_order: record<amount: int, currency: string, email: string, items: list<record>, shipping: record<address: record, carrier: string, name: string, phone: string, tracking_number: string>>, statement_descriptor: string, status: string, three_d_secure: record<address_line1_check: string, address_zip_check: string, authenticated: bool, brand: string, card: string, country: string, customer: string, cvc_check: string, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, last4: string, name: string, three_d_secure: string, tokenization_method: string>, type: string, usage: string, wechat: record<prepay_id: string, qr_code_url: string, statement_descriptor: string>> {
@@ -13711,7 +14132,7 @@ export def "sources-verify PostSourcesSourceVerify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all subscription items
@@ -13726,6 +14147,7 @@ export def "subscription-items GetSubscriptionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -13741,7 +14163,7 @@ export def "subscription-items GetSubscriptionItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a subscription item
@@ -13757,6 +14179,7 @@ export def "subscription-items PostSubscriptionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-thresholds: any # Define thresholds at which an invoice will be sent, and the subscription advanced to a new billing period. Pass an empty string to remove previously-defined thresholds.
   --discounts: any # The coupons to redeem into discounts for the subscription item.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -13778,7 +14201,7 @@ export def "subscription-items PostSubscriptionItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a subscription item
@@ -13794,6 +14217,7 @@ export def "subscription-items DeleteSubscriptionItemsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clear-usage: oneof<nothing, bool> # Delete all usage for the given subscription item. Allowed only when the current plan's `usage_type` is `metered`.
   --payment-behavior: string@payment-behavior-completer # Controls how Stripe handles payment when a subscription update requires payment and `collection_method=charge_automatically`.
   --proration-behavior: string@proration-behavior-completer # Determines how to handle [prorations](https://docs.stripe.com/billing/subscriptions/prorations) when the billing cycle changes (e.g., when switching plans, resetting `billing_cycle_anchor=now`, or starting a trial), or if an item's `quantity` changes. The default value is `create_prorations`.
@@ -13807,7 +14231,7 @@ export def "subscription-items DeleteSubscriptionItemsItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a subscription item
@@ -13823,6 +14247,7 @@ export def "subscription-items GetSubscriptionItemsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<billed_until: int, billing_thresholds: any, created: int, current_period_end: int, current_period_start: int, discounts: list<any>, id: string, metadata: record, object: string, price: record<active: bool, billing_scheme: string, created: int, currency: string, currency_options: record, custom_unit_amount: any, id: string, livemode: bool, lookup_key: string, metadata: record, nickname: string, object: string, product: any, recurring: any, tax_behavior: string, tiers: list<record>, tiers_mode: string, transform_quantity: any, type: string, unit_amount: int, unit_amount_decimal: string>, quantity: int, subscription: string, tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>> {
@@ -13834,7 +14259,7 @@ export def "subscription-items GetSubscriptionItemsItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a subscription item
@@ -13851,6 +14276,7 @@ export def "subscription-items PostSubscriptionItemsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-thresholds: any # Define thresholds at which an invoice will be sent, and the subscription advanced to a new billing period. Pass an empty string to remove previously-defined thresholds.
   --discounts: any # The coupons to redeem into discounts for the subscription item.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -13872,7 +14298,7 @@ export def "subscription-items PostSubscriptionItemsItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all schedules
@@ -13887,6 +14313,7 @@ export def "subscription-schedules GetSubscriptionSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --canceled-at: string # Only return subscription schedules that were created canceled the given date interval.
   --completed-at: string # Only return subscription schedules that completed during the given date interval.
   --created: string # Only return subscription schedules that were created during the given date interval.
@@ -13908,7 +14335,7 @@ export def "subscription-schedules GetSubscriptionSchedules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a schedule
@@ -13926,6 +14353,7 @@ export def "subscription-schedules PostSubscriptionSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-mode: record # Controls how prorations and invoices for subscriptions are calculated and orchestrated. — shape: {flexible?: record, type: "classic"|"flexible"}
   --customer: string # The identifier of the customer to create the subscription schedule for.
   --customer-account: string # The identifier of the account to create the subscription schedule for.
@@ -13945,7 +14373,7 @@ export def "subscription-schedules PostSubscriptionSchedules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a schedule
@@ -13961,6 +14389,7 @@ export def "subscription-schedules GetSubscriptionSchedulesSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<application: any, billing_mode: record<flexible: any, type: string, updated_at: int>, canceled_at: int, completed_at: int, created: int, current_phase: any, customer: any, customer_account: string, default_settings: record<application_fee_percent: float, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any>, billing_cycle_anchor: string, billing_thresholds: any, collection_method: string, default_payment_method: any, description: string, invoice_settings: record<account_tax_ids: list, days_until_due: int, issuer: record>, on_behalf_of: any, transfer_data: any>, end_behavior: string, id: string, livemode: bool, metadata: record, object: string, phases: table<add_invoice_items: list, application_fee_percent: float, automatic_tax: record, billing_cycle_anchor: string, billing_thresholds: any, collection_method: string, currency: string, default_payment_method: any, default_tax_rates: list, description: string, discounts: list, end_date: int, invoice_settings: any, items: list, metadata: record, on_behalf_of: any, proration_behavior: string, start_date: int, transfer_data: any, trial_end: int>, released_at: int, released_subscription: string, status: string, subscription: any, test_clock: any> {
@@ -13972,7 +14401,7 @@ export def "subscription-schedules GetSubscriptionSchedulesSchedule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a schedule
@@ -13990,6 +14419,7 @@ export def "subscription-schedules PostSubscriptionSchedulesSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --default-settings: record # Object representing the subscription schedule's default settings. — shape: {application_fee_percent?: float, automatic_tax?: record, billing_cycle_anchor?: "automatic"|"phase_start", billing_thresholds?: any, collection_method?: "charge_automatically"|"send_invoice", default_payment_method?: string, description?: any, invoice_settings?: record, on_behalf_of?: any, transfer_data?: any}
   --end-behavior: string@end-behavior-completer # Behavior of the subscription schedule and underlying subscription when it ends. Possible values are `release` or `cancel` with the default being `release`. `release` will end the subscription schedule and keep the underlying subscription running. `cancel` will end the subscription schedule and cancel the underlying subscription.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -14005,7 +14435,7 @@ export def "subscription-schedules PostSubscriptionSchedulesSchedule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a schedule
@@ -14021,6 +14451,7 @@ export def "subscription-schedules-cancel PostSubscriptionSchedulesScheduleCance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-now: oneof<nothing, bool> # If the subscription schedule is `active`, indicates if a final invoice will be generated that contains any un-invoiced metered usage and new/pending proration invoice items. Defaults to `true`.
   --prorate: oneof<nothing, bool> # If the subscription schedule is `active`, indicates if the cancellation should be prorated. Defaults to `true`.
@@ -14033,7 +14464,7 @@ export def "subscription-schedules-cancel PostSubscriptionSchedulesScheduleCance
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Release a schedule
@@ -14049,6 +14480,7 @@ export def "subscription-schedules-release PostSubscriptionSchedulesScheduleRele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --preserve-cancel-date: oneof<nothing, bool> # Keep any cancellation on the subscription that the schedule has set
 ]: any -> record<application: any, billing_mode: record<flexible: any, type: string, updated_at: int>, canceled_at: int, completed_at: int, created: int, current_phase: any, customer: any, customer_account: string, default_settings: record<application_fee_percent: float, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any>, billing_cycle_anchor: string, billing_thresholds: any, collection_method: string, default_payment_method: any, description: string, invoice_settings: record<account_tax_ids: list, days_until_due: int, issuer: record>, on_behalf_of: any, transfer_data: any>, end_behavior: string, id: string, livemode: bool, metadata: record, object: string, phases: table<add_invoice_items: list, application_fee_percent: float, automatic_tax: record, billing_cycle_anchor: string, billing_thresholds: any, collection_method: string, currency: string, default_payment_method: any, default_tax_rates: list, description: string, discounts: list, end_date: int, invoice_settings: any, items: list, metadata: record, on_behalf_of: any, proration_behavior: string, start_date: int, transfer_data: any, trial_end: int>, released_at: int, released_subscription: string, status: string, subscription: any, test_clock: any> {
@@ -14060,7 +14492,7 @@ export def "subscription-schedules-release PostSubscriptionSchedulesScheduleRele
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List subscriptions
@@ -14075,6 +14507,7 @@ export def "subscriptions GetSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automatic-tax: record # Filter subscriptions by their automatic tax settings.
   --collection-method: string@collection-method-completer # The collection method of the subscriptions to retrieve. Either `charge_automatically` or `send_invoice`.
   --created: string # Only return subscriptions that were created during the given date interval.
@@ -14099,7 +14532,7 @@ export def "subscriptions GetSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a subscription
@@ -14124,6 +14557,7 @@ export def "subscriptions PostSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --add-invoice-items: list # A list of prices and quantities that will generate invoice items appended to the next invoice for this subscription. You may pass up to 20 items. — item shape: {discountable?: bool, discounts?: list, metadata?: record, period?: record, price?: string, price_data?: record, quantity?: int, tax_rates?: any}
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. The request must be made by a platform account on a connected account in order to set an application fee percentage. For more information, see the application fees [documentation](https://stripe.com/docs/connect/subscriptions#collecting-fees-on-subscriptions).
   --automatic-tax: record # Automatic tax settings for this subscription. — shape: {enabled: bool, liability?: record}
@@ -14169,7 +14603,7 @@ export def "subscriptions PostSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search subscriptions
@@ -14184,6 +14618,7 @@ export def "subscriptions-search GetSubscriptionsSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
   --page: string # A cursor for pagination across multiple pages of results. Don't include this parameter on the first call. Use the next_page value returned in a previous response to request subsequent results.
@@ -14198,7 +14633,7 @@ export def "subscriptions-search GetSubscriptionsSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a subscription
@@ -14215,6 +14650,7 @@ export def "subscriptions DeleteSubscriptionsSubscriptionExposedId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellation-details: record # Details about why this subscription was cancelled — shape: {comment?: any, feedback?: ""|"customer_service"|"low_quality"|"missing_features"|"other"|"switched_service"|"too_complex"|"too_expensive"|"unused"}
   --expand: list # Specifies which fields in the response should be expanded.
   --invoice-now: oneof<nothing, bool> # Will generate a final invoice that invoices for any un-invoiced metered usage and new/pending proration invoice items. Defaults to `false`.
@@ -14228,7 +14664,7 @@ export def "subscriptions DeleteSubscriptionsSubscriptionExposedId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a subscription
@@ -14244,6 +14680,7 @@ export def "subscriptions GetSubscriptionsSubscriptionExposedId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<application: any, application_fee_percent: float, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any>, billing_cycle_anchor: int, billing_cycle_anchor_config: any, billing_mode: record<flexible: any, type: string, updated_at: int>, billing_schedules: table<applies_to: list, bill_until: record, key: string>, billing_thresholds: any, cancel_at: int, cancel_at_period_end: bool, canceled_at: int, cancellation_details: any, collection_method: string, created: int, currency: string, customer: any, customer_account: string, days_until_due: int, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, ended_at: int, id: string, invoice_settings: record<account_tax_ids: list<any>, issuer: record<account: any, type: string>>, items: record<data: list<record>, has_more: bool, object: string, url: string>, latest_invoice: any, livemode: bool, managed_payments: any, metadata: record, next_pending_invoice_item_invoice: int, object: string, on_behalf_of: any, pause_collection: any, payment_settings: any, pending_invoice_item_interval: any, pending_setup_intent: any, pending_update: any, presentment_details: record<presentment_currency: string>, schedule: any, start_date: int, status: string, test_clock: any, transfer_data: any, trial_end: int, trial_settings: any, trial_start: int> {
@@ -14255,7 +14692,7 @@ export def "subscriptions GetSubscriptionsSubscriptionExposedId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a subscription
@@ -14278,6 +14715,7 @@ export def "subscriptions PostSubscriptionsSubscriptionExposedId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --add-invoice-items: list # A list of prices and quantities that will generate invoice items appended to the next invoice for this subscription. You may pass up to 20 items. — item shape: {discountable?: bool, discounts?: list, metadata?: record, period?: record, price?: string, price_data?: record, quantity?: int, tax_rates?: any}
   --application-fee-percent: any # A non-negative decimal between 0 and 100, with at most two decimal places. This represents the percentage of the subscription invoice total that will be transferred to the application owner's Stripe account. The request must be made by a platform account on a connected account in order to set an application fee percentage. For more information, see the application fees [documentation](https://stripe.com/docs/connect/subscriptions#collecting-fees-on-subscriptions).
   --automatic-tax: record # Automatic tax settings for this subscription. We recommend you only include this parameter when the existing value is being changed. — shape: {enabled: bool, liability?: record}
@@ -14319,7 +14757,7 @@ export def "subscriptions PostSubscriptionsSubscriptionExposedId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a subscription discount
@@ -14335,6 +14773,7 @@ export def "subscriptions-discount DeleteSubscriptionsSubscriptionExposedIdDisco
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<checkout_session: string, customer: any, customer_account: string, deleted: bool, id: string, invoice: string, invoice_item: string, object: string, promotion_code: any, source: record<coupon: any, type: string>, start: int, subscription: string, subscription_item: string> {
   let input = $in
@@ -14344,7 +14783,7 @@ export def "subscriptions-discount DeleteSubscriptionsSubscriptionExposedIdDisco
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Migrate a subscription
@@ -14361,6 +14800,7 @@ export def "subscriptions-migrate PostSubscriptionsSubscriptionMigrate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   billing_mode: record # Controls how prorations and invoices for subscriptions are calculated and orchestrated. — shape: {flexible?: record, type: "flexible"}
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<application: any, application_fee_percent: float, automatic_tax: record<disabled_reason: string, enabled: bool, liability: any>, billing_cycle_anchor: int, billing_cycle_anchor_config: any, billing_mode: record<flexible: any, type: string, updated_at: int>, billing_schedules: table<applies_to: list, bill_until: record, key: string>, billing_thresholds: any, cancel_at: int, cancel_at_period_end: bool, canceled_at: int, cancellation_details: any, collection_method: string, created: int, currency: string, customer: any, customer_account: string, days_until_due: int, default_payment_method: any, default_source: any, default_tax_rates: table<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string>, description: string, discounts: list<any>, ended_at: int, id: string, invoice_settings: record<account_tax_ids: list<any>, issuer: record<account: any, type: string>>, items: record<data: list<record>, has_more: bool, object: string, url: string>, latest_invoice: any, livemode: bool, managed_payments: any, metadata: record, next_pending_invoice_item_invoice: int, object: string, on_behalf_of: any, pause_collection: any, payment_settings: any, pending_invoice_item_interval: any, pending_setup_intent: any, pending_update: any, presentment_details: record<presentment_currency: string>, schedule: any, start_date: int, status: string, test_clock: any, transfer_data: any, trial_end: int, trial_settings: any, trial_start: int> {
@@ -14372,7 +14812,7 @@ export def "subscriptions-migrate PostSubscriptionsSubscriptionMigrate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resume a subscription
@@ -14388,6 +14828,7 @@ export def "subscriptions-resume PostSubscriptionsSubscriptionResume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-cycle-anchor: string@billing-cycle-anchor-completer # The billing cycle anchor that applies when the subscription is resumed. Either `now` or `unchanged`. The default is `now`. For more information, see the billing cycle [documentation](https://docs.stripe.com/billing/subscriptions/billing-cycle).
   --expand: list # Specifies which fields in the response should be expanded.
   --proration-behavior: string@proration-behavior-completer # Determines how to handle [prorations](https://docs.stripe.com/billing/subscriptions/prorations) resulting from the `billing_cycle_anchor` being `unchanged`. When the `billing_cycle_anchor` is set to `now` (default value), no prorations are generated. If no value is passed, the default is `create_prorations`.
@@ -14401,7 +14842,7 @@ export def "subscriptions-resume PostSubscriptionsSubscriptionResume" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Find a Tax Association
@@ -14416,6 +14857,7 @@ export def "tax-associations-find GetTaxAssociationsFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --payment-intent: string # Valid [PaymentIntent](https://docs.stripe.com/api/payment_intents/object) id
   --body: record
@@ -14428,7 +14870,7 @@ export def "tax-associations-find GetTaxAssociationsFind" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Calculation
@@ -14447,6 +14889,7 @@ export def "tax-calculations PostTaxCalculations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --customer: string # The ID of an existing customer to use for this calculation. If provided, the customer's address and tax IDs are copied to `customer_details`.
   --customer-details: record # Details about the customer, including address and tax IDs. — shape: {address?: record, address_source?: "billing"|"shipping", ip_address?: string, tax_ids?: list, taxability_override?: "customer_exempt"|"none"|"reverse_charge"}
@@ -14464,7 +14907,7 @@ export def "tax-calculations PostTaxCalculations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Calculation
@@ -14480,6 +14923,7 @@ export def "tax-calculations GetTaxCalculationsCalculation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount_total: int, currency: string, customer: string, customer_details: record<address: any, address_source: string, ip_address: string, tax_ids: list<record>, taxability_override: string>, expires_at: int, id: string, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, object: string, ship_from_details: any, shipping_cost: any, tax_amount_exclusive: int, tax_amount_inclusive: int, tax_breakdown: table<amount: int, inclusive: bool, tax_rate_details: record, taxability_reason: string, taxable_amount: int>, tax_date: int> {
@@ -14491,7 +14935,7 @@ export def "tax-calculations GetTaxCalculationsCalculation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Calculation's line items
@@ -14507,6 +14951,7 @@ export def "tax-calculations-line-items GetTaxCalculationsCalculationLineItems" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -14521,7 +14966,7 @@ export def "tax-calculations-line-items GetTaxCalculationsCalculationLineItems" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List registrations
@@ -14536,6 +14981,7 @@ export def "tax-registrations GetTaxRegistrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -14551,7 +14997,7 @@ export def "tax-registrations GetTaxRegistrations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a registration
@@ -14567,6 +15013,7 @@ export def "tax-registrations PostTaxRegistrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   active_from: any # Time at which the Tax Registration becomes active. It can be either `now` to indicate the current time, or a future timestamp measured in seconds since the Unix epoch.
   country: string # Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
   country_options: record # Specific options for a registration in the specified `country`. — shape: {ae?: record, al?: record, am?: record, ao?: record, at?: record, au?: record, aw?: record, az?: record, ba?: record, bb?: record, bd?: record, be?: record, bf?: record, bg?: record, bh?: record, bj?: record, bs?: record, by?: record, ca?: record, cd?: record, ch?: record, cl?: record, cm?: record, co?: record, cr?: record, cv?: record, cy?: record, cz?: record, de?: record, dk?: record, ec?: record, ee?: record, eg?: record, es?: record, et?: record, fi?: record, fr?: record, gb?: record, ge?: record, gn?: record, gr?: record, hr?: record, hu?: record, id?: record, ie?: record, in?: record, is?: record, it?: record, jp?: record, ke?: record, kg?: record, kh?: record, kr?: record, kz?: record, la?: record, lk?: record, lt?: record, lu?: record, lv?: record, ma?: record, md?: record, me?: record, mk?: record, mr?: record, mt?: record, mx?: record, my?: record, ng?: record, nl?: record, no?: record, np?: record, nz?: record, om?: record, pe?: record, ph?: record, pl?: record, pt?: record, ro?: record, rs?: record, ru?: record, sa?: record, se?: record, sg?: record, si?: record, sk?: record, sn?: record, sr?: record, th?: record, tj?: record, tr?: record, tw?: record, tz?: record, ua?: record, ug?: record, us?: record, uy?: record, uz?: record, vn?: record, za?: record, zm?: record, zw?: record}
@@ -14581,7 +15028,7 @@ export def "tax-registrations PostTaxRegistrations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a registration
@@ -14597,6 +15044,7 @@ export def "tax-registrations GetTaxRegistrationsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active_from: int, country: string, country_options: record<ae: record<standard: record, type: string>, al: record<type: string>, am: record<type: string>, ao: record<type: string>, at: record<standard: record, type: string>, au: record<standard: record, type: string>, aw: record<type: string>, az: record<type: string>, ba: record<type: string>, bb: record<type: string>, bd: record<type: string>, be: record<standard: record, type: string>, bf: record<type: string>, bg: record<standard: record, type: string>, bh: record<type: string>, bj: record<type: string>, bs: record<type: string>, by: record<type: string>, ca: record<province_standard: record, type: string>, cd: record<type: string>, ch: record<standard: record, type: string>, cl: record<type: string>, cm: record<type: string>, co: record<type: string>, cr: record<type: string>, cv: record<type: string>, cy: record<standard: record, type: string>, cz: record<standard: record, type: string>, de: record<standard: record, type: string>, dk: record<standard: record, type: string>, ec: record<type: string>, ee: record<standard: record, type: string>, eg: record<type: string>, es: record<standard: record, type: string>, et: record<type: string>, fi: record<standard: record, type: string>, fr: record<standard: record, type: string>, gb: record<standard: record, type: string>, ge: record<type: string>, gn: record<type: string>, gr: record<standard: record, type: string>, hr: record<standard: record, type: string>, hu: record<standard: record, type: string>, id: record<type: string>, ie: record<standard: record, type: string>, in: record<type: string>, is: record<type: string>, it: record<standard: record, type: string>, jp: record<standard: record, type: string>, ke: record<type: string>, kg: record<type: string>, kh: record<type: string>, kr: record<type: string>, kz: record<type: string>, la: record<type: string>, lk: record<type: string>, lt: record<standard: record, type: string>, lu: record<standard: record, type: string>, lv: record<standard: record, type: string>, ma: record<type: string>, md: record<type: string>, me: record<type: string>, mk: record<type: string>, mr: record<type: string>, mt: record<standard: record, type: string>, mx: record<type: string>, my: record<type: string>, ng: record<type: string>, nl: record<standard: record, type: string>, no: record<standard: record, type: string>, np: record<type: string>, nz: record<standard: record, type: string>, om: record<type: string>, pe: record<type: string>, ph: record<type: string>, pl: record<standard: record, type: string>, pt: record<standard: record, type: string>, ro: record<standard: record, type: string>, rs: record<type: string>, ru: record<type: string>, sa: record<type: string>, se: record<standard: record, type: string>, sg: record<standard: record, type: string>, si: record<standard: record, type: string>, sk: record<standard: record, type: string>, sn: record<type: string>, sr: record<type: string>, th: record<type: string>, tj: record<type: string>, tr: record<type: string>, tw: record<type: string>, tz: record<type: string>, ua: record<type: string>, ug: record<type: string>, us: record<local_amusement_tax: record, local_lease_tax: record, state: string, state_sales_tax: record, type: string>, uy: record<type: string>, uz: record<type: string>, vn: record<type: string>, za: record<type: string>, zm: record<type: string>, zw: record<type: string>>, created: int, expires_at: int, id: string, livemode: bool, object: string, status: string> {
@@ -14608,7 +15056,7 @@ export def "tax-registrations GetTaxRegistrationsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a registration
@@ -14624,6 +15072,7 @@ export def "tax-registrations PostTaxRegistrationsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-from: any # Time at which the registration becomes active. It can be either `now` to indicate the current time, or a timestamp measured in seconds since the Unix epoch.
   --expand: list # Specifies which fields in the response should be expanded.
   --expires-at: any # If set, the registration stops being active at this time. If not set, the registration will be active indefinitely. It can be either `now` to indicate the current time, or a timestamp measured in seconds since the Unix epoch.
@@ -14636,7 +15085,7 @@ export def "tax-registrations PostTaxRegistrationsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve settings
@@ -14651,6 +15100,7 @@ export def "tax-settings GetTaxSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<defaults: record<provider: string, tax_behavior: string, tax_code: string>, head_office: any, livemode: bool, object: string, status: string, status_details: record<active: record, pending: record<missing_fields: list>>> {
@@ -14662,7 +15112,7 @@ export def "tax-settings GetTaxSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update settings
@@ -14679,6 +15129,7 @@ export def "tax-settings PostTaxSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaults: record # Default configuration to be used on Stripe Tax calculations. — shape: {tax_behavior?: "exclusive"|"inclusive"|"inferred_by_currency", tax_code?: string}
   --expand: list # Specifies which fields in the response should be expanded.
   --head-office: record # The place where your business is located. — shape: {address: record}
@@ -14691,7 +15142,7 @@ export def "tax-settings PostTaxSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Transaction from a Calculation
@@ -14706,6 +15157,7 @@ export def "tax-transactions-create-from-calculation PostTaxTransactionsCreateFr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   calculation: string # Tax Calculation ID to be used as input when creating the transaction.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -14720,7 +15172,7 @@ export def "tax-transactions-create-from-calculation PostTaxTransactionsCreateFr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a reversal Transaction
@@ -14737,6 +15189,7 @@ export def "tax-transactions-create-reversal PostTaxTransactionsCreateReversal" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --flat-amount: int # A flat amount to reverse across the entire transaction, in the [smallest currency unit](https://docs.stripe.com/currencies#minor-units) in negative. This value represents the total amount to refund from the transaction, including taxes.
   --line-items: list # The line item amounts to reverse. — item shape: {amount: int, amount_tax: int, metadata?: record, original_line_item: string, quantity?: int, reference: string}
@@ -14754,7 +15207,7 @@ export def "tax-transactions-create-reversal PostTaxTransactionsCreateReversal" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Transaction
@@ -14770,6 +15223,7 @@ export def "tax-transactions GetTaxTransactionsTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, currency: string, customer: string, customer_details: record<address: any, address_source: string, ip_address: string, tax_ids: list<record>, taxability_override: string>, id: string, line_items: record<data: list<record>, has_more: bool, object: string, url: string>, livemode: bool, metadata: record, object: string, posted_at: int, reference: string, reversal: any, ship_from_details: any, shipping_cost: any, tax_date: int, type: string> {
@@ -14781,7 +15235,7 @@ export def "tax-transactions GetTaxTransactionsTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Transaction's line items
@@ -14797,6 +15251,7 @@ export def "tax-transactions-line-items GetTaxTransactionsTransactionLineItems" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -14811,7 +15266,7 @@ export def "tax-transactions-line-items GetTaxTransactionsTransactionLineItems" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all tax codes
@@ -14826,6 +15281,7 @@ export def "tax-codes GetTaxCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -14840,7 +15296,7 @@ export def "tax-codes GetTaxCodes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a tax code
@@ -14856,6 +15312,7 @@ export def "tax-codes GetTaxCodesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<description: string, id: string, name: string, object: string> {
@@ -14867,7 +15324,7 @@ export def "tax-codes GetTaxCodesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all tax IDs
@@ -14882,6 +15339,7 @@ export def "tax-ids GetTaxIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -14897,7 +15355,7 @@ export def "tax-ids GetTaxIds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a tax ID
@@ -14913,6 +15371,7 @@ export def "tax-ids PostTaxIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --owner: record # The account or customer the tax ID belongs to. Defaults to `owner[type]=self`. — shape: {account?: string, customer?: string, customer_account?: string, type: "account"|"application"|"customer"|"self"}
   type: string@type-completer-4 # Type of the tax ID, one of `ad_nrt`, `ae_trn`, `al_tin`, `am_tin`, `ao_tin`, `ar_cuit`, `au_abn`, `au_arn`, `aw_tin`, `az_tin`, `ba_tin`, `bb_tin`, `bd_bin`, `bf_ifu`, `bg_uic`, `bh_vat`, `bj_ifu`, `bo_tin`, `br_cnpj`, `br_cpf`, `bs_tin`, `by_tin`, `ca_bn`, `ca_gst_hst`, `ca_pst_bc`, `ca_pst_mb`, `ca_pst_sk`, `ca_qst`, `cd_nif`, `ch_uid`, `ch_vat`, `cl_tin`, `cm_niu`, `cn_tin`, `co_nit`, `cr_tin`, `cv_nif`, `de_stn`, `do_rcn`, `ec_ruc`, `eg_tin`, `es_cif`, `et_tin`, `eu_oss_vat`, `eu_vat`, `fo_vat`, `gb_vat`, `ge_vat`, `gi_tin`, `gn_nif`, `hk_br`, `hr_oib`, `hu_tin`, `id_npwp`, `il_vat`, `in_gst`, `is_vat`, `it_cf`, `jp_cn`, `jp_rn`, `jp_trn`, `ke_pin`, `kg_tin`, `kh_tin`, `kr_brn`, `kz_bin`, `la_tin`, `li_uid`, `li_vat`, `lk_vat`, `ma_vat`, `md_vat`, `me_pib`, `mk_vat`, `mr_nif`, `mx_rfc`, `my_frp`, `my_itn`, `my_sst`, `ng_tin`, `no_vat`, `no_voec`, `np_pan`, `nz_gst`, `om_vat`, `pe_ruc`, `ph_tin`, `pl_nip`, `py_ruc`, `ro_tin`, `rs_pib`, `ru_inn`, `ru_kpp`, `sa_vat`, `sg_gst`, `sg_uen`, `si_tin`, `sn_ninea`, `sr_fin`, `sv_nit`, `th_vat`, `tj_tin`, `tr_tin`, `tw_vat`, `tz_vat`, `ua_vat`, `ug_tin`, `us_ein`, `uy_ruc`, `uz_tin`, `uz_vat`, `ve_rif`, `vn_tin`, `za_vat`, `zm_tin`, or `zw_tin`
@@ -14926,7 +15385,7 @@ export def "tax-ids PostTaxIds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a tax ID
@@ -14942,6 +15401,7 @@ export def "tax-ids DeleteTaxIdsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -14951,7 +15411,7 @@ export def "tax-ids DeleteTaxIdsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a tax ID
@@ -14967,6 +15427,7 @@ export def "tax-ids GetTaxIdsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<country: string, created: int, customer: any, customer_account: string, id: string, livemode: bool, object: string, owner: any, type: string, value: string, verification: any> {
@@ -14978,7 +15439,7 @@ export def "tax-ids GetTaxIdsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all tax rates
@@ -14993,6 +15454,7 @@ export def "tax-rates GetTaxRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Optional flag to filter by tax rates that are either active or inactive (archived).
   --created: string # Optional range for filtering created date.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -15010,7 +15472,7 @@ export def "tax-rates GetTaxRates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a tax rate
@@ -15025,6 +15487,7 @@ export def "tax-rates PostTaxRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Flag determining whether the tax rate is active or inactive (archived). Inactive tax rates cannot be used with new applications or Checkout Sessions, but will still work for subscriptions and invoices that already have it set.
   --country: string # Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
   --description: string # An arbitrary string attached to the tax rate for your internal use only. It will not be visible to your customers.
@@ -15045,7 +15508,7 @@ export def "tax-rates PostTaxRates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a tax rate
@@ -15061,6 +15524,7 @@ export def "tax-rates GetTaxRatesTaxRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active: bool, country: string, created: int, description: string, display_name: string, effective_percentage: float, flat_amount: any, id: string, inclusive: bool, jurisdiction: string, jurisdiction_level: string, livemode: bool, metadata: record, object: string, percentage: float, rate_type: string, state: string, tax_type: string> {
@@ -15072,7 +15536,7 @@ export def "tax-rates GetTaxRatesTaxRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a tax rate
@@ -15088,6 +15552,7 @@ export def "tax-rates PostTaxRatesTaxRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Flag determining whether the tax rate is active or inactive (archived). Inactive tax rates cannot be used with new applications or Checkout Sessions, but will still work for subscriptions and invoices that already have it set.
   --country: string # Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
   --description: string # An arbitrary string attached to the tax rate for your internal use only. It will not be visible to your customers.
@@ -15106,7 +15571,7 @@ export def "tax-rates PostTaxRatesTaxRate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Configurations
@@ -15121,6 +15586,7 @@ export def "terminal-configurations GetTerminalConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --is-account-default: oneof<nothing, bool> # if present, only return the account default or non-default configurations.
@@ -15136,7 +15602,7 @@ export def "terminal-configurations GetTerminalConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Configuration
@@ -15161,6 +15627,7 @@ export def "terminal-configurations PostTerminalConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bbpos-wisepad3: record # An object containing device type specific settings for BBPOS WisePad 3 readers. — shape: {splashscreen?: any}
   --bbpos-wisepos-e: record # An object containing device type specific settings for BBPOS WisePOS E readers. — shape: {splashscreen?: any}
   --cellular: any # Configuration for cellular connectivity.
@@ -15186,7 +15653,7 @@ export def "terminal-configurations PostTerminalConfigurations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Configuration
@@ -15202,6 +15669,7 @@ export def "terminal-configurations DeleteTerminalConfigurationsConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -15211,7 +15679,7 @@ export def "terminal-configurations DeleteTerminalConfigurationsConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Configuration
@@ -15227,6 +15695,7 @@ export def "terminal-configurations GetTerminalConfigurationsConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -15238,7 +15707,7 @@ export def "terminal-configurations GetTerminalConfigurationsConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a Configuration
@@ -15254,6 +15723,7 @@ export def "terminal-configurations PostTerminalConfigurationsConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bbpos-wisepad3: any # An object containing device type specific settings for BBPOS WisePad 3 readers.
   --bbpos-wisepos-e: any # An object containing device type specific settings for BBPOS WisePOS E readers.
   --cellular: any # Configuration for cellular connectivity.
@@ -15279,7 +15749,7 @@ export def "terminal-configurations PostTerminalConfigurationsConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Connection Token
@@ -15294,6 +15764,7 @@ export def "terminal-connection-tokens PostTerminalConnectionTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --location: string # The id of the location that this connection token is scoped to. If specified the connection token will only be usable with readers assigned to that location, otherwise the connection token will be usable with all readers. Note that location scoping only applies to internet-connected readers. For more details, see [the docs on scoping connection tokens](https://docs.stripe.com/terminal/fleet/locations-and-zones?dashboard-or-api=api#connection-tokens).
 ]: any -> record<location: string, object: string, secret: string> {
@@ -15305,7 +15776,7 @@ export def "terminal-connection-tokens PostTerminalConnectionTokens" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Locations
@@ -15320,6 +15791,7 @@ export def "terminal-locations GetTerminalLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -15334,7 +15806,7 @@ export def "terminal-locations GetTerminalLocations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Location
@@ -15352,6 +15824,7 @@ export def "terminal-locations PostTerminalLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # The full address of the location. — shape: {city?: string, country: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the full address of the location (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
   --address-kanji: record # The Kanji variation of the full address of the location (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -15371,7 +15844,7 @@ export def "terminal-locations PostTerminalLocations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Location
@@ -15387,6 +15860,7 @@ export def "terminal-locations DeleteTerminalLocationsLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -15396,7 +15870,7 @@ export def "terminal-locations DeleteTerminalLocationsLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Location
@@ -15412,6 +15886,7 @@ export def "terminal-locations GetTerminalLocationsLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -15423,7 +15898,7 @@ export def "terminal-locations GetTerminalLocationsLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a Location
@@ -15442,6 +15917,7 @@ export def "terminal-locations PostTerminalLocationsLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # The full address of the location. You can't change the location's `country`. If you need to modify the `country` field, create a new `Location` object and re-register any existing readers to that location. — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string}
   --address-kana: record # The Kana variation of the full address of the location (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
   --address-kanji: record # The Kanji variation of the full address of the location (Japan only). — shape: {city?: string, country?: string, line1?: string, line2?: string, postal_code?: string, state?: string, town?: string}
@@ -15461,7 +15937,7 @@ export def "terminal-locations PostTerminalLocationsLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an Onboarding Link
@@ -15477,6 +15953,7 @@ export def "terminal-onboarding-links PostTerminalOnboardingLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   link_options: record # Specific fields needed to generate the desired link type. — shape: {apple_terms_and_conditions?: record}
   link_type: string@link-type-completer # The type of link being generated.
@@ -15490,7 +15967,7 @@ export def "terminal-onboarding-links PostTerminalOnboardingLinks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Readers
@@ -15505,6 +15982,7 @@ export def "terminal-readers GetTerminalReaders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --device-type: string@device-type-completer # Filters readers by device type
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -15523,7 +16001,7 @@ export def "terminal-readers GetTerminalReaders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Reader
@@ -15538,6 +16016,7 @@ export def "terminal-readers PostTerminalReaders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --label: string # Custom label given to the reader for easier identification. If no label is specified, the registration code will be used.
   --location: string # The location to assign the reader to.
@@ -15552,7 +16031,7 @@ export def "terminal-readers PostTerminalReaders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Reader
@@ -15568,6 +16047,7 @@ export def "terminal-readers DeleteTerminalReadersReader" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, device_type: string, id: string, object: string, serial_number: string> {
   let input = $in
@@ -15577,7 +16057,7 @@ export def "terminal-readers DeleteTerminalReadersReader" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Reader
@@ -15593,6 +16073,7 @@ export def "terminal-readers GetTerminalReadersReader" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> any {
@@ -15604,7 +16085,7 @@ export def "terminal-readers GetTerminalReadersReader" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a Reader
@@ -15620,6 +16101,7 @@ export def "terminal-readers PostTerminalReadersReader" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --label: any # The new label of the reader.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -15632,7 +16114,7 @@ export def "terminal-readers PostTerminalReadersReader" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel the current reader action
@@ -15648,6 +16130,7 @@ export def "terminal-readers-cancel-action PostTerminalReadersReaderCancelAction
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<action: any, device_sw_version: string, device_type: string, id: string, ip_address: string, label: string, last_seen_at: int, livemode: bool, location: any, metadata: record, object: string, serial_number: string, status: string> {
   let input = $in
@@ -15658,7 +16141,7 @@ export def "terminal-readers-cancel-action PostTerminalReadersReaderCancelAction
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Collect inputs using a Reader
@@ -15675,6 +16158,7 @@ export def "terminal-readers-collect-inputs PostTerminalReadersReaderCollectInpu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   inputs: list # List of inputs to be collected from the customer using the Reader. Maximum 5 inputs. — item shape: {custom_text: record, required?: bool, selection?: record, toggles?: list, type: "email"|"numeric"|"phone"|"selection"|"signature"|"text"}
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -15687,7 +16171,7 @@ export def "terminal-readers-collect-inputs PostTerminalReadersReaderCollectInpu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Hand off a PaymentIntent to a Reader and collect card details
@@ -15704,6 +16188,7 @@ export def "terminal-readers-collect-payment-method PostTerminalReadersReaderCol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collect-config: record # Configuration overrides for this collection, such as tipping, surcharging, and customer cancellation settings. — shape: {allow_redisplay?: "always"|"limited"|"unspecified", enable_customer_cancellation?: bool, skip_tipping?: bool, tipping?: record}
   --expand: list # Specifies which fields in the response should be expanded.
   payment_intent: string # The ID of the PaymentIntent to collect a payment method for.
@@ -15716,7 +16201,7 @@ export def "terminal-readers-collect-payment-method PostTerminalReadersReaderCol
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Confirm a PaymentIntent on the Reader
@@ -15733,6 +16218,7 @@ export def "terminal-readers-confirm-payment-intent PostTerminalReadersReaderCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --confirm-config: record # Configuration overrides for this confirmation, such as surcharge settings and return URL. — shape: {return_url?: string}
   --expand: list # Specifies which fields in the response should be expanded.
   payment_intent: string # The ID of the PaymentIntent to confirm.
@@ -15745,7 +16231,7 @@ export def "terminal-readers-confirm-payment-intent PostTerminalReadersReaderCon
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Hand-off a PaymentIntent to a Reader
@@ -15762,6 +16248,7 @@ export def "terminal-readers-process-payment-intent PostTerminalReadersReaderPro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   payment_intent: string # The ID of the PaymentIntent to process on the reader.
   --process-config: record # Configuration overrides for this transaction, such as tipping and customer cancellation settings. — shape: {allow_redisplay?: "always"|"limited"|"unspecified", enable_customer_cancellation?: bool, return_url?: string, skip_tipping?: bool, tipping?: record}
@@ -15774,7 +16261,7 @@ export def "terminal-readers-process-payment-intent PostTerminalReadersReaderPro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Hand-off a SetupIntent to a Reader
@@ -15791,6 +16278,7 @@ export def "terminal-readers-process-setup-intent PostTerminalReadersReaderProce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   allow_redisplay: string@allow-redisplay-completer # This field indicates whether this payment method can be shown again to its customer in a checkout flow. Stripe products such as Checkout and Elements use this field to determine whether a payment method can be shown as a saved payment method in a checkout flow.
   --expand: list # Specifies which fields in the response should be expanded.
   --process-config: record # Configuration overrides for this setup, such as MOTO and customer cancellation settings. — shape: {enable_customer_cancellation?: bool}
@@ -15804,7 +16292,7 @@ export def "terminal-readers-process-setup-intent PostTerminalReadersReaderProce
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refund a Charge or a PaymentIntent in-person
@@ -15821,6 +16309,7 @@ export def "terminal-readers-refund-payment PostTerminalReadersReaderRefundPayme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # A positive integer in __cents__ representing how much of this charge to refund.
   --charge: string # ID of the Charge to refund.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -15838,7 +16327,7 @@ export def "terminal-readers-refund-payment PostTerminalReadersReaderRefundPayme
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set reader display
@@ -15855,6 +16344,7 @@ export def "terminal-readers-set-reader-display PostTerminalReadersReaderSetRead
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cart: record # Cart details to display on the reader screen, including line items, amounts, and currency. — shape: {currency: string, line_items: list, tax?: int, total: int}
   --expand: list # Specifies which fields in the response should be expanded.
   type: string@type-completer-12 # Type of information to display. Only `cart` is currently supported.
@@ -15867,7 +16357,7 @@ export def "terminal-readers-set-reader-display PostTerminalReadersReaderSetRead
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a refund using a Terminal-supported device.
@@ -15882,6 +16372,7 @@ export def "terminal-refunds PostTerminalRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record {
   let input = $in
@@ -15892,7 +16383,7 @@ export def "terminal-refunds PostTerminalRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test Confirmation Token
@@ -15910,6 +16401,7 @@ export def "test-helpers-confirmation-tokens PostTestHelpersConfirmationTokens" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --payment-method: string # ID of an existing PaymentMethod.
   --payment-method-data: record # If provided, this hash will be used to create a PaymentMethod. — shape: {acss_debit?: record, affirm?: record, afterpay_clearpay?: record, alipay?: record, allow_redisplay?: "always"|"limited"|"unspecified", alma?: record, amazon_pay?: record, au_becs_debit?: record, bacs_debit?: record, bancontact?: record, billie?: record, billing_details?: record, bizum?: record, blik?: record, boleto?: record, cashapp?: record, crypto?: record, customer_balance?: record, eps?: record, fpx?: record, giropay?: record, grabpay?: record, ideal?: record, interac_present?: record, kakao_pay?: record, klarna?: record, konbini?: record, kr_card?: record, link?: record, mb_way?: record, metadata?: record, mobilepay?: record, multibanco?: record, naver_pay?: record, nz_bank_account?: record, oxxo?: record, p24?: record, pay_by_bank?: record, payco?: record, paynow?: record, paypal?: record, payto?: record, pix?: record, promptpay?: record, radar_options?: record, revolut_pay?: record, samsung_pay?: record, satispay?: record, scalapay?: record, sepa_debit?: record, sofort?: record, sunbit?: record, swish?: record, twint?: record, type: "acss_debit"|"affirm"|"afterpay_clearpay"|"alipay"|"alma"|"amazon_pay"|"au_becs_debit"|"bacs_debit"|"bancontact"|"billie"|"bizum"|"blik"|"boleto"|"cashapp"|"crypto"|"customer_balance"|"eps"|"fpx"|"giropay"|"grabpay"|"ideal"|"kakao_pay"|"klarna"|"konbini"|"kr_card"|"link"|"mb_way"|"mobilepay"|"multibanco"|"naver_pay"|"nz_bank_account"|"oxxo"|"p24"|"pay_by_bank"|"payco"|"paynow"|"paypal"|"payto"|"pix"|"promptpay"|"revolut_pay"|"samsung_pay"|"satispay"|"scalapay"|"sepa_debit"|"sofort"|"sunbit"|"swish"|"twint"|"upi"|"us_bank_account"|"wechat_pay"|"zip", upi?: record, us_bank_account?: record, wechat_pay?: record, zip?: record}
@@ -15926,7 +16418,7 @@ export def "test-helpers-confirmation-tokens PostTestHelpersConfirmationTokens" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fund a test mode cash balance
@@ -15942,6 +16434,7 @@ export def "test-helpers-customers-fund-cash-balance PostTestHelpersCustomersCus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount to be used for this test cash balance transaction. A positive integer representing how much to fund in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal) (e.g., 100 cents to fund $1.00 or 100 to fund ¥100, a zero-decimal currency).
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --expand: list # Specifies which fields in the response should be expanded.
@@ -15955,7 +16448,7 @@ export def "test-helpers-customers-fund-cash-balance PostTestHelpersCustomersCus
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test-mode authorization
@@ -15977,6 +16470,7 @@ export def "test-helpers-issuing-authorizations PostTestHelpersIssuingAuthorizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The total amount to attempt to authorize. This amount is in the provided currency, or defaults to the card's currency, and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   --amount-details: record # Detailed breakdown of amount components. These amounts are denominated in `currency` and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal). — shape: {atm_fee?: int, cashback_amount?: int}
   --authorization-method: string@authorization-method-completer # How the card details were provided. Defaults to online.
@@ -16003,7 +16497,7 @@ export def "test-helpers-issuing-authorizations PostTestHelpersIssuingAuthorizat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Capture a test-mode authorization
@@ -16020,6 +16514,7 @@ export def "test-helpers-issuing-authorizations-capture PostTestHelpersIssuingAu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --capture-amount: int # The amount to capture from the authorization. If not provided, the full amount of the authorization will be captured. This amount is in the authorization currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   --close-authorization: oneof<nothing, bool> # Whether to close the authorization after capture. Defaults to true. Set to false to enable multi-capture flows.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -16033,7 +16528,7 @@ export def "test-helpers-issuing-authorizations-capture PostTestHelpersIssuingAu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Expire a test-mode authorization
@@ -16049,6 +16544,7 @@ export def "test-helpers-issuing-authorizations-expire PostTestHelpersIssuingAut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
   let input = $in
@@ -16059,7 +16555,7 @@ export def "test-helpers-issuing-authorizations-expire PostTestHelpersIssuingAut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Finalize a test-mode authorization's amount
@@ -16077,6 +16573,7 @@ export def "test-helpers-issuing-authorizations-finalize-amount PostTestHelpersI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   final_amount: int # The final authorization amount that will be captured by the merchant. This amount is in the authorization currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   --fleet: record # Fleet-specific information for authorizations using Fleet cards. — shape: {cardholder_prompt_data?: record, purchase_type?: "fuel_and_non_fuel_purchase"|"fuel_purchase"|"non_fuel_purchase", reported_breakdown?: record, service_type?: "full_service"|"non_fuel_transaction"|"self_service"}
@@ -16090,7 +16587,7 @@ export def "test-helpers-issuing-authorizations-finalize-amount PostTestHelpersI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Respond to fraud challenge
@@ -16106,6 +16603,7 @@ export def "test-helpers-issuing-authorizations-fraud-challenges-respond PostTes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --confirmed: oneof<nothing, bool> # Whether to simulate the user confirming that the transaction was legitimate (true) or telling Stripe that it was fraudulent (false).
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
@@ -16117,7 +16615,7 @@ export def "test-helpers-issuing-authorizations-fraud-challenges-respond PostTes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Increment a test-mode authorization
@@ -16133,6 +16631,7 @@ export def "test-helpers-issuing-authorizations-increment PostTestHelpersIssuing
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   increment_amount: int # The amount to increment the authorization by. This amount is in the authorization currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   --is-amount-controllable: oneof<nothing, bool> # If set `true`, you may provide [amount](https://docs.stripe.com/api/issuing/authorizations/approve#approve_issuing_authorization-amount) to control how much to hold for the authorization.
@@ -16145,7 +16644,7 @@ export def "test-helpers-issuing-authorizations-increment PostTestHelpersIssuing
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reverse a test-mode authorization
@@ -16161,6 +16660,7 @@ export def "test-helpers-issuing-authorizations-reverse PostTestHelpersIssuingAu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --reverse-amount: int # The amount to reverse from the authorization. If not provided, the full amount of the authorization will be reversed. This amount is in the authorization currency and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
 ]: any -> record<amount: int, amount_details: any, approved: bool, authorization_method: string, balance_transactions: table<amount: int, available_on: int, balance_type: string, created: int, currency: string, description: string, exchange_rate: float, fee: int, fee_details: list, id: string, net: int, object: string, reporting_category: string, source: any, status: string, type: string>, card: record<brand: string, cancellation_reason: string, cardholder: record<billing: record, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list, requirements: record, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list, allowed_categories: list, allowed_merchant_countries: list, blocked_card_presences: list, blocked_categories: list, blocked_merchant_countries: list, spending_limits: list, spending_limits_currency: string>, status: string, type: string, wallets: any>, card_presence: string, cardholder: any, created: int, currency: string, fleet: any, fraud_challenges: table<channel: string, status: string, undeliverable_reason: string>, fuel: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, pending_request: any, request_history: table<amount: int, amount_details: any, approved: bool, authorization_code: string, created: int, currency: string, merchant_amount: int, merchant_currency: string, network_risk_score: int, reason: string, reason_message: string, requested_at: int>, status: string, token: any, transactions: table<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string>, treasury: any, verification_data: record<address_line1_check: string, address_postal_code_check: string, authentication_exemption: any, cvc_check: string, expiry_check: string, postal_code: string, three_d_secure: any>, verified_by_fraud_challenge: bool, wallet: string> {
@@ -16172,7 +16672,7 @@ export def "test-helpers-issuing-authorizations-reverse PostTestHelpersIssuingAu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deliver a testmode card
@@ -16188,6 +16688,7 @@ export def "test-helpers-issuing-cards-shipping-deliver PostTestHelpersIssuingCa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
   let input = $in
@@ -16198,7 +16699,7 @@ export def "test-helpers-issuing-cards-shipping-deliver PostTestHelpersIssuingCa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fail a testmode card
@@ -16214,6 +16715,7 @@ export def "test-helpers-issuing-cards-shipping-fail PostTestHelpersIssuingCards
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
   let input = $in
@@ -16224,7 +16726,7 @@ export def "test-helpers-issuing-cards-shipping-fail PostTestHelpersIssuingCards
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Return a testmode card
@@ -16240,6 +16742,7 @@ export def "test-helpers-issuing-cards-shipping-return PostTestHelpersIssuingCar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
   let input = $in
@@ -16250,7 +16753,7 @@ export def "test-helpers-issuing-cards-shipping-return PostTestHelpersIssuingCar
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Ship a testmode card
@@ -16266,6 +16769,7 @@ export def "test-helpers-issuing-cards-shipping-ship PostTestHelpersIssuingCards
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
   let input = $in
@@ -16276,7 +16780,7 @@ export def "test-helpers-issuing-cards-shipping-ship PostTestHelpersIssuingCards
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Submit a testmode card
@@ -16292,6 +16796,7 @@ export def "test-helpers-issuing-cards-shipping-submit PostTestHelpersIssuingCar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<brand: string, cancellation_reason: string, cardholder: record<billing: record<address: record>, company: any, created: int, email: string, id: string, individual: any, livemode: bool, metadata: record, name: string, object: string, phone_number: string, preferred_locales: list<string>, requirements: record<disabled_reason: string, past_due: list>, spending_controls: any, status: string, type: string>, created: int, currency: string, cvc: string, exp_month: int, exp_year: int, financial_account: string, id: string, last4: string, latest_fraud_warning: any, lifecycle_controls: any, livemode: bool, metadata: record, number: string, object: string, personalization_design: any, replaced_by: any, replacement_for: any, replacement_reason: string, second_line: string, shipping: any, spending_controls: record<allowed_card_presences: list<string>, allowed_categories: list<string>, allowed_merchant_countries: list<string>, blocked_card_presences: list<string>, blocked_categories: list<string>, blocked_merchant_countries: list<string>, spending_limits: list<record>, spending_limits_currency: string>, status: string, type: string, wallets: any> {
   let input = $in
@@ -16302,7 +16807,7 @@ export def "test-helpers-issuing-cards-shipping-submit PostTestHelpersIssuingCar
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Activate a testmode personalization design
@@ -16318,6 +16823,7 @@ export def "test-helpers-issuing-personalization-designs-activate PostTestHelper
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<card_logo: any, carrier_text: any, created: int, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string, physical_bundle: any, preferences: record<is_default: bool, is_platform_default: bool>, rejection_reasons: record<card_logo: list<string>, carrier_text: list<string>>, status: string> {
   let input = $in
@@ -16328,7 +16834,7 @@ export def "test-helpers-issuing-personalization-designs-activate PostTestHelper
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deactivate a testmode personalization design
@@ -16344,6 +16850,7 @@ export def "test-helpers-issuing-personalization-designs-deactivate PostTestHelp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<card_logo: any, carrier_text: any, created: int, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string, physical_bundle: any, preferences: record<is_default: bool, is_platform_default: bool>, rejection_reasons: record<card_logo: list<string>, carrier_text: list<string>>, status: string> {
   let input = $in
@@ -16354,7 +16861,7 @@ export def "test-helpers-issuing-personalization-designs-deactivate PostTestHelp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reject a testmode personalization design
@@ -16371,6 +16878,7 @@ export def "test-helpers-issuing-personalization-designs-reject PostTestHelpersI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   rejection_reasons: record # The reason(s) the personalization design was rejected. — shape: {card_logo?: list, carrier_text?: list}
 ]: any -> record<card_logo: any, carrier_text: any, created: int, id: string, livemode: bool, lookup_key: string, metadata: record, name: string, object: string, physical_bundle: any, preferences: record<is_default: bool, is_platform_default: bool>, rejection_reasons: record<card_logo: list<string>, carrier_text: list<string>>, status: string> {
@@ -16382,7 +16890,7 @@ export def "test-helpers-issuing-personalization-designs-reject PostTestHelpersI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test-mode settlement
@@ -16397,6 +16905,7 @@ export def "test-helpers-issuing-settlements PostTestHelpersIssuingSettlements" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   bin: string # The Bank Identification Number reflecting this settlement record.
   clearing_date: int # The date that the transactions are cleared and posted to user's accounts.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
@@ -16416,7 +16925,7 @@ export def "test-helpers-issuing-settlements PostTestHelpersIssuingSettlements" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Complete a test-mode settlement
@@ -16432,6 +16941,7 @@ export def "test-helpers-issuing-settlements-complete PostTestHelpersIssuingSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<bin: string, clearing_date: int, created: int, currency: string, id: string, interchange_fees_amount: int, livemode: bool, metadata: record, net_total_amount: int, network: string, network_fees_amount: int, network_settlement_identifier: string, object: string, settlement_service: string, status: string, transaction_amount: int, transaction_count: int> {
   let input = $in
@@ -16442,7 +16952,7 @@ export def "test-helpers-issuing-settlements-complete PostTestHelpersIssuingSett
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test-mode force capture
@@ -16459,6 +16969,7 @@ export def "test-helpers-issuing-transactions-create-force-capture PostTestHelpe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # The total amount to attempt to capture. This amount is in the provided currency, or defaults to the cards currency, and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   card: string # Card associated with this transaction.
   --currency: string # The currency of the capture. If not provided, defaults to the currency of the card. Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
@@ -16474,7 +16985,7 @@ export def "test-helpers-issuing-transactions-create-force-capture PostTestHelpe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test-mode unlinked refund
@@ -16491,6 +17002,7 @@ export def "test-helpers-issuing-transactions-create-unlinked-refund PostTestHel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # The total amount to attempt to refund. This amount is in the provided currency, or defaults to the cards currency, and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
   card: string # Card associated with this unlinked refund transaction.
   --currency: string # The currency of the unlinked refund. If not provided, defaults to the currency of the card. Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
@@ -16506,7 +17018,7 @@ export def "test-helpers-issuing-transactions-create-unlinked-refund PostTestHel
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refund a test-mode transaction
@@ -16522,6 +17034,7 @@ export def "test-helpers-issuing-transactions-refund PostTestHelpersIssuingTrans
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --refund-amount: int # The total amount to attempt to refund. This amount is in the provided currency, or defaults to the cards currency, and in the [smallest currency unit](https://docs.stripe.com/currencies#zero-decimal).
 ]: any -> record<amount: int, amount_details: any, authorization: any, balance_transaction: any, card: any, cardholder: any, created: int, currency: string, dispute: any, id: string, livemode: bool, merchant_amount: int, merchant_currency: string, merchant_data: record<category: string, category_code: string, city: string, country: string, name: string, network_id: string, postal_code: string, state: string, tax_id: string, terminal_id: string, url: string>, metadata: record, network_data: any, object: string, purchase_details: any, token: any, treasury: any, type: string, wallet: string> {
@@ -16533,7 +17046,7 @@ export def "test-helpers-issuing-transactions-refund PostTestHelpersIssuingTrans
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Expire a pending refund.
@@ -16549,6 +17062,7 @@ export def "test-helpers-refunds-expire PostTestHelpersRefundsRefundExpire" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, balance_transaction: any, charge: any, created: int, currency: string, description: string, destination_details: record<affirm: record, afterpay_clearpay: record, alipay: record, alma: record, amazon_pay: record, au_bank_transfer: record, blik: record<network_decline_code: string, reference: string, reference_status: string>, br_bank_transfer: record<reference: string, reference_status: string>, card: record<reference: string, reference_status: string, reference_type: string, type: string>, cashapp: record, crypto: record<reference: string>, customer_cash_balance: record, eps: record, eu_bank_transfer: record<reference: string, reference_status: string>, gb_bank_transfer: record<reference: string, reference_status: string>, giropay: record, grabpay: record, jp_bank_transfer: record<reference: string, reference_status: string>, klarna: record, mb_way: record<reference: string, reference_status: string>, multibanco: record<reference: string, reference_status: string>, mx_bank_transfer: record<reference: string, reference_status: string>, nz_bank_transfer: record, p24: record<reference: string, reference_status: string>, paynow: record, paypal: record<network_decline_code: string>, pix: record, revolut: record, scalapay: record, sofort: record, swish: record<network_decline_code: string, reference: string, reference_status: string>, th_bank_transfer: record<reference: string, reference_status: string>, twint: record, type: string, us_bank_transfer: record<reference: string, reference_status: string>, wechat_pay: record, zip: record>, failure_balance_transaction: any, failure_reason: string, id: string, instructions_email: string, metadata: record, next_action: record<display_details: record<email_sent: record, expires_at: int>, type: string>, object: string, payment_intent: any, pending_reason: string, presentment_details: record<presentment_amount: int, presentment_currency: string>, reason: string, receipt_number: string, source_transfer_reversal: any, status: string, transfer_reversal: any> {
   let input = $in
@@ -16559,7 +17073,7 @@ export def "test-helpers-refunds-expire PostTestHelpersRefundsRefundExpire" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Simulate presenting a payment method
@@ -16578,6 +17092,7 @@ export def "test-helpers-terminal-readers-present-payment-method PostTestHelpers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount-tip: int # Simulated on-reader tip amount.
   --card: record # Simulated data for the card payment method. — shape: {cvc?: string, exp_month: int, exp_year: int, number: string}
   --card-present: record # Simulated data for the card_present payment method. — shape: {number?: string}
@@ -16593,7 +17108,7 @@ export def "test-helpers-terminal-readers-present-payment-method PostTestHelpers
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Simulate a successful input collection
@@ -16609,6 +17124,7 @@ export def "test-helpers-terminal-readers-succeed-input-collection PostTestHelpe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --skip-non-required-inputs: string@skip-non-required-inputs-completer # This parameter defines the skip behavior for input collection.
 ]: any -> record<action: any, device_sw_version: string, device_type: string, id: string, ip_address: string, label: string, last_seen_at: int, livemode: bool, location: any, metadata: record, object: string, serial_number: string, status: string> {
@@ -16620,7 +17136,7 @@ export def "test-helpers-terminal-readers-succeed-input-collection PostTestHelpe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Simulate an input collection timeout
@@ -16636,6 +17152,7 @@ export def "test-helpers-terminal-readers-timeout-input-collection PostTestHelpe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<action: any, device_sw_version: string, device_type: string, id: string, ip_address: string, label: string, last_seen_at: int, livemode: bool, location: any, metadata: record, object: string, serial_number: string, status: string> {
   let input = $in
@@ -16646,7 +17163,7 @@ export def "test-helpers-terminal-readers-timeout-input-collection PostTestHelpe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all test clocks
@@ -16661,6 +17178,7 @@ export def "test-helpers-test-clocks GetTestHelpersTestClocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -16675,7 +17193,7 @@ export def "test-helpers-test-clocks GetTestHelpersTestClocks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a test clock
@@ -16690,6 +17208,7 @@ export def "test-helpers-test-clocks PostTestHelpersTestClocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: string # Existing customer this test clock will be attached to. Once attached, customers can't be removed from a test clock.
   --expand: list # Specifies which fields in the response should be expanded.
   frozen_time: int # The initial frozen time for this test clock. (format: unix-time)
@@ -16703,7 +17222,7 @@ export def "test-helpers-test-clocks PostTestHelpersTestClocks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a test clock
@@ -16719,6 +17238,7 @@ export def "test-helpers-test-clocks DeleteTestHelpersTestClocksTestClock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -16728,7 +17248,7 @@ export def "test-helpers-test-clocks DeleteTestHelpersTestClocksTestClock" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a test clock
@@ -16744,6 +17264,7 @@ export def "test-helpers-test-clocks GetTestHelpersTestClocksTestClock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<created: int, deletes_after: int, frozen_time: int, id: string, livemode: bool, name: string, object: string, status: string, status_details: record<advancing: record<target_frozen_time: int>>> {
@@ -16755,7 +17276,7 @@ export def "test-helpers-test-clocks GetTestHelpersTestClocksTestClock" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Advance a test clock
@@ -16771,6 +17292,7 @@ export def "test-helpers-test-clocks-advance PostTestHelpersTestClocksTestClockA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   frozen_time: int # The time to advance the test clock. Must be after the test clock's current frozen time. Cannot be more than two intervals in the future from the shortest subscription in this test clock. If there are no subscriptions in this test clock, it cannot be more than two years in the future. (format: unix-time)
 ]: any -> record<created: int, deletes_after: int, frozen_time: int, id: string, livemode: bool, name: string, object: string, status: string, status_details: record<advancing: record<target_frozen_time: int>>> {
@@ -16782,7 +17304,7 @@ export def "test-helpers-test-clocks-advance PostTestHelpersTestClocksTestClockA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Fail an InboundTransfer
@@ -16799,6 +17321,7 @@ export def "test-helpers-treasury-inbound-transfers-fail PostTestHelpersTreasury
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --failure-details: record # Details about a failed InboundTransfer. — shape: {code?: "account_closed"|"account_frozen"|"bank_account_restricted"|"bank_ownership_changed"|"debit_not_authorized"|"incorrect_account_holder_address"|"incorrect_account_holder_name"|"incorrect_account_holder_tax_id"|"insufficient_funds"|"invalid_account_number"|"invalid_currency"|"no_account"|"other"}
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, failure_details: any, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: record<received_debit: string>, livemode: bool, metadata: record, object: string, origin_payment_method: string, origin_payment_method_details: any, returned: bool, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, succeeded_at: int>, transaction: any> {
@@ -16810,7 +17333,7 @@ export def "test-helpers-treasury-inbound-transfers-fail PostTestHelpersTreasury
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Return an InboundTransfer
@@ -16826,6 +17349,7 @@ export def "test-helpers-treasury-inbound-transfers-return PostTestHelpersTreasu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, failure_details: any, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: record<received_debit: string>, livemode: bool, metadata: record, object: string, origin_payment_method: string, origin_payment_method_details: any, returned: bool, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, succeeded_at: int>, transaction: any> {
   let input = $in
@@ -16836,7 +17360,7 @@ export def "test-helpers-treasury-inbound-transfers-return PostTestHelpersTreasu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Succeed an InboundTransfer
@@ -16852,6 +17376,7 @@ export def "test-helpers-treasury-inbound-transfers-succeed PostTestHelpersTreas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, failure_details: any, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: record<received_debit: string>, livemode: bool, metadata: record, object: string, origin_payment_method: string, origin_payment_method_details: any, returned: bool, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, succeeded_at: int>, transaction: any> {
   let input = $in
@@ -16862,7 +17387,7 @@ export def "test-helpers-treasury-inbound-transfers-succeed PostTestHelpersTreas
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Update an OutboundPayment
@@ -16879,6 +17404,7 @@ export def "test-helpers-treasury-outbound-payments PostTestHelpersTreasuryOutbo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   tracking_details: record # Details about network-specific tracking information. — shape: {ach?: record, type: "ach"|"us_domestic_wire", us_domestic_wire?: record}
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -16890,7 +17416,7 @@ export def "test-helpers-treasury-outbound-payments PostTestHelpersTreasuryOutbo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Fail an OutboundPayment
@@ -16906,6 +17432,7 @@ export def "test-helpers-treasury-outbound-payments-fail PostTestHelpersTreasury
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -16916,7 +17443,7 @@ export def "test-helpers-treasury-outbound-payments-fail PostTestHelpersTreasury
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Post an OutboundPayment
@@ -16932,6 +17459,7 @@ export def "test-helpers-treasury-outbound-payments-post PostTestHelpersTreasury
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -16942,7 +17470,7 @@ export def "test-helpers-treasury-outbound-payments-post PostTestHelpersTreasury
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Return an OutboundPayment
@@ -16959,6 +17487,7 @@ export def "test-helpers-treasury-outbound-payments-return PostTestHelpersTreasu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --returned-details: record # Optional hash to set the return code. — shape: {code?: "account_closed"|"account_frozen"|"bank_account_restricted"|"bank_ownership_changed"|"declined"|"incorrect_account_holder_name"|"invalid_account_number"|"invalid_currency"|"no_account"|"other"}
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -16970,7 +17499,7 @@ export def "test-helpers-treasury-outbound-payments-return PostTestHelpersTreasu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Update an OutboundTransfer
@@ -16987,6 +17516,7 @@ export def "test-helpers-treasury-outbound-transfers PostTestHelpersTreasuryOutb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   tracking_details: record # Details about network-specific tracking information. — shape: {ach?: record, type: "ach"|"us_domestic_wire", us_domestic_wire?: record}
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -16998,7 +17528,7 @@ export def "test-helpers-treasury-outbound-transfers PostTestHelpersTreasuryOutb
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Fail an OutboundTransfer
@@ -17014,6 +17544,7 @@ export def "test-helpers-treasury-outbound-transfers-fail PostTestHelpersTreasur
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -17024,7 +17555,7 @@ export def "test-helpers-treasury-outbound-transfers-fail PostTestHelpersTreasur
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Post an OutboundTransfer
@@ -17040,6 +17571,7 @@ export def "test-helpers-treasury-outbound-transfers-post PostTestHelpersTreasur
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -17050,7 +17582,7 @@ export def "test-helpers-treasury-outbound-transfers-post PostTestHelpersTreasur
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Return an OutboundTransfer
@@ -17067,6 +17599,7 @@ export def "test-helpers-treasury-outbound-transfers-return PostTestHelpersTreas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --returned-details: record # Details about a returned OutboundTransfer. — shape: {code?: "account_closed"|"account_frozen"|"bank_account_restricted"|"bank_ownership_changed"|"declined"|"incorrect_account_holder_name"|"invalid_account_number"|"invalid_currency"|"no_account"|"other"}
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -17078,7 +17611,7 @@ export def "test-helpers-treasury-outbound-transfers-return PostTestHelpersTreas
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Create a ReceivedCredit
@@ -17094,6 +17627,7 @@ export def "test-helpers-treasury-received-credits PostTestHelpersTreasuryReceiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount (in cents) to be transferred.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -17110,7 +17644,7 @@ export def "test-helpers-treasury-received-credits PostTestHelpersTreasuryReceiv
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Test mode: Create a ReceivedDebit
@@ -17126,6 +17660,7 @@ export def "test-helpers-treasury-received-debits PostTestHelpersTreasuryReceive
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount (in cents) to be transferred.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -17142,7 +17677,7 @@ export def "test-helpers-treasury-received-debits PostTestHelpersTreasuryReceive
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a CVC update token
@@ -17162,6 +17697,7 @@ export def "tokens PostTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account: record # Information for the account this token represents. — shape: {business_type?: "company"|"government_entity"|"individual"|"non_profit", company?: record, individual?: record, tos_shown_and_accepted?: bool}
   --bank-account: record # The bank account this token will represent. — shape: {account_holder_name?: string, account_holder_type?: "company"|"individual", account_number: string, account_type?: "checking"|"futsu"|"savings"|"toza", country: string, currency?: string, payment_method?: string, routing_number?: string}
   --card: any # The card this token will represent. If you also pass in a customer, the card must be the ID of a card belonging to the customer. Otherwise, if you do not pass in a customer, this is a dictionary containing a user's credit card details, with the options described below.
@@ -17179,7 +17715,7 @@ export def "tokens PostTokens" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a token
@@ -17195,6 +17731,7 @@ export def "tokens GetTokensToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<bank_account: record<account: any, account_holder_name: string, account_holder_type: string, account_type: string, available_payout_methods: list<string>, bank_name: string, country: string, currency: string, customer: any, default_for_currency: bool, fingerprint: string, future_requirements: any, id: string, last4: string, metadata: record, object: string, requirements: any, routing_number: string, status: string>, card: record<account: any, address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, allow_redisplay: string, available_payout_methods: list<string>, brand: string, country: string, currency: string, customer: any, cvc_check: string, default_for_currency: bool, dynamic_last4: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, iin: string, last4: string, metadata: record, name: string, networks: record<preferred: string>, object: string, regulated_status: string, status: string, tokenization_method: string>, client_ip: string, created: int, id: string, livemode: bool, object: string, type: string, used: bool> {
@@ -17206,7 +17743,7 @@ export def "tokens GetTokensToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all top-ups
@@ -17221,6 +17758,7 @@ export def "topups GetTopups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # A positive integer representing how much to transfer.
   --created: string # A filter on the list, based on the object `created` field. The value can be a string with an integer Unix timestamp, or it can be a dictionary with a number of different query options.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -17238,7 +17776,7 @@ export def "topups GetTopups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a top-up
@@ -17253,6 +17791,7 @@ export def "topups PostTopups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # A positive integer representing how much to transfer.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies).
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -17270,7 +17809,7 @@ export def "topups PostTopups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a top-up
@@ -17286,6 +17825,7 @@ export def "topups GetTopupsTopup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, description: string, expected_availability_date: int, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, object: string, source: any, statement_descriptor: string, status: string, transfer_group: string> {
@@ -17297,7 +17837,7 @@ export def "topups GetTopupsTopup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a top-up
@@ -17313,6 +17853,7 @@ export def "topups PostTopupsTopup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -17325,7 +17866,7 @@ export def "topups PostTopupsTopup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a top-up
@@ -17341,6 +17882,7 @@ export def "topups-cancel PostTopupsTopupCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, description: string, expected_availability_date: int, failure_code: string, failure_message: string, id: string, livemode: bool, metadata: record, object: string, source: any, statement_descriptor: string, status: string, transfer_group: string> {
   let input = $in
@@ -17351,7 +17893,7 @@ export def "topups-cancel PostTopupsTopupCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all transfers
@@ -17366,6 +17908,7 @@ export def "transfers GetTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return transfers that were created during the given date interval.
   --destination: string # Only return transfers for the destination specified by this account ID.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -17383,7 +17926,7 @@ export def "transfers GetTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a transfer
@@ -17398,6 +17941,7 @@ export def "transfers PostTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # A positive integer in cents (or local equivalent) representing how much to transfer.
   currency: string # Three-letter [ISO code for currency](https://www.iso.org/iso-4217-currency-codes.html) in lowercase. Must be a [supported currency](https://docs.stripe.com/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -17416,7 +17960,7 @@ export def "transfers PostTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all reversals
@@ -17432,6 +17976,7 @@ export def "transfers-reversals GetTransfersIdReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -17446,7 +17991,7 @@ export def "transfers-reversals GetTransfersIdReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a transfer reversal
@@ -17462,6 +18007,7 @@ export def "transfers-reversals PostTransfersIdReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # A positive integer in cents (or local equivalent) representing how much of this transfer to reverse. Can only reverse up to the unreversed amount remaining of the transfer. Partial transfer reversals are only allowed for transfers to Stripe Accounts. Defaults to the entire transfer amount.
   --description: string # An arbitrary string which you can attach to a reversal object. This will be unset if you POST an empty value.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -17476,7 +18022,7 @@ export def "transfers-reversals PostTransfersIdReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a transfer
@@ -17492,6 +18038,7 @@ export def "transfers GetTransfersTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, amount_reversed: int, balance_transaction: any, created: int, currency: string, description: string, destination: any, destination_payment: any, id: string, livemode: bool, metadata: record, object: string, reversals: record<data: list<record>, has_more: bool, object: string, url: string>, reversed: bool, source_transaction: any, source_type: string, transfer_group: string> {
@@ -17503,7 +18050,7 @@ export def "transfers GetTransfersTransfer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a transfer
@@ -17519,6 +18066,7 @@ export def "transfers PostTransfersTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -17531,7 +18079,7 @@ export def "transfers PostTransfersTransfer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a reversal
@@ -17548,6 +18096,7 @@ export def "transfers-reversals GetTransfersTransferReversalsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, destination_payment_refund: any, id: string, metadata: record, object: string, source_refund: any, transfer: any> {
@@ -17559,7 +18108,7 @@ export def "transfers-reversals GetTransfersTransferReversalsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a reversal
@@ -17576,6 +18125,7 @@ export def "transfers-reversals PostTransfersTransferReversalsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: any # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
 ]: any -> record<amount: int, balance_transaction: any, created: int, currency: string, destination_payment_refund: any, id: string, metadata: record, object: string, source_refund: any, transfer: any> {
@@ -17587,7 +18137,7 @@ export def "transfers-reversals PostTransfersTransferReversalsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all CreditReversals
@@ -17602,6 +18152,7 @@ export def "treasury-credit-reversals GetTreasuryCreditReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # Returns objects associated with this FinancialAccount.
@@ -17619,7 +18170,7 @@ export def "treasury-credit-reversals GetTreasuryCreditReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a CreditReversal
@@ -17634,6 +18185,7 @@ export def "treasury-credit-reversals PostTreasuryCreditReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   received_credit: string # The ReceivedCredit to reverse.
@@ -17646,7 +18198,7 @@ export def "treasury-credit-reversals PostTreasuryCreditReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a CreditReversal
@@ -17662,6 +18214,7 @@ export def "treasury-credit-reversals GetTreasuryCreditReversalsCreditReversal" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, created: int, currency: string, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, network: string, object: string, received_credit: string, status: string, status_transitions: record<posted_at: int>, transaction: any> {
@@ -17673,7 +18226,7 @@ export def "treasury-credit-reversals GetTreasuryCreditReversalsCreditReversal" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all DebitReversals
@@ -17688,6 +18241,7 @@ export def "treasury-debit-reversals GetTreasuryDebitReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # Returns objects associated with this FinancialAccount.
@@ -17706,7 +18260,7 @@ export def "treasury-debit-reversals GetTreasuryDebitReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a DebitReversal
@@ -17721,6 +18275,7 @@ export def "treasury-debit-reversals PostTreasuryDebitReversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
   received_debit: string # The ReceivedDebit to reverse.
@@ -17733,7 +18288,7 @@ export def "treasury-debit-reversals PostTreasuryDebitReversals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a DebitReversal
@@ -17749,6 +18304,7 @@ export def "treasury-debit-reversals GetTreasuryDebitReversalsDebitReversal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, created: int, currency: string, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: any, livemode: bool, metadata: record, network: string, object: string, received_debit: string, status: string, status_transitions: record<completed_at: int>, transaction: any> {
@@ -17760,7 +18316,7 @@ export def "treasury-debit-reversals GetTreasuryDebitReversalsDebitReversal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all FinancialAccounts
@@ -17775,6 +18331,7 @@ export def "treasury-financial-accounts GetTreasuryFinancialAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return FinancialAccounts that were created during the given date interval.
   --ending-before: string # An object ID cursor for use in pagination.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -17791,7 +18348,7 @@ export def "treasury-financial-accounts GetTreasuryFinancialAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a FinancialAccount
@@ -17808,6 +18365,7 @@ export def "treasury-financial-accounts PostTreasuryFinancialAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --features: record # Encodes whether a FinancialAccount has access to a particular feature. Stripe or the platform can control features via the requested field. — shape: {card_issuing?: record, deposit_insurance?: record, financial_addresses?: record, inbound_transfers?: record, intra_stripe_flows?: record, outbound_payments?: record, outbound_transfers?: record}
   --metadata: record # Set of [key-value pairs](https://docs.stripe.com/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format. Individual keys can be unset by posting an empty value to them. All keys can be unset by posting an empty value to `metadata`.
@@ -17823,7 +18381,7 @@ export def "treasury-financial-accounts PostTreasuryFinancialAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a FinancialAccount
@@ -17839,6 +18397,7 @@ export def "treasury-financial-accounts GetTreasuryFinancialAccountsFinancialAcc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<active_features: list<string>, balance: record<cash: record, inbound_pending: record, outbound_pending: record>, country: string, created: int, features: record<card_issuing: record<requested: bool, status: string, status_details: list>, deposit_insurance: record<requested: bool, status: string, status_details: list>, financial_addresses: record<aba: record>, inbound_transfers: record<ach: record>, intra_stripe_flows: record<requested: bool, status: string, status_details: list>, object: string, outbound_payments: record<ach: record, us_domestic_wire: record>, outbound_transfers: record<ach: record, us_domestic_wire: record>>, financial_addresses: table<aba: record, supported_networks: list, type: string>, id: string, is_default: bool, livemode: bool, metadata: record, nickname: string, object: string, pending_features: list<string>, platform_restrictions: any, restricted_features: list<string>, status: string, status_details: record<closed: any>, supported_currencies: list<string>> {
@@ -17850,7 +18409,7 @@ export def "treasury-financial-accounts GetTreasuryFinancialAccountsFinancialAcc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a FinancialAccount
@@ -17869,6 +18428,7 @@ export def "treasury-financial-accounts PostTreasuryFinancialAccountsFinancialAc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --features: record # Encodes whether a FinancialAccount has access to a particular feature, with a status enum and associated `status_details`. Stripe or the platform may control features via the requested field. — shape: {card_issuing?: record, deposit_insurance?: record, financial_addresses?: record, inbound_transfers?: record, intra_stripe_flows?: record, outbound_payments?: record, outbound_transfers?: record}
   --forwarding-settings: record # A different bank account where funds can be deposited/debited in order to get the closing FA's balance to $0 — shape: {financial_account?: string, payment_method?: string, type: "financial_account"|"payment_method"}
@@ -17884,7 +18444,7 @@ export def "treasury-financial-accounts PostTreasuryFinancialAccountsFinancialAc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Close a FinancialAccount
@@ -17901,6 +18461,7 @@ export def "treasury-financial-accounts-close PostTreasuryFinancialAccountsFinan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --forwarding-settings: record # A different bank account where funds can be deposited/debited in order to get the closing FA's balance to $0 — shape: {financial_account?: string, payment_method?: string, type: "financial_account"|"payment_method"}
 ]: any -> record<active_features: list<string>, balance: record<cash: record, inbound_pending: record, outbound_pending: record>, country: string, created: int, features: record<card_issuing: record<requested: bool, status: string, status_details: list>, deposit_insurance: record<requested: bool, status: string, status_details: list>, financial_addresses: record<aba: record>, inbound_transfers: record<ach: record>, intra_stripe_flows: record<requested: bool, status: string, status_details: list>, object: string, outbound_payments: record<ach: record, us_domestic_wire: record>, outbound_transfers: record<ach: record, us_domestic_wire: record>>, financial_addresses: table<aba: record, supported_networks: list, type: string>, id: string, is_default: bool, livemode: bool, metadata: record, nickname: string, object: string, pending_features: list<string>, platform_restrictions: any, restricted_features: list<string>, status: string, status_details: record<closed: any>, supported_currencies: list<string>> {
@@ -17912,7 +18473,7 @@ export def "treasury-financial-accounts-close PostTreasuryFinancialAccountsFinan
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve FinancialAccount Features
@@ -17928,6 +18489,7 @@ export def "treasury-financial-accounts-features GetTreasuryFinancialAccountsFin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<card_issuing: record<requested: bool, status: string, status_details: list<record>>, deposit_insurance: record<requested: bool, status: string, status_details: list<record>>, financial_addresses: record<aba: record<requested: bool, status: string, status_details: list>>, inbound_transfers: record<ach: record<requested: bool, status: string, status_details: list>>, intra_stripe_flows: record<requested: bool, status: string, status_details: list<record>>, object: string, outbound_payments: record<ach: record<requested: bool, status: string, status_details: list>, us_domestic_wire: record<requested: bool, status: string, status_details: list>>, outbound_transfers: record<ach: record<requested: bool, status: string, status_details: list>, us_domestic_wire: record<requested: bool, status: string, status_details: list>>> {
@@ -17939,7 +18501,7 @@ export def "treasury-financial-accounts-features GetTreasuryFinancialAccountsFin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update FinancialAccount Features
@@ -17962,6 +18524,7 @@ export def "treasury-financial-accounts-features PostTreasuryFinancialAccountsFi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --card-issuing: record # Encodes the FinancialAccount's ability to be used with the Issuing product, including attaching cards to and drawing funds from the FinancialAccount. — shape: {requested: bool}
   --deposit-insurance: record # Represents whether this FinancialAccount is eligible for deposit insurance. Various factors determine the insurance amount. — shape: {requested: bool}
   --expand: list # Specifies which fields in the response should be expanded.
@@ -17979,7 +18542,7 @@ export def "treasury-financial-accounts-features PostTreasuryFinancialAccountsFi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all InboundTransfers
@@ -17994,6 +18557,7 @@ export def "treasury-inbound-transfers GetTreasuryInboundTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # Returns objects associated with this FinancialAccount.
@@ -18010,7 +18574,7 @@ export def "treasury-inbound-transfers GetTreasuryInboundTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an InboundTransfer
@@ -18025,6 +18589,7 @@ export def "treasury-inbound-transfers PostTreasuryInboundTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount (in cents) to be transferred.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -18042,7 +18607,7 @@ export def "treasury-inbound-transfers PostTreasuryInboundTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an InboundTransfer
@@ -18058,6 +18623,7 @@ export def "treasury-inbound-transfers GetTreasuryInboundTransfersId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, failure_details: any, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: record<received_debit: string>, livemode: bool, metadata: record, object: string, origin_payment_method: string, origin_payment_method_details: any, returned: bool, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, succeeded_at: int>, transaction: any> {
@@ -18069,7 +18635,7 @@ export def "treasury-inbound-transfers GetTreasuryInboundTransfersId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel an InboundTransfer
@@ -18085,6 +18651,7 @@ export def "treasury-inbound-transfers-cancel PostTreasuryInboundTransfersInboun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, failure_details: any, financial_account: string, hosted_regulatory_receipt_url: string, id: string, linked_flows: record<received_debit: string>, livemode: bool, metadata: record, object: string, origin_payment_method: string, origin_payment_method_details: any, returned: bool, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, succeeded_at: int>, transaction: any> {
   let input = $in
@@ -18095,7 +18662,7 @@ export def "treasury-inbound-transfers-cancel PostTreasuryInboundTransfersInboun
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all OutboundPayments
@@ -18110,6 +18677,7 @@ export def "treasury-outbound-payments GetTreasuryOutboundPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return OutboundPayments that were created during the given date interval.
   --customer: string # Only return OutboundPayments sent to this customer.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -18128,7 +18696,7 @@ export def "treasury-outbound-payments GetTreasuryOutboundPayments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an OutboundPayment
@@ -18146,6 +18714,7 @@ export def "treasury-outbound-payments PostTreasuryOutboundPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount (in cents) to be transferred.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --customer: string # ID of the customer to whom the OutboundPayment is sent. Must match the Customer attached to the `destination_payment_method` passed in.
@@ -18167,7 +18736,7 @@ export def "treasury-outbound-payments PostTreasuryOutboundPayments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an OutboundPayment
@@ -18183,6 +18752,7 @@ export def "treasury-outbound-payments GetTreasuryOutboundPaymentsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -18194,7 +18764,7 @@ export def "treasury-outbound-payments GetTreasuryOutboundPaymentsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel an OutboundPayment
@@ -18210,6 +18780,7 @@ export def "treasury-outbound-payments-cancel PostTreasuryOutboundPaymentsIdCanc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, customer: string, description: string, destination_payment_method: string, destination_payment_method_details: any, end_user_details: any, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -18220,7 +18791,7 @@ export def "treasury-outbound-payments-cancel PostTreasuryOutboundPaymentsIdCanc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all OutboundTransfers
@@ -18235,6 +18806,7 @@ export def "treasury-outbound-transfers GetTreasuryOutboundTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # Returns objects associated with this FinancialAccount.
@@ -18251,7 +18823,7 @@ export def "treasury-outbound-transfers GetTreasuryOutboundTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an OutboundTransfer
@@ -18268,6 +18840,7 @@ export def "treasury-outbound-transfers PostTreasuryOutboundTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount (in cents) to be transferred.
   currency: string # Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies). (format: currency)
   --description: string # An arbitrary string attached to the object. Often useful for displaying to users.
@@ -18287,7 +18860,7 @@ export def "treasury-outbound-transfers PostTreasuryOutboundTransfers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an OutboundTransfer
@@ -18303,6 +18876,7 @@ export def "treasury-outbound-transfers GetTreasuryOutboundTransfersOutboundTran
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
@@ -18314,7 +18888,7 @@ export def "treasury-outbound-transfers GetTreasuryOutboundTransfersOutboundTran
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel an OutboundTransfer
@@ -18330,6 +18904,7 @@ export def "treasury-outbound-transfers-cancel PostTreasuryOutboundTransfersOutb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
 ]: any -> record<amount: int, cancelable: bool, created: int, currency: string, description: string, destination_payment_method: string, destination_payment_method_details: record<billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, type: string, us_bank_account: record<account_holder_type: string, account_type: string, bank_name: string, fingerprint: string, last4: string, mandate: any, network: string, routing_number: string>>, expected_arrival_date: int, financial_account: string, hosted_regulatory_receipt_url: string, id: string, livemode: bool, metadata: record, object: string, returned_details: any, statement_descriptor: string, status: string, status_transitions: record<canceled_at: int, failed_at: int, posted_at: int, returned_at: int>, tracking_details: any, transaction: any> {
   let input = $in
@@ -18340,7 +18915,7 @@ export def "treasury-outbound-transfers-cancel PostTreasuryOutboundTransfersOutb
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all ReceivedCredits
@@ -18355,6 +18930,7 @@ export def "treasury-received-credits GetTreasuryReceivedCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # The FinancialAccount that received the funds.
@@ -18372,7 +18948,7 @@ export def "treasury-received-credits GetTreasuryReceivedCredits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a ReceivedCredit
@@ -18388,6 +18964,7 @@ export def "treasury-received-credits GetTreasuryReceivedCreditsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, created: int, currency: string, description: string, failure_code: string, financial_account: string, hosted_regulatory_receipt_url: string, id: string, initiating_payment_method_details: record<balance: string, billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, issuing_card: string, type: string, us_bank_account: record<bank_name: string, last4: string, routing_number: string>>, linked_flows: record<credit_reversal: string, issuing_authorization: string, issuing_transaction: string, source_flow: string, source_flow_details: any, source_flow_type: string>, livemode: bool, network: string, object: string, reversal_details: any, status: string, transaction: any> {
@@ -18399,7 +18976,7 @@ export def "treasury-received-credits GetTreasuryReceivedCreditsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all ReceivedDebits
@@ -18414,6 +18991,7 @@ export def "treasury-received-debits GetTreasuryReceivedDebits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --financial-account: string # The FinancialAccount that funds were pulled from.
@@ -18430,7 +19008,7 @@ export def "treasury-received-debits GetTreasuryReceivedDebits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a ReceivedDebit
@@ -18446,6 +19024,7 @@ export def "treasury-received-debits GetTreasuryReceivedDebitsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, created: int, currency: string, description: string, failure_code: string, financial_account: string, hosted_regulatory_receipt_url: string, id: string, initiating_payment_method_details: record<balance: string, billing_details: record<address: record, email: string, name: string>, financial_account: record<id: string, network: string>, issuing_card: string, type: string, us_bank_account: record<bank_name: string, last4: string, routing_number: string>>, linked_flows: record<debit_reversal: string, inbound_transfer: string, issuing_authorization: string, issuing_transaction: string, payout: string, topup: string>, livemode: bool, network: string, object: string, reversal_details: any, status: string, transaction: any> {
@@ -18457,7 +19036,7 @@ export def "treasury-received-debits GetTreasuryReceivedDebitsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all TransactionEntries
@@ -18472,6 +19051,7 @@ export def "treasury-transaction-entries GetTreasuryTransactionEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return TransactionEntries that were created during the given date interval.
   --effective-at: string
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
@@ -18491,7 +19071,7 @@ export def "treasury-transaction-entries GetTreasuryTransactionEntries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a TransactionEntry
@@ -18507,6 +19087,7 @@ export def "treasury-transaction-entries GetTreasuryTransactionEntriesId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<balance_impact: record<cash: int, inbound_pending: int, outbound_pending: int>, created: int, currency: string, effective_at: int, financial_account: string, flow: string, flow_details: any, flow_type: string, id: string, livemode: bool, object: string, transaction: any, type: string> {
@@ -18518,7 +19099,7 @@ export def "treasury-transaction-entries GetTreasuryTransactionEntriesId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all Transactions
@@ -18533,6 +19114,7 @@ export def "treasury-transactions GetTreasuryTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created: string # Only return Transactions that were created during the given date interval.
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
@@ -18552,7 +19134,7 @@ export def "treasury-transactions GetTreasuryTransactions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a Transaction
@@ -18568,6 +19150,7 @@ export def "treasury-transactions GetTreasuryTransactionsId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<amount: int, balance_impact: record<cash: int, inbound_pending: int, outbound_pending: int>, created: int, currency: string, description: string, entries: record<data: list<record>, has_more: bool, object: string, url: string>, financial_account: string, flow: string, flow_details: any, flow_type: string, id: string, livemode: bool, object: string, status: string, status_transitions: record<posted_at: int, void_at: int>> {
@@ -18579,7 +19162,7 @@ export def "treasury-transactions GetTreasuryTransactionsId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all webhook endpoints
@@ -18594,6 +19177,7 @@ export def "webhook-endpoints GetWebhookEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list. For instance, if you make a list request and receive 100 objects, starting with `obj_bar`, your subsequent call can include `ending_before=obj_bar` in order to fetch the previous page of the list.
   --expand: list # Specifies which fields in the response should be expanded.
   --limit: int # A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.
@@ -18608,7 +19192,7 @@ export def "webhook-endpoints GetWebhookEndpoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a webhook endpoint
@@ -18623,6 +19207,7 @@ export def "webhook-endpoints PostWebhookEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Events sent to this endpoint will be generated with this Stripe Version instead of your account's default Stripe Version.
   --connect: oneof<nothing, bool> # Whether this endpoint should receive events from connected accounts (`true`), or from your account (`false`). Defaults to `false`.
   --description: any # An optional description of what the webhook is used for.
@@ -18639,7 +19224,7 @@ export def "webhook-endpoints PostWebhookEndpoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a webhook endpoint
@@ -18655,6 +19240,7 @@ export def "webhook-endpoints DeleteWebhookEndpointsWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deleted: bool, id: string, object: string> {
   let input = $in
@@ -18664,7 +19250,7 @@ export def "webhook-endpoints DeleteWebhookEndpointsWebhookEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a webhook endpoint
@@ -18680,6 +19266,7 @@ export def "webhook-endpoints GetWebhookEndpointsWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Specifies which fields in the response should be expanded.
   --body: record
 ]: any -> record<api_version: string, application: string, created: int, description: string, enabled_events: list<string>, id: string, livemode: bool, metadata: record, object: string, secret: string, status: string, url: string> {
@@ -18691,7 +19278,7 @@ export def "webhook-endpoints GetWebhookEndpointsWebhookEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a webhook endpoint
@@ -18707,6 +19294,7 @@ export def "webhook-endpoints PostWebhookEndpointsWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: any # An optional description of what the webhook is used for.
   --disabled: oneof<nothing, bool> # Disable the webhook endpoint if set to true.
   --enabled-events: list # The list of events to enable for this endpoint. You may specify `['*']` to enable all events, except those that require explicit selection.
@@ -18722,5 +19310,5 @@ export def "webhook-endpoints PostWebhookEndpointsWebhookEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }

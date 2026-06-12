@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["api-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "indexes indexes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "indexes indexes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<indexes: table<name: string, dimension: int, metric: string, host: string, private_host: string, deletion_protection: string, tags: record, embed: record, spec: record, status: record, vector_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -109,7 +111,7 @@ export def "indexes indexes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an index
@@ -125,6 +127,7 @@ export def "indexes index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the index. Resource name must be 1-45 characters long, start and end with an alphanumeric character, and consist only of lower case alphanumeric characters or '-'.  (e.g. example-index)
   --dimension: int # The dimensions of the vectors to be inserted in the index. (format: int32, e.g. 1536)
@@ -144,7 +147,7 @@ export def "indexes index" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe an index
@@ -160,6 +163,7 @@ export def "indexes index-by-index_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<name: string, dimension: int, metric: string, host: string, private_host: string, deletion_protection: string, tags: record, embed: record<model: string, metric: string, dimension: int, vector_type: string, field_map: record, read_parameters: record, write_parameters: record>, spec: record, status: record<ready: bool, state: string>, vector_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -169,7 +173,7 @@ export def "indexes index-by-index_name" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an index
@@ -185,6 +189,7 @@ export def "indexes index-by-index_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -194,7 +199,7 @@ export def "indexes index-by-index_name-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure an index
@@ -211,6 +216,7 @@ export def "indexes index-by-index_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --spec: any # The spec object defines how the index should be deployed.  Only some attributes of an index's spec may be updated.  In general, you can modify settings related to scaling and  configuration but you cannot change the cloud or region  where the index is hosted.
   --deletion-protection: string # Whether [deletion protection](http://docs.pinecone.io/guides/manage-data/manage-indexes#configure-deletion-protection) is enabled/disabled for the index. Possible values: `disabled` or `enabled`. (default: disabled)
@@ -227,7 +233,7 @@ export def "indexes index-by-index_name-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List backups for an index
@@ -243,6 +249,7 @@ export def "indexes-backups backups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results to return per page. (default: 10)
   --paginationToken: string # The token to use to retrieve the next page of results.
   --X-Pinecone-Api-Version: string # Required date-based version header
@@ -255,7 +262,7 @@ export def "indexes-backups backups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a backup of an index
@@ -271,6 +278,7 @@ export def "indexes-backups backup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --name: string # The name of the backup.
   --description: string # A description of the backup.
@@ -285,7 +293,7 @@ export def "indexes-backups backup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List collections
@@ -300,6 +308,7 @@ export def "collections collections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<collections: table<name: string, size: int, status: string, dimension: int, vector_count: int, environment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -309,7 +318,7 @@ export def "collections collections" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a collection
@@ -324,6 +333,7 @@ export def "collections collection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the collection to be created. Resource name must be 1-45 characters long, start and end with an alphanumeric character, and consist only of lower case alphanumeric characters or '-'.
   --body-source: string # The name of the index to be used as the source for the collection. (e.g. example-source-index)
@@ -338,7 +348,7 @@ export def "collections collection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an index with integrated embedding
@@ -355,6 +365,7 @@ export def "indexes-create-for-model model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the index. Resource name must be 1-45 characters long, start and end with an alphanumeric character, and consist only of lower case alphanumeric characters or '-'.  (e.g. example-index)
   cloud: string # The public cloud where you would like your index hosted. Possible values: `gcp`, `aws`, or `azure`. (e.g. aws)
@@ -375,7 +386,7 @@ export def "indexes-create-for-model model" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List backups for all indexes in a project
@@ -390,6 +401,7 @@ export def "backups backups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results to return per page. (default: 10)
   --paginationToken: string # The token to use to retrieve the next page of results.
   --X-Pinecone-Api-Version: string # Required date-based version header
@@ -402,7 +414,7 @@ export def "backups backups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describe a backup
@@ -418,6 +430,7 @@ export def "backups backup-by-backup_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<backup_id: string, source_index_name: string, source_index_id: string, name: string, description: string, status: string, cloud: string, region: string, dimension: int, metric: string, schema: record<fields: record>, record_count: int, namespace_count: int, size_bytes: int, tags: record, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -427,7 +440,7 @@ export def "backups backup-by-backup_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a backup
@@ -443,6 +456,7 @@ export def "backups backup-by-backup_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -452,7 +466,7 @@ export def "backups backup-by-backup_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an index from a backup
@@ -468,6 +482,7 @@ export def "backups-create-index operation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the index. Resource name must be 1-45 characters long, start and end with an alphanumeric character, and consist only of lower case alphanumeric characters or '-'.  (e.g. example-index)
   --tags: record # Custom user tags added to an index. Keys must be 80 characters or less. Values must be 120 characters or less. Keys must be alphanumeric, '_', or '-'.  Values must be alphanumeric, ';', '@', '_', '-', '.', '+', or ' '. To unset a key, set the value to be an empty string. (e.g. {tag0: val0, tag1: val1})
@@ -483,7 +498,7 @@ export def "backups-create-index operation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List restore jobs
@@ -498,6 +513,7 @@ export def "restore-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results to return per page. (default: 10)
   --paginationToken: string # The token to use to retrieve the next page of results.
   --X-Pinecone-Api-Version: string # Required date-based version header
@@ -510,7 +526,7 @@ export def "restore-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describe a restore job
@@ -526,6 +542,7 @@ export def "restore-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<restore_job_id: string, backup_id: string, target_index_name: string, target_index_id: string, status: string, created_at: string, completed_at: string, percent_complete: float> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -535,7 +552,7 @@ export def "restore-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describe a collection
@@ -551,6 +568,7 @@ export def "collections collection-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<name: string, size: int, status: string, dimension: int, vector_count: int, environment: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -560,7 +578,7 @@ export def "collections collection-by-collection_name" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a collection
@@ -576,6 +594,7 @@ export def "collections collection-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -585,5 +604,5 @@ export def "collections collection-by-collection_name-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -91,7 +92,7 @@ def order-by-completer-11 [] { ["AREA_OF_EFFECT_SIZE" "LEVEL" "NAME" "SCHOOL"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query ability-scores" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -124,6 +125,7 @@ export def "query ability-scores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -143,13 +145,13 @@ export def "query ability-scores" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc full_name index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $full_name: String, $order: AbilityScoreOrder) { abilityScores(skip: $skip, limit: $limit, name: $name, lang: $lang, full_name: $full_name, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "abilityScores" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "abilityScores" }
 }
 
 # Gets a single ability score by index.
@@ -163,6 +165,7 @@ export def "query ability-score" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -175,13 +178,13 @@ export def "query ability-score" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc full_name index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { abilityScore(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "abilityScore" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "abilityScore" }
 }
 
 # Gets all alignments, optionally filtered by name and sorted.
@@ -196,6 +199,7 @@ export def "query alignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -214,13 +218,13 @@ export def "query alignments" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc abbreviation index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: AlignmentOrder) { alignments(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "alignments" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "alignments" }
 }
 
 # Gets a single alignment by index.
@@ -234,6 +238,7 @@ export def "query alignment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -246,13 +251,13 @@ export def "query alignment" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc abbreviation index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { alignment(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "alignment" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "alignment" }
 }
 
 # Gets all backgrounds, optionally filtered by name and sorted by name.
@@ -267,6 +272,7 @@ export def "query backgrounds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -285,13 +291,13 @@ export def "query backgrounds" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: BackgroundOrder) { backgrounds(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "backgrounds" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "backgrounds" }
 }
 
 # Gets a single background by index.
@@ -305,6 +311,7 @@ export def "query background" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -317,13 +324,13 @@ export def "query background" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { background(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "background" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "background" }
 }
 
 # Gets all classes, optionally filtering by name or hit die and sorted.
@@ -339,6 +346,7 @@ export def "query classes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -362,13 +370,13 @@ export def "query classes" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "hit_die index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $hit_die: NumberFilterInput, $order: ClassOrder) { classes(skip: $skip, limit: $limit, name: $name, lang: $lang, hit_die: $hit_die, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "classes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "classes" }
 }
 
 # Gets a single class by its index.
@@ -382,6 +390,7 @@ export def "query class" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -394,13 +403,13 @@ export def "query class" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "hit_die index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { class(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "class" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "class" }
 }
 
 # Gets all conditions, optionally filtered by name and sorted by name.
@@ -415,6 +424,7 @@ export def "query conditions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -433,13 +443,13 @@ export def "query conditions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: ConditionOrder) { conditions(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "conditions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "conditions" }
 }
 
 # Gets a single condition by index.
@@ -453,6 +463,7 @@ export def "query condition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -465,13 +476,13 @@ export def "query condition" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { condition(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "condition" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "condition" }
 }
 
 # Gets all damage types, optionally filtered by name and sorted by name.
@@ -486,6 +497,7 @@ export def "query damage-types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -504,13 +516,13 @@ export def "query damage-types" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: DamageTypeOrder) { damageTypes(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "damageTypes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "damageTypes" }
 }
 
 # Gets a single damage type by index.
@@ -524,6 +536,7 @@ export def "query damage-type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -536,13 +549,13 @@ export def "query damage-type" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { damageType(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "damageType" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "damageType" }
 }
 
 # Gets all equipment, optionally filtered and sorted.
@@ -557,6 +570,7 @@ export def "query equipments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -576,13 +590,13 @@ export def "query equipments" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on Armor { index name desc weight updated_at armor_category str_minimum stealth_disadvantage } ... on Weapon { index name desc weight updated_at weapon_category weapon_range category_range } ... on Tool { index name desc weight updated_at tool_category }" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $equipment_category: [String!], $order: EquipmentOrder) { equipments(skip: $skip, limit: $limit, name: $name, lang: $lang, equipment_category: $equipment_category, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "equipments" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "equipments" }
 }
 
 # Gets a single piece of equipment by its index.
@@ -596,6 +610,7 @@ export def "query equipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -608,13 +623,13 @@ export def "query equipment" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on Armor { index name desc weight updated_at armor_category str_minimum stealth_disadvantage } ... on Weapon { index name desc weight updated_at weapon_category weapon_range category_range } ... on Tool { index name desc weight updated_at tool_category }" }
     let body = {query: ("query($index: String!, $lang: String) { equipment(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "equipment" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "equipment" }
 }
 
 # Gets all equipment categories, optionally filtered by name and sorted by name.
@@ -629,6 +644,7 @@ export def "query equipment-categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -647,13 +663,13 @@ export def "query equipment-categories" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: EquipmentCategoryOrder) { equipmentCategories(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "equipmentCategories" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "equipmentCategories" }
 }
 
 # Gets a single equipment category by index.
@@ -667,6 +683,7 @@ export def "query equipment-category" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -679,13 +696,13 @@ export def "query equipment-category" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { equipmentCategory(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "equipmentCategory" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "equipmentCategory" }
 }
 
 # Gets all feats, optionally filtered by name and sorted by name.
@@ -700,6 +717,7 @@ export def "query feats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -718,13 +736,13 @@ export def "query feats" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: FeatOrder) { feats(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "feats" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "feats" }
 }
 
 # Gets a single feat by index.
@@ -738,6 +756,7 @@ export def "query feat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -750,13 +769,13 @@ export def "query feat" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name desc updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { feat(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "feat" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "feat" }
 }
 
 # Gets all features, optionally filtered and sorted.
@@ -772,6 +791,7 @@ export def "query features" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -797,13 +817,13 @@ export def "query features" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index level name reference updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $level: NumberFilterInput, $class: [String!], $subclass: [String!], $order: FeatureOrder) { features(skip: $skip, limit: $limit, name: $name, lang: $lang, class: $class, subclass: $subclass, level: $level, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "features" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "features" }
 }
 
 # Gets a single feature by its index.
@@ -817,6 +837,7 @@ export def "query feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -829,13 +850,13 @@ export def "query feature" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index level name reference updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { feature(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "feature" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "feature" }
 }
 
 # Gets a single language by its index.
@@ -849,6 +870,7 @@ export def "query language" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -861,13 +883,13 @@ export def "query language" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name script type typical_speakers updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { language(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "language" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "language" }
 }
 
 # Gets all languages, optionally filtered and sorted.
@@ -882,6 +904,7 @@ export def "query languages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -902,13 +925,13 @@ export def "query languages" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name script type typical_speakers updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $type: String, $script: [String!], $order: LanguageOrder) { languages(skip: $skip, limit: $limit, name: $name, lang: $lang, type: $type, script: $script, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "languages" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "languages" }
 }
 
 # Gets a single level by its combined index (e.g., wizard-3-evocation or fighter-5).
@@ -922,6 +945,7 @@ export def "query level" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -934,13 +958,13 @@ export def "query level" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_score_bonuses index level prof_bonus updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { level(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "level" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "level" }
 }
 
 # Gets all levels, optionally filtered and sorted.
@@ -956,6 +980,7 @@ export def "query levels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -981,13 +1006,13 @@ export def "query levels" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_score_bonuses index level prof_bonus updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $class: [String!], $subclass: [String!], $level: NumberFilterInput, $ability_score_bonuses: Int, $prof_bonus: Int, $order: LevelOrder) { levels(skip: $skip, limit: $limit, class: $class, subclass: $subclass, ability_score_bonuses: $ability_score_bonuses, prof_bonus: $prof_bonus, level: $level, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "levels" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "levels" }
 }
 
 # Gets all supported translation locales for the 2014 SRD.
@@ -1001,6 +1026,7 @@ export def "query locales2014" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -1011,13 +1037,13 @@ export def "query locales2014" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "lang" }
     let body = {query: ("query { locales2014 { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "locales2014" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "locales2014" }
 }
 
 # Gets a single 2014 locale by BCP 47 language tag (e.g. "de", "fr").
@@ -1031,6 +1057,7 @@ export def "query locale2014" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   lang: string
@@ -1042,13 +1069,13 @@ export def "query locale2014" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "lang" }
     let body = {query: ("query($lang: String!) { locale2014(lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "locale2014" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "locale2014" }
 }
 
 # Gets all magic items, optionally filtered and sorted.
@@ -1063,6 +1090,7 @@ export def "query magic-items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1083,13 +1111,13 @@ export def "query magic-items" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc image index name variant updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $equipment_category: [String!], $rarity: [String!], $order: MagicItemOrder) { magicItems(skip: $skip, limit: $limit, name: $name, lang: $lang, equipment_category: $equipment_category, rarity: $rarity, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "magicItems" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "magicItems" }
 }
 
 # Gets a single magic item by index.
@@ -1103,6 +1131,7 @@ export def "query magic-item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1115,13 +1144,13 @@ export def "query magic-item" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc image index name variant updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { magicItem(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "magicItem" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "magicItem" }
 }
 
 # Gets all magic schools, optionally filtered by name and sorted by name.
@@ -1136,6 +1165,7 @@ export def "query magic-schools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1154,13 +1184,13 @@ export def "query magic-schools" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: MagicSchoolOrder) { magicSchools(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "magicSchools" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "magicSchools" }
 }
 
 # Gets a single magic school by index.
@@ -1174,6 +1204,7 @@ export def "query magic-school" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1186,13 +1217,13 @@ export def "query magic-school" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { magicSchool(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "magicSchool" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "magicSchool" }
 }
 
 # Gets all monsters, optionally filtered and sorted.
@@ -1215,6 +1246,7 @@ export def "query monsters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1280,13 +1312,13 @@ export def "query monsters" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alignment challenge_rating charisma constitution damage_immunities damage_resistances damage_vulnerabilities desc dexterity hit_dice hit_points hit_points_roll image index intelligence languages name size strength subtype type wisdom xp updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $type: String, $subtype: String, $challenge_rating: NumberFilterInput, $size: String, $xp: NumberFilterInput, $strength: NumberFilterInput, $dexterity: NumberFilterInput, $constitution: NumberFilterInput, $intelligence: NumberFilterInput, $wisdom: NumberFilterInput, $charisma: NumberFilterInput, $damage_vulnerabilities: [String!], $damage_resistances: [String!], $damage_immunities: [String!], $condition_immunities: [String!], $order: MonsterOrder) { monsters(skip: $skip, limit: $limit, name: $name, lang: $lang, type: $type, subtype: $subtype, size: $size, damage_vulnerabilities: $damage_vulnerabilities, damage_resistances: $damage_resistances, damage_immunities: $damage_immunities, condition_immunities: $condition_immunities, challenge_rating: $challenge_rating, xp: $xp, strength: $strength, dexterity: $dexterity, constitution: $constitution, intelligence: $intelligence, wisdom: $wisdom, charisma: $charisma, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "monsters" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "monsters" }
 }
 
 # Gets a single monster by its index.
@@ -1300,6 +1332,7 @@ export def "query monster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1312,13 +1345,13 @@ export def "query monster" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alignment challenge_rating charisma constitution damage_immunities damage_resistances damage_vulnerabilities desc dexterity hit_dice hit_points hit_points_roll image index intelligence languages name size strength subtype type wisdom xp updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { monster(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "monster" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "monster" }
 }
 
 # Query all Proficiencies, optionally filtered and sorted.
@@ -1333,6 +1366,7 @@ export def "query proficiencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1354,13 +1388,13 @@ export def "query proficiencies" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name type updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $class: [String!], $race: [String!], $type: [String!], $order: ProficiencyOrder) { proficiencies(skip: $skip, limit: $limit, name: $name, lang: $lang, class: $class, race: $race, type: $type, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "proficiencies" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "proficiencies" }
 }
 
 # Gets a single proficiency by index.
@@ -1374,6 +1408,7 @@ export def "query proficiency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1386,13 +1421,13 @@ export def "query proficiency" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index name type updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { proficiency(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "proficiency" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "proficiency" }
 }
 
 # Gets all races, optionally filtered by name and sorted.
@@ -1408,6 +1443,7 @@ export def "query races" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1434,13 +1470,13 @@ export def "query races" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index age alignment language_desc name size size_description speed updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $ability_bonus: [String!], $size: [String!], $language: [String!], $speed: NumberFilterInput, $order: RaceOrder) { races(skip: $skip, limit: $limit, name: $name, lang: $lang, ability_bonus: $ability_bonus, size: $size, language: $language, speed: $speed, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "races" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "races" }
 }
 
 # Gets a single race by its index.
@@ -1454,6 +1490,7 @@ export def "query race" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1466,13 +1503,13 @@ export def "query race" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "index age alignment language_desc name size size_description speed updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { race(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "race" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "race" }
 }
 
 # Gets all rules, optionally filtered by name and sorted by name.
@@ -1487,6 +1524,7 @@ export def "query rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1505,13 +1543,13 @@ export def "query rules" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: RuleOrder) { rules(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "rules" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "rules" }
 }
 
 # Gets a single rule by index.
@@ -1525,6 +1563,7 @@ export def "query rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1537,13 +1576,13 @@ export def "query rule" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { rule(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "rule" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "rule" }
 }
 
 # Gets all rule sections, optionally filtered by name and sorted by name.
@@ -1558,6 +1597,7 @@ export def "query rule-sections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1576,13 +1616,13 @@ export def "query rule-sections" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: RuleSectionOrder) { ruleSections(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "ruleSections" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "ruleSections" }
 }
 
 # Gets a single rule section by index.
@@ -1596,6 +1636,7 @@ export def "query rule-section" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1608,13 +1649,13 @@ export def "query rule-section" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { ruleSection(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "ruleSection" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "ruleSection" }
 }
 
 # Gets all skills, optionally filtered by name and sorted by name.
@@ -1629,6 +1670,7 @@ export def "query skills" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1648,13 +1690,13 @@ export def "query skills" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $ability_score: [String!], $order: SkillOrder) { skills(skip: $skip, limit: $limit, name: $name, lang: $lang, ability_score: $ability_score, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "skills" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "skills" }
 }
 
 # Gets a single skill by index.
@@ -1668,6 +1710,7 @@ export def "query skill" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1680,13 +1723,13 @@ export def "query skill" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { skill(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "skill" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "skill" }
 }
 
 # Gets all spells, optionally filtered and sorted.
@@ -1702,6 +1745,7 @@ export def "query spells" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1734,13 +1778,13 @@ export def "query spells" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "attack_type casting_time components concentration desc duration higher_level index level material name range ritual updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $level: [Int!], $school: [String!], $class: [String!], $subclass: [String!], $concentration: Boolean, $ritual: Boolean, $attack_type: [String!], $casting_time: [String!], $area_of_effect: AreaOfEffectFilterInput, $damage_type: [String!], $dc_type: [String!], $range: [String!], $order: SpellOrder) { spells(skip: $skip, limit: $limit, name: $name, lang: $lang, level: $level, school: $school, class: $class, subclass: $subclass, concentration: $concentration, ritual: $ritual, attack_type: $attack_type, casting_time: $casting_time, damage_type: $damage_type, dc_type: $dc_type, range: $range, area_of_effect: $area_of_effect, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "spells" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "spells" }
 }
 
 # Gets a single spell by its index.
@@ -1754,6 +1798,7 @@ export def "query spell" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1766,13 +1811,13 @@ export def "query spell" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "attack_type casting_time components concentration desc duration higher_level index level material name range ritual updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { spell(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "spell" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "spell" }
 }
 
 # Gets all subclasses, optionally filtered by name and sorted.
@@ -1787,6 +1832,7 @@ export def "query subclasses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1805,13 +1851,13 @@ export def "query subclasses" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name subclass_flavor updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: SubclassOrder) { subclasses(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "subclasses" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "subclasses" }
 }
 
 # Gets a single subclass by its index.
@@ -1825,6 +1871,7 @@ export def "query subclass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1837,13 +1884,13 @@ export def "query subclass" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name subclass_flavor updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { subclass(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "subclass" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "subclass" }
 }
 
 # Gets all subraces, optionally filtered by name and sorted by name.
@@ -1858,6 +1905,7 @@ export def "query subraces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1876,13 +1924,13 @@ export def "query subraces" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: SubraceOrder) { subraces(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "subraces" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "subraces" }
 }
 
 # Gets a single subrace by index.
@@ -1896,6 +1944,7 @@ export def "query subrace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1908,13 +1957,13 @@ export def "query subrace" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { subrace(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "subrace" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "subrace" }
 }
 
 # Gets all traits, optionally filtered by name and sorted by name.
@@ -1929,6 +1978,7 @@ export def "query traits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -1947,13 +1997,13 @@ export def "query traits" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: TraitOrder) { traits(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "traits" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "traits" }
 }
 
 # Gets a single trait by index.
@@ -1967,6 +2017,7 @@ export def "query trait" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -1979,13 +2030,13 @@ export def "query trait" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { trait(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "trait" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "trait" }
 }
 
 # Gets all weapon properties, optionally filtered by name and sorted by name.
@@ -2000,6 +2051,7 @@ export def "query weapon-properties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --skip: int # Number of results to skip for pagination. Default: 0.
@@ -2018,13 +2070,13 @@ export def "query weapon-properties" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($skip: Int, $limit: Int, $name: String, $lang: String, $order: WeaponPropertyOrder) { weaponProperties(skip: $skip, limit: $limit, name: $name, lang: $lang, order: $order) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "weaponProperties" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "weaponProperties" }
 }
 
 # Gets a single weapon property by index.
@@ -2038,6 +2090,7 @@ export def "query weapon-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   index: string # The index of the resource to retrieve.
@@ -2050,11 +2103,11 @@ export def "query weapon-property" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "desc index name updated_at" }
     let body = {query: ("query($index: String!, $lang: String) { weaponProperty(index: $index, lang: $lang) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "weaponProperty" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "weaponProperty" }
 }

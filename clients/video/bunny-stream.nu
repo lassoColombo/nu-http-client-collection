@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["accesskey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "library-collections GetCollection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "library-collections GetCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeThumbnails: oneof<nothing, bool> # default: false
 ]: nothing -> record<videoLibraryId: int, guid: string, name: string, videoCount: int, totalSize: int, previewVideoIds: string, previewImageUrls: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -110,7 +112,7 @@ export def "library-collections GetCollection" [
   let full_url = (build-url $base $"/library/($libraryId)/collections/($collectionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Collection
@@ -127,6 +129,7 @@ export def "library-collections UpdateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the collection (nullable)
 ]: any -> record<success: bool, message: string, statusCode: int> {
   let input = $in
@@ -137,7 +140,7 @@ export def "library-collections UpdateCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Collection
@@ -154,13 +157,14 @@ export def "library-collections DeleteCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/collections/($collectionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Collection List
@@ -176,6 +180,7 @@ export def "library-collections List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1
   --itemsPerPage: int # format: int32, default: 100
   --search: string # nullable, default: 
@@ -188,7 +193,7 @@ export def "library-collections List" [
   let full_url = (build-url $base $"/library/($libraryId)/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Collection
@@ -204,6 +209,7 @@ export def "library-collections CreateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the collection (nullable)
 ]: any -> record<videoLibraryId: int, guid: string, name: string, videoCount: int, totalSize: int, previewVideoIds: string, previewImageUrls: list<string>> {
   let input = $in
@@ -214,7 +220,7 @@ export def "library-collections CreateCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Video
@@ -231,13 +237,14 @@ export def "library-videos GetVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<videoLibraryId: int, guid: string, title: string, description: string, dateUploaded: string, views: int, isPublic: bool, length: int, status: any, framerate: float, rotation: int, width: int, height: int, availableResolutions: string, outputCodecs: string, thumbnailCount: int, encodeProgress: int, storageSize: int, captions: table<srclang: string, label: string, version: int>, hasMP4Fallback: bool, collectionId: string, thumbnailFileName: string, thumbnailBlurhash: string, averageWatchTime: int, totalWatchTime: int, category: string, chapters: table<title: string, start: int, end: int>, moments: table<label: string, timestamp: int>, metaTags: table<property: string, value: string>, transcodingMessages: table<timeStamp: string, level: int, issueCode: int, message: string, value: string>, jitEncodingEnabled: bool, smartGenerateStatus: any, smartGenerateFeaturesStatus: any, hasOriginal: bool, originalHash: string, hasHighQualityPreview: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Video
@@ -257,6 +264,7 @@ export def "library-videos UpdateVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # The title of the video (nullable)
   --collectionId: string # The ID of the collection where the video belongs (nullable)
   --chapters: list # The list of chapters available for the video (nullable) — item shape: {title: string, start?: int, end?: int}
@@ -271,7 +279,7 @@ export def "library-videos UpdateVideo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Video
@@ -288,13 +296,14 @@ export def "library-videos DeleteVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Video
@@ -311,6 +320,7 @@ export def "library-videos UploadVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jitEnabled: oneof<nothing, bool> # Marks whether JIT encoding should be enabled for this video (works only when Premium Encoding is enabled), overrides library settings
   --enabledResolutions: string # Comma separated list of resolutions enabled for encoding, available options: 240p, 360p, 480p, 720p, 1080p, 1440p, 2160p (nullable, default: )
   --enabledOutputCodecs: string # List of codecs that will be used to encode the file (overrides library settings). Available values: x264, vp9 (nullable, default: )
@@ -331,7 +341,7 @@ export def "library-videos UploadVideo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Get Video Heatmap
@@ -348,13 +358,14 @@ export def "library-videos-heatmap GetVideoHeatmap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<heatmap: record> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/heatmap")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video play data
@@ -371,6 +382,7 @@ export def "library-videos-play GetVideoPlayData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # nullable, default: 
   --expires: int # format: int64, default: 0
 ]: nothing -> record<video: any, libraryName: string, captionsPath: string, seekPath: string, thumbnailUrl: string, fallbackUrl: string, videoPlaylistUrl: string, originalUrl: string, previewUrl: string, controls: string, enableDRM: bool, drmVersion: int, playerKeyColor: string, vastTagUrl: string, viAiPublisherId: string, captionsFontSize: int, captionsFontColor: string, captionsBackground: string, uiLanguage: string, allowEarlyPlay: bool, tokenAuthEnabled: bool, enableMP4Fallback: bool, showHeatmap: bool, fontFamily: string, playbackSpeeds: string, widevineMinClientSecurityLevel: int, zoneTier: int, isPlayable: bool, isPlaylistPlayable: bool, preferredPlaybackSource: any, rememberPlayerPosition: bool, customCss: string, exposeVideoMetadata: bool, enableCompactControls: bool> {
@@ -380,7 +392,7 @@ export def "library-videos-play GetVideoPlayData" [
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/play" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video heatmap data
@@ -397,6 +409,7 @@ export def "library-videos-play-heatmap GetVideoHeatmapData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # nullable, default: 
   --expires: int # format: int64, default: 0
 ]: nothing -> record<video: any, libraryName: string, captionsPath: string, seekPath: string, thumbnailUrl: string, fallbackUrl: string, videoPlaylistUrl: string, originalUrl: string, previewUrl: string, controls: string, enableDRM: bool, drmVersion: int, playerKeyColor: string, vastTagUrl: string, viAiPublisherId: string, captionsFontSize: int, captionsFontColor: string, captionsBackground: string, uiLanguage: string, allowEarlyPlay: bool, tokenAuthEnabled: bool, enableMP4Fallback: bool, showHeatmap: bool, fontFamily: string, playbackSpeeds: string, widevineMinClientSecurityLevel: int, zoneTier: int, isPlayable: bool, isPlaylistPlayable: bool, preferredPlaybackSource: any, rememberPlayerPosition: bool, customCss: string, exposeVideoMetadata: bool, enableCompactControls: bool> {
@@ -406,7 +419,7 @@ export def "library-videos-play-heatmap GetVideoHeatmapData" [
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/play/heatmap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Statistics
@@ -422,6 +435,7 @@ export def "library-statistics GetVideoStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # Optional start of the time range (UTC). If omitted or invalid, the last 30 days are returned. (nullable, format: date-time)
   --dateTo: string # Optional end of the time range (UTC). If omitted with a valid start, defaults to now; otherwise the last 30 days are returned. (nullable, format: date-time)
   --hourly: oneof<nothing, bool> # Optional. If true, returns hourly data; otherwise daily (UTC). Default is daily. (default: false)
@@ -433,7 +447,7 @@ export def "library-statistics GetVideoStatistics" [
   let full_url = (build-url $base $"/library/($libraryId)/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reencode Video
@@ -450,13 +464,14 @@ export def "library-videos-reencode ReencodeVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<videoLibraryId: int, guid: string, title: string, description: string, dateUploaded: string, views: int, isPublic: bool, length: int, status: any, framerate: float, rotation: int, width: int, height: int, availableResolutions: string, outputCodecs: string, thumbnailCount: int, encodeProgress: int, storageSize: int, captions: table<srclang: string, label: string, version: int>, hasMP4Fallback: bool, collectionId: string, thumbnailFileName: string, thumbnailBlurhash: string, averageWatchTime: int, totalWatchTime: int, category: string, chapters: table<title: string, start: int, end: int>, moments: table<label: string, timestamp: int>, metaTags: table<property: string, value: string>, transcodingMessages: table<timeStamp: string, level: int, issueCode: int, message: string, value: string>, jitEncodingEnabled: bool, smartGenerateStatus: any, smartGenerateFeaturesStatus: any, hasOriginal: bool, originalHash: string, hasHighQualityPreview: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/reencode")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add output codec to video
@@ -474,13 +489,14 @@ export def "library-videos-outputs ReencodeUsingCodec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<videoLibraryId: int, guid: string, title: string, description: string, dateUploaded: string, views: int, isPublic: bool, length: int, status: any, framerate: float, rotation: int, width: int, height: int, availableResolutions: string, outputCodecs: string, thumbnailCount: int, encodeProgress: int, storageSize: int, captions: table<srclang: string, label: string, version: int>, hasMP4Fallback: bool, collectionId: string, thumbnailFileName: string, thumbnailBlurhash: string, averageWatchTime: int, totalWatchTime: int, category: string, chapters: table<title: string, start: int, end: int>, moments: table<label: string, timestamp: int>, metaTags: table<property: string, value: string>, transcodingMessages: table<timeStamp: string, level: int, issueCode: int, message: string, value: string>, jitEncodingEnabled: bool, smartGenerateStatus: any, smartGenerateFeaturesStatus: any, hasOriginal: bool, originalHash: string, hasHighQualityPreview: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/outputs/($outputCodecId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repackage Video
@@ -497,6 +513,7 @@ export def "library-videos-repackage Repackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keepOriginalFiles: oneof<nothing, bool> # Marks whether previous file versions should be kept in storage, allows for faster repackage later on. Default is true. (default: true)
 ]: nothing -> record<videoLibraryId: int, guid: string, title: string, description: string, dateUploaded: string, views: int, isPublic: bool, length: int, status: any, framerate: float, rotation: int, width: int, height: int, availableResolutions: string, outputCodecs: string, thumbnailCount: int, encodeProgress: int, storageSize: int, captions: table<srclang: string, label: string, version: int>, hasMP4Fallback: bool, collectionId: string, thumbnailFileName: string, thumbnailBlurhash: string, averageWatchTime: int, totalWatchTime: int, category: string, chapters: table<title: string, start: int, end: int>, moments: table<label: string, timestamp: int>, metaTags: table<property: string, value: string>, transcodingMessages: table<timeStamp: string, level: int, issueCode: int, message: string, value: string>, jitEncodingEnabled: bool, smartGenerateStatus: any, smartGenerateFeaturesStatus: any, hasOriginal: bool, originalHash: string, hasHighQualityPreview: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -505,7 +522,7 @@ export def "library-videos-repackage Repackage" [
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/repackage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Videos
@@ -521,6 +538,7 @@ export def "library-videos List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1
   --itemsPerPage: int # format: int32, default: 100
   --search: string # nullable, default: 
@@ -533,7 +551,7 @@ export def "library-videos List" [
   let full_url = (build-url $base $"/library/($libraryId)/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Video
@@ -549,6 +567,7 @@ export def "library-videos CreateVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # The title of the video
   --collectionId: string # The ID of the collection where the video will be put (nullable)
   --thumbnailTime: int # Video time in ms to extract the main video thumbnail. (nullable, format: int32)
@@ -561,7 +580,7 @@ export def "library-videos CreateVideo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set Thumbnail
@@ -578,6 +597,7 @@ export def "library-videos-thumbnail SetThumbnail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --thumbnailUrl: string # nullable
   --body: record
 ]: any -> record<success: bool, message: string, statusCode: int> {
@@ -589,7 +609,7 @@ export def "library-videos-thumbnail SetThumbnail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Fetch Video
@@ -605,6 +625,7 @@ export def "library-videos-fetch FetchNewVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionId: string # nullable
   --thumbnailTime: int # (Optional) Video time in ms to extract the main video thumbnail. (nullable, format: int32)
   --body-url: string # The URL from which the video will be fetched from.
@@ -620,7 +641,7 @@ export def "library-videos-fetch FetchNewVideo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Caption
@@ -638,6 +659,7 @@ export def "library-videos-captions AddCaption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-srclang: string # The unique srclang shortcode for the caption (nullable)
   --label: string # The text description label for the caption (nullable)
   --captionsFile: string # Base64 encoded captions file (nullable)
@@ -650,7 +672,7 @@ export def "library-videos-captions AddCaption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Caption
@@ -668,13 +690,14 @@ export def "library-videos-captions DeleteCaption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/captions/($srclang)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transcribe video
@@ -691,6 +714,7 @@ export def "library-videos-transcribe TranscribeVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # default: false
   --targetLanguages: list # List of languages that will be used as target languages, use ISO 639-1 language codes. (nullable)
   --generateTitle: oneof<nothing, bool> # Whether video title should be automatically generated. (nullable)
@@ -708,7 +732,7 @@ export def "library-videos-transcribe TranscribeVideo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trigger Smart actions
@@ -725,6 +749,7 @@ export def "library-videos-smart SmartGenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --generateTitle: oneof<nothing, bool> # Whether video title should be generated. (nullable)
   --generateDescription: oneof<nothing, bool> # Whether video description should be generated. (nullable)
   --generateChapters: oneof<nothing, bool> # Whether video chapters should be generated. (nullable)
@@ -739,7 +764,7 @@ export def "library-videos-smart SmartGenerate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Video resolutions info
@@ -756,13 +781,14 @@ export def "library-videos-resolutions GetVideoResolutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, message: string, statusCode: int, data: any> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/resolutions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get video storage size info
@@ -779,13 +805,14 @@ export def "library-videos-storage GetVideoStorageSize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, message: string, statusCode: int, data: any> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/storage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cleanup unconfigured resolutions
@@ -802,6 +829,7 @@ export def "library-videos-resolutions-cleanup DeleteResolutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resolutionsToDelete: string # nullable
   --deleteNonConfiguredResolutions: oneof<nothing, bool> # default: false
   --allResolutions: oneof<nothing, bool> # default: false
@@ -816,7 +844,7 @@ export def "library-videos-resolutions-cleanup DeleteResolutions" [
   let full_url = (build-url $base $"/library/($libraryId)/videos/($videoId)/resolutions/cleanup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /OEmbed
@@ -830,6 +858,7 @@ export def "o-embed GetOEmbed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # nullable
   --maxWidth: int # nullable, format: int32
   --maxHeight: int # nullable, format: int32
@@ -842,5 +871,5 @@ export def "o-embed GetOEmbed" [
   let full_url = (build-url $base "/OEmbed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

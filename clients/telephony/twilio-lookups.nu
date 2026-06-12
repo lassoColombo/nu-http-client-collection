@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def line-type-completer [] { ["fixedVoip" "landline" "mobile" "nonFixedVoip" "pa
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers FetchPhoneNumber" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "phone-numbers FetchPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Fields: string # A comma-separated list of fields to return. Possible values are validation, caller_name, sim_swap, call_forwarding, line_status, line_type_intelligence, identity_match, reassigned_number, sms_pumping_risk, phone_number_quality_score, pre_fill.
   --CountryCode: string # The [country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) used if the phone number provided is in national format.
   --FirstName: string # User’s first name. This query parameter is only used (optionally) for identity_match package requests.
@@ -125,7 +127,7 @@ export def "phone-numbers FetchPhoneNumber" [
   let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # In Request Bulk
@@ -141,6 +143,7 @@ export def "batch-query CreateBulkLookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phone-numbers: list # item shape: {correlation_id?: string, phone_number: string, fields?: list, country_code?: string, identity_match?: record, reassigned_number?: record, sms_pumping_risk?: record}
 ]: any -> record<phone_numbers: table<correlation_id: string, twilio_error_code: int, calling_country_code: string, country_code: string, phone_number: string, national_format: string, valid: bool, validation_errors: list, caller_name: record, sim_swap: record, call_forwarding: record, line_type_intelligence: record, line_status: record, identity_match: record, reassigned_number: record, sms_pumping_risk: record, phone_number_quality_score: any, pre_fill: any>> {
   let input = $in
@@ -151,7 +154,7 @@ export def "batch-query CreateBulkLookup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account rate limits
@@ -166,6 +169,7 @@ export def "rate-limits FetchLookupAccountRateLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Fields: list
 ]: nothing -> record<rate_limits: table<field: string, limit: int, bucket: string, owner: string, ttl: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -174,7 +178,7 @@ export def "rate-limits FetchLookupAccountRateLimits" [
   let full_url = (build-url $base "/v2/RateLimits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rate limit
@@ -191,13 +195,14 @@ export def "rate-limits-fields-bucket FetchLookupRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<field: string, limit: int, bucket: string, owner: string, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/RateLimits/Fields/($Field)/Bucket/($Bucket)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete rate limit
@@ -214,13 +219,14 @@ export def "rate-limits-fields-bucket DeleteLookupRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/RateLimits/Fields/($Field)/Bucket/($Bucket)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert rate limit
@@ -237,6 +243,7 @@ export def "rate-limits-fields-bucket UpdateLookupRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit of requests for the bucket (format: int32)
   --ttl: int # Time to live of the rule (format: int32)
 ]: any -> record<field: string, limit: int, bucket: string, owner: string, ttl: int> {
@@ -248,7 +255,7 @@ export def "rate-limits-fields-bucket UpdateLookupRateLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Overrides for a Phone Number for a specific field.
@@ -265,13 +272,14 @@ export def "phone-numbers-overrides FetchLookupPhoneNumberOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<phone_number: string, original_line_type: string, overridden_line_type: string, override_reason: string, override_timestamp: string, overridden_by_account_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)/Overrides/($Field)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Override for a Phone Number for a specific field
@@ -288,6 +296,7 @@ export def "phone-numbers-overrides CreateLookupPhoneNumberOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --line-type: string@line-type-completer # The new line type to override the original line type
   --reason: string # The reason for the override
 ]: any -> record<phone_number: string, original_line_type: string, overridden_line_type: string, override_reason: string, override_timestamp: string, overridden_by_account_sid: string> {
@@ -299,7 +308,7 @@ export def "phone-numbers-overrides CreateLookupPhoneNumberOverrides" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Override for a Phone Number for a specific field
@@ -316,6 +325,7 @@ export def "phone-numbers-overrides UpdateLookupPhoneNumberOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --line-type: string@line-type-completer # The new line type to override the original line type
   --reason: string # The reason for the override
 ]: any -> record<phone_number: string, original_line_type: string, overridden_line_type: string, override_reason: string, override_timestamp: string, overridden_by_account_sid: string> {
@@ -327,7 +337,7 @@ export def "phone-numbers-overrides UpdateLookupPhoneNumberOverrides" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Override for a Phone Number for a specific field
@@ -344,11 +354,12 @@ export def "phone-numbers-overrides DeleteLookupPhoneNumberOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)/Overrides/($Field)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

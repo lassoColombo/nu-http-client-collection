@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def RejectReason-completer [] { ["Canceled"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "address AddAddress" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "address AddAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 30495)
   --Name: string # Address name (nullable, e.g. 2 St Josephs Crescent, Liverpool, L3 3JF)
@@ -126,7 +128,7 @@ export def "address AddAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get driver by Track-POD unique identifier
@@ -142,6 +144,7 @@ export def "driver-id GetDriverById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: string, Number: int, Name: string, Vehicle: string, Phone: string, Username: string, DepotId: string, Depot: string, HomeAddress: string, Zone: string, Active: bool, Note: string, TeamCodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -149,7 +152,7 @@ export def "driver-id GetDriverById" [
   let full_url = (build-url $base $"/Driver/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete driver by Track-POD unique identifier
@@ -165,6 +168,7 @@ export def "driver-id DeleteDriverById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -172,7 +176,7 @@ export def "driver-id DeleteDriverById" [
   let full_url = (build-url $base $"/Driver/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get driver by Username
@@ -188,6 +192,7 @@ export def "driver-username GetDriverByUsername" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: string, Number: int, Name: string, Vehicle: string, Phone: string, Username: string, DepotId: string, Depot: string, HomeAddress: string, Zone: string, Active: bool, Note: string, TeamCodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -195,7 +200,7 @@ export def "driver-username GetDriverByUsername" [
   let full_url = (build-url $base $"/Driver/Username/($username)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Driver by id.
@@ -211,6 +216,7 @@ export def "driver-username DeleteDriverByUsername" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -218,7 +224,7 @@ export def "driver-username DeleteDriverByUsername" [
   let full_url = (build-url $base $"/Driver/Username/($username)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get drivers
@@ -233,6 +239,7 @@ export def "driver GetDrivers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Id: string, Number: int, Name: string, Vehicle: string, Phone: string, Username: string, DepotId: string, Depot: string, HomeAddress: string, Zone: string, Active: bool, Note: string, TeamCodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -240,7 +247,7 @@ export def "driver GetDrivers" [
   let full_url = (build-url $base "/Driver")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add driver
@@ -255,6 +262,7 @@ export def "driver AddDriver" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Name: string # Required (*)   Name (nullable, e.g. John Doe)
   --Vehicle: string # Vehicle number (nullable, e.g. NYC 1898)
@@ -276,7 +284,7 @@ export def "driver AddDriver" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update driver
@@ -291,6 +299,7 @@ export def "driver UpdateDriver" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Id: string # Track-POD unique identifier (nullable, format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
   --Name: string # Required (*)   Name (nullable, e.g. John Doe)
@@ -313,7 +322,7 @@ export def "driver UpdateDriver" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add unscheduled order
@@ -332,6 +341,7 @@ export def "order AddOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --updateGoodsPrice: oneof<nothing, bool> # Force update existing Price in the Goods directory from the payload data. (default: false)
@@ -380,7 +390,7 @@ export def "order AddOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update order
@@ -399,6 +409,7 @@ export def "order UpdateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --forceUpdate: oneof<nothing, bool> # Allows updating completed orders. (default: false)
@@ -447,7 +458,7 @@ export def "order UpdateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add unscheduled orders (the maximum is 500)
@@ -462,6 +473,7 @@ export def "order-bulk AddOrderBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --updateGoodsPrice: oneof<nothing, bool> # Force update existing Price in the Goods directory from the payload data. (default: false)
@@ -475,7 +487,7 @@ export def "order-bulk AddOrderBulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get order by number
@@ -491,6 +503,7 @@ export def "order-number GetOrderByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: table<OrderLineId: string, GoodsId: string, GoodsName: string, GoodsUnit: string, Note: string, Quantity: float, QuantityFact: float, Cost: float, RejectReason: string, HasPhoto: bool, Photos: list, OrderLineBarcode: string, GoodsBarcode: string, Scanned: bool, LoadStatus: string, LoadCheckScanRejectReason: string, ScanRejectReason: string>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list<record>, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: table<Id: string, Label: string, Value: any>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -498,7 +511,7 @@ export def "order-number GetOrderByNumber" [
   let full_url = (build-url $base $"/Order/Number/($number)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete order by number
@@ -514,6 +527,7 @@ export def "order-number DeleteOrderByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -521,7 +535,7 @@ export def "order-number DeleteOrderByNumber" [
   let full_url = (build-url $base $"/Order/Number/($number)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order by Id
@@ -537,6 +551,7 @@ export def "order-id GetOrderById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: table<OrderLineId: string, GoodsId: string, GoodsName: string, GoodsUnit: string, Note: string, Quantity: float, QuantityFact: float, Cost: float, RejectReason: string, HasPhoto: bool, Photos: list, OrderLineBarcode: string, GoodsBarcode: string, Scanned: bool, LoadStatus: string, LoadCheckScanRejectReason: string, ScanRejectReason: string>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list<record>, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: table<Id: string, Label: string, Value: any>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -544,7 +559,7 @@ export def "order-id GetOrderById" [
   let full_url = (build-url $base $"/Order/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete order by id.
@@ -560,6 +575,7 @@ export def "order-id DeleteOrderById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -567,7 +583,7 @@ export def "order-id DeleteOrderById" [
   let full_url = (build-url $base $"/Order/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order by TrackId
@@ -583,6 +599,7 @@ export def "order-track-id GetOrderByTrackId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: table<OrderLineId: string, GoodsId: string, GoodsName: string, GoodsUnit: string, Note: string, Quantity: float, QuantityFact: float, Cost: float, RejectReason: string, HasPhoto: bool, Photos: list, OrderLineBarcode: string, GoodsBarcode: string, Scanned: bool, LoadStatus: string, LoadCheckScanRejectReason: string, ScanRejectReason: string>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list<record>, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: table<Id: string, Label: string, Value: any>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -590,7 +607,7 @@ export def "order-track-id GetOrderByTrackId" [
   let full_url = (build-url $base $"/Order/TrackId/($trackId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update order by TrackId
@@ -610,6 +627,7 @@ export def "order-track-id UpdateOrderByTrackId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
@@ -657,7 +675,7 @@ export def "order-track-id UpdateOrderByTrackId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get orders by date
@@ -673,6 +691,7 @@ export def "order-date GetOrderByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list<record>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list<record>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -680,7 +699,7 @@ export def "order-date GetOrderByDate" [
   let full_url = (build-url $base $"/Order/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get orders by route date
@@ -696,6 +715,7 @@ export def "order-route-date GetOrderByRouteDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list<record>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list<record>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -703,7 +723,7 @@ export def "order-route-date GetOrderByRouteDate" [
   let full_url = (build-url $base $"/Order/Route/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get orders by route code
@@ -719,6 +739,7 @@ export def "order-route-code GetOrderByRouteCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list<record>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list<record>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -726,7 +747,7 @@ export def "order-route-code GetOrderByRouteCode" [
   let full_url = (build-url $base $"/Order/Route/Code/($code)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get orders after status modify date and time (min. request time is UTC - 1 day)
@@ -742,6 +763,7 @@ export def "order-status-date GetOrderByStatusDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list<record>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list<record>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -749,7 +771,7 @@ export def "order-status-date GetOrderByStatusDate" [
   let full_url = (build-url $base $"/Order/Status/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get orders by number (last 25 orders)
@@ -765,6 +787,7 @@ export def "order-number-list GetOrdersByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list<record>, PickupOrder: record<Id_DocShipment: int, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, ContactName: string, Phone: string, Email: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, CustomFields: list, Note: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReasonId: int, RejectReason: string, ScanReasonId: int, ScanRejectReason: string, LoadCheckScanReasonId: int, LoadCheckScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, HasRoutePointPhoto: bool, StatusDate: string, PlanTime: int, PlanTimeDep: int, PlanServiceTime: int, ETA: string, UpdatedETA: string, RouteDate: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatusId: string, HasLoadSignature: bool, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, AddressNote: string, ClientNote: string, CustomFieldsStr: string, CancelledStatus: int, RescheduledTimes: int>, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record<PriorToRouteNotificationEnabled: bool, AtRouteStartNotificationEnabled: bool, EnRouteNotificationEnabled: bool, AtDepartureNotificationEnabled: bool>, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list<string>, HasPhoto: bool, Photos: list<string>, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list<record>, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list<string>, ChangeDate: string, RescheduledTimes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -772,7 +795,7 @@ export def "order-number-list GetOrdersByNumber" [
   let full_url = (build-url $base $"/Order/Number/($number)/List")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set order status by number. Deprecated. Please use /Order/Complete or Reject instead.
@@ -790,6 +813,7 @@ export def "order-number-status SetOrderStatusByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Status: string@Status-completer
   --RejectReason: string@RejectReason-completer
@@ -802,7 +826,7 @@ export def "order-number-status SetOrderStatusByNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set order status by TrackId. Deprecated. Please use /Order/Complete or Reject instead.
@@ -820,6 +844,7 @@ export def "order-track-id-status SetOrderStatusByTrackId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Status: string@Status-completer
   --RejectReason: string@RejectReason-completer
@@ -832,7 +857,7 @@ export def "order-track-id-status SetOrderStatusByTrackId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set order status by id. Deprecated. Please use /Order/Complete or Reject instead.
@@ -850,6 +875,7 @@ export def "order-id-status SetOrderStatusById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Status: string@Status-completer
   --RejectReason: string@RejectReason-completer
@@ -862,7 +888,7 @@ export def "order-id-status SetOrderStatusById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get order POD by number
@@ -878,13 +904,14 @@ export def "order-number-pdf GetOrderPodByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Order/Number/($number)/Pdf")
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order POD by Id
@@ -900,13 +927,14 @@ export def "order-id-pdf GetOrderPodById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Order/Id/($id)/Pdf")
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order shipping label by number
@@ -922,6 +950,7 @@ export def "order-number-shipping-label GetOrderShippingLabelByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageType: string # Page type. Options: 6A4, 10x10, 10x15. (default: 6A4)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -930,7 +959,7 @@ export def "order-number-shipping-label GetOrderShippingLabelByNumber" [
   let full_url = (build-url $base $"/Order/Number/($number)/Shipping-label" $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order shipping label by Id
@@ -946,6 +975,7 @@ export def "order-id-shipping-label GetOrderShippingLabelById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageType: string # Page type. Options: 6A4, 10x10, 10x15. (default: 6A4)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -954,7 +984,7 @@ export def "order-id-shipping-label GetOrderShippingLabelById" [
   let full_url = (build-url $base $"/Order/Id/($id)/Shipping-label" $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the order status to 'delivered', 'collected', or 'partially' by number. Note: The order must be scheduled for delivery.
@@ -971,6 +1001,7 @@ export def "order-number-complete CompleteOrderByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -985,7 +1016,7 @@ export def "order-number-complete CompleteOrderByNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the order status to 'delivered', 'collected', or 'partially' by Id. Note: The order must be scheduled for delivery.
@@ -1002,6 +1033,7 @@ export def "order-id-complete CompleteOrderById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -1016,7 +1048,7 @@ export def "order-id-complete CompleteOrderById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the order status to 'delivered', 'collected', or 'partially' by TrackId. Note: The order must be scheduled for delivery.
@@ -1033,6 +1065,7 @@ export def "order-track-id-complete CompleteOrderByTrackId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -1047,7 +1080,7 @@ export def "order-track-id-complete CompleteOrderByTrackId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the order status to 'not delivered' or 'not collected' by number. Note: The order must be scheduled for delivery.
@@ -1063,6 +1096,7 @@ export def "order-number-reject RejectOrderByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -1076,7 +1110,7 @@ export def "order-number-reject RejectOrderByNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the order status to 'not delivered' or 'not collected' by Id. Note: The order must be scheduled for delivery.
@@ -1092,6 +1126,7 @@ export def "order-id-reject RejectOrderById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -1105,7 +1140,7 @@ export def "order-id-reject RejectOrderById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the order status to 'not delivered' or 'not collected' by TrackId. Note: The order must be scheduled for delivery.
@@ -1121,6 +1156,7 @@ export def "order-track-id-reject RejectOrderByTrackId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --StatusDate: string # Local date and time when the status changed, yyyy-MM-ddTHH:mm:ss. If empty, the default will be now UTC+0. (nullable, format: date-time, e.g. 2025-05-13T13:36:05)
   --DriverComment: string # Driver note (nullable, e.g. Closed from API)
   --SignatureName: string # Recipient's signature name on ePOD (nullable, e.g. John Dow)
@@ -1134,7 +1170,7 @@ export def "order-track-id-reject RejectOrderByTrackId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get reasons for rejection list
@@ -1149,6 +1185,7 @@ export def "reject-reason GetRejectReasonsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<SiteIssue: table<Id: int, Name: string>, OrderIssue: table<Id: int, Name: string>, GoodsIssue: table<Id: int, Name: string>, ScanningIssues: table<Id: int, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1156,7 +1193,7 @@ export def "reject-reason GetRejectReasonsList" [
   let full_url = (build-url $base "/RejectReason")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add route
@@ -1174,6 +1211,7 @@ export def "route AddRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --update: oneof<nothing, bool> # Add or remove orders from the route if route already exists on this date. (default: false)
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
@@ -1204,7 +1242,7 @@ export def "route AddRoute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update route by code
@@ -1223,6 +1261,7 @@ export def "route-code UpdateRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
@@ -1251,7 +1290,7 @@ export def "route-code UpdateRouteByCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get route by code
@@ -1267,6 +1306,7 @@ export def "route-code GetRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Code: string, Id: string, Date: string, DepotId: string, Depot: string, StartFromDepot: bool, ReturnToDepot: bool, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, StartDate: string, CloseDate: string, Track: float, Priority: int, LocationLat: float, LocationLon: float, StartTimePlan: string, FinishTimePlan: string, DistancePlan: float, CostPlan: float, CostActual: float, CreateDateUtc: string, Orders: table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list, PickupOrder: record, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, RescheduledTimes: int>, Status: string, Xd: bool, Vehicle: record<Number: string, CarrierCode: string, Carrier: string, Weight: float, Volume: float, Pallets: float>, CustomFields: table<Id: string, Label: string, Value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1274,7 +1314,7 @@ export def "route-code GetRouteByCode" [
   let full_url = (build-url $base $"/Route/Code/($code)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete route by code.
@@ -1290,6 +1330,7 @@ export def "route-code DeleteRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --deleteOrders: oneof<nothing, bool> # default: true
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1299,7 +1340,7 @@ export def "route-code DeleteRouteByCode" [
   let full_url = (build-url $base $"/Route/Code/($code)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update route by id
@@ -1318,6 +1359,7 @@ export def "route-id UpdateRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
@@ -1346,7 +1388,7 @@ export def "route-id UpdateRouteById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get route by id
@@ -1362,6 +1404,7 @@ export def "route-id GetRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Code: string, Id: string, Date: string, DepotId: string, Depot: string, StartFromDepot: bool, ReturnToDepot: bool, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, StartDate: string, CloseDate: string, Track: float, Priority: int, LocationLat: float, LocationLon: float, StartTimePlan: string, FinishTimePlan: string, DistancePlan: float, CostPlan: float, CostActual: float, CreateDateUtc: string, Orders: table<Number: string, Id: string, Date: string, SeqNumber: int, RouteNumber: string, RoutePriority: int, RouteStatus: string, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, ShipperId: string, Shipper: string, DepotId: string, Depot: string, Weight: float, Volume: float, Pallets: float, InvoiceId: string, CustomerReferenceId: string, GoodsList: list, PickupOrder: record, CreateSource: string, DistanceFromDepotPlan: float, SeqNumberDriver: int, DeliveryInstructions: string, Pin: string, AddressNote: string, ClientNote: string, CreateDateUtc: string, Priority: string, TeamCode: string, Feedback: string, NotificationsPolicy: record, RouteDate: string, Type: int, ClientId: string, Client: string, AddressId: string, Address: string, AddressLat: float, AddressLon: float, AddressZone: string, TimeSlotFrom: string, TimeSlotTo: string, ServiceTime: float, Note: string, ContactName: string, Phone: string, Email: string, COD: float, CODActual: string, StatusId: int, Status: string, StatusLat: float, StatusLon: float, DriverComment: string, RejectReason: string, LoadCheckScanRejectReason: string, ScanRejectReason: string, SignatureName: string, HasSignaturePhoto: bool, SignaturePhotos: list, HasPhoto: bool, Photos: list, StatusDate: string, ETA: string, UpdatedETA: string, ArrivedDate: string, DepartedDate: string, ReportUrl: string, CustomFields: list, Barcode: string, Scanned: bool, FeedbackRating: float, TrackKey: string, TrackId: string, TrackLink: string, LoadStatus: string, LoadDate: string, LoadSignaturePhotos: list, ChangeDate: string, RescheduledTimes: int>, Status: string, Xd: bool, Vehicle: record<Number: string, CarrierCode: string, Carrier: string, Weight: float, Volume: float, Pallets: float>, CustomFields: table<Id: string, Label: string, Value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1369,7 +1412,7 @@ export def "route-id GetRouteById" [
   let full_url = (build-url $base $"/Route/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete route by id.
@@ -1385,6 +1428,7 @@ export def "route-id DeleteRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --deleteOrders: oneof<nothing, bool> # default: true
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1394,7 +1438,7 @@ export def "route-id DeleteRouteById" [
   let full_url = (build-url $base $"/Route/Id/($id)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update routes custom fields by route code
@@ -1410,6 +1454,7 @@ export def "route-code-custom-fields UpdateRouteCustomValuesByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
 ]: any -> record<Status: int, Title: string, Detail: string> {
@@ -1420,7 +1465,7 @@ export def "route-code-custom-fields UpdateRouteCustomValuesByCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update routes custom fields by route id
@@ -1436,6 +1481,7 @@ export def "route-id-custom-fields UpdateRouteCustomValuesById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
 ]: any -> record<Status: int, Title: string, Detail: string> {
@@ -1446,7 +1492,7 @@ export def "route-id-custom-fields UpdateRouteCustomValuesById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get routes by date
@@ -1462,6 +1508,7 @@ export def "route-date GetRouteByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Code: string, Id: string, Date: string, DepotId: string, Depot: string, StartFromDepot: bool, ReturnToDepot: bool, DriverLogin: string, DriverName: string, DriverNumber: int, DriverVehicle: string, StartDate: string, CloseDate: string, Track: float, Priority: int, LocationLat: float, LocationLon: float, StartTimePlan: string, FinishTimePlan: string, DistancePlan: float, CostPlan: float, CostActual: float, CreateDateUtc: string, Orders: list<record>, Status: string, Xd: bool, Vehicle: record<Number: string, CarrierCode: string, Carrier: string, Weight: float, Volume: float, Pallets: float>, CustomFields: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1469,7 +1516,7 @@ export def "route-date GetRouteByDate" [
   let full_url = (build-url $base $"/Route/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get route codes for export (exported is False)
@@ -1484,6 +1531,7 @@ export def "route-export-code GetRouteExportCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: int # Routes status: 0 - Ready; 5 - Closed (format: int32, default: 5)
 ]: nothing -> list<string> {
@@ -1493,7 +1541,7 @@ export def "route-export-code GetRouteExportCode" [
   let full_url = (build-url $base "/Route/Export/Code" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get route ids for export (exported is False)
@@ -1508,6 +1556,7 @@ export def "route-export-id GetRouteExportId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: int # Routes status: 0 - Ready; 5 - Closed (format: int32, default: 5)
 ]: nothing -> list<string> {
@@ -1517,7 +1566,7 @@ export def "route-export-id GetRouteExportId" [
   let full_url = (build-url $base "/Route/Export/Id" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirm route export (set exported to True) by code
@@ -1533,6 +1582,7 @@ export def "route-export-code SetRouteExportCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1540,7 +1590,7 @@ export def "route-export-code SetRouteExportCode" [
   let full_url = (build-url $base $"/Route/Export/Code/($code)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirm route export (set exported to True) by id
@@ -1556,6 +1606,7 @@ export def "route-export-id SetRouteExportId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1563,7 +1614,7 @@ export def "route-export-id SetRouteExportId" [
   let full_url = (build-url $base $"/Route/Export/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new order to route
@@ -1583,6 +1634,7 @@ export def "route-code-order AddOrderToRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
@@ -1631,7 +1683,7 @@ export def "route-code-order AddOrderToRouteByCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add new order to route
@@ -1651,6 +1703,7 @@ export def "route-id-order AddOrderToRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
@@ -1699,7 +1752,7 @@ export def "route-id-order AddOrderToRouteById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add existing order to route
@@ -1716,6 +1769,7 @@ export def "route-code-order-number MoveOrderToRouteByCodeByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
   --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
@@ -1726,7 +1780,7 @@ export def "route-code-order-number MoveOrderToRouteByCodeByNumber" [
   let full_url = (build-url $base $"/Route/Code/($code)/Order/Number/($number)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add existing order to route
@@ -1743,6 +1797,7 @@ export def "route-code-order-id MoveOrderToRouteByCodeById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
   --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
@@ -1753,7 +1808,7 @@ export def "route-code-order-id MoveOrderToRouteByCodeById" [
   let full_url = (build-url $base $"/Route/Code/($code)/Order/Id/($orderId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add existing order to route
@@ -1770,6 +1825,7 @@ export def "route-id-order-number MoveOrderToRouteByIdByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
   --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
@@ -1780,7 +1836,7 @@ export def "route-id-order-number MoveOrderToRouteByIdByNumber" [
   let full_url = (build-url $base $"/Route/Id/($id)/Order/Number/($number)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add existing order to route
@@ -1797,6 +1853,7 @@ export def "route-id-order-id MoveOrderToRouteByIdById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
   --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
@@ -1807,7 +1864,7 @@ export def "route-id-order-id MoveOrderToRouteByIdById" [
   let full_url = (build-url $base $"/Route/Id/($id)/Order/Id/($orderId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get route track by code
@@ -1823,6 +1880,7 @@ export def "route-track-code GetRouteTrackByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<TrackPoints: table<Lat: float, Lng: float, Speed: float, Date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1830,7 +1888,7 @@ export def "route-track-code GetRouteTrackByCode" [
   let full_url = (build-url $base $"/Route/Track/Code/($code)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get route track by id
@@ -1846,6 +1904,7 @@ export def "route-track-id GetRouteTrackById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<TrackPoints: table<Lat: float, Lng: float, Speed: float, Date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1853,7 +1912,7 @@ export def "route-track-id GetRouteTrackById" [
   let full_url = (build-url $base $"/Route/Track/Id/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start route by code
@@ -1869,6 +1928,7 @@ export def "route-start-code StartRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # Status date (client's local date and time) (format: date-time)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1878,7 +1938,7 @@ export def "route-start-code StartRouteByCode" [
   let full_url = (build-url $base $"/Route/Start/Code/($code)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start route by id.
@@ -1894,6 +1954,7 @@ export def "route-start-id StartRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # format: date-time
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1903,7 +1964,7 @@ export def "route-start-id StartRouteById" [
   let full_url = (build-url $base $"/Route/Start/Id/($id)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close route by code
@@ -1919,6 +1980,7 @@ export def "route-close-code CloseRouteByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # Status date (client's local date and time) (format: date-time)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1928,7 +1990,7 @@ export def "route-close-code CloseRouteByCode" [
   let full_url = (build-url $base $"/Route/Close/Code/($code)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close route by id.
@@ -1944,6 +2006,7 @@ export def "route-close-id CloseRouteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # format: date-time
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1953,7 +2016,7 @@ export def "route-close-id CloseRouteById" [
   let full_url = (build-url $base $"/Route/Close/Id/($id)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set route ready by code.
@@ -1969,6 +2032,7 @@ export def "route-ready-code SetRouteReadyByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # Status date (client's local date and time) (format: date-time)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -1978,7 +2042,7 @@ export def "route-ready-code SetRouteReadyByCode" [
   let full_url = (build-url $base $"/Route/Ready/Code/($code)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set route ready by id.
@@ -1994,6 +2058,7 @@ export def "route-ready-id SetRouteReadyById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --statusDate: string # format: date-time
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
@@ -2003,7 +2068,7 @@ export def "route-ready-id SetRouteReadyById" [
   let full_url = (build-url $base $"/Route/Ready/Id/($id)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test authorization and rate limits
@@ -2018,6 +2083,7 @@ export def "test Test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2025,7 +2091,7 @@ export def "test Test" [
   let full_url = (build-url $base "/Test")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get vehicle by Track-POD unique identifier
@@ -2041,6 +2107,7 @@ export def "vehicle GetVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: int, DriverId: string, DriverUsername: string, DepotId: string, Depot: string, MaxNodes: int, MaxWorkTime: int, MaxDistance: int, SpeedRatio: float, CostPerDistance: float, CostPerHour: float, BaseFare: float, StartTime: string, VehicleType: int, EmissionCo2: int, Number: string, CarrierCode: string, Carrier: string, Weight: float, Volume: float, Pallets: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2048,7 +2115,7 @@ export def "vehicle GetVehicle" [
   let full_url = (build-url $base $"/Vehicle/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete vehicle by Track-POD unique identifier
@@ -2064,6 +2131,7 @@ export def "vehicle DeleteVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2071,7 +2139,7 @@ export def "vehicle DeleteVehicle" [
   let full_url = (build-url $base $"/Vehicle/($id)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get vehicles
@@ -2086,6 +2154,7 @@ export def "vehicle GetVehicles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --number: string
 ]: nothing -> table<Id: int, DriverId: string, DriverUsername: string, DepotId: string, Depot: string, MaxNodes: int, MaxWorkTime: int, MaxDistance: int, SpeedRatio: float, CostPerDistance: float, CostPerHour: float, BaseFare: float, StartTime: string, VehicleType: int, EmissionCo2: int, Number: string, CarrierCode: string, Carrier: string, Weight: float, Volume: float, Pallets: float> {
@@ -2095,7 +2164,7 @@ export def "vehicle GetVehicles" [
   let full_url = (build-url $base "/Vehicle" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add vehicle
@@ -2110,6 +2179,7 @@ export def "vehicle AddVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Number: string # Required (*)   Number (nullable, e.g. XXX777)
   --CarrierCode: string # Carrier Code (nullable, e.g. 31)
@@ -2140,7 +2210,7 @@ export def "vehicle AddVehicle" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update vehicle
@@ -2155,6 +2225,7 @@ export def "vehicle UpdateVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Id: int # Track-POD unique identifier (format: int32, e.g. 2341)
   --Number: string # Required (*)   Number (nullable, e.g. XXX777)
@@ -2186,7 +2257,7 @@ export def "vehicle UpdateVehicle" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last vehicle check by number
@@ -2202,6 +2273,7 @@ export def "vehicle-check GetCheckByVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<DriverLogin: string, DriverName: string, DepotId: string, Depot: string, Date: string, VehicleNumber: string, Odometer: float, Values: table<Label: string, Status: bool, Photo: bool, Photos: list, Note: string, Value: float>, HasSignature: bool, SignaturePhoto: string, Stage: string, RouteNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2209,7 +2281,7 @@ export def "vehicle-check GetCheckByVehicle" [
   let full_url = (build-url $base $"/VehicleCheck/($number)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get vehicle checks by date
@@ -2226,6 +2298,7 @@ export def "vehicle-check-number-date GetChecksByVehicle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<DriverLogin: string, DriverName: string, DepotId: string, Depot: string, Date: string, VehicleNumber: string, Odometer: float, Values: list<record>, HasSignature: bool, SignaturePhoto: string, Stage: string, RouteNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2233,7 +2306,7 @@ export def "vehicle-check-number-date GetChecksByVehicle" [
   let full_url = (build-url $base $"/VehicleCheck/Number/($number)/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get vehicle checks by date
@@ -2249,6 +2322,7 @@ export def "vehicle-check-date GetVehicleChecksByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<DriverLogin: string, DriverName: string, DepotId: string, Depot: string, Date: string, VehicleNumber: string, Odometer: float, Values: list<record>, HasSignature: bool, SignaturePhoto: string, Stage: string, RouteNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2256,5 +2330,5 @@ export def "vehicle-check-date GetVehicleChecksByDate" [
   let full_url = (build-url $base $"/VehicleCheck/Date/($date)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

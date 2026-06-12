@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "vectordb-entities-delete post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "vectordb-entities-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the target database.
@@ -116,7 +118,7 @@ export def "vectordb-entities-delete post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Insert
@@ -130,6 +132,7 @@ export def "vectordb-entities-insert post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the target database.
@@ -147,7 +150,7 @@ export def "vectordb-entities-insert post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query
@@ -161,6 +164,7 @@ export def "vectordb-entities-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database.
@@ -179,7 +183,7 @@ export def "vectordb-entities-query post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Has Collection
@@ -193,6 +197,7 @@ export def "vectordb-collections-has post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of the database in which to check the existence of a collection.
@@ -208,7 +213,7 @@ export def "vectordb-collections-has post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rename Collection
@@ -222,6 +227,7 @@ export def "vectordb-collections-rename post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -239,7 +245,7 @@ export def "vectordb-collections-rename post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Collection Stats
@@ -253,6 +259,7 @@ export def "vectordb-collections-get-stats post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of the database which the collection belongs to. Setting this to a non-existing database results in an error.
@@ -268,7 +275,7 @@ export def "vectordb-collections-get-stats post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upsert
@@ -282,6 +289,7 @@ export def "vectordb-entities-upsert post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database.
@@ -299,7 +307,7 @@ export def "vectordb-entities-upsert post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get
@@ -313,6 +321,7 @@ export def "vectordb-entities-get post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database.
@@ -331,7 +340,7 @@ export def "vectordb-entities-get post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search
@@ -346,6 +355,7 @@ export def "vectordb-entities-search post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database.
@@ -370,7 +380,7 @@ export def "vectordb-entities-search post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Partitions
@@ -384,6 +394,7 @@ export def "vectordb-partitions-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # e.g. Bearer {{TOKEN}}
   dbName: string # The name of the target database.
@@ -399,7 +410,7 @@ export def "vectordb-partitions-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Partition
@@ -413,6 +424,7 @@ export def "vectordb-partitions-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -429,7 +441,7 @@ export def "vectordb-partitions-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop Partition
@@ -443,6 +455,7 @@ export def "vectordb-partitions-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -459,7 +472,7 @@ export def "vectordb-partitions-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create User
@@ -473,6 +486,7 @@ export def "vectordb-users-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   userName: string # The name of the target user. The value should start with a letter and can only contain underline, letters and numbers.
@@ -488,7 +502,7 @@ export def "vectordb-users-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update User Password
@@ -502,6 +516,7 @@ export def "vectordb-users-update-password post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authorization token. (e.g. Bearer {{TOKEN}})
   userName: string # The name of the target user. The value should start with a letter and can only contain underline, letters and numbers.
@@ -518,7 +533,7 @@ export def "vectordb-users-update-password post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop User
@@ -532,6 +547,7 @@ export def "vectordb-users-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   userName: string # The name of the target user. The value should start with a letter and can only contain underline, letters and numbers.
@@ -546,7 +562,7 @@ export def "vectordb-users-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe User
@@ -560,6 +576,7 @@ export def "vectordb-users-describe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   userName: string #   The name of the user to describe.
@@ -574,7 +591,7 @@ export def "vectordb-users-describe post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Users
@@ -588,6 +605,7 @@ export def "vectordb-users-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token (e.g. Bearer {{TOKEN}})
 ]: nothing -> record<code: int, data: list<string>> {
@@ -598,7 +616,7 @@ export def "vectordb-users-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Grant Role To User
@@ -612,6 +630,7 @@ export def "vectordb-users-grant-role post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --body: record
@@ -625,7 +644,7 @@ export def "vectordb-users-grant-role post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Roles
@@ -639,6 +658,7 @@ export def "vectordb-roles-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --body: record
@@ -652,7 +672,7 @@ export def "vectordb-roles-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe Role
@@ -666,6 +686,7 @@ export def "vectordb-roles-describe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   roleName: string # The name of the role.
@@ -680,7 +701,7 @@ export def "vectordb-roles-describe post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Role
@@ -694,6 +715,7 @@ export def "vectordb-roles-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # Then authentication token. (e.g. Bearer {{TOKEN}})
   roleName: string # The name of the role.
@@ -708,7 +730,7 @@ export def "vectordb-roles-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop Role
@@ -722,6 +744,7 @@ export def "vectordb-roles-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   roleName: string # The name of the role.
@@ -736,7 +759,7 @@ export def "vectordb-roles-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Grant Privilege To Role
@@ -750,6 +773,7 @@ export def "vectordb-roles-grant-privilege post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   roleName: string # The name of the role.
@@ -767,7 +791,7 @@ export def "vectordb-roles-grant-privilege post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Index
@@ -782,6 +806,7 @@ export def "vectordb-indexes-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -798,7 +823,7 @@ export def "vectordb-indexes-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop Index
@@ -812,6 +837,7 @@ export def "vectordb-indexes-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -828,7 +854,7 @@ export def "vectordb-indexes-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe Index
@@ -842,6 +868,7 @@ export def "vectordb-indexes-describe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs.
@@ -858,7 +885,7 @@ export def "vectordb-indexes-describe post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Collection
@@ -872,6 +899,7 @@ export def "vectordb-collections-load post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Header: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs.  (e.g. )
   --Authorization: string # The authentication token (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -887,7 +915,7 @@ export def "vectordb-collections-load post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Release Collection
@@ -901,6 +929,7 @@ export def "vectordb-collections-release post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs. (e.g. )
   --Authorization: string # The authentication token (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the cpllection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -916,7 +945,7 @@ export def "vectordb-collections-release post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Partitions
@@ -930,6 +959,7 @@ export def "vectordb-partitions-load post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -946,7 +976,7 @@ export def "vectordb-partitions-load post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Release Partitions
@@ -960,6 +990,7 @@ export def "vectordb-partitions-release post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -976,7 +1007,7 @@ export def "vectordb-partitions-release post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Collection
@@ -993,6 +1024,7 @@ export def "vectordb-collections-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database. <zilliz>This parameter applies only to dedicated clusters.</zilliz>
@@ -1017,7 +1049,7 @@ export def "vectordb-collections-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Has Partition
@@ -1031,6 +1063,7 @@ export def "vectordb-partitions-has post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of an existing database. The value defaults to __default__.
@@ -1047,7 +1080,7 @@ export def "vectordb-partitions-has post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Partition Statistics
@@ -1061,6 +1094,7 @@ export def "vectordb-partitions-get-stats post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of an existing database. The value defaults to __default__.
@@ -1077,7 +1111,7 @@ export def "vectordb-partitions-get-stats post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoker Role From User
@@ -1091,6 +1125,7 @@ export def "vectordb-users-revoke-role post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # Then authentication token (e.g. Bearer {{TOKEN}})
   --body: record
@@ -1104,7 +1139,7 @@ export def "vectordb-users-revoke-role post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke Privilege From Role
@@ -1118,6 +1153,7 @@ export def "vectordb-roles-revoke-privilege post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   roleName: string # The name of the role.
@@ -1135,7 +1171,7 @@ export def "vectordb-roles-revoke-privilege post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Collection Load State
@@ -1149,6 +1185,7 @@ export def "vectordb-collections-get-load-state post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs. (e.g. )
   --Authorization: string # e.g. Bearer {{TOKEN}}
   --dbName: string # The name of a database to which the collection belongs.
@@ -1165,7 +1202,7 @@ export def "vectordb-collections-get-load-state post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Indexes
@@ -1179,6 +1216,7 @@ export def "vectordb-indexes-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of the database to which the collection belongs.
@@ -1194,7 +1232,7 @@ export def "vectordb-indexes-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Collections
@@ -1208,6 +1246,7 @@ export def "vectordb-collections-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs.  (e.g. )
   --Authorization: string # The authentication token (e.g. Bearer {{TOKEN}})
   dbName: string # The name of an existing database.
@@ -1222,7 +1261,7 @@ export def "vectordb-collections-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe Collection
@@ -1236,6 +1275,7 @@ export def "vectordb-collections-describe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation. Setting this to None indicates that this operation times out when any response returns or an error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of the database.
@@ -1251,7 +1291,7 @@ export def "vectordb-collections-describe post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop Collection
@@ -1265,6 +1305,7 @@ export def "vectordb-collections-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation.  Setting this to **None** indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs. Setting this to a non-existing database results in a **MilvusException**.
@@ -1280,7 +1321,7 @@ export def "vectordb-collections-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Aliases
@@ -1294,6 +1335,7 @@ export def "vectordb-aliases-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of an existing database. The value defaults to __default__.
@@ -1308,7 +1350,7 @@ export def "vectordb-aliases-list post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe Alias
@@ -1322,6 +1364,7 @@ export def "vectordb-aliases-describe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   dbName: string # The name of the database to which the collection belongs.
@@ -1337,7 +1380,7 @@ export def "vectordb-aliases-describe post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Alter Alias
@@ -1351,6 +1394,7 @@ export def "vectordb-aliases-alter post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --body: record
@@ -1364,7 +1408,7 @@ export def "vectordb-aliases-alter post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Drop Alias
@@ -1378,6 +1422,7 @@ export def "vectordb-aliases-drop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --dbName: string # The name of the database to which the collection belongs.
@@ -1394,7 +1439,7 @@ export def "vectordb-aliases-drop post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Alias
@@ -1408,6 +1453,7 @@ export def "vectordb-aliases-create post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The timeout duration for this operation in seconds. Setting this to None indicates that this operation timeouts when any response arrives or any error occurs. (e.g. )
   --Authorization: string # The authentication token. (e.g. Bearer {{TOKEN}})
   --body: record
@@ -1421,5 +1467,5 @@ export def "vectordb-aliases-create post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

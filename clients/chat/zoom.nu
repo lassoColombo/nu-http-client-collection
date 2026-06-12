@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -133,7 +134,7 @@ def action-completer-12 [] { ["end"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -166,6 +167,7 @@ export def "accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -177,7 +179,7 @@ export def "accounts accounts" [
   let full_url = (build-url $base "/accounts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a sub account
@@ -193,6 +195,7 @@ export def "accounts accountCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --account-name: string # Name of the account. If you do not provide a value for this field, by default, the value will be set as a concatenation of "first_name" and "last_name". 
   email: string # User's email address.
@@ -209,7 +212,7 @@ export def "accounts accountCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Disassociate a sub account
@@ -225,13 +228,14 @@ export def "accounts accountDisassociate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($accountId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sub account details
@@ -247,6 +251,7 @@ export def "accounts account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, id: string, options: record<billing_auto_renew: bool, meeting_connector_list: list<string>, pay_mode: string, room_connector_list: list<string>, share_mc: bool, share_rc: bool>, owner_email: string, owner_id: string, vanity_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -254,7 +259,7 @@ export def "accounts account" [
   let full_url = (build-url $base $"/accounts/($accountId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get billing information
@@ -270,6 +275,7 @@ export def "accounts-billing accountBilling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<address: string, apt: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -277,7 +283,7 @@ export def "accounts-billing accountBilling" [
   let full_url = (build-url $base $"/accounts/($accountId)/billing")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update billing information
@@ -293,6 +299,7 @@ export def "accounts-billing accountBillingUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Billing Contact's address.
   --apt: string # Billing Contact's apartment/suite.
   --city: string # Billing Contact's city.
@@ -312,7 +319,7 @@ export def "accounts-billing accountBillingUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List billing invoices
@@ -328,6 +335,7 @@ export def "accounts-billing-invoices accountBillingInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years.  (format: date)
   --qp-to: string # End date for the invoice query in `yyyy-mm-dd` format (format: date)
@@ -338,7 +346,7 @@ export def "accounts-billing-invoices accountBillingInvoices" [
   let full_url = (build-url $base $"/accounts/($accountId)/billing/invoices" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoice details
@@ -355,6 +363,7 @@ export def "accounts-billing-invoices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<balance: float, currency: string, due_date: string, id: string, invoice_date: string, invoice_items: table<charge_name: string, charge_number: string, charge_type: string, end_date: string, quantity: int, start_date: string, tax_amount: float, total_amount: float>, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -362,7 +371,7 @@ export def "accounts-billing-invoices get" [
   let full_url = (build-url $base $"/accounts/($accountId)/billing/invoices/($invoiceId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get locked settings
@@ -378,6 +387,7 @@ export def "accounts-lock-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --option: string # `meeting_security`: Use this query parameter to view meeting security settings applied on the account.<br>
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
@@ -388,7 +398,7 @@ export def "accounts-lock-settings get" [
   let full_url = (build-url $base $"/accounts/($accountId)/lock_settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update locked settings
@@ -411,6 +421,7 @@ export def "accounts-lock-settings updateAccountLockSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
   --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, remote_control?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, webinar_question_answer?: bool, whiteboard?: bool}
@@ -428,7 +439,7 @@ export def "accounts-lock-settings updateAccountLockSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get managed domains
@@ -444,6 +455,7 @@ export def "accounts-managed-domains accountManagedDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<domains: list<record>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -451,7 +463,7 @@ export def "accounts-managed-domains accountManagedDomain" [
   let full_url = (build-url $base $"/accounts/($accountId)/managed_domains")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update options
@@ -467,6 +479,7 @@ export def "accounts-options accountOptionsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-auto-renew: oneof<nothing, bool> # Toggle whether automatic billing renewal is on or off.
   --meeting-connector-list: list # Specify the IP addresses of the Meeting Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Meeting Connectors of a master account will be shared with the sub account.   **Note:** This option can only be used if the value of `share_mc` is set to `true`.
   --pay-mode: string@pay-mode-completer # Payee:<br>`master` - master account holder pays.<br>`sub` - Sub account holder pays. (default: master)
@@ -482,7 +495,7 @@ export def "accounts-options accountOptionsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the account owner
@@ -498,6 +511,7 @@ export def "accounts-owner updateAccountOwner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email: string # Email address of the new owner. (format: email)
 ]: any -> any {
@@ -509,7 +523,7 @@ export def "accounts-owner updateAccountOwner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update BYOC settings
@@ -526,6 +540,7 @@ export def "accounts-phone-settings updatePhoneSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --byoc: record # shape: {enable?: bool}
 ]: any -> any {
@@ -537,7 +552,7 @@ export def "accounts-phone-settings updatePhoneSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set up a Zoom Phone account
@@ -554,6 +569,7 @@ export def "accounts-phone-setup setUpAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emergency_address: record # Specify emergency address for the account. — shape: {address_line1: string, address_line2?: string, city?: string, country: string, state_code?: string, zip?: string}
   extension_number: string # Specify extension number that will be associated with the owner of the account. (default: 800)
 ]: any -> any {
@@ -565,7 +581,7 @@ export def "accounts-phone-setup setUpAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign SIP trunks
@@ -582,6 +598,7 @@ export def "accounts-phone-sip-trunk-trunks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sip-trunks: list # SIP trunk configurations. — item shape: {carrier_account?: string, id?: string, name?: string}
 ]: any -> record<sip_trunks: table<carrier_account: string, id: string, name: string>> {
@@ -593,7 +610,7 @@ export def "accounts-phone-sip-trunk-trunks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update SIP trunk details
@@ -610,6 +627,7 @@ export def "accounts-phone-sip-trunk-trunks updatePhoneSIPTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --carrier-account: string # Account associated with the carrier.
   --name: string # Name of the SIP Trunk.
@@ -622,7 +640,7 @@ export def "accounts-phone-sip-trunk-trunks updatePhoneSIPTrunk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plan Information
@@ -638,6 +656,7 @@ export def "accounts-plans accountPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<plan_audio: record<callout_countries: string, ddi_numbers: int, next_invoice_date: string, premium_countries: string, service_effective_date: string, status: string, tollfree_countries: string, type: string>, plan_base: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_large_meeting: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_phone: record<plan_base: record<callout_countries: string, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_calling: list<record>, plan_number: list<record>>, plan_recording: string, plan_recording_next_invoice_date: string, plan_recording_service_effective_date: string, plan_recording_status: string, plan_room_connector: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_webinar: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_zoom_rooms: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -645,7 +664,7 @@ export def "accounts-plans accountPlans" [
   let full_url = (build-url $base $"/accounts/($accountId)/plans")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe plans
@@ -669,6 +688,7 @@ export def "accounts-plans accountPlanCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contact: record # Billing Contact object. — shape: {address: string, apt?: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string}
   --plan-audio: record # Additional audio conferencing <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans#audio-conferencing-plans">plan type</a>. — shape: {callout_countries?: string, ddi_numbers?: int, premium_countries?: string, tollfree_countries?: string, type?: string}
@@ -688,7 +708,7 @@ export def "accounts-plans accountPlanCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Subscribe additional plan
@@ -705,6 +725,7 @@ export def "accounts-plans-addons accountPlanAddonCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hosts: int # Number of hosts for this plan.
   --type: string # Account <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
   --plan-details: record # Phone Plan Object — shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
@@ -717,7 +738,7 @@ export def "accounts-plans-addons accountPlanAddonCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an additional plan
@@ -733,6 +754,7 @@ export def "accounts-plans-addons accountPlanAddonUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hosts: int # Number of hosts for this plan.
   type: string # Account <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
 ]: any -> any {
@@ -744,7 +766,7 @@ export def "accounts-plans-addons accountPlanAddonUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel additional plans
@@ -760,6 +782,7 @@ export def "accounts-plans-addons-status accountPlanAddonCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --action: string@action-completer # The action that needs to be taken for this sub account. Value must be set to "cancel".
   --comment: string # Additional comments about the cancellation decision.
@@ -774,7 +797,7 @@ export def "accounts-plans-addons-status accountPlanAddonCancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a base plan
@@ -790,6 +813,7 @@ export def "accounts-plans-base accountPlanBaseUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hosts: int # Account base plan number of hosts. For a Pro Plan please select a value between 1 and 9. For a Business Plan please select a value between 10 and 49. For a Education Plan please select a value between 20 and 149. For a Free Trial Plan please select a value between 1 and 9999.
   type: string # Account base <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
 ]: any -> any {
@@ -801,7 +825,7 @@ export def "accounts-plans-base accountPlanBaseUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a base plan
@@ -817,6 +841,7 @@ export def "accounts-plans-base-status accountPlanBaseDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   action: string # The action that needs to be taken for this sub account. Value must be set to "cancel".
   --comment: string # Additional comments about the cancellation decision.
@@ -830,7 +855,7 @@ export def "accounts-plans-base-status accountPlanBaseDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plan usage
@@ -846,6 +871,7 @@ export def "accounts-plans-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<plan_base: table<hosts: int, type: string, usage: int>, plan_large_meeting: table<hosts: int, type: string, usage: int>, plan_recording: record<free_storage: string, free_storage_usage: string, plan_storage: string, plan_storage_exceed: string, plan_storage_usage: string, type: string>, plan_united: record<hosts: int, name: string, type: string, usage: int>, plan_webinar: table<hosts: int, type: string, usage: int>, plan_zoom_rooms: table<hosts: int, type: string, usage: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -853,7 +879,7 @@ export def "accounts-plans-usage get" [
   let full_url = (build-url $base $"/accounts/($accountId)/plans/usage")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recordings of an account
@@ -869,6 +895,7 @@ export def "accounts-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -881,7 +908,7 @@ export def "accounts-recordings get" [
   let full_url = (build-url $base $"/accounts/($accountId)/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get settings
@@ -897,6 +924,7 @@ export def "accounts-settings accountSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the account.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the account.<br>`security`: Use this query parameter to view security settings such as password requirements for user login, two factor authentication etc., applied on the account.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the account.<br> (allows empty value)
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
@@ -907,7 +935,7 @@ export def "accounts-settings accountSettings" [
   let full_url = (build-url $base $"/accounts/($accountId)/settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update settings
@@ -935,6 +963,7 @@ export def "accounts-settings accountSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --option: string@option-completer-1 # allows empty value
   --email-notification: record # Account Settings: Notification. — shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_avaliable_reminder?: bool, jbh_reminder?: bool, low_host_count_reminder?: bool, schedule_for_reminder?: bool}
   --feature: record # Account Settings: Feature. — shape: {meeting_capacity?: int}
@@ -958,7 +987,7 @@ export def "accounts-settings accountSettingsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete virtual background files
@@ -974,6 +1003,7 @@ export def "accounts-settings-virtual-backgrounds delVB" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-ids: string # Provide the id of the file that is to be deleted. To delete multiple files, provide comma separated values for this field.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -982,7 +1012,7 @@ export def "accounts-settings-virtual-backgrounds delVB" [
   let full_url = (build-url $base $"/accounts/($accountId)/settings/virtual_backgrounds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload virtual background files
@@ -998,6 +1028,7 @@ export def "accounts-settings-virtual-backgrounds uploadVB" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file: string # Provide the file's path here.
 ]: any -> record<id: string, is_default: bool, name: string, size: string, type: string> {
@@ -1009,7 +1040,7 @@ export def "accounts-settings-virtual-backgrounds uploadVB" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List internal call-out countries
@@ -1025,6 +1056,7 @@ export def "accounts-sip-trunk-callout-countries listInternalCalloutCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<callout_countries: table<code: string, id: string, name: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1032,7 +1064,7 @@ export def "accounts-sip-trunk-callout-countries listInternalCalloutCountries" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/callout_countries")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add internal call-out countries
@@ -1049,6 +1081,7 @@ export def "accounts-sip-trunk-callout-countries addCalloutCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   callout_countries: list # List of callout countries. — item shape: {id: string}
 ]: any -> record<callout_countries: table<code: string, id: string, name: string>> {
@@ -1060,7 +1093,7 @@ export def "accounts-sip-trunk-callout-countries addCalloutCountries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete internal call-out country
@@ -1077,6 +1110,7 @@ export def "accounts-sip-trunk-callout-countries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1084,7 +1118,7 @@ export def "accounts-sip-trunk-callout-countries delete" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/callout_countries/($countryId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List internal numbers
@@ -1100,6 +1134,7 @@ export def "accounts-sip-trunk-internal-numbers listInternalNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -1110,7 +1145,7 @@ export def "accounts-sip-trunk-internal-numbers listInternalNumbers" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/internal_numbers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add internal numbers
@@ -1127,6 +1162,7 @@ export def "accounts-sip-trunk-internal-numbers addInternalNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --internal-numbers: list # item shape: {allow_for_external_meetings?: bool, allow_join?: bool, country: string, display_number: string, labels: string, languages: "en-GB"|"en-US"|"de-DE", number: string, type: "0"|"1", visible?: bool}
 ]: any -> record<internal_numbers: table<allow_for_external_meetings: bool, allow_join: bool, country: string, display_number: string, id: string, labels: string, languages: string, number: string, type: int, visible: bool>> {
@@ -1138,7 +1174,7 @@ export def "accounts-sip-trunk-internal-numbers addInternalNumbers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an internal number
@@ -1155,6 +1191,7 @@ export def "accounts-sip-trunk-internal-numbers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1162,7 +1199,7 @@ export def "accounts-sip-trunk-internal-numbers delete" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/internal_numbers/($numberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all numbers
@@ -1178,6 +1215,7 @@ export def "accounts-sip-trunk-numbers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1185,7 +1223,7 @@ export def "accounts-sip-trunk-numbers delete" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/numbers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign numbers
@@ -1201,6 +1239,7 @@ export def "accounts-sip-trunk-numbers assignSipTrunkNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # Phone number(s) to be assigned to the sub account.
 ]: any -> any {
@@ -1212,7 +1251,7 @@ export def "accounts-sip-trunk-numbers assignSipTrunkNumbers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign SIP trunk configuration
@@ -1228,6 +1267,7 @@ export def "accounts-sip-trunk-settings assignSIPConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --enable: oneof<nothing, bool> # Enable or delete the configuration.<br> The values can be one of the following:<br> `true`: Enable configuration.<br> `false`: Delete configuration
   --show-callout-internal-number: oneof<nothing, bool> # If the value of this option is set to `true`, the call-out numbers provided by the Zoom carrier partners will be displayed in the account's list of available call-out numbers in the Zoom Web Portal and Zoom Client.
@@ -1242,7 +1282,7 @@ export def "accounts-sip-trunk-settings assignSIPConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List SIP trunks
@@ -1258,6 +1298,7 @@ export def "accounts-sip-trunk-trunks listSIPTrunks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, outbound_caller_id: string, sip_server_address: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1265,7 +1306,7 @@ export def "accounts-sip-trunk-trunks listSIPTrunks" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/trunks")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign SIP trunks
@@ -1282,6 +1323,7 @@ export def "accounts-sip-trunk-trunks assignSIPTrunks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sip-trunks: list # Array of one or more SIP Trunk objects.  — item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
 ]: any -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, sip_server_address: string>> {
@@ -1293,7 +1335,7 @@ export def "accounts-sip-trunk-trunks assignSIPTrunks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a SIP trunk
@@ -1310,6 +1352,7 @@ export def "accounts-sip-trunk-trunks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1317,7 +1360,7 @@ export def "accounts-sip-trunk-trunks delete" [
   let full_url = (build-url $base $"/accounts/($accountId)/sip_trunk/trunks/($trunkId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trusted domains
@@ -1333,6 +1376,7 @@ export def "accounts-trusted-domains accountTrustedDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<trusted_domains: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1340,7 +1384,7 @@ export def "accounts-trusted-domains accountTrustedDomain" [
   let full_url = (build-url $base $"/accounts/($accountId)/trusted_domains")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch a user's account
@@ -1357,6 +1401,7 @@ export def "accounts-users-account switchUserAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   account_id: string # The Account ID of the account to which you would like move the user to.
 ]: any -> any {
@@ -1368,7 +1413,7 @@ export def "accounts-users-account switchUserAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download an invoice file
@@ -1384,6 +1429,7 @@ export def "download-billing-invoices downloadInvoicePDF" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1391,7 +1437,7 @@ export def "download-billing-invoices downloadInvoicePDF" [
   let full_url = (build-url $base $"/api/download/billing/invoices/($invoiceId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List archived files
@@ -1406,6 +1452,7 @@ export def "archive-files listArchivedFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -1419,7 +1466,7 @@ export def "archive-files listArchivedFiles" [
   let full_url = (build-url $base "/archive_files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a channel
@@ -1435,6 +1482,7 @@ export def "chat-channels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1442,7 +1490,7 @@ export def "chat-channels delete" [
   let full_url = (build-url $base $"/chat/channels/($channelId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a channel
@@ -1458,6 +1506,7 @@ export def "chat-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1465,7 +1514,7 @@ export def "chat-channels get" [
   let full_url = (build-url $base $"/chat/channels/($channelId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a channel
@@ -1481,6 +1530,7 @@ export def "chat-channels updateUserLevelChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # A new name for the channel.
 ]: any -> any {
@@ -1492,7 +1542,7 @@ export def "chat-channels updateUserLevelChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Leave a channel
@@ -1508,6 +1558,7 @@ export def "chat-channels-members-me leaveChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1515,7 +1566,7 @@ export def "chat-channels-members-me leaveChannel" [
   let full_url = (build-url $base $"/chat/channels/($channelId)/members/me")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Join a channel
@@ -1531,6 +1582,7 @@ export def "chat-channels-members-me joinChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<added_at: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1538,7 +1590,7 @@ export def "chat-channels-members-me joinChannel" [
   let full_url = (build-url $base $"/chat/channels/($channelId)/members/me")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a member
@@ -1555,6 +1607,7 @@ export def "chat-channels-members removeAUserLevelChannelMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1562,7 +1615,7 @@ export def "chat-channels-members removeAUserLevelChannelMember" [
   let full_url = (build-url $base $"/chat/channels/($channelId)/members/($memberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's contacts
@@ -1577,6 +1630,7 @@ export def "chat-users-me-contacts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string # The type of contact. The value can be one of the following: `company`: Contacts from the user's organization. `external`: External contacts.  (default: company)
   --page-size: int # The number of records returned with a single API call. (default: 10)
@@ -1588,7 +1642,7 @@ export def "chat-users-me-contacts list" [
   let full_url = (build-url $base "/chat/users/me/contacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's contact details
@@ -1604,6 +1658,7 @@ export def "chat-users-me-contacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query-presence-status: oneof<nothing, bool> # The presence status of the contact.  Include this query parameter with a value of `true` to get the presence status of the contact in the response.
 ]: nothing -> record<direct_numbers: list<string>, email: string, extension_number: string, first_name: string, id: string, last_name: string, phone_number: string, presence_status: string> {
@@ -1613,7 +1668,7 @@ export def "chat-users-me-contacts get" [
   let full_url = (build-url $base $"/chat/users/me/contacts/($contactId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's channels
@@ -1629,6 +1684,7 @@ export def "chat-users-channels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned from a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. The expiration period for this token is 15 minutes.
@@ -1639,7 +1695,7 @@ export def "chat-users-channels list" [
   let full_url = (build-url $base $"/chat/users/($userId)/channels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a channel
@@ -1656,6 +1712,7 @@ export def "chat-users-channels createChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # Member(s) to include in the channel. A max of 5 members can be added to the channel at once with this API. — item shape: {email: string}
   --name: string # Name of the channel.
@@ -1669,7 +1726,7 @@ export def "chat-users-channels createChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a channel
@@ -1686,6 +1743,7 @@ export def "chat-users-channels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1693,7 +1751,7 @@ export def "chat-users-channels delete" [
   let full_url = (build-url $base $"/chat/users/($userId)/channels/($channelId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a channel
@@ -1710,6 +1768,7 @@ export def "chat-users-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1717,7 +1776,7 @@ export def "chat-users-channels get" [
   let full_url = (build-url $base $"/chat/users/($userId)/channels/($channelId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a channel
@@ -1734,6 +1793,7 @@ export def "chat-users-channels updateChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # A new name for the channel.
 ]: any -> any {
@@ -1745,7 +1805,7 @@ export def "chat-users-channels updateChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List channel members
@@ -1762,6 +1822,7 @@ export def "chat-users-channels-members listChannelMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned with a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -1772,7 +1833,7 @@ export def "chat-users-channels-members listChannelMembers" [
   let full_url = (build-url $base $"/chat/users/($userId)/channels/($channelId)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite channel members
@@ -1790,6 +1851,7 @@ export def "chat-users-channels-members inviteChannelMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # Members of a channel. You can invite up to a max number of 5 members with a single API call. — item shape: {email: string}
 ]: any -> record<added_at: string, ids: list<string>> {
@@ -1801,7 +1863,7 @@ export def "chat-users-channels-members inviteChannelMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member
@@ -1819,6 +1881,7 @@ export def "chat-users-channels-members removeAChannelMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1826,7 +1889,7 @@ export def "chat-users-channels-members removeAChannelMember" [
   let full_url = (build-url $base $"/chat/users/($userId)/channels/($channelId)/members/($memberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's chat messages
@@ -1842,6 +1905,7 @@ export def "chat-users-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --to-contact: string # The email address of a chat contact with whom the current user chatted. Messages that were sent and/or received between the user and the contact is displayed.  Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel. 
   --to-channel: string # The channel Id of a channel inside which the current user had chat conversations. Messages that were sent and/or received between the user and the channel is displayed.  Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel. 
@@ -1856,7 +1920,7 @@ export def "chat-users-messages get" [
   let full_url = (build-url $base $"/chat/users/($userId)/messages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a chat message
@@ -1873,6 +1937,7 @@ export def "chat-users-messages sendaChatMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --at-items: list # [Chat mentions](https://support.zoom.us/hc/en-us/articles/360037567431-Using-chat-mentions-and-slash-commands) object. Use this object to include mentions in the message that will be sent to  a channel.  — item shape: {at_contact?: string, at_type?: "1"|"2", end_position?: int, start_position?: int}
   message: string # The message to be sent.
@@ -1887,7 +1952,7 @@ export def "chat-users-messages sendaChatMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a message
@@ -1904,6 +1969,7 @@ export def "chat-users-messages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --to-contact: string # The userId or email address of a chat contact to whom you previously sent the message.  Note: You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel respectively. 
   --to-channel: string # The channel Id of the channel where you would like to send the message.  You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel 
 ]: nothing -> any {
@@ -1913,7 +1979,7 @@ export def "chat-users-messages delete" [
   let full_url = (build-url $base $"/chat/users/($userId)/messages/($messageId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a message
@@ -1930,6 +1996,7 @@ export def "chat-users-messages editMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # The edited message.
   --to-channel: string # The Channel ID of the channel where you sent the message.<br>You must provide either `to_contact` or `to_channel` parameter in the API request.  Channel ID can be retrieved from List User's Channels API. 
   --to-contact: string # The email address of the contact to whom the message was sent.<br> You must provide either `to_contact` or `to_channel` parameter in the API request.
@@ -1942,7 +2009,7 @@ export def "chat-users-messages editMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search company contacts
@@ -1957,6 +2024,7 @@ export def "contacts searchCompanyContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --search-key: string # Provide the keyword - either first name, last name or email of the contact whom you have to search for.
   --query-presence-status: string # Set `query_presence_status` to `true` in order to include the presence status of a contact in the response.
@@ -1969,7 +2037,7 @@ export def "contacts searchCompanyContacts" [
   let full_url = (build-url $base "/contacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List groups
@@ -1984,6 +2052,7 @@ export def "groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<groups: table<id: string, name: string, total_members: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1991,7 +2060,7 @@ export def "groups groups" [
   let full_url = (build-url $base "/groups")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a group
@@ -2006,6 +2075,7 @@ export def "groups groupCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # Group name.
 ]: any -> record<id: string, name: string, total_members: int> {
@@ -2017,7 +2087,7 @@ export def "groups groupCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a group
@@ -2033,13 +2103,14 @@ export def "groups groupDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a group
@@ -2055,6 +2126,7 @@ export def "groups group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, name: string, total_members: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2062,7 +2134,7 @@ export def "groups group" [
   let full_url = (build-url $base $"/groups/($groupId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group
@@ -2078,6 +2150,7 @@ export def "groups groupUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Group name. It must be unique to one account and less than 128 characters.
 ]: any -> any {
   let input = $in
@@ -2088,7 +2161,7 @@ export def "groups groupUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get locked settings
@@ -2104,6 +2177,7 @@ export def "groups-lock-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string # Specify `meeting_security` as the value of this field if you would like to view security settings applied on a meeting hosted by the users in this group.
@@ -2114,7 +2188,7 @@ export def "groups-lock-settings get" [
   let full_url = (build-url $base $"/groups/($groupId)/lock_settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update locked settings
@@ -2136,6 +2210,7 @@ export def "groups-lock-settings groupLockedSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string # Specify `meeting_security` as the value of this field if you would like to view security settings applied on a meeting hosted by the users in this group.
@@ -2155,7 +2230,7 @@ export def "groups-lock-settings groupLockedSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List group members 
@@ -2171,6 +2246,7 @@ export def "groups-members groupMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -2182,7 +2258,7 @@ export def "groups-members groupMembers" [
   let full_url = (build-url $base $"/groups/($groupId)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add group members
@@ -2199,6 +2275,7 @@ export def "groups-members groupMembersCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # List of Group members — item shape: {email?: string, id?: string}
 ]: any -> record<added_at: string, ids: string> {
@@ -2210,7 +2287,7 @@ export def "groups-members groupMembersCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a group member
@@ -2227,13 +2304,14 @@ export def "groups-members groupMembersDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($groupId)/members/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group member
@@ -2250,6 +2328,7 @@ export def "groups-members updateAGroupMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   action: string@action-completer-1 # Specify the type of action to be performed:<br><br> `move`: Simultaneously remove a member from one group and move the member to a different group.<br> `set_primary`: Set a primary group for the user.
   --target-group-id: string # Can be retrieved by calling [GET /groups](https://marketplace.zoom.us/docs/api-reference/zoom-api/groups/groups) API.<br>  To move a user, use this field to specify the groupId of the group where the member is to be moved.<br>  To set a primary group for the user, provide the groupId of the group which is going to be the primary group.
@@ -2262,7 +2341,7 @@ export def "groups-members updateAGroupMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a group's settings
@@ -2278,6 +2357,7 @@ export def "groups-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the group.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the group.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the group.<br> (allows empty value)
@@ -2288,7 +2368,7 @@ export def "groups-settings get" [
   let full_url = (build-url $base $"/groups/($groupId)/settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group's settings
@@ -2311,6 +2391,7 @@ export def "groups-settings updateGroupSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string@option-completer-2 # allows empty value
@@ -2331,7 +2412,7 @@ export def "groups-settings updateGroupSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete virtual background files
@@ -2347,6 +2428,7 @@ export def "groups-settings-virtual-backgrounds delGroupVB" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-ids: string # Provide the id of the file that is to be deleted. To delete multiple files, provide comma separated values for this field.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2355,7 +2437,7 @@ export def "groups-settings-virtual-backgrounds delGroupVB" [
   let full_url = (build-url $base $"/groups/($groupId)/settings/virtual_backgrounds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload virtual background files
@@ -2371,6 +2453,7 @@ export def "groups-settings-virtual-backgrounds uploadGroupVB" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file-ids: string # Provide the id of the file that is to be deleted. To delete multiple files, provide comma separated values for this field.
   --file: string # Provide the file's path here.
@@ -2384,7 +2467,7 @@ export def "groups-settings-virtual-backgrounds uploadGroupVB" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List H.323/SIP devices
@@ -2399,6 +2482,7 @@ export def "h323-devices deviceList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -2410,7 +2494,7 @@ export def "h323-devices deviceList" [
   let full_url = (build-url $base "/h323/devices" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a H.323/SIP device
@@ -2425,6 +2509,7 @@ export def "h323-devices deviceCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   encryption: string@encryption-completer # Device encryption:<br>`auto` - auto.<br>`yes` - yes.<br>`no` - no.
   ip: string # Device IP.
@@ -2439,7 +2524,7 @@ export def "h323-devices deviceCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a H.323/SIP device
@@ -2455,13 +2540,14 @@ export def "h323-devices deviceDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/h323/devices/($deviceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a H.323/SIP device
@@ -2477,6 +2563,7 @@ export def "h323-devices deviceUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   encryption: string@encryption-completer # Device encryption:<br>`auto` - auto.<br>`yes` - yes.<br>`no` - no.
   ip: string # Device IP.
   name: string # Device name.
@@ -2490,7 +2577,7 @@ export def "h323-devices deviceUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send chatbot messages
@@ -2505,6 +2592,7 @@ export def "im-chat-messages sendchatbot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_id: string # Account ID of the authorized account.
   content: record # JSON template describing how the message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
   --is-markdown-support: oneof<nothing, bool> # **Optional**<br> Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
@@ -2521,7 +2609,7 @@ export def "im-chat-messages sendchatbot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a chatbot message
@@ -2537,6 +2625,7 @@ export def "im-chat-messages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   account_id: string # The AccountID of the Zoom account to which the message was sent. Retrieve this from the Chatbot request sent to your server as shown in the example [here]( https://marketplace.zoom.us/docs/guides/chatbots/sending-messages).
   robot_jid: string # The BotJID found in the Chat Subscription Section on the Features page of your App Dashboard.
@@ -2550,7 +2639,7 @@ export def "im-chat-messages delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a chatbot message
@@ -2566,6 +2655,7 @@ export def "im-chat-messages editChatbotMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   account_id: string # The AccountID of the Zoom account to which the message was sent. Retrieve this from the Chatbot request sent to your server as shown in the example [here]( https://marketplace.zoom.us/docs/guides/chatbots/sending-messages).
   content: record # JSON template describing how the edited message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
@@ -2581,7 +2671,7 @@ export def "im-chat-messages editChatbotMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get IM chat sessions
@@ -2598,6 +2688,7 @@ export def "im-chat-sessions imChatSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -2610,7 +2701,7 @@ export def "im-chat-sessions imChatSessions" [
   let full_url = (build-url $base "/im/chat/sessions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IM chat messages
@@ -2628,6 +2719,7 @@ export def "im-chat-sessions imChatMessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -2640,7 +2732,7 @@ export def "im-chat-sessions imChatMessages" [
   let full_url = (build-url $base $"/im/chat/sessions/($sessionId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List IM directory groups
@@ -2655,6 +2747,7 @@ export def "im-groups imGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2662,7 +2755,7 @@ export def "im-groups imGroups" [
   let full_url = (build-url $base "/im/groups")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an IM directory group
@@ -2677,6 +2770,7 @@ export def "im-groups imGroupCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --name: string # Group name: must be unique to one account.
   --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
@@ -2692,7 +2786,7 @@ export def "im-groups imGroupCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an IM directory group
@@ -2708,13 +2802,14 @@ export def "im-groups imGroupDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/im/groups/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an IM directory group
@@ -2730,6 +2825,7 @@ export def "im-groups imGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2737,7 +2833,7 @@ export def "im-groups imGroup" [
   let full_url = (build-url $base $"/im/groups/($groupId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an IM directory group
@@ -2753,6 +2849,7 @@ export def "im-groups imGroupUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Group name: must be unique to one account.
   --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
   --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
@@ -2767,7 +2864,7 @@ export def "im-groups imGroupUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List IM directory group members
@@ -2783,6 +2880,7 @@ export def "im-groups-members imGroupMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -2794,7 +2892,7 @@ export def "im-groups-members imGroupMembers" [
   let full_url = (build-url $base $"/im/groups/($groupId)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add IM directory group members
@@ -2811,6 +2909,7 @@ export def "im-groups-members imGroupMembersCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # List of IM group members. — item shape: {email?: string, id?: string}
 ]: any -> record<added_at: string, ids: string> {
@@ -2822,7 +2921,7 @@ export def "im-groups-members imGroupMembersCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an IM directory group member
@@ -2839,13 +2938,14 @@ export def "im-groups-members imGroupMembersDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/im/groups/($groupId)/members/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send IM messages
@@ -2862,6 +2962,7 @@ export def "im-users-me-chat-messages sendimmessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --chat-user: string # The email address (registered with Zoom) or the userId of the chat user.
   --message: string # IM message content.
@@ -2875,7 +2976,7 @@ export def "im-users-me-chat-messages sendimmessages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user’s IM messages
@@ -2893,6 +2994,7 @@ export def "im-users-chat-messages listimmessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --chat-user: string # Chat user's ID or email address.
   --channel: string # IM Channel's ID.
@@ -2906,7 +3008,7 @@ export def "im-users-chat-messages listimmessages" [
   let full_url = (build-url $base $"/im/users/($userId)/chat/messages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Use in-Meeting recording controls
@@ -2922,6 +3024,7 @@ export def "live-meetings-events inMeetingRecordingControl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --method: string # The method that you would like to control. The value of this field can be one of the following: * `recording.start`: Provide this value if you would like to start the recording.<br><br> * `recording.stop`: Provide this value if you would like to stop the recording.<br><br> * `recording.pause`: Provide this value if you would like to pause the recording.<br><br> * `recording.resume`: Provide this value if you would like to resume the recording that was previously paused.   
 ]: any -> any {
@@ -2933,7 +3036,7 @@ export def "live-meetings-events inMeetingRecordingControl" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a meeting
@@ -2949,6 +3052,7 @@ export def "meetings meetingDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
   --schedule-for-reminder: oneof<nothing, bool> # `true`: Notify host and alternative host about the meeting cancellation via email. `false`: Do not send any email notification.
   --cancel-meeting-reminder: string # `true`: Notify registrants about the meeting cancellation via email.   `false`: Do not send any email notification to meeting registrants.   The default value of this field is `false`.
@@ -2959,7 +3063,7 @@ export def "meetings meetingDelete" [
   let full_url = (build-url $base $"/meetings/($meetingId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a meeting
@@ -2975,6 +3079,7 @@ export def "meetings meeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Meeting Occurrence ID. Provide this field to view meeting details of a particular occurrence of the [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
   --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings). 
@@ -2985,7 +3090,7 @@ export def "meetings meeting" [
   let full_url = (build-url $base $"/meetings/($meetingId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a meeting
@@ -3001,6 +3106,7 @@ export def "meetings meetingUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # Meeting occurrence id. Support change of agenda, start_time, duration, settings: {host_video, participant_video, join_before_host, mute_upon_entry, waiting_room, watermark, auto_recording}
   --schedule-for: string # Email or userId if you want to schedule meeting for another user.
 ]: any -> any {
@@ -3013,7 +3119,7 @@ export def "meetings meetingUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Perform batch poll creation
@@ -3030,6 +3136,7 @@ export def "meetings-batch-polls createBatchPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --questions: list # item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
   --title: string # Meeting Poll Title.
@@ -3042,7 +3149,7 @@ export def "meetings-batch-polls createBatchPolls" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get meeting invitation
@@ -3058,6 +3165,7 @@ export def "meetings-invitation meetingInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<invitation: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3065,7 +3173,7 @@ export def "meetings-invitation meetingInvitation" [
   let full_url = (build-url $base $"/meetings/($meetingId)/invitation")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get live stream details
@@ -3081,6 +3189,7 @@ export def "meetings-livestream get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<page_url: string, stream_key: string, stream_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3088,7 +3197,7 @@ export def "meetings-livestream get" [
   let full_url = (build-url $base $"/meetings/($meetingId)/livestream")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a live stream
@@ -3104,6 +3213,7 @@ export def "meetings-livestream meetingLiveStreamUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-url: string # The livestream page URL. (format: uri)
   stream_key: string # Stream name and key.
   stream_url: string # Streaming URL.
@@ -3116,7 +3226,7 @@ export def "meetings-livestream meetingLiveStreamUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Live Stream Status
@@ -3133,6 +3243,7 @@ export def "meetings-livestream-status meetingLiveStreamStatusUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-2 # Update the status of a livestream.  The value can be one of the following:<br> `start`: Start a live stream. <br> `stop`: Stop an ongoing live stream.
   --settings: record # Update the settings of a live streaming session. The settings can only be updated for a live stream that has been stopped. You can not update the settings of an ongoing live stream. — shape: {active_speaker_name?: bool, display_name?: string}
 ]: any -> any {
@@ -3144,7 +3255,7 @@ export def "meetings-livestream-status meetingLiveStreamStatusUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List meeting polls
@@ -3160,6 +3271,7 @@ export def "meetings-polls meetingPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3167,7 +3279,7 @@ export def "meetings-polls meetingPolls" [
   let full_url = (build-url $base $"/meetings/($meetingId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a meeting poll
@@ -3184,6 +3296,7 @@ export def "meetings-polls meetingPollCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
@@ -3196,7 +3309,7 @@ export def "meetings-polls meetingPollCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a meeting poll
@@ -3213,13 +3326,14 @@ export def "meetings-polls meetingPollDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/meetings/($meetingId)/polls/($pollId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a meeting poll
@@ -3236,6 +3350,7 @@ export def "meetings-polls meetingPollGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3243,7 +3358,7 @@ export def "meetings-polls meetingPollGet" [
   let full_url = (build-url $base $"/meetings/($meetingId)/polls/($pollId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a meeting poll
@@ -3261,6 +3376,7 @@ export def "meetings-polls meetingPollUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> any {
@@ -3272,7 +3388,7 @@ export def "meetings-polls meetingPollUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete meeting recordings
@@ -3288,6 +3404,7 @@ export def "meetings-recordings recordingDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-3 # The recording delete actions:<br>`trash` - Move recording to trash.<br>`delete` - Delete recording permanently. (default: trash)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3296,7 +3413,7 @@ export def "meetings-recordings recordingDelete" [
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting recordings
@@ -3312,6 +3429,7 @@ export def "meetings-recordings recordingGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-fields: string # Get the `download_access_token` field for downloading meeting recordings.
   --ttl: int # Time to live (TTL) of the `download_access_token`. This is only valid if the `include_fields` query parameter contains `download_access_token`. The range is between 0-604800.
@@ -3322,7 +3440,7 @@ export def "meetings-recordings recordingGet" [
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recording registrants
@@ -3338,6 +3456,7 @@ export def "meetings-recordings-registrants meetingRecordingRegistrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -3350,7 +3469,7 @@ export def "meetings-recordings-registrants meetingRecordingRegistrants" [
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings/registrants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a recording registrant
@@ -3367,6 +3486,7 @@ export def "meetings-recordings-registrants meetingRecordingRegistrantCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --address: string # Registrant's address.
   --city: string # Registrant's city.
@@ -3394,7 +3514,7 @@ export def "meetings-recordings-registrants meetingRecordingRegistrantCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get registration questions
@@ -3410,6 +3530,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantsQuesti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3417,7 +3538,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantsQuesti
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings/registrants/questions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update registration questions
@@ -3435,6 +3556,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantQuestio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
   --questions: list # Array of Registrant Questions — item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
@@ -3446,7 +3568,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantQuestio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update registrant's status
@@ -3463,6 +3585,7 @@ export def "meetings-recordings-registrants-status meetingRecordingRegistrantSta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer-4
   --registrants: list # List of registrants — item shape: {id?: string}
 ]: any -> any {
@@ -3474,7 +3597,7 @@ export def "meetings-recordings-registrants-status meetingRecordingRegistrantSta
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get meeting recording settings
@@ -3490,6 +3613,7 @@ export def "meetings-recordings-settings recordingSettingUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<approval_type: int, authentication_domains: string, authentication_option: string, on_demand: bool, password: string, recording_authentication: bool, send_email_to_host: bool, share_recording: string, show_social_share_buttons: bool, topic: string, viewer_download: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3497,7 +3621,7 @@ export def "meetings-recordings-settings recordingSettingUpdate" [
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings/settings")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update meeting recording settings
@@ -3513,6 +3637,7 @@ export def "meetings-recordings-settings recordingSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --approval-type: int@approval-type-completer # Approval type for the registration.<br> `0`- Automatically approve the registration when a user registers.<br> `1` - Manually approve or deny the registration of a user.<br> `2` - No registration required to view the recording.
   --authentication-domains: string # Authentication domains.
   --authentication-option: string # Authentication Options.
@@ -3533,7 +3658,7 @@ export def "meetings-recordings-settings recordingSettingsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recover meeting recordings
@@ -3549,6 +3674,7 @@ export def "meetings-recordings-status recordingStatusUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-5
 ]: any -> any {
   let input = $in
@@ -3559,7 +3685,7 @@ export def "meetings-recordings-status recordingStatusUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a meeting recording file
@@ -3576,6 +3702,7 @@ export def "meetings-recordings recordingDeleteOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-3 # The recording delete actions:<br>`trash` - Move recording to trash.<br>`delete` - Delete recording permanently. (default: trash)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3584,7 +3711,7 @@ export def "meetings-recordings recordingDeleteOne" [
   let full_url = (build-url $base $"/meetings/($meetingId)/recordings/($recordingId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recover a single recording
@@ -3601,6 +3728,7 @@ export def "meetings-recordings-status recordingStatusUpdateOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-5
 ]: any -> any {
   let input = $in
@@ -3611,7 +3739,7 @@ export def "meetings-recordings-status recordingStatusUpdateOne" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List meeting registrants
@@ -3627,6 +3755,7 @@ export def "meetings-registrants meetingRegistrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
   --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
@@ -3640,7 +3769,7 @@ export def "meetings-registrants meetingRegistrants" [
   let full_url = (build-url $base $"/meetings/($meetingId)/registrants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add meeting registrant
@@ -3657,6 +3786,7 @@ export def "meetings-registrants meetingRegistrantCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-ids: string # Occurrence IDs. You can find these with the meeting get API. Multiple values separated by comma.
   --address: string # Registrant's address.
@@ -3688,7 +3818,7 @@ export def "meetings-registrants meetingRegistrantCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List registration questions 
@@ -3704,6 +3834,7 @@ export def "meetings-registrants-questions meetingRegistrantsQuestionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3711,7 +3842,7 @@ export def "meetings-registrants-questions meetingRegistrantsQuestionsGet" [
   let full_url = (build-url $base $"/meetings/($meetingId)/registrants/questions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update registration questions
@@ -3729,6 +3860,7 @@ export def "meetings-registrants-questions meetingRegistrantQuestionUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"}
   --questions: list # Array of Registrant Questions — item shape: {field_name?: "address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
@@ -3740,7 +3872,7 @@ export def "meetings-registrants-questions meetingRegistrantQuestionUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update registrant's status
@@ -3757,6 +3889,7 @@ export def "meetings-registrants-status meetingRegistrantStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
   action: string@action-completer-6 # Registrant Status:<br>`approve` - Approve registrant.<br>`cancel` - Cancel previously approved registrant's registration.<br>`deny` - Deny registrant.
   --registrants: list # List of registrants. — item shape: {email?: string, id?: string}
@@ -3770,7 +3903,7 @@ export def "meetings-registrants-status meetingRegistrantStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a meeting registrant
@@ -3787,6 +3920,7 @@ export def "meetings-registrants meetingregistrantdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurence ID.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3795,7 +3929,7 @@ export def "meetings-registrants meetingregistrantdelete" [
   let full_url = (build-url $base $"/meetings/($meetingId)/registrants/($registrantId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update meeting status
@@ -3811,6 +3945,7 @@ export def "meetings-status meetingStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-7 # `end` - End a meeting.<br> `recover` - [Recover](https://support.zoom.us/hc/en-us/articles/360038297111-Recover-a-deleted-meeting) a deleted meeting.
 ]: any -> any {
   let input = $in
@@ -3821,7 +3956,7 @@ export def "meetings-status meetingStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Zoom meetings client feedback
@@ -3836,6 +3971,7 @@ export def "metrics-client-feedback dashboardClientFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -3846,7 +3982,7 @@ export def "metrics-client-feedback dashboardClientFeedback" [
   let full_url = (build-url $base "/metrics/client/feedback" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get zoom meetings client feedback
@@ -3862,6 +3998,7 @@ export def "metrics-client-feedback dashboardClientFeedbackDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # format: date
   --qp-to: string # format: date
@@ -3874,7 +4011,7 @@ export def "metrics-client-feedback dashboardClientFeedbackDetail" [
   let full_url = (build-url $base $"/metrics/client/feedback/($feedbackId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List client meeting satisfaction
@@ -3889,6 +4026,7 @@ export def "metrics-client-satisfaction listMeetingSatisfaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # The start date for the query in “yyyy-mm-dd” format.  (format: date)
   --qp-to: string # The end date for the query in “yyyy-mm-dd” format.  (format: date)
@@ -3899,7 +4037,7 @@ export def "metrics-client-satisfaction listMeetingSatisfaction" [
   let full_url = (build-url $base "/metrics/client/satisfaction" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CRC port usage
@@ -3914,6 +4052,7 @@ export def "metrics-crc dashboardCRC" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -3924,7 +4063,7 @@ export def "metrics-crc dashboardCRC" [
   let full_url = (build-url $base "/metrics/crc" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IM metrics
@@ -3939,6 +4078,7 @@ export def "metrics-im dashboardIM" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -3951,7 +4091,7 @@ export def "metrics-im dashboardIM" [
   let full_url = (build-url $base "/metrics/im" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 25 Zoom Rooms with issues
@@ -3966,6 +4106,7 @@ export def "metrics-issues-zoomrooms dashboardIssueZoomRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -3976,7 +4117,7 @@ export def "metrics-issues-zoomrooms dashboardIssueZoomRoom" [
   let full_url = (build-url $base "/metrics/issues/zoomrooms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues of Zoom Rooms
@@ -3992,6 +4133,7 @@ export def "metrics-issues-zoomrooms dashboardIssueDetailZoomRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -4004,7 +4146,7 @@ export def "metrics-issues-zoomrooms dashboardIssueDetailZoomRoom" [
   let full_url = (build-url $base $"/metrics/issues/zoomrooms/($zoomroomId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meetings
@@ -4019,6 +4161,7 @@ export def "metrics-meetings dashboardMeetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
@@ -4033,7 +4176,7 @@ export def "metrics-meetings dashboardMeetings" [
   let full_url = (build-url $base "/metrics/meetings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting details
@@ -4049,6 +4192,7 @@ export def "metrics-meetings dashboardMeetingDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`pastOne` - Past one user meetings.<br>`live` - Live meetings. (default: live)
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string> {
@@ -4058,7 +4202,7 @@ export def "metrics-meetings dashboardMeetingDetail" [
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meeting participants
@@ -4074,6 +4218,7 @@ export def "metrics-meetings-participants dashboardMeetingParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`pastOne` - Past one user meetings.<br>`live` - Live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4086,7 +4231,7 @@ export def "metrics-meetings-participants dashboardMeetingParticipants" [
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meeting participants QoS
@@ -4102,6 +4247,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantsQOS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
@@ -4113,7 +4259,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantsQOS" [
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)/participants/qos" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get post meeting feedback
@@ -4129,6 +4275,7 @@ export def "metrics-meetings-participants-satisfaction participantFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -4140,7 +4287,7 @@ export def "metrics-meetings-participants-satisfaction participantFeedback" [
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)/participants/satisfaction" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sharing/recording details
@@ -4156,6 +4303,7 @@ export def "metrics-meetings-participants-sharing dashboardMeetingParticipantSha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4167,7 +4315,7 @@ export def "metrics-meetings-participants-sharing dashboardMeetingParticipantSha
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)/participants/sharing" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting participant QoS
@@ -4184,6 +4332,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantQOS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
 ]: nothing -> record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string> {
@@ -4193,7 +4342,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantQOS" [
   let full_url = (build-url $base $"/metrics/meetings/($meetingId)/participants/($participantId)/qos" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webinars
@@ -4208,6 +4357,7 @@ export def "metrics-webinars dashboardWebinars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
@@ -4221,7 +4371,7 @@ export def "metrics-webinars dashboardWebinars" [
   let full_url = (build-url $base "/metrics/webinars" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar details
@@ -4237,6 +4387,7 @@ export def "metrics-webinars dashboardWebinarDetail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string> {
@@ -4246,7 +4397,7 @@ export def "metrics-webinars dashboardWebinarDetail" [
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar participants
@@ -4262,6 +4413,7 @@ export def "metrics-webinars-participants dashboardWebinarParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4274,7 +4426,7 @@ export def "metrics-webinars-participants dashboardWebinarParticipants" [
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webinar participant QoS
@@ -4290,6 +4442,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantsQOS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
@@ -4301,7 +4454,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantsQOS" [
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)/participants/qos" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get post webinar feedback
@@ -4317,6 +4470,7 @@ export def "metrics-webinars-participants-satisfaction participantWebinarFeedbac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4328,7 +4482,7 @@ export def "metrics-webinars-participants-satisfaction participantWebinarFeedbac
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)/participants/satisfaction" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sharing/recording details
@@ -4344,6 +4498,7 @@ export def "metrics-webinars-participants-sharing dashboardWebinarParticipantSha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4355,7 +4510,7 @@ export def "metrics-webinars-participants-sharing dashboardWebinarParticipantSha
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)/participants/sharing" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar participant QoS
@@ -4372,6 +4527,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantQOS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
 ]: nothing -> record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string> {
@@ -4381,7 +4537,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantQOS" [
   let full_url = (build-url $base $"/metrics/webinars/($webinarId)/participants/($participantId)/qos" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Zoom Rooms
@@ -4396,6 +4552,7 @@ export def "metrics-zoomrooms dashboardZoomRooms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # The page number of the current page in the returned records. (default: 1)
@@ -4407,7 +4564,7 @@ export def "metrics-zoomrooms dashboardZoomRooms" [
   let full_url = (build-url $base "/metrics/zoomrooms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 25 issues of Zoom Rooms
@@ -4422,6 +4579,7 @@ export def "metrics-zoomrooms-issues dashboardZoomRoomIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -4432,7 +4590,7 @@ export def "metrics-zoomrooms-issues dashboardZoomRoomIssue" [
   let full_url = (build-url $base "/metrics/zoomrooms/issues" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Zoom Rooms details
@@ -4448,6 +4606,7 @@ export def "metrics-zoomrooms dashboardZoomRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -4460,7 +4619,7 @@ export def "metrics-zoomrooms dashboardZoomRoom" [
   let full_url = (build-url $base $"/metrics/zoomrooms/($zoomroomId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List past meeting's files
@@ -4476,6 +4635,7 @@ export def "past-meetings-files listPastMeetingFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4483,7 +4643,7 @@ export def "past-meetings-files listPastMeetingFiles" [
   let full_url = (build-url $base $"/past_meetings/($meetingId)/files")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List ended meeting instances
@@ -4499,6 +4659,7 @@ export def "past-meetings-instances pastMeetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4506,7 +4667,7 @@ export def "past-meetings-instances pastMeetings" [
   let full_url = (build-url $base $"/past_meetings/($meetingId)/instances")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List past meeting's poll results
@@ -4522,6 +4683,7 @@ export def "past-meetings-polls listPastMeetingPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4529,7 +4691,7 @@ export def "past-meetings-polls listPastMeetingPolls" [
   let full_url = (build-url $base $"/past_meetings/($meetingId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get past meeting details
@@ -4545,6 +4707,7 @@ export def "past-meetings pastMeetingDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<duration: int, end_time: string, host_id: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4552,7 +4715,7 @@ export def "past-meetings pastMeetingDetails" [
   let full_url = (build-url $base $"/past_meetings/($meetingUUID)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get past meeting participants
@@ -4568,6 +4731,7 @@ export def "past-meetings-participants pastMeetingParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -4578,7 +4742,7 @@ export def "past-meetings-participants pastMeetingParticipants" [
   let full_url = (build-url $base $"/past_meetings/($meetingUUID)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar absentees
@@ -4594,6 +4758,7 @@ export def "past-webinars-absentees webinarAbsentees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4605,7 +4770,7 @@ export def "past-webinars-absentees webinarAbsentees" [
   let full_url = (build-url $base $"/past_webinars/($WebinarUUID)/absentees" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List past webinar files
@@ -4621,6 +4786,7 @@ export def "past-webinars-files listPastWebinarFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4628,7 +4794,7 @@ export def "past-webinars-files listPastWebinarFiles" [
   let full_url = (build-url $base $"/past_webinars/($webinarId)/files")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List past webinar instances
@@ -4644,6 +4810,7 @@ export def "past-webinars-instances pastWebinars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4651,7 +4818,7 @@ export def "past-webinars-instances pastWebinars" [
   let full_url = (build-url $base $"/past_webinars/($webinarId)/instances")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webinar participants
@@ -4667,6 +4834,7 @@ export def "past-webinars-participants listWebinarParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -4677,7 +4845,7 @@ export def "past-webinars-participants listWebinarParticipants" [
   let full_url = (build-url $base $"/past_webinars/($webinarId)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List past webinar poll results
@@ -4693,6 +4861,7 @@ export def "past-webinars-polls listPastWebinarPollResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4700,7 +4869,7 @@ export def "past-webinars-polls listPastWebinarPollResults" [
   let full_url = (build-url $base $"/past_webinars/($webinarId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Q&A of past webinar
@@ -4716,6 +4885,7 @@ export def "past-webinars-qa listPastWebinarQA" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4723,7 +4893,7 @@ export def "past-webinars-qa listPastWebinarQA" [
   let full_url = (build-url $base $"/past_webinars/($webinarId)/qa")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an auto receptionist
@@ -4738,6 +4908,7 @@ export def "phone-auto-receptionists addAutoReceptionist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Provide a name to help identify the auto receptionist.
   --site-id: string # Unique identifier of the site where the auto receptionist is to be assigned. This field is required only if you have [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) enabled.
@@ -4750,7 +4921,7 @@ export def "phone-auto-receptionists addAutoReceptionist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update auto receptionist details
@@ -4766,6 +4937,7 @@ export def "phone-auto-receptionists updateAutoReceptionist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --extension-number: int # Extension number to be assigned to the auto receptionist. If site code is enabled, provide the short extension number instead.
   --name: string # Display name of the auto receptionist.
@@ -4778,7 +4950,7 @@ export def "phone-auto-receptionists updateAutoReceptionist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign all phone numbers
@@ -4794,6 +4966,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAllPhoneNumsAutoRecep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4801,7 +4974,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAllPhoneNumsAutoRecep
   let full_url = (build-url $base $"/phone/auto_receptionists/($autoReceptionistId)/phone_numbers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign phone numbers
@@ -4818,6 +4991,7 @@ export def "phone-auto-receptionists-phone-numbers assignPhoneNumbersAutoRecepti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # Provide either the unique identifier of the Phone Number  in the `id` field or provide the phone number in the `number` field. — item shape: {id?: string, number?: string}
 ]: any -> any {
@@ -4829,7 +5003,7 @@ export def "phone-auto-receptionists-phone-numbers assignPhoneNumbersAutoRecepti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a phone number
@@ -4846,6 +5020,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAPhoneNumAutoReceptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4853,7 +5028,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAPhoneNumAutoReceptio
   let full_url = (build-url $base $"/phone/auto_receptionists/($autoReceptionistId)/phone_numbers/($phoneNumberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List blocked lists
@@ -4868,6 +5043,7 @@ export def "phone-blocked-list listBlockedList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The total number of records returned from a single API call. (default: 30)
@@ -4878,7 +5054,7 @@ export def "phone-blocked-list listBlockedList" [
   let full_url = (build-url $base "/phone/blocked_list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a blocked list
@@ -4893,6 +5069,7 @@ export def "phone-blocked-list addAnumberToBlockedList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound.<br> `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users.<br> `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
   --comment: string # Provide a comment to help you identify the blocked number or prefix.
@@ -4908,7 +5085,7 @@ export def "phone-blocked-list addAnumberToBlockedList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a blocked list
@@ -4924,6 +5101,7 @@ export def "phone-blocked-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4931,7 +5109,7 @@ export def "phone-blocked-list delete" [
   let full_url = (build-url $base $"/phone/blocked_list/($blockedListId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get blocked list details
@@ -4947,6 +5125,7 @@ export def "phone-blocked-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4954,7 +5133,7 @@ export def "phone-blocked-list get" [
   let full_url = (build-url $base $"/phone/blocked_list/($blockedListId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a blocked list
@@ -4970,6 +5149,7 @@ export def "phone-blocked-list updateBlockedList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound.<br> `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users.<br> `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
   --comment: string # Provide a comment to help you identify the blocked number or prefix.
@@ -4985,7 +5165,7 @@ export def "phone-blocked-list updateBlockedList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add BYOC phone numbers
@@ -5000,6 +5180,7 @@ export def "phone-byoc-numbers addBYOCNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   carrier: string # Name of the carrier.
   phone_numbers: list # Phone number(s) to be added to Zoom. The value should be in e164 format.
@@ -5013,7 +5194,7 @@ export def "phone-byoc-numbers addBYOCNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account's call logs
@@ -5028,6 +5209,7 @@ export def "phone-call-logs accountCallLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --qp-from: string # Start date from which you would like to get the call logs. The start date should be within past six months. <br>  The API only returns data pertaining to a month. Thus, the date range(defined using "from" and "to" fields) for which the call logs are to be returned must not exceed a month.
@@ -5044,7 +5226,7 @@ export def "phone-call-logs accountCallLogs" [
   let full_url = (build-url $base "/phone/call_logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List call queues
@@ -5059,6 +5241,7 @@ export def "phone-call-queues listCallQueues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned from a single API call. (default: 30)
@@ -5069,7 +5252,7 @@ export def "phone-call-queues listCallQueues" [
   let full_url = (build-url $base "/phone/call_queues" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a call queue
@@ -5085,6 +5268,7 @@ export def "phone-call-queues createCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description for the Call Queue.
   --extension-number: int # Phone extension number for the site.<br>  If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number..
@@ -5100,7 +5284,7 @@ export def "phone-call-queues createCallQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a call queue
@@ -5116,6 +5300,7 @@ export def "phone-call-queues delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5123,7 +5308,7 @@ export def "phone-call-queues delete" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get call queue details
@@ -5139,6 +5324,7 @@ export def "phone-call-queues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, name: string, phone_numbers: table<id: string, number: string, source: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5146,7 +5332,7 @@ export def "phone-call-queues get" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update call queue details
@@ -5162,6 +5348,7 @@ export def "phone-call-queues updateCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description for the Call Queue.
   --extension-number: int # Phone extension number for the site.<br>  If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number.
@@ -5178,7 +5365,7 @@ export def "phone-call-queues updateCallQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change call queue manager
@@ -5194,6 +5381,7 @@ export def "phone-call-queues-manager changeCallQueueManager" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --member-id: string # Unique Identifier (userId) or email address of the user who will be the new call queue manager.
 ]: any -> any {
@@ -5205,7 +5393,7 @@ export def "phone-call-queues-manager changeCallQueueManager" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign all members
@@ -5221,6 +5409,7 @@ export def "phone-call-queues-members unassignAllMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5228,7 +5417,7 @@ export def "phone-call-queues-members unassignAllMembers" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)/members")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add members to a call queue
@@ -5245,6 +5434,7 @@ export def "phone-call-queues-members addMembersToCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: record # A maximum of 10 members can be added at a time. — shape: {common_area_phone_ids?: list, users?: list}
 ]: any -> record {
@@ -5256,7 +5446,7 @@ export def "phone-call-queues-members addMembersToCallQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a member
@@ -5273,6 +5463,7 @@ export def "phone-call-queues-members unassignMemberFromCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5280,7 +5471,7 @@ export def "phone-call-queues-members unassignMemberFromCallQueue" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)/members/($memberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unassign all phone numbers
@@ -5296,6 +5487,7 @@ export def "phone-call-queues-phone-numbers unassignAPhoneNumCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5303,7 +5495,7 @@ export def "phone-call-queues-phone-numbers unassignAPhoneNumCallQueue" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)/phone_numbers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign numbers to a call queue
@@ -5320,6 +5512,7 @@ export def "phone-call-queues-phone-numbers assignPhoneToCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # Provide either the `id` or the `number` field. Only a max of 5 numbers can be assigned to a call queue at a time. — item shape: {id?: string, number?: string}
 ]: any -> any {
@@ -5331,7 +5524,7 @@ export def "phone-call-queues-phone-numbers assignPhoneToCallQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a phone number
@@ -5348,6 +5541,7 @@ export def "phone-call-queues-phone-numbers unAssignPhoneNumCallQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5355,7 +5549,7 @@ export def "phone-call-queues-phone-numbers unAssignPhoneNumCallQueue" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)/phone_numbers/($phoneNumberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get call queue recordings
@@ -5371,6 +5565,7 @@ export def "phone-call-queues-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -5383,7 +5578,7 @@ export def "phone-call-queues-recordings get" [
   let full_url = (build-url $base $"/phone/call_queues/($callQueueId)/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List calling plans
@@ -5398,6 +5593,7 @@ export def "phone-calling-plans listCallingPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<calling_plans: table<assigned: int, available: int, name: string, subscribed: int, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5405,7 +5601,7 @@ export def "phone-calling-plans listCallingPlans" [
   let full_url = (build-url $base "/phone/calling_plans")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List common area phones
@@ -5420,6 +5616,7 @@ export def "phone-common-area-phones listCommonAreaPhones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The total number of records returned from a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -5430,7 +5627,7 @@ export def "phone-common-area-phones listCommonAreaPhones" [
   let full_url = (build-url $base "/phone/common_area_phones" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a common area phone
@@ -5445,6 +5642,7 @@ export def "phone-common-area-phones addCommonAreaPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description for the common area phone.
   display_name: string # Display name of the Common area phone.
@@ -5463,7 +5661,7 @@ export def "phone-common-area-phones addCommonAreaPhone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a common area phone
@@ -5479,6 +5677,7 @@ export def "phone-common-area-phones delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5486,7 +5685,7 @@ export def "phone-common-area-phones delete" [
   let full_url = (build-url $base $"/phone/common_area_phones/($commonAreaPhoneId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get common area phone details
@@ -5502,6 +5701,7 @@ export def "phone-common-area-phones get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<device_type: string, id: string, mac_address: string, name: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5509,7 +5709,7 @@ export def "phone-common-area-phones get" [
   let full_url = (build-url $base $"/phone/common_area_phones/($commonAreaPhoneId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update common area phone
@@ -5525,6 +5725,7 @@ export def "phone-common-area-phones updateCommonAreaPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --display-name: string # Display name of the common area phone.
   --extension-number: int # Extension number of the phone. If site code is enabled, provide short extension number instead.
@@ -5539,7 +5740,7 @@ export def "phone-common-area-phones updateCommonAreaPhone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change main company number
@@ -5554,6 +5755,7 @@ export def "phone-company-number changeMainCompanyNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-number: string # Provide either the unique identifier of the phone number (id) or the phone number itself in e164 format (e.g: +199955500123).
 ]: any -> any {
@@ -5565,7 +5767,7 @@ export def "phone-company-number changeMainCompanyNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List devices
@@ -5580,6 +5782,7 @@ export def "phone-devices listPhoneDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-4 # State of the device. The value should be either `assigned` to list devices that have been assigned to user(s) or `unassigned` to list devices that have not yet been assigned to any user in the Zoom account.
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -5591,7 +5794,7 @@ export def "phone-devices listPhoneDevices" [
   let full_url = (build-url $base "/phone/devices" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a device
@@ -5606,6 +5809,7 @@ export def "phone-devices addPhoneDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assigned-to: string # User ID or email address of the user to whom this device is to be assigned. The User ID and the email of the user can be retrieved using the [List Users](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/users) API.
   display_name: string # Display name of the desk phone.
@@ -5621,7 +5825,7 @@ export def "phone-devices addPhoneDevice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a device
@@ -5637,6 +5841,7 @@ export def "phone-devices delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5644,7 +5849,7 @@ export def "phone-devices delete" [
   let full_url = (build-url $base $"/phone/devices/($deviceId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get device details
@@ -5660,6 +5865,7 @@ export def "phone-devices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<assignee: record<extension_number: int, id: string, name: string>, device_type: string, display_name: string, id: string, mac_address: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5667,7 +5873,7 @@ export def "phone-devices get" [
   let full_url = (build-url $base $"/phone/devices/($deviceId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a device
@@ -5683,6 +5889,7 @@ export def "phone-devices updateADevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assigned-to: string # User ID or email address of the user to whom this device is to be assigned. The User ID and the email of the user can be retrieved using the [List Users](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/users) API.
   --display-name: string # Display name of the desk phone.
@@ -5696,7 +5903,7 @@ export def "phone-devices updateADevice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List call logs
@@ -5711,6 +5918,7 @@ export def "phone-metrics-call-logs listCallLogsMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date for the report in `yyyy-mm-dd` format. Specify a 30 day range using the `from` and `to` parameters as the response provides a maximum of a month worth of data per API request.
   --qp-to: string # End date for the report in `yyyy-mm-dd` format.
@@ -5725,7 +5933,7 @@ export def "phone-metrics-call-logs listCallLogsMetrics" [
   let full_url = (build-url $base "/phone/metrics/call_logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get call QoS
@@ -5741,6 +5949,7 @@ export def "phone-metrics-call-logs-qos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<call_id: string, callee_qos: record<receiving: list<record>, sending: list<record>>, caller_qos: record<receiving: list<record>, sending: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5748,7 +5957,7 @@ export def "phone-metrics-call-logs-qos get" [
   let full_url = (build-url $base $"/phone/metrics/call_logs/($callId)/qos")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get call details from call log
@@ -5764,6 +5973,7 @@ export def "phone-metrics-call-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<call_id: string, callee: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, caller: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, date_time: string, direction: string, duration: int, mos: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5771,7 +5981,7 @@ export def "phone-metrics-call-logs get" [
   let full_url = (build-url $base $"/phone/metrics/call_logs/($call_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List phone numbers
@@ -5786,6 +5996,7 @@ export def "phone-numbers listAccountPhoneNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --type: string@type-completer-5 # Query response by number assignment. The value can be one of the following: <br> `assigned`: The number has been assigned to either a user, a call queue, an auto-receptionist or a common area phone in an account. <br>`unassigned`: The number is not assigned to anyone.<br> `all`: Include both assigned and unassigned numbers in the response.<br> `byoc`: Include Bring Your Own Carrier (BYOC) numbers only in the response.
@@ -5801,7 +6012,7 @@ export def "phone-numbers listAccountPhoneNumbers" [
   let full_url = (build-url $base "/phone/numbers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get phone number details
@@ -5817,6 +6028,7 @@ export def "phone-numbers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<assignee: record<extension_number: int, id: string, name: string, type: string>, capability: list<string>, display_name: string, id: string, location: string, number: string, number_type: string, site: record<id: string, name: string>, source: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5824,7 +6036,7 @@ export def "phone-numbers get" [
   let full_url = (build-url $base $"/phone/numbers/($numberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update phone number details
@@ -5840,6 +6052,7 @@ export def "phone-numbers updatePhoneNumberDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --capability: list # Phone number capability. Values: `outgoing` or `incoming`. Add one or both.
   --display-name: string # Phone number display name.
@@ -5852,7 +6065,7 @@ export def "phone-numbers updatePhoneNumberDetails" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get call recordings
@@ -5867,6 +6080,7 @@ export def "phone-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. The default is **30**, and the maximum is **100**.
   --next-page-token: string # The current page number of returned records.
@@ -5882,7 +6096,7 @@ export def "phone-recordings get" [
   let full_url = (build-url $base "/phone/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get operation logs report
@@ -5897,6 +6111,7 @@ export def "phone-reports-operationlogs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report provides only one month worth of data per API request.
   --qp-to: string # End date in 'yyyy-mm-dd' format.
@@ -5910,7 +6125,7 @@ export def "phone-reports-operationlogs get" [
   let full_url = (build-url $base "/phone/reports/operationlogs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List setting templates
@@ -5925,6 +6140,7 @@ export def "phone-setting-templates listSettingTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # Number of records returns within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -5936,7 +6152,7 @@ export def "phone-setting-templates listSettingTemplates" [
   let full_url = (build-url $base "/phone/setting_templates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a setting template
@@ -5951,6 +6167,7 @@ export def "phone-setting-templates addSettingTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # A description of the template.
   name: string # The name of the template.
@@ -5965,7 +6182,7 @@ export def "phone-setting-templates addSettingTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get setting template details
@@ -5981,6 +6198,7 @@ export def "phone-setting-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field to use to filter the response. For example, if you provide "description" as the value of the field, you will get a response similar to the following: {“description”: “template description”}.
 ]: nothing -> record<description: string, id: string, name: string, policy: record<ad_hoc_call_recording: record<enable: bool, recording_start_prompt: bool, recording_transcription: bool>, auto_call_recording: record<enable: bool, recording_calls: string, recording_start_prompt: bool, recording_transcription: bool>, sms: record<enable: bool, international_sms: bool>, voicemail: record<allow_transcription: bool, enable: bool>>, profile: record<area_code: string, country: string>, type: string, user_settings: record<audio_prompt_language: string, block_calls_without_caller_id: bool, call_handling: record<business_hours: record, close_hours: record>, desk_phone: record<pin_code: string>, hold_music: string>> {
@@ -5990,7 +6208,7 @@ export def "phone-setting-templates get" [
   let full_url = (build-url $base $"/phone/setting_templates/($templateId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a setting template
@@ -6009,6 +6227,7 @@ export def "phone-setting-templates updateSettingTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # The description of the template.
   --name: string # Specify the name of the template.
@@ -6024,7 +6243,7 @@ export def "phone-setting-templates updateSettingTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shared line groups
@@ -6039,6 +6258,7 @@ export def "phone-shared-line-groups listSharedLineGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -6049,7 +6269,7 @@ export def "phone-shared-line-groups listSharedLineGroups" [
   let full_url = (build-url $base "/phone/shared_line_groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a shared line group
@@ -6064,6 +6284,7 @@ export def "phone-shared-line-groups createASharedLineGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Provide a description for the shared line group.
   display_name: string # Provide a name to help identify the shared line group.
@@ -6078,7 +6299,7 @@ export def "phone-shared-line-groups createASharedLineGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a shared line group
@@ -6094,6 +6315,7 @@ export def "phone-shared-line-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6101,7 +6323,7 @@ export def "phone-shared-line-groups delete" [
   let full_url = (build-url $base $"/phone/shared_line_groups/($sharedLineGroupId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a shared line group
@@ -6117,6 +6339,7 @@ export def "phone-shared-line-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<display_name: string, extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, phone_numbers: table<id: string, number: string>, primary_number: string, site: record<id: string, name: string>, status: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6124,7 +6347,7 @@ export def "phone-shared-line-groups get" [
   let full_url = (build-url $base $"/phone/shared_line_groups/($sharedLineGroupId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a shared line group
@@ -6141,6 +6364,7 @@ export def "phone-shared-line-groups updateASharedLineGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --display-name: string # Display Name of the Shared Line Group.
   --extension-number: int # Extension number assigned to the Shared Line Group.
@@ -6156,7 +6380,7 @@ export def "phone-shared-line-groups updateASharedLineGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign members of a shared line group
@@ -6172,6 +6396,7 @@ export def "phone-shared-line-groups-members delete-by-sharedLineGroupId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6179,7 +6404,7 @@ export def "phone-shared-line-groups-members delete-by-sharedLineGroupId" [
   let full_url = (build-url $base $"/phone/shared_line_groups/($sharedLineGroupId)/members")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add members to a shared line group
@@ -6196,6 +6421,7 @@ export def "phone-shared-line-groups-members addMembersToSharedLineGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: record # Members can comprise of users on the account as well as common area phones. You can add a maximum of 10 members at once. — shape: {common_area_phone_ids?: list, users?: list}
 ]: any -> any {
@@ -6207,7 +6433,7 @@ export def "phone-shared-line-groups-members addMembersToSharedLineGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a member from a shared line group
@@ -6224,13 +6450,14 @@ export def "phone-shared-line-groups-members delete-by-sharedLineGroupId-memberI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/phone/shared_line_groups/($sharedLineGroupId)/members/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign phone numbers
@@ -6247,6 +6474,7 @@ export def "phone-shared-line-groups-phone-numbers assignPhoneNumbersSLG" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --phone-numbers: list # Phone number(s) to be assigned to the Shared Line Group. — item shape: {id?: string, number?: string}
 ]: any -> any {
   let input = $in
@@ -6257,7 +6485,7 @@ export def "phone-shared-line-groups-phone-numbers assignPhoneNumbersSLG" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a phone number
@@ -6274,13 +6502,14 @@ export def "phone-shared-line-groups-phone-numbers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/phone/shared_line_groups/($sharedLineGroupId)/phone_numbers/($phoneNumberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List BYOC SIP trunks
@@ -6295,6 +6524,7 @@ export def "phone-sip-trunk-trunks listBYOCSIPTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -6305,7 +6535,7 @@ export def "phone-sip-trunk-trunks listBYOCSIPTrunk" [
   let full_url = (build-url $base "/phone/sip_trunk/trunks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List phone sites
@@ -6320,6 +6550,7 @@ export def "phone-sites listPhoneSites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -6330,7 +6561,7 @@ export def "phone-sites listPhoneSites" [
   let full_url = (build-url $base "/phone/sites" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a phone site
@@ -6347,6 +6578,7 @@ export def "phone-sites createPhoneSite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   auto_receptionist_name: string # Display name of the [auto-receptionist](https://support.zoom.us/hc/en-us/articles/360021121312-Managing-Auto-Receptionists-and-Integrated-Voice-Response-IVR-) for the site.
   --default-emergency-address: record # shape: {address_line1: string, address_line2?: string, city: string, country: string, state_code: string, zip: string}
@@ -6362,7 +6594,7 @@ export def "phone-sites createPhoneSite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a phone site
@@ -6378,6 +6610,7 @@ export def "phone-sites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --transfer-site-id: string # The Site ID of another site where the assets of the current site (users, numbers and phones) can be transferred to.
 ]: nothing -> any {
@@ -6387,7 +6620,7 @@ export def "phone-sites delete" [
   let full_url = (build-url $base $"/phone/sites/($siteId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get phone site details
@@ -6403,6 +6636,7 @@ export def "phone-sites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<country: record<code: string, name: string>, id: string, main_auto_receptionist: record<extension_id: string, extension_number: int, id: string, name: string>, name: string, short_extension: record<length: int>, site_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6410,7 +6644,7 @@ export def "phone-sites get" [
   let full_url = (build-url $base $"/phone/sites/($siteId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update phone site details
@@ -6426,6 +6660,7 @@ export def "phone-sites updateSiteDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # Name of the site.
   --site-code: int # [Site Code](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b).
@@ -6438,7 +6673,7 @@ export def "phone-sites updateSiteDetails" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List phone users
@@ -6453,6 +6688,7 @@ export def "phone-users listPhoneUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned from a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -6464,7 +6700,7 @@ export def "phone-users listPhoneUsers" [
   let full_url = (build-url $base "/phone/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's profile
@@ -6480,6 +6716,7 @@ export def "phone-users phoneUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<calling_plan: table<type: int>, email: string, extension_number: int, id: string, phone_numbers: table<id: string, number: string>, phone_user_id: string, site_admin: bool, site_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6487,7 +6724,7 @@ export def "phone-users phoneUser" [
   let full_url = (build-url $base $"/phone/users/($userId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user's profile
@@ -6503,6 +6740,7 @@ export def "phone-users updateUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --extension-number: string # The extension number of the user. The number must be complete (i.e. site number + short extension).
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672) where the user should be moved or assigned. 
@@ -6515,7 +6753,7 @@ export def "phone-users updateUserProfile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user's call logs
@@ -6531,6 +6769,7 @@ export def "phone-users-call-logs phoneUserCallLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
@@ -6546,7 +6785,7 @@ export def "phone-users-call-logs phoneUserCallLogs" [
   let full_url = (build-url $base $"/phone/users/($userId)/call_logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user's call log
@@ -6563,6 +6802,7 @@ export def "phone-users-call-logs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6570,7 +6810,7 @@ export def "phone-users-call-logs delete" [
   let full_url = (build-url $base $"/phone/users/($userId)/call_logs/($callLogId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign calling plan to a user
@@ -6587,6 +6827,7 @@ export def "phone-users-calling-plans assignCallingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --calling-plans: list # item shape: {type?: string}
 ]: any -> any {
@@ -6598,7 +6839,7 @@ export def "phone-users-calling-plans assignCallingPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign user's calling plan
@@ -6615,6 +6856,7 @@ export def "phone-users-calling-plans unassignCallingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6622,7 +6864,7 @@ export def "phone-users-calling-plans unassignCallingPlan" [
   let full_url = (build-url $base $"/phone/users/($userId)/calling_plans/($type)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign phone number to user
@@ -6639,6 +6881,7 @@ export def "phone-users-phone-numbers assignPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # item shape: {id?: string, number?: string}
 ]: any -> record<phone_numbers: table<id: string, number: string>> {
@@ -6650,7 +6893,7 @@ export def "phone-users-phone-numbers assignPhoneNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign phone number
@@ -6667,6 +6910,7 @@ export def "phone-users-phone-numbers UnassignPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6674,7 +6918,7 @@ export def "phone-users-phone-numbers UnassignPhoneNumber" [
   let full_url = (build-url $base $"/phone/users/($userId)/phone_numbers/($phoneNumberId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's recordings
@@ -6690,6 +6934,7 @@ export def "phone-users-recordings phoneUserRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -6702,7 +6947,7 @@ export def "phone-users-recordings phoneUserRecordings" [
   let full_url = (build-url $base $"/phone/users/($userId)/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's settings
@@ -6718,6 +6963,7 @@ export def "phone-users-settings phoneUserSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<area_code: string, company_number: string, desk_phone: record<keys_positions: record<primary_number: string>>, outbound_caller: record<number: string>, outbound_caller_ids: record<is_default: bool, name: string, number: string>, voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6725,7 +6971,7 @@ export def "phone-users-settings phoneUserSettings" [
   let full_url = (build-url $base $"/phone/users/($userId)/settings")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove shared access
@@ -6742,6 +6988,7 @@ export def "phone-users-settings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --shared-id: string # Required only for voicemail setting type.
 ]: nothing -> any {
@@ -6751,7 +6998,7 @@ export def "phone-users-settings delete" [
   let full_url = (build-url $base $"/phone/users/($userId)/settings/($settingType)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update shared access
@@ -6769,6 +7016,7 @@ export def "phone-users-settings updateUserSetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --voice-mail: record # Update the voicemail setting. — shape: {access_user_id?: string, delete?: bool, download?: bool, shared_id?: string}
 ]: any -> any {
@@ -6780,7 +7028,7 @@ export def "phone-users-settings updateUserSetting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set up shared access
@@ -6798,6 +7046,7 @@ export def "phone-users-settings addUserSetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --voice-mail: record # Update the voicemail setting. — shape: {access_user_id?: string, delete?: bool, download?: bool}
 ]: any -> record<voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>> {
@@ -6809,7 +7058,7 @@ export def "phone-users-settings addUserSetting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user's voicemails
@@ -6825,6 +7074,7 @@ export def "phone-users-voice-mails phoneUserVoiceMails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --status: string@status-completer-2 # Status of the voice mail (default: all)
@@ -6838,7 +7088,7 @@ export def "phone-users-voice-mails phoneUserVoiceMails" [
   let full_url = (build-url $base $"/phone/users/($userId)/voice_mails" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a voicemail
@@ -6854,6 +7104,7 @@ export def "phone-voice-mails delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6861,7 +7112,7 @@ export def "phone-voice-mails delete" [
   let full_url = (build-url $base $"/phone/voice_mails/($voicemailId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sign In / sign out activity report
@@ -6876,6 +7127,7 @@ export def "report-activities reportSignInSignOutActivities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date for which you would like to view the activity logs report. Using the `from` and `to` parameters, specify a monthly date range for the report as the API only provides one month worth of data in one request. The specified date range should fall within the last six months. (format: date)
   --qp-to: string # End date up to which you would like to view the activity logs report. (format: date)
@@ -6888,7 +7140,7 @@ export def "report-activities reportSignInSignOutActivities" [
   let full_url = (build-url $base "/report/activities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cloud recording usage report
@@ -6903,6 +7155,7 @@ export def "report-cloud-recording reportCloudRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -6913,7 +7166,7 @@ export def "report-cloud-recording reportCloudRecording" [
   let full_url = (build-url $base "/report/cloud_recording" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get daily usage report
@@ -6928,6 +7181,7 @@ export def "report-daily reportDaily" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --year: int # Year for this report
   --month: int # Month for this report
@@ -6938,7 +7192,7 @@ export def "report-daily reportDaily" [
   let full_url = (build-url $base "/report/daily" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting detail reports
@@ -6954,6 +7208,7 @@ export def "report-meetings reportMeetingDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6961,7 +7216,7 @@ export def "report-meetings reportMeetingDetails" [
   let full_url = (build-url $base $"/report/meetings/($meetingId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting participant reports
@@ -6977,6 +7232,7 @@ export def "report-meetings-participants reportMeetingParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -6988,7 +7244,7 @@ export def "report-meetings-participants reportMeetingParticipants" [
   let full_url = (build-url $base $"/report/meetings/($meetingId)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting poll reports
@@ -7004,6 +7260,7 @@ export def "report-meetings-polls reportMeetingPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7011,7 +7268,7 @@ export def "report-meetings-polls reportMeetingPolls" [
   let full_url = (build-url $base $"/report/meetings/($meetingId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get operation logs report
@@ -7026,6 +7283,7 @@ export def "report-operationlogs reportOperationLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -7039,7 +7297,7 @@ export def "report-operationlogs reportOperationLogs" [
   let full_url = (build-url $base "/report/operationlogs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get telephone reports
@@ -7054,6 +7312,7 @@ export def "report-telephone reportTelephone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-8 # Audio types:<br>`1` - Toll-free Call-in & Call-out.<br>`2` - Toll <br> `3` - SIP Connected Audio (default: 1)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
@@ -7068,7 +7327,7 @@ export def "report-telephone reportTelephone" [
   let full_url = (build-url $base "/report/telephone" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get active/inactive host reports
@@ -7083,6 +7342,7 @@ export def "report-users reportUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-9 # Active or inactive hosts.<br>`active` - Active hosts. <br>`inactive` - Inactive hosts.
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
@@ -7097,7 +7357,7 @@ export def "report-users reportUsers" [
   let full_url = (build-url $base "/report/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting reports
@@ -7113,6 +7373,7 @@ export def "report-users-meetings reportMeetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
@@ -7126,7 +7387,7 @@ export def "report-users-meetings reportMeetings" [
   let full_url = (build-url $base $"/report/users/($userId)/meetings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar detail reports
@@ -7142,6 +7403,7 @@ export def "report-webinars reportWebinarDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7149,7 +7411,7 @@ export def "report-webinars reportWebinarDetails" [
   let full_url = (build-url $base $"/report/webinars/($webinarId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar participant reports
@@ -7165,6 +7427,7 @@ export def "report-webinars-participants reportWebinarParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -7176,7 +7439,7 @@ export def "report-webinars-participants reportWebinarParticipants" [
   let full_url = (build-url $base $"/report/webinars/($webinarId)/participants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar poll reports
@@ -7192,6 +7455,7 @@ export def "report-webinars-polls reportWebinarPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7199,7 +7463,7 @@ export def "report-webinars-polls reportWebinarPolls" [
   let full_url = (build-url $base $"/report/webinars/($webinarId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webinar Q&A report
@@ -7215,6 +7479,7 @@ export def "report-webinars-qa reportWebinarQA" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7222,7 +7487,7 @@ export def "report-webinars-qa reportWebinarQA" [
   let full_url = (build-url $base $"/report/webinars/($webinarId)/qa")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List roles
@@ -7237,6 +7502,7 @@ export def "roles roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7244,7 +7510,7 @@ export def "roles roles" [
   let full_url = (build-url $base "/roles")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a role
@@ -7259,6 +7525,7 @@ export def "roles createRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description of the role.
   --name: string # Name of the role.
@@ -7272,7 +7539,7 @@ export def "roles createRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a role
@@ -7288,6 +7555,7 @@ export def "roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7295,7 +7563,7 @@ export def "roles delete" [
   let full_url = (build-url $base $"/roles/($roleId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get role information
@@ -7311,6 +7579,7 @@ export def "roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<description: string, id: string, name: string, privileges: list<string>, sub_account_privileges: record<second_level: int>, total_members: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7318,7 +7587,7 @@ export def "roles get" [
   let full_url = (build-url $base $"/roles/($roleId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update role information
@@ -7335,6 +7604,7 @@ export def "roles updateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description of the role.
   --id: string # Role Id.
@@ -7351,7 +7621,7 @@ export def "roles updateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List members in a role
@@ -7367,6 +7637,7 @@ export def "roles-members roleMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-count: string # The number of pages returned for this request.
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -7379,7 +7650,7 @@ export def "roles-members roleMembers" [
   let full_url = (build-url $base $"/roles/($roleId)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign a role
@@ -7396,6 +7667,7 @@ export def "roles-members AddRoleMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # Array of userId/user email of users to whom you would like to assign this role. Upto 30 users can be assigned a role at once. — item shape: {email?: string, id?: string}
 ]: any -> record<add_at: string, ids: string> {
@@ -7407,7 +7679,7 @@ export def "roles-members AddRoleMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign a role
@@ -7424,13 +7696,14 @@ export def "roles-members roleMemberDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/roles/($roleId)/members/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Zoom Rooms
@@ -7445,6 +7718,7 @@ export def "rooms listZoomRooms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # The status of the Zoom Room.
   --type: string@type-completer-11 # Type of the Zoom Rooms.
@@ -7459,7 +7733,7 @@ export def "rooms listZoomRooms" [
   let full_url = (build-url $base "/rooms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a Zoom Room
@@ -7474,6 +7748,7 @@ export def "rooms addARoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --location-id: string # **Optional**<br>Location ID of the lowest level location in the [location hierarchy](https://support.zoom.us/hc/en-us/articles/115000342983-Zoom-Rooms-Location-Hierarchy) where the Zoom Room is to be added. For instance if the structure of the location hierarchy is set up as “country, states, city, campus, building, floor”, a room can only be added under the floor level location.   This ID can be retrieved from the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
   name: string # Name of the Zoom Room.
@@ -7487,7 +7762,7 @@ export def "rooms addARoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Zoom Room account profile
@@ -7502,6 +7777,7 @@ export def "rooms-account-profile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<basic: record<required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7509,7 +7785,7 @@ export def "rooms-account-profile get" [
   let full_url = (build-url $base "/rooms/account_profile")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Zoom Room account profile
@@ -7525,6 +7801,7 @@ export def "rooms-account-profile updateZRAccProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --basic: record # shape: {required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
 ]: any -> any {
@@ -7536,7 +7813,7 @@ export def "rooms-account-profile updateZRAccProfile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Zoom Room account settings
@@ -7551,6 +7828,7 @@ export def "rooms-account-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account. <br> `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
@@ -7560,7 +7838,7 @@ export def "rooms-account-settings get" [
   let full_url = (build-url $base "/rooms/account_settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Zoom Room account settings
@@ -7579,6 +7857,7 @@ export def "rooms-account-settings updateZoomRoomAccSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
   --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool}
@@ -7595,7 +7874,7 @@ export def "rooms-account-settings updateZoomRoomAccSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List digital signage contents
@@ -7610,6 +7889,7 @@ export def "rooms-digital-signage listDigitalSignageContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string # Specify the type of digital signane resource. The value can be one of the following: * `content`: Returns information about content files. * `folder`: Returns information about the folder where the content files are located.
   --folder-id: string # Unique identifier of the folder where the content is located. Provide this field if you would like to filter the response by contents that are only available in a specific folder.
@@ -7622,7 +7902,7 @@ export def "rooms-digital-signage listDigitalSignageContent" [
   let full_url = (build-url $base "/rooms/digital_signage" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update E911 digital signage
@@ -7638,6 +7918,7 @@ export def "rooms-events manageE911signage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --method: string@method-completer # To display the emergency content on the Zoom Rooms digital signage display, set the value of this field to be `zoomroom.emergency_alert_displayed`.
   --params: record # shape: {content?: string, target_ids?: list, target_type?: "account"|"location"|"room"}
@@ -7650,7 +7931,7 @@ export def "rooms-events manageE911signage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Zoom Room locations
@@ -7665,6 +7946,7 @@ export def "rooms-locations listZRLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --parent-location-id: string # A unique identifier of the parent location. For instance, if a Zoom Room is located in Floor 1 of Building A, the location of Building A will be the parent location of Floor 1. Use this parameter to filter the response by a specific location hierarchy level.
   --type: string # Use this field to filter the response by the type of location. The value can be one of the following: `country`, `states`, `city`, `campus`, `building`, `floor`. 
@@ -7677,7 +7959,7 @@ export def "rooms-locations listZRLocations" [
   let full_url = (build-url $base "/rooms/locations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a location
@@ -7692,6 +7974,7 @@ export def "rooms-locations addAZRLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # Name of the location. The name must be unique and shouldn't have already been used in the same account.
   --parent-location-id: string # The location ID of the location that is a level higher from the location that is being added.<br><br> For example, to add a City named "City 1" as the child location under a State named "State 1", you must provide the location ID of "State 1". This can be retrieved using the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
@@ -7704,7 +7987,7 @@ export def "rooms-locations addAZRLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Zoom Room location structure
@@ -7719,6 +8002,7 @@ export def "rooms-locations-structure get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<structures: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7726,7 +8010,7 @@ export def "rooms-locations-structure get" [
   let full_url = (build-url $base "/rooms/locations/structure")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Zoom Rooms location structure
@@ -7741,6 +8025,7 @@ export def "rooms-locations-structure updateZoomRoomsLocationStructure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --structures: list # Location Structure. The value can be either one or a combination of the following strings separated by comma: `country`, `state`, `city`, `campus`, `building`, `floor`
 ]: any -> any {
@@ -7752,7 +8037,7 @@ export def "rooms-locations-structure updateZoomRoomsLocationStructure" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Zoom Room location profile
@@ -7768,6 +8053,7 @@ export def "rooms-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<basic: record<address: string, description_: string, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string, timezone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7775,7 +8061,7 @@ export def "rooms-locations get" [
   let full_url = (build-url $base $"/rooms/locations/($locationId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Zoom Room location profile
@@ -7792,6 +8078,7 @@ export def "rooms-locations updateZRLocationProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --basic: record # shape: {address?: string, description ?: string, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string, timezone?: string}
 ]: any -> any {
@@ -7803,7 +8090,7 @@ export def "rooms-locations updateZRLocationProfile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change the assigned parent location
@@ -7819,6 +8106,7 @@ export def "rooms-locations-location changeParentLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --parent-location-id: string # Location ID of the new Parent Location under which you the child location will be positioned. This can be retrieved from the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
 ]: any -> any {
@@ -7830,7 +8118,7 @@ export def "rooms-locations-location changeParentLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get location settings
@@ -7846,6 +8134,7 @@ export def "rooms-locations-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: Digital signage settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
@@ -7855,7 +8144,7 @@ export def "rooms-locations-settings get" [
   let full_url = (build-url $base $"/rooms/locations/($locationId)/settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update location settings
@@ -7876,6 +8165,7 @@ export def "rooms-locations-settings updateZRLocationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: Digital signage settings. (default: meeting)
   --meeting-security: record # shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
@@ -7893,7 +8183,7 @@ export def "rooms-locations-settings updateZRLocationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check-in or check-out of a Zoom Room
@@ -7910,6 +8200,7 @@ export def "rooms-events checkInRooms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --method: string # The value of this field can be one of the following:<br> * zoomroom.check_in * zoomroom.check_out
   --params: record # shape: {calendar_id?: string, change_key?: string, event_id: string, resource_email?: string}
@@ -7922,7 +8213,7 @@ export def "rooms-events checkInRooms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Zoom Room
@@ -7938,6 +8229,7 @@ export def "rooms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7945,7 +8237,7 @@ export def "rooms delete" [
   let full_url = (build-url $base $"/rooms/($roomId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Zoom Room profile
@@ -7961,6 +8253,7 @@ export def "rooms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<basic: record<activation_code: string, hide_room_in_contacts: bool, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7968,7 +8261,7 @@ export def "rooms get" [
   let full_url = (build-url $base $"/rooms/($roomId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Zoom Room profile
@@ -7985,6 +8278,7 @@ export def "rooms updateRoomProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --basic: record # shape: {hide_room_in_contacts?: bool, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
 ]: any -> any {
@@ -7996,7 +8290,7 @@ export def "rooms updateRoomProfile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Zoom Room devices
@@ -8012,6 +8306,7 @@ export def "rooms-devices listZRDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<devices: table<app_version: string, device_system: string, device_type: string, id: string, room_name: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8019,7 +8314,7 @@ export def "rooms-devices listZRDevices" [
   let full_url = (build-url $base $"/rooms/($roomId)/devices")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Zoom Rooms' app version
@@ -8036,6 +8331,7 @@ export def "rooms-devices-app-version changeZoomRoomsAppVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --action: string@action-completer-8 # Specify one of the following values for this field:  `upgrade`: Upgrade to the latest Zoom Rooms App Version.<br> `downgrade`: Downgrade the Zoom Rooms App Version.<br> `cancel`: Cancel an ongoing upgrade or downgrade process.
 ]: any -> any {
@@ -8047,7 +8343,7 @@ export def "rooms-devices-app-version changeZoomRoomsAppVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change a Zoom Room's location
@@ -8063,6 +8359,7 @@ export def "rooms-location changeZRLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --location-id: string # Location ID of the location where Zoom Room is to be assigned. This can be retrieved from the `id` property in the response of [List Zoom Rooms Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
 ]: any -> any {
@@ -8074,7 +8371,7 @@ export def "rooms-location changeZRLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Zoom Room settings
@@ -8090,6 +8387,7 @@ export def "rooms-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
@@ -8099,7 +8397,7 @@ export def "rooms-settings get" [
   let full_url = (build-url $base $"/rooms/($roomId)/settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Zoom Room settings
@@ -8120,6 +8418,7 @@ export def "rooms-settings updateZRSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Room.<br> `meeting`: Meeting settings of the Zoom Room.<br> `signage`: Digital signage settings applied on the Zoom Room.
   --meeting-security: record # shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
@@ -8137,7 +8436,7 @@ export def "rooms-settings updateZRSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List SIP phones
@@ -8152,6 +8451,7 @@ export def "sip-phones listSipPhones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
   --search-key: string # User name or email address of a user. If this parameter is provided, only the SIP phone system integration enabled for that specific user will be returned. Otherwise, all SIP phones on an account will be returned.
@@ -8164,7 +8464,7 @@ export def "sip-phones listSipPhones" [
   let full_url = (build-url $base "/sip_phones" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable SIP phone
@@ -8179,6 +8479,7 @@ export def "sip-phones createSIPPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   authorization_name: string # Authorization name of the user  registered for SIP Phone.
   domain: string # The name or IP address of your provider’s SIP domain. (example: CDC.WEB).
   password: string # The password generated for the user in the SIP account.
@@ -8204,7 +8505,7 @@ export def "sip-phones createSIPPhone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SIP phone
@@ -8220,6 +8521,7 @@ export def "sip-phones delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8227,7 +8529,7 @@ export def "sip-phones delete" [
   let full_url = (build-url $base $"/sip_phones/($phoneId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SIP phone
@@ -8243,6 +8545,7 @@ export def "sip-phones updateSIPPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   authorization_name: string # Authorization name of the user  registered for SIP Phone.
   domain: string # The name or IP address of your provider’s SIP domain. (example: CDC.WEB).
@@ -8268,7 +8571,7 @@ export def "sip-phones updateSIPPhone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List SIP trunk numbers
@@ -8283,6 +8586,7 @@ export def "sip-trunk-numbers listSipTrunkNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<phone_numbers: table<country: string, number: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8290,7 +8594,7 @@ export def "sip-trunk-numbers listSipTrunkNumbers" [
   let full_url = (build-url $base "/sip_trunk/numbers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tracking fields
@@ -8305,6 +8609,7 @@ export def "tracking-fields trackingfieldList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8312,7 +8617,7 @@ export def "tracking-fields trackingfieldList" [
   let full_url = (build-url $base "/tracking_fields")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tracking field
@@ -8327,6 +8632,7 @@ export def "tracking-fields trackingfieldCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --field: string # Label/ Name for the tracking field.
   --recommended-values: list # Array of recommended values
@@ -8341,7 +8647,7 @@ export def "tracking-fields trackingfieldCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tracking field
@@ -8357,13 +8663,14 @@ export def "tracking-fields trackingfieldDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tracking_fields/($fieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a tracking field
@@ -8379,6 +8686,7 @@ export def "tracking-fields trackingfieldGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8386,7 +8694,7 @@ export def "tracking-fields trackingfieldGet" [
   let full_url = (build-url $base $"/tracking_fields/($fieldId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a tracking field
@@ -8402,6 +8710,7 @@ export def "tracking-fields trackingfieldUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: string # Label/ Name for the tracking field.
   --recommended-values: list # Array of recommended values
   --required: oneof<nothing, bool> # Tracking Field Required
@@ -8415,7 +8724,7 @@ export def "tracking-fields trackingfieldUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account's TSP information
@@ -8430,6 +8739,7 @@ export def "tsp tsp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<dial_in_number_unrestricted: bool, dial_in_numbers: table<code: string, number: string, type: string>, enable: bool, master_account_setting_extended: bool, modify_credential_forbidden: bool, tsp_bridge: string, tsp_enabled: bool, tsp_provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8437,7 +8747,7 @@ export def "tsp tsp" [
   let full_url = (build-url $base "/tsp")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update account's TSP information
@@ -8452,6 +8762,7 @@ export def "tsp tspUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dial-in-number-unrestricted: oneof<nothing, bool> # Control restriction on account users adding a TSP number outside of account's dial in numbers.
   --enable: oneof<nothing, bool> # Enable 3rd party audio conferencing for account users
   --master-account-setting-extended: oneof<nothing, bool> # For master account, extend its TSP setting to all sub accounts. For sub account, extend TSP setting from master account.
@@ -8468,7 +8779,7 @@ export def "tsp tspUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List users
@@ -8483,6 +8794,7 @@ export def "users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-4 # User statuses:<br>`active` - Users with an active status.<br>`inactive` - Users who are deactivated.<br>`pending` - Users with a pending status. (default: active)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -8497,7 +8809,7 @@ export def "users users" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create users
@@ -8513,6 +8825,7 @@ export def "users userCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   action: string@action-completer-9 # Specify how to create the new user: <br>`create` - User will get an email sent from Zoom. There is a confirmation link in this email. The user will then need to use the link to activate their Zoom account. The user can then set or change their password.<br>`autoCreate` - This action is provided for the enterprise customer who has a managed domain. This feature is disabled by default because of the security risk involved in creating a user who does not belong to your domain.<br>`custCreate` - Users created via this option do not have passwords and will not have the ability to log into the Zoom Web Portal or the Zoom Client. These users can still host and join meetings using the `start_url` and `join_url` respectively. To use this option, you must contact the ISV Platform Sales team at isv@zoom.us.<br>`ssoCreate` - This action is provided for the enabled “Pre-provisioning SSO User” option. A user created in this way has no password. If not a basic user, a personal vanity URL using the user name (no domain) of the provisioning email will be generated. If the user name or PMI is invalid or occupied, it will use a random number or random personal vanity URL.
   --user-info: record # shape: {email: string, first_name?: string, last_name?: string, password?: string, type: "1"|"2"|"3"|"99"}
@@ -8525,7 +8838,7 @@ export def "users userCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check a user email
@@ -8540,6 +8853,7 @@ export def "users-email userEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email: string # The email address to be verified.
 ]: nothing -> record<existed_email: bool> {
@@ -8549,7 +8863,7 @@ export def "users-email userEmail" [
   let full_url = (build-url $base "/users/email" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's ZAK
@@ -8564,6 +8878,7 @@ export def "users-me-zak userZak" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8571,7 +8886,7 @@ export def "users-me-zak userZak" [
   let full_url = (build-url $base "/users/me/zak")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check a user's PM room
@@ -8586,6 +8901,7 @@ export def "users-vanity-name userVanityName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --vanity-name: string # Personal meeting room name.
 ]: nothing -> record<existed: bool> {
@@ -8595,7 +8911,7 @@ export def "users-vanity-name userVanityName" [
   let full_url = (build-url $base "/users/vanity_name" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user
@@ -8611,6 +8927,7 @@ export def "users userDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-10 # Delete action options:<br>`disassociate` - Disassociate a user.<br>`delete`-  Permanently delete a user.<br>Note: To delete pending user in the account, use `disassociate` (default: disassociate)
   --transfer-email: string # Transfer email.
   --transfer-meeting: oneof<nothing, bool> # Transfer meeting.
@@ -8623,7 +8940,7 @@ export def "users userDelete" [
   let full_url = (build-url $base $"/users/($userId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -8639,6 +8956,7 @@ export def "users user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
 ]: nothing -> record<id: string, created_at: string, dept: string, email: string, first_name: string, last_client_version: string, last_login_time: string, last_name: string, pmi: int, role_name: string, timezone: string, type: int, use_pmi: bool, account_id: string, cms_user_id: string, company: string, custom_attributes: record<key: string, name: string, value: string>, group_ids: list<string>, host_key: string, im_group_ids: list<string>, jid: string, job_title: string, language: string, location: string, login_type: int, manager: string, personal_meeting_url: string, phone_country: string, phone_number: string, phone_numbers: record<code: string, country: string, number: string, verified: bool>, pic_url: string, plan_united_type: string, role_id: string, status: string, vanity_url: string, verified: int> {
@@ -8648,7 +8966,7 @@ export def "users user" [
   let full_url = (build-url $base $"/users/($userId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -8666,6 +8984,7 @@ export def "users userUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
   --cms-user-id: string # Kaltura user ID.
   --company: string # User's company.
@@ -8697,7 +9016,7 @@ export def "users userUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user assistants
@@ -8713,13 +9032,14 @@ export def "users-assistants userAssistantsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/assistants")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user assistants
@@ -8735,6 +9055,7 @@ export def "users-assistants userAssistants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<assistants: table<email: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8742,7 +9063,7 @@ export def "users-assistants userAssistants" [
   let full_url = (build-url $base $"/users/($userId)/assistants")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add assistants
@@ -8759,6 +9080,7 @@ export def "users-assistants userAssistantCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assistants: list # List of User's assistants. — item shape: {email?: string, id?: string}
 ]: any -> record<add_at: string, ids: string> {
@@ -8770,7 +9092,7 @@ export def "users-assistants userAssistantCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user assistant
@@ -8787,13 +9109,14 @@ export def "users-assistants userAssistantDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/assistants/($assistantId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's email
@@ -8809,6 +9132,7 @@ export def "users-email userEmailUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # User’s email. The length should be less than 128 characters. (format: email)
 ]: any -> any {
   let input = $in
@@ -8819,7 +9143,7 @@ export def "users-email userEmailUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List meeting templates
@@ -8835,6 +9159,7 @@ export def "users-meeting-templates listMeetingTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<templates: table<id: string, name: string, type: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8842,7 +9167,7 @@ export def "users-meeting-templates listMeetingTemplates" [
   let full_url = (build-url $base $"/users/($userId)/meeting_templates")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meetings
@@ -8858,6 +9183,7 @@ export def "users-meetings meetings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-13 # The meeting types: <br>`scheduled` - This includes all valid past meetings (unexpired), live meetings and upcoming scheduled meetings. It is equivalent to the combined list of "Previous Meetings" and "Upcoming Meetings" displayed in the user's [Meetings page](https://zoom.us/meeting) on the Zoom Web Portal.<br>`live` - All the ongoing meetings.<br>`upcoming` - All upcoming meetings including live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -8870,7 +9196,7 @@ export def "users-meetings meetings" [
   let full_url = (build-url $base $"/users/($userId)/meetings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a meeting
@@ -8889,6 +9215,7 @@ export def "users-meetings meetingCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --agenda: string # Meeting description.
   --duration: int # Meeting duration (minutes). Used for scheduled meetings only.
@@ -8911,7 +9238,7 @@ export def "users-meetings meetingCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a user's PAC accounts
@@ -8927,6 +9254,7 @@ export def "users-pac userPACs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<pac_accounts: table<conference_id: int, dedicated_dial_in_number: list, global_dial_in_numbers: list, listen_only_password: string, participant_password: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8934,7 +9262,7 @@ export def "users-pac userPACs" [
   let full_url = (build-url $base $"/users/($userId)/pac")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's password
@@ -8950,6 +9278,7 @@ export def "users-password userPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string # User password. Should be less than 32 characters.  **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
 ]: any -> any {
   let input = $in
@@ -8960,7 +9289,7 @@ export def "users-password userPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user permissions
@@ -8976,6 +9305,7 @@ export def "users-permissions userPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8983,7 +9313,7 @@ export def "users-permissions userPermission" [
   let full_url = (build-url $base $"/users/($userId)/permissions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a user's profile picture
@@ -8999,6 +9329,7 @@ export def "users-picture userPicture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pic_file: string # The file's path.  (format: binary)
 ]: any -> any {
   let input = $in
@@ -9009,7 +9340,7 @@ export def "users-picture userPicture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update a user's presence status
@@ -9025,6 +9356,7 @@ export def "users-presence-status updatePresenceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --duration: int # If you're updating the status to `Do_Not_Disturb`, specify a duration in minutes for which the status should remain as `Do_Not_Disturb`.   The default value is 20 minutes and the maximum allowed value is 1440 minutes.
   --status: string@status-completer-5 # Presence status of the user. The value can be set to one of the following:<br> * `Away` * `Do_Not_Disturb` * `Available`  Users who are on Zoom Client with a version **lower than 5.3.0** can update the status from: * `Away` to `Do_Not_Disturb`  * `Available` to `Do-Not_Disturb`  Users who are on **Zoom Client 5.3.0** or higher can update the status from: * `Do_Not_Disturb` to `Away` * `Do_Not_Disturb` to `Available` * `Available` to `Away` * `Away` to `Available`
@@ -9037,7 +9369,7 @@ export def "users-presence-status updatePresenceStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all recordings
@@ -9053,6 +9385,7 @@ export def "users-recordings recordingsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -9068,7 +9401,7 @@ export def "users-recordings recordingsList" [
   let full_url = (build-url $base $"/users/($userId)/recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user schedulers
@@ -9084,13 +9417,14 @@ export def "users-schedulers userSchedulersDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/schedulers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user schedulers
@@ -9106,6 +9440,7 @@ export def "users-schedulers userSchedulers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<schedulers: table<email: string, id: string, pmi: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9113,7 +9448,7 @@ export def "users-schedulers userSchedulers" [
   let full_url = (build-url $base $"/users/($userId)/schedulers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a scheduler
@@ -9130,13 +9465,14 @@ export def "users-schedulers userSchedulerDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/schedulers/($schedulerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user settings
@@ -9152,6 +9488,7 @@ export def "users-settings userSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
   --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the user's account.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the user's account.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the user's account.<br> (allows empty value)
@@ -9163,7 +9500,7 @@ export def "users-settings userSettings" [
   let full_url = (build-url $base $"/users/($userId)/settings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user settings
@@ -9188,6 +9525,7 @@ export def "users-settings userSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --option: string@option-completer-3 # allows empty value
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, jbh_reminder?: bool, schedule_for_reminder?: bool}
   --feature: record # shape: {large_meeting?: bool, large_meeting_capacity?: int, meeting_capacity?: int, webinar?: bool, webinar_capacity?: int, zoom_phone?: bool}
@@ -9208,7 +9546,7 @@ export def "users-settings userSettingsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete virtual background files
@@ -9224,6 +9562,7 @@ export def "users-settings-virtual-backgrounds delUserVB" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-ids: string # Provide the id of the file that is to be deleted. To delete multiple files, provide comma separated values for this field.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9232,7 +9571,7 @@ export def "users-settings-virtual-backgrounds delUserVB" [
   let full_url = (build-url $base $"/users/($userId)/settings/virtual_backgrounds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload virtual background files
@@ -9248,6 +9587,7 @@ export def "users-settings-virtual-backgrounds uploadVBuser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file: string # Provide the file's path here.
 ]: any -> record<id: string, is_default: bool, name: string, size: string, type: string> {
@@ -9259,7 +9599,7 @@ export def "users-settings-virtual-backgrounds uploadVBuser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update user status
@@ -9275,6 +9615,7 @@ export def "users-status userStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer-11 # The action types:<br>`activate` - Activate a deactivated user.<br>`deactivate` - Deactivate a user.
 ]: any -> any {
   let input = $in
@@ -9285,7 +9626,7 @@ export def "users-status userStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke a user's SSO token
@@ -9301,13 +9642,14 @@ export def "users-token userSSOTokenDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user token
@@ -9323,6 +9665,7 @@ export def "users-token userToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-15 # User token types:<br>`token` - Used for starting meetings with the client SDK. This token expires in 14 days and a new token will be returned after the expiry.<br>`zak` - Used for generating the start meeting URL. The token expiration time is two hours. For API users, the expiration time is 90 days.
   --ttl: int # Use this field in conjunction with the `type` field where the value of `type` field is `zak`. The value of this field denotes the expiry time of the `zak` token in seconds. For example, if you would like the zak token to be expired after one hour of the token generation, the value of this field should be `3600`.
@@ -9333,7 +9676,7 @@ export def "users-token userToken" [
   let full_url = (build-url $base $"/users/($userId)/token" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's TSP accounts
@@ -9349,6 +9692,7 @@ export def "users-tsp userTSPs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<tsp_accounts: table<conference_code: string, dial_in_numbers: list, id: int, leader_pin: string, tsp_bridge: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9356,7 +9700,7 @@ export def "users-tsp userTSPs" [
   let full_url = (build-url $base $"/users/($userId)/tsp")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a user's TSP account
@@ -9373,6 +9717,7 @@ export def "users-tsp userTSPCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   conference_code: string # Conference code: numeric value, length is less than 16.
   --dial-in-numbers: list # List of dial in numbers. — item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
@@ -9387,7 +9732,7 @@ export def "users-tsp userTSPCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set global dial-in URL for a TSP user
@@ -9403,6 +9748,7 @@ export def "users-tsp-settings tspUrlUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audio-url: string # The global dial-in URL for a TSP enabled account. The URL must be valid with a max-length of 512 characters.
 ]: any -> any {
   let input = $in
@@ -9413,7 +9759,7 @@ export def "users-tsp-settings tspUrlUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user's TSP account
@@ -9430,13 +9776,14 @@ export def "users-tsp userTSPDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($userId)/tsp/($tspId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's TSP account
@@ -9453,6 +9800,7 @@ export def "users-tsp userTSP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, id: int, leader_pin: string, tsp_bridge: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9460,7 +9808,7 @@ export def "users-tsp userTSP" [
   let full_url = (build-url $base $"/users/($userId)/tsp/($tspId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a TSP account
@@ -9478,6 +9826,7 @@ export def "users-tsp userTSPUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   conference_code: string # Conference code: numeric value, length is less than 16.
   --dial-in-numbers: list # List of dial in numbers. — item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
   leader_pin: string # Leader PIN: numeric value, length is less than 16.
@@ -9491,7 +9840,7 @@ export def "users-tsp userTSPUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List webinar templates
@@ -9507,6 +9856,7 @@ export def "users-webinar-templates listWebinarTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<templates: table<id: string, name: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9514,7 +9864,7 @@ export def "users-webinar-templates listWebinarTemplates" [
   let full_url = (build-url $base $"/users/($userId)/webinar_templates")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webinars
@@ -9530,6 +9880,7 @@ export def "users-webinars webinars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
@@ -9540,7 +9891,7 @@ export def "users-webinars webinars" [
   let full_url = (build-url $base $"/users/($userId)/webinars" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webinar
@@ -9559,6 +9910,7 @@ export def "users-webinars webinarCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --agenda: string # Webinar description.
   --duration: int # Webinar duration (minutes). Used for scheduled webinars only.
@@ -9579,7 +9931,7 @@ export def "users-webinars webinarCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webinar
@@ -9595,6 +9947,7 @@ export def "webinars webinarDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
   --cancel-webinar-reminder: string # `true`: Notify panelists and registrants about the webinar cancellation via email.   `false`: Do not send any email notification to webinar registrants and panelists.   The default value of this field is `false`.
 ]: nothing -> any {
@@ -9604,7 +9957,7 @@ export def "webinars webinarDelete" [
   let full_url = (build-url $base $"/webinars/($webinarId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webinar
@@ -9620,6 +9973,7 @@ export def "webinars webinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Unique Identifier that identifies an occurrence of a recurring webinar. [Recurring webinars](https://support.zoom.us/hc/en-us/articles/216354763-How-to-Schedule-A-Recurring-Webinar) can have a maximum of 50 occurrences. When you create a recurring Webinar using [Create a Webinar API](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarcreate), you can retrieve the Occurrence ID from the response of the API call.
   --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view Webinar details of all previous occurrences of a recurring Webinar.
@@ -9630,7 +9984,7 @@ export def "webinars webinar" [
   let full_url = (build-url $base $"/webinars/($webinarId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webinar
@@ -9648,6 +10002,7 @@ export def "webinars webinarUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # Webinar occurrence id. Support change of agenda, start_time, duration, settings: {host_video, panelist_video, hd_video, watermark, auto_recording}
   --agenda: string # Webinar description.
   --duration: int # Webinar duration (minutes). Used for scheduled webinar only.
@@ -9669,7 +10024,7 @@ export def "webinars webinarUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Perform batch registration
@@ -9686,6 +10041,7 @@ export def "webinars-batch-registrants addBatchWebinarRegistrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --auto-approve: oneof<nothing, bool> # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`.   You **cannot** use this field to change approval setting for a meeting  that was originally scheduled with approval_type `0` (automatic approval).
   --registrants: list # item shape: {email: string, first_name: string, last_name?: string}
@@ -9698,7 +10054,7 @@ export def "webinars-batch-registrants addBatchWebinarRegistrants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove panelists
@@ -9714,13 +10070,14 @@ export def "webinars-panelists webinarPanelistsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinars/($webinarId)/panelists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List panelists
@@ -9736,6 +10093,7 @@ export def "webinars-panelists webinarPanelists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9743,7 +10101,7 @@ export def "webinars-panelists webinarPanelists" [
   let full_url = (build-url $base $"/webinars/($webinarId)/panelists")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add panelists
@@ -9760,6 +10118,7 @@ export def "webinars-panelists webinarPanelistCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --panelists: list # List of panelist objects. — item shape: {email?: string, name?: string}
 ]: any -> record<id: string, updated_at: string> {
@@ -9771,7 +10130,7 @@ export def "webinars-panelists webinarPanelistCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a panelist
@@ -9788,13 +10147,14 @@ export def "webinars-panelists webinarPanelistDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinars/($webinarId)/panelists/($panelistId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a webinar's polls 
@@ -9810,6 +10170,7 @@ export def "webinars-polls webinarPolls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9817,7 +10178,7 @@ export def "webinars-polls webinarPolls" [
   let full_url = (build-url $base $"/webinars/($webinarId)/polls")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webinar's poll
@@ -9834,6 +10195,7 @@ export def "webinars-polls webinarPollCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
@@ -9846,7 +10208,7 @@ export def "webinars-polls webinarPollCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webinar poll
@@ -9863,13 +10225,14 @@ export def "webinars-polls webinarPollDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webinars/($webinarId)/polls/($pollId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webinar poll
@@ -9886,6 +10249,7 @@ export def "webinars-polls webinarPollGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9893,7 +10257,7 @@ export def "webinars-polls webinarPollGet" [
   let full_url = (build-url $base $"/webinars/($webinarId)/polls/($pollId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webinar poll
@@ -9911,6 +10275,7 @@ export def "webinars-polls webinarPollUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> any {
@@ -9922,7 +10287,7 @@ export def "webinars-polls webinarPollUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List webinar registrants
@@ -9938,6 +10303,7 @@ export def "webinars-registrants webinarRegistrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
   --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
@@ -9952,7 +10318,7 @@ export def "webinars-registrants webinarRegistrants" [
   let full_url = (build-url $base $"/webinars/($webinarId)/registrants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a webinar registrant
@@ -9969,6 +10335,7 @@ export def "webinars-registrants webinarRegistrantCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-ids: string # Occurrence ID. Get this value from the webinar get API. Multiple values separated by a comma.
   --address: string # Registrant's address.
@@ -9998,7 +10365,7 @@ export def "webinars-registrants webinarRegistrantCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List registration questions
@@ -10014,6 +10381,7 @@ export def "webinars-registrants-questions webinarRegistrantsQuestionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10021,7 +10389,7 @@ export def "webinars-registrants-questions webinarRegistrantsQuestionsGet" [
   let full_url = (build-url $base $"/webinars/($webinarId)/registrants/questions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update registration questions
@@ -10039,6 +10407,7 @@ export def "webinars-registrants-questions webinarRegistrantQuestionUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-questions: list # Array of Registrant Custom Questions. — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
   --questions: list # Array of registration fields whose values should be provided by registrants during registration. — item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
@@ -10050,7 +10419,7 @@ export def "webinars-registrants-questions webinarRegistrantQuestionUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update registrant's status
@@ -10067,6 +10436,7 @@ export def "webinars-registrants-status webinarRegistrantStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
   action: string@action-completer-6 # Used to approve a registrant, deny a registrant, or cancel a previously approved registrant. 
   --registrants: list # List of registrants. — item shape: {email?: string, id?: string}
@@ -10080,7 +10450,7 @@ export def "webinars-registrants-status webinarRegistrantStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webinar registrant
@@ -10097,6 +10467,7 @@ export def "webinars-registrants delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The webinar occurence ID.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10105,7 +10476,7 @@ export def "webinars-registrants delete" [
   let full_url = (build-url $base $"/webinars/($webinarId)/registrants/($registrantId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webinar registrant
@@ -10122,6 +10493,7 @@ export def "webinars-registrants webinarRegistrantGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
 ]: nothing -> record {
@@ -10131,7 +10503,7 @@ export def "webinars-registrants webinarRegistrantGet" [
   let full_url = (build-url $base $"/webinars/($webinarId)/registrants/($registrantId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webinar status
@@ -10147,6 +10519,7 @@ export def "webinars-status webinarStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-12
 ]: any -> any {
   let input = $in
@@ -10157,7 +10530,7 @@ export def "webinars-status webinarStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webinar tracking sources
@@ -10173,6 +10546,7 @@ export def "webinars-tracking-sources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<total_records: int, tracking_sources: table<id: string, registration_count: int, source_name: string, tracking_url: string, visitor_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10180,5 +10554,5 @@ export def "webinars-tracking-sources get" [
   let full_url = (build-url $base $"/webinars/($webinarId)/tracking_sources")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

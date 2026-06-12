@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def TemplateScope-completer [] { ["Global" "Personal"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "campaigns campaignsGet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "campaigns campaignsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Text fragment used for searching in Campaign name (using the 'contains' rule) (format: string)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
@@ -120,7 +122,7 @@ export def "campaigns campaignsGet" [
   let full_url = (build-url $base "/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Campaign
@@ -139,6 +141,7 @@ export def "campaigns campaignsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content: list # Campaign's email content. Provide multiple items to send an A/X Split Campaign — item shape: {Poolname?: string, From: string, ReplyTo?: string, Subject?: string, TemplateName?: string, AttachFiles?: list, Utm?: record}
   Name: string # Campaign name (format: string)
   --Status: string@Status-completer # default: Deleted
@@ -154,7 +157,7 @@ export def "campaigns campaignsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Campaign
@@ -170,13 +173,14 @@ export def "campaigns campaignsByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/campaigns/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Campaign
@@ -192,13 +196,14 @@ export def "campaigns campaignsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Content: table<Poolname: string, From: string, ReplyTo: string, Subject: string, TemplateName: string, AttachFiles: list, Utm: record>, Name: string, Status: string, Recipients: record<ListNames: list<string>, SegmentNames: list<string>>, ExcludedRecipients: record<ListNames: list<string>, SegmentNames: list<string>>, Options: record<DeliveryOptimization: string, TrackOpens: bool, TrackClicks: bool, ScheduleFor: string, TriggerFrequency: float, TriggerCount: int, SplitOptions: record<OptimizeFor: string, OptimizePeriodMinutes: int>, SendAtLocalTime: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/campaigns/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Campaign
@@ -218,6 +223,7 @@ export def "campaigns campaignsByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content: list # Campaign's email content. Provide multiple items to send an A/X Split Campaign — item shape: {Poolname?: string, From: string, ReplyTo?: string, Subject?: string, TemplateName?: string, AttachFiles?: list, Utm?: record}
   Name: string # Campaign name (format: string)
   --Status: string@Status-completer # default: Deleted
@@ -233,7 +239,7 @@ export def "campaigns campaignsByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pause Campaign
@@ -249,13 +255,14 @@ export def "campaigns-pause campaignsByNamePausePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/campaigns/($name)/pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Contacts
@@ -270,6 +277,7 @@ export def "contacts contactsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<Email: string, Status: string, FirstName: string, LastName: string, CustomFields: record, Consent: record<ConsentIP: string, ConsentDate: string, ConsentTracking: string>, Source: string, SourceInfo: string, DateAdded: string, DateUpdated: string, StatusChangeDate: string, Activity: record<TotalSent: int, TotalOpened: int, TotalClicked: int, TotalFailed: int, LastSent: string, LastOpened: string, LastClicked: string, LastFailed: string, LastIP: string, ErrorCode: int, FriendlyErrorMessage: string>> {
@@ -279,7 +287,7 @@ export def "contacts contactsGet" [
   let full_url = (build-url $base "/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Contact
@@ -294,6 +302,7 @@ export def "contacts contactsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listnames: list # Names of lists to which the uploaded contacts should be added to
   --body: record
 ]: any -> table<Email: string, Status: string, FirstName: string, LastName: string, CustomFields: record, Consent: record<ConsentIP: string, ConsentDate: string, ConsentTracking: string>, Source: string, SourceInfo: string, DateAdded: string, DateUpdated: string, StatusChangeDate: string, Activity: record<TotalSent: int, TotalOpened: int, TotalClicked: int, TotalFailed: int, LastSent: string, LastOpened: string, LastClicked: string, LastFailed: string, LastIP: string, ErrorCode: int, FriendlyErrorMessage: string>> {
@@ -305,7 +314,7 @@ export def "contacts contactsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Contact
@@ -321,13 +330,14 @@ export def "contacts contactsByEmailDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/contacts/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Contact
@@ -343,13 +353,14 @@ export def "contacts contactsByEmailGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Email: string, Status: string, FirstName: string, LastName: string, CustomFields: record, Consent: record<ConsentIP: string, ConsentDate: string, ConsentTracking: string>, Source: string, SourceInfo: string, DateAdded: string, DateUpdated: string, StatusChangeDate: string, Activity: record<TotalSent: int, TotalOpened: int, TotalClicked: int, TotalFailed: int, LastSent: string, LastOpened: string, LastClicked: string, LastFailed: string, LastIP: string, ErrorCode: int, FriendlyErrorMessage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/contacts/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Contact
@@ -365,6 +376,7 @@ export def "contacts contactsByEmailPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FirstName: string # First name. (format: string, e.g. Fred)
   --LastName: string # Last name. (format: string, e.g. Flintstone)
   --CustomFields: record # A key-value collection of custom contact fields which can be used in the system. (e.g. {city: New York, age: 34})
@@ -377,7 +389,7 @@ export def "contacts contactsByEmailPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Contacts Bulk
@@ -392,6 +404,7 @@ export def "contacts-delete contactsDeletePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Rule: string # SQL-like rule. Sending 'All' as a value loads all resources of the given type. Help for building a segment rule can be found here: https://help.elasticemail.com/en/articles/5162182-segment-rules (format: string)
   --Emails: list # Comma delimited list of contact emails (e.g. [john.doe@sample.com])
 ]: any -> any {
@@ -403,7 +416,7 @@ export def "contacts-delete contactsDeletePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export Contacts
@@ -418,6 +431,7 @@ export def "contacts-export contactsExportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fileFormat: string@fileFormat-completer # Format of the exported file (default: Csv)
   --rule: string # Query used for filtering. (format: string, e.g. Status%20=%20Engaged)
   --emails: list # Comma delimited list of contact emails (e.g. [mail@contact.com,mail1@contact.com,mail2@contact.com])
@@ -430,7 +444,7 @@ export def "contacts-export contactsExportPost" [
   let full_url = (build-url $base "/contacts/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Export Status
@@ -446,13 +460,14 @@ export def "contacts-export-status contactsExportByIdStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/contacts/export/($id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Contacts
@@ -467,6 +482,7 @@ export def "contacts-import contactsImportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listName: string # Name of an existing list to add these contacts to (format: string)
   --encodingName: string # In what encoding the file is uploaded (format: string)
   --fileUrl: string # Optional url of csv to import (format: string)
@@ -481,7 +497,7 @@ export def "contacts-import contactsImportPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Load Domains
@@ -496,13 +512,14 @@ export def "domains domainsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Domain
@@ -517,6 +534,7 @@ export def "domains domainsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Domain: string # Name of selected domain. (format: string, e.g. example.com)
   --SetAsDefault: oneof<nothing, bool> # format: boolean
 ]: any -> record<Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
@@ -528,7 +546,7 @@ export def "domains domainsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Domain
@@ -544,13 +562,14 @@ export def "domains domainsByDomainDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/domains/($domain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Domain
@@ -566,13 +585,14 @@ export def "domains domainsByDomainGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ValidationLog: string, Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/domains/($domain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Domain
@@ -588,6 +608,7 @@ export def "domains domainsByDomainPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CertificateStatus: string@CertificateStatus-completer # default: ErrorOccured
   --VERP: oneof<nothing, bool> # format: boolean
   --CustomBouncesDomain: string # format: string
@@ -601,7 +622,7 @@ export def "domains domainsByDomainPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check for domain restriction
@@ -617,13 +638,14 @@ export def "domains-restricted domainsByDomainRestrictedGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/domains/($domain)/restricted")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify Domain
@@ -639,6 +661,7 @@ export def "domains-verification domainsByDomainVerificationPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<ValidationLog: string, Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let input = $in
@@ -648,7 +671,7 @@ export def "domains-verification domainsByDomainVerificationPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set Default
@@ -664,13 +687,14 @@ export def "domains-default domainsByEmailDefaultPatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/domains/($email)/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Bulk Emails
@@ -688,6 +712,7 @@ export def "emails emailsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Recipients: list # List of recipients — item shape: {Email: string, Fields?: record}
   Content: record # Proper e-mail content (e.g. {ReplyTo: John Doe <email@domain.com>,John Doe2 <email2@domain.com>, Merge: {city: New York, age: 34}, Headers: {city: New York, age: 34}, Postback: Postback, EnvelopeFrom: John Doe <email@domain.com>, TemplateName: Template01, From: John Doe <email@domain.com>, AttachFiles: [preuploaded.jpg], Body: [{ContentType: HTML, Content: Content, Charset: Charset}, {ContentType: HTML, Content: Content, Charset: Charset}], Attachments: [{ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}, {ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}], Subject: Hello!, Utm: {Campaign: Campaign, Medium: Medium, Content: Content, Source: Source}}) — shape: {Body?: list, Merge?: record, Attachments?: list, Headers?: record, Postback?: string, EnvelopeFrom?: string, From: string, ReplyTo?: string, Subject?: string, TemplateName?: string, AttachFiles?: list, Utm?: record}
   --Options: record # E-mail configuration (e.g. {TrackClicks: true, ChannelName: Channel01, PoolName: My Custom Pool, Encoding: UserProvided, TimeOffset: 6, TrackOpens: true}) — shape: {TimeOffset?: int, PoolName?: string, ChannelName?: string, Encoding?: "UserProvided"|"None"|"Raw7bit"|"Raw8bit"|"QuotedPrintable"|"Base64"|"Uue", TrackOpens?: bool, TrackClicks?: bool}
@@ -700,7 +725,7 @@ export def "emails emailsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View Email
@@ -716,13 +741,14 @@ export def "emails-view emailsByMsgidViewGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Preview: record<Body: string, Subject: string, From: string>, Attachments: table<FileName: string, Size: int, DateAdded: string, ExpirationDate: string, ContentType: string>, Status: record<From: string, To: string, Date: string, Status: string, StatusName: string, StatusChangeDate: string, DateSent: string, DateOpened: string, DateClicked: string, ErrorMessage: string, TransactionID: string, EnvelopeFrom: string, ErrorCategory: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/emails/($msgid)/view")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Status
@@ -738,6 +764,7 @@ export def "emails-status emailsByTransactionidStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showFailed: oneof<nothing, bool> # Include Bounced email addresses. (format: boolean, default: false)
   --showSent: oneof<nothing, bool> # Include Sent email addresses. (format: boolean, default: false)
   --showDelivered: oneof<nothing, bool> # Include all delivered email addresses. (format: boolean, default: false)
@@ -755,7 +782,7 @@ export def "emails-status emailsByTransactionidStatusGet" [
   let full_url = (build-url $base $"/emails/($transactionid)/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Bulk Emails CSV
@@ -773,6 +800,7 @@ export def "emails-mergefile emailsMergefilePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   MergeFile: record # e.g. {ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name} — shape: {BinaryContent: string, Name: string, ContentType?: string, Size?: int}
   Content: record # Proper e-mail content (e.g. {ReplyTo: John Doe <email@domain.com>,John Doe2 <email2@domain.com>, Merge: {city: New York, age: 34}, Headers: {city: New York, age: 34}, Postback: Postback, EnvelopeFrom: John Doe <email@domain.com>, TemplateName: Template01, From: John Doe <email@domain.com>, AttachFiles: [preuploaded.jpg], Body: [{ContentType: HTML, Content: Content, Charset: Charset}, {ContentType: HTML, Content: Content, Charset: Charset}], Attachments: [{ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}, {ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}], Subject: Hello!, Utm: {Campaign: Campaign, Medium: Medium, Content: Content, Source: Source}}) — shape: {Body?: list, Merge?: record, Attachments?: list, Headers?: record, Postback?: string, EnvelopeFrom?: string, From: string, ReplyTo?: string, Subject?: string, TemplateName?: string, AttachFiles?: list, Utm?: record}
   --Options: record # E-mail configuration (e.g. {TrackClicks: true, ChannelName: Channel01, PoolName: My Custom Pool, Encoding: UserProvided, TimeOffset: 6, TrackOpens: true}) — shape: {TimeOffset?: int, PoolName?: string, ChannelName?: string, Encoding?: "UserProvided"|"None"|"Raw7bit"|"Raw8bit"|"QuotedPrintable"|"Base64"|"Uue", TrackOpens?: bool, TrackClicks?: bool}
@@ -785,7 +813,7 @@ export def "emails-mergefile emailsMergefilePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send Transactional Email
@@ -803,6 +831,7 @@ export def "emails-transactional emailsTransactionalPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Recipients: record # List of transactional recipients (e.g. {CC: [CC, CC], BCC: [BCC, BCC], To: [To, To]}) — shape: {To: list, CC?: list, BCC?: list}
   Content: record # Proper e-mail content (e.g. {ReplyTo: John Doe <email@domain.com>,John Doe2 <email2@domain.com>, Merge: {city: New York, age: 34}, Headers: {city: New York, age: 34}, Postback: Postback, EnvelopeFrom: John Doe <email@domain.com>, TemplateName: Template01, From: John Doe <email@domain.com>, AttachFiles: [preuploaded.jpg], Body: [{ContentType: HTML, Content: Content, Charset: Charset}, {ContentType: HTML, Content: Content, Charset: Charset}], Attachments: [{ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}, {ContentType: ContentType, Size: 0, BinaryContent: BinaryContent, Name: Name}], Subject: Hello!, Utm: {Campaign: Campaign, Medium: Medium, Content: Content, Source: Source}}) — shape: {Body?: list, Merge?: record, Attachments?: list, Headers?: record, Postback?: string, EnvelopeFrom?: string, From: string, ReplyTo?: string, Subject?: string, TemplateName?: string, AttachFiles?: list, Utm?: record}
   --Options: record # E-mail configuration (e.g. {TrackClicks: true, ChannelName: Channel01, PoolName: My Custom Pool, Encoding: UserProvided, TimeOffset: 6, TrackOpens: true}) — shape: {TimeOffset?: int, PoolName?: string, ChannelName?: string, Encoding?: "UserProvided"|"None"|"Raw7bit"|"Raw8bit"|"QuotedPrintable"|"Base64"|"Uue", TrackOpens?: bool, TrackClicks?: bool}
@@ -815,7 +844,7 @@ export def "emails-transactional emailsTransactionalPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Events
@@ -830,6 +859,7 @@ export def "events eventsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
@@ -843,7 +873,7 @@ export def "events eventsGet" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Email Events
@@ -859,6 +889,7 @@ export def "events eventsByTransactionidGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --orderBy: string@orderBy-completer # default: DateDescending
@@ -871,7 +902,7 @@ export def "events eventsByTransactionidGet" [
   let full_url = (build-url $base $"/events/($transactionid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Channel Events
@@ -887,6 +918,7 @@ export def "events-channels eventsChannelsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
@@ -900,7 +932,7 @@ export def "events-channels eventsChannelsByNameGet" [
   let full_url = (build-url $base $"/events/channels/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export Channel Events
@@ -916,6 +948,7 @@ export def "events-channels-export eventsChannelsByNameExportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
@@ -929,7 +962,7 @@ export def "events-channels-export eventsChannelsByNameExportPost" [
   let full_url = (build-url $base $"/events/channels/($name)/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Channel Export Status
@@ -945,13 +978,14 @@ export def "events-channels-export-status eventsChannelsExportByIdStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/events/channels/export/($id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export Events
@@ -966,6 +1000,7 @@ export def "events-export eventsExportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
@@ -979,7 +1014,7 @@ export def "events-export eventsExportPost" [
   let full_url = (build-url $base "/events/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Export Status
@@ -995,13 +1030,14 @@ export def "events-export-status eventsExportByIdStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/events/export/($id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Files
@@ -1016,6 +1052,7 @@ export def "files filesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<FileName: string, Size: int, DateAdded: string, ExpirationDate: string, ContentType: string> {
@@ -1025,7 +1062,7 @@ export def "files filesGet" [
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload File
@@ -1040,6 +1077,7 @@ export def "files filesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiresAfterDays: int # After how many days should the file be deleted. (nullable, format: int32)
   BinaryContent: string # Content of the file sent as binary data (format: byte)
   --Name: string # Filename (format: string, e.g. attachment.txt)
@@ -1054,7 +1092,7 @@ export def "files filesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete File
@@ -1070,13 +1108,14 @@ export def "files filesByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download File
@@ -1092,13 +1131,14 @@ export def "files filesByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($name)")
   let accept_val = "application/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load File Details
@@ -1114,13 +1154,14 @@ export def "files-info filesByNameInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<FileName: string, Size: int, DateAdded: string, ExpirationDate: string, ContentType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/files/($name)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Routes
@@ -1135,13 +1176,14 @@ export def "inboundroute inboundrouteGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<PublicId: string, Name: string, FilterType: string, Filter: string, ActionType: string, ActionParameter: string, SortOrder: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inboundroute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Route
@@ -1156,6 +1198,7 @@ export def "inboundroute inboundroutePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Filter: string # Filter of the inbound data (format: string)
   Name: string # Name of this route (format: string)
   FilterType: string@FilterType-completer # default: EmailAddress
@@ -1171,7 +1214,7 @@ export def "inboundroute inboundroutePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Route
@@ -1187,13 +1230,14 @@ export def "inboundroute inboundrouteByIdDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/inboundroute/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Route
@@ -1209,13 +1253,14 @@ export def "inboundroute inboundrouteByIdGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<PublicId: string, Name: string, FilterType: string, Filter: string, ActionType: string, ActionParameter: string, SortOrder: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/inboundroute/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Route
@@ -1231,6 +1276,7 @@ export def "inboundroute inboundrouteByIdPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Filter: string # Filter of the inbound data (format: string)
   Name: string # Name of this route (format: string)
   FilterType: string@FilterType-completer # default: EmailAddress
@@ -1246,7 +1292,7 @@ export def "inboundroute inboundrouteByIdPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Sorting
@@ -1261,6 +1307,7 @@ export def "inboundroute-order inboundrouteOrderPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<PublicId: string, Name: string, FilterType: string, Filter: string, ActionType: string, ActionParameter: string, SortOrder: int> {
   let input = $in
@@ -1270,7 +1317,7 @@ export def "inboundroute-order inboundrouteOrderPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Lists
@@ -1285,6 +1332,7 @@ export def "lists listsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
@@ -1294,7 +1342,7 @@ export def "lists listsGet" [
   let full_url = (build-url $base "/lists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add List
@@ -1309,6 +1357,7 @@ export def "lists listsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ListName: string # Name of your list. (format: string, e.g. My List 1)
   --AllowUnsubscribe: oneof<nothing, bool> # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
   --Emails: list # Comma delimited list of existing contact emails that should be added to this list. Leave empty for all contacts (e.g. [john.doe@sample.com])
@@ -1321,7 +1370,7 @@ export def "lists listsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Contacts in List
@@ -1337,6 +1386,7 @@ export def "lists-contacts listsByListnameContactsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<Email: string, Status: string, FirstName: string, LastName: string, CustomFields: record, Consent: record<ConsentIP: string, ConsentDate: string, ConsentTracking: string>, Source: string, SourceInfo: string, DateAdded: string, DateUpdated: string, StatusChangeDate: string, Activity: record<TotalSent: int, TotalOpened: int, TotalClicked: int, TotalFailed: int, LastSent: string, LastOpened: string, LastClicked: string, LastFailed: string, LastIP: string, ErrorCode: int, FriendlyErrorMessage: string>> {
@@ -1346,7 +1396,7 @@ export def "lists-contacts listsByListnameContactsGet" [
   let full_url = (build-url $base $"/lists/($listname)/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete List
@@ -1362,13 +1412,14 @@ export def "lists listsByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lists/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load List
@@ -1384,13 +1435,14 @@ export def "lists listsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lists/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update List
@@ -1406,6 +1458,7 @@ export def "lists listsByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewListName: string # Name of your list if you want to change it. (format: string, e.g. My List 2)
   --AllowUnsubscribe: oneof<nothing, bool> # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
 ]: any -> record<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
@@ -1417,7 +1470,7 @@ export def "lists listsByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Contacts to List
@@ -1433,6 +1486,7 @@ export def "lists-contacts listsByNameContactsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Rule: string # SQL-like rule. Sending 'All' as a value loads all resources of the given type. Help for building a segment rule can be found here: https://help.elasticemail.com/en/articles/5162182-segment-rules (format: string)
   --Emails: list # Comma delimited list of contact emails (e.g. [john.doe@sample.com])
 ]: any -> record<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
@@ -1444,7 +1498,7 @@ export def "lists-contacts listsByNameContactsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Contacts from List
@@ -1460,6 +1514,7 @@ export def "lists-contacts-remove listsByNameContactsRemovePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Rule: string # SQL-like rule. Sending 'All' as a value loads all resources of the given type. Help for building a segment rule can be found here: https://help.elasticemail.com/en/articles/5162182-segment-rules (format: string)
   --Emails: list # Comma delimited list of contact emails (e.g. [john.doe@sample.com])
 ]: any -> any {
@@ -1471,7 +1526,7 @@ export def "lists-contacts-remove listsByNameContactsRemovePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List ApiKeys
@@ -1486,6 +1541,7 @@ export def "security-apikeys securityApikeysGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which ApiKeys should be loaded (format: string)
 ]: nothing -> table<AccessLevel: list<string>, Name: string, DateCreated: string, LastUse: string, Expires: string, RestrictAccessToIPRange: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1494,7 +1550,7 @@ export def "security-apikeys securityApikeysGet" [
   let full_url = (build-url $base "/security/apikeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add ApiKey
@@ -1509,6 +1565,7 @@ export def "security-apikeys securityApikeysPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Name of the ApiKey for ease of reference. (format: string)
   AccessLevel: list # Access level or permission to be assigned to this ApiKey.
   --Expires: string # Date this ApiKey expires. (nullable, format: date-time)
@@ -1523,7 +1580,7 @@ export def "security-apikeys securityApikeysPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete ApiKey
@@ -1539,6 +1596,7 @@ export def "security-apikeys securityApikeysByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which ApiKey should be deleted (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1547,7 +1605,7 @@ export def "security-apikeys securityApikeysByNameDelete" [
   let full_url = (build-url $base $"/security/apikeys/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load ApiKey
@@ -1563,6 +1621,7 @@ export def "security-apikeys securityApikeysByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which ApiKey should be loaded (format: string)
 ]: nothing -> record<AccessLevel: list<string>, Name: string, DateCreated: string, LastUse: string, Expires: string, RestrictAccessToIPRange: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1571,7 +1630,7 @@ export def "security-apikeys securityApikeysByNameGet" [
   let full_url = (build-url $base $"/security/apikeys/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update ApiKey
@@ -1587,6 +1646,7 @@ export def "security-apikeys securityApikeysByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Name of the ApiKey for ease of reference. (format: string)
   AccessLevel: list # Access level or permission to be assigned to this ApiKey.
   --Expires: string # Date this ApiKey expires. (nullable, format: date-time)
@@ -1601,7 +1661,7 @@ export def "security-apikeys securityApikeysByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List SMTP Credentials
@@ -1616,6 +1676,7 @@ export def "security-smtp securitySmtpGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which credentials should be listed (format: string)
 ]: nothing -> table<AccessLevel: string, Name: string, DateCreated: string, LastUse: string, Expires: string, RestrictAccessToIPRange: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1624,7 +1685,7 @@ export def "security-smtp securitySmtpGet" [
   let full_url = (build-url $base "/security/smtp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add SMTP Credential
@@ -1639,6 +1700,7 @@ export def "security-smtp securitySmtpPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Name of the Credential for ease of reference. It must be a valid email address. (format: string)
   --Expires: string # Date this SmtpCredential expires. (nullable, format: date-time)
   --RestrictAccessToIPRange: list # Which IPs can use this SmtpCredential
@@ -1652,7 +1714,7 @@ export def "security-smtp securitySmtpPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SMTP Credential
@@ -1668,6 +1730,7 @@ export def "security-smtp securitySmtpByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which credential should be deleted (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1676,7 +1739,7 @@ export def "security-smtp securitySmtpByNameDelete" [
   let full_url = (build-url $base $"/security/smtp/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load SMTP Credential
@@ -1692,6 +1755,7 @@ export def "security-smtp securitySmtpByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subaccount: string # Email of the subaccount of which credential should be loaded (format: string)
 ]: nothing -> record<AccessLevel: string, Name: string, DateCreated: string, LastUse: string, Expires: string, RestrictAccessToIPRange: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -1700,7 +1764,7 @@ export def "security-smtp securitySmtpByNameGet" [
   let full_url = (build-url $base $"/security/smtp/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SMTP Credential
@@ -1716,6 +1780,7 @@ export def "security-smtp securitySmtpByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Name of the Credential for ease of reference. It must be a valid email address. (format: string)
   --Expires: string # Date this SmtpCredential expires. (nullable, format: date-time)
   --RestrictAccessToIPRange: list # Which IPs can use this SmtpCredential
@@ -1729,7 +1794,7 @@ export def "security-smtp securitySmtpByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Segments
@@ -1744,6 +1809,7 @@ export def "segments segmentsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<Name: string, Rule: string> {
@@ -1753,7 +1819,7 @@ export def "segments segmentsGet" [
   let full_url = (build-url $base "/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Segment
@@ -1768,6 +1834,7 @@ export def "segments segmentsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Segment name (format: string)
   Rule: string # SQL-like rule to determine which Contacts belong to this Segment. Help for building a segment rule can be found here: https://help.elasticemail.com/en/articles/5162182-segment-rules (format: string)
 ]: any -> record<Name: string, Rule: string> {
@@ -1779,7 +1846,7 @@ export def "segments segmentsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Segment
@@ -1795,13 +1862,14 @@ export def "segments segmentsByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/segments/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Segment
@@ -1817,13 +1885,14 @@ export def "segments segmentsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Name: string, Rule: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/segments/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Segment
@@ -1839,6 +1908,7 @@ export def "segments segmentsByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Segment name (format: string)
   Rule: string # SQL-like rule to determine which Contacts belong to this Segment. Help for building a segment rule can be found here: https://help.elasticemail.com/en/articles/5162182-segment-rules (format: string)
 ]: any -> record<Name: string, Rule: string> {
@@ -1850,7 +1920,7 @@ export def "segments segmentsByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Statistics
@@ -1865,6 +1935,7 @@ export def "statistics statisticsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
 ]: nothing -> record<Recipients: int, EmailTotal: int, SmsTotal: int, Delivered: int, Bounced: int, InProgress: int, Opened: int, Clicked: int, Unsubscribed: int, Complaints: int, Inbound: int, ManualCancel: int, NotDelivered: int> {
@@ -1874,7 +1945,7 @@ export def "statistics statisticsGet" [
   let full_url = (build-url $base "/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Campaigns Stats
@@ -1889,6 +1960,7 @@ export def "statistics-campaigns statisticsCampaignsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<ChannelName: string, Recipients: int, EmailTotal: int, SmsTotal: int, Delivered: int, Bounced: int, InProgress: int, Opened: int, Clicked: int, Unsubscribed: int, Complaints: int, Inbound: int, ManualCancel: int, NotDelivered: int> {
@@ -1898,7 +1970,7 @@ export def "statistics-campaigns statisticsCampaignsGet" [
   let full_url = (build-url $base "/statistics/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Campaign Stats
@@ -1914,13 +1986,14 @@ export def "statistics-campaigns statisticsCampaignsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ChannelName: string, Recipients: int, EmailTotal: int, SmsTotal: int, Delivered: int, Bounced: int, InProgress: int, Opened: int, Clicked: int, Unsubscribed: int, Complaints: int, Inbound: int, ManualCancel: int, NotDelivered: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/statistics/campaigns/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Channels Stats
@@ -1935,6 +2008,7 @@ export def "statistics-channels statisticsChannelsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<ChannelName: string, Recipients: int, EmailTotal: int, SmsTotal: int, Delivered: int, Bounced: int, InProgress: int, Opened: int, Clicked: int, Unsubscribed: int, Complaints: int, Inbound: int, ManualCancel: int, NotDelivered: int> {
@@ -1944,7 +2018,7 @@ export def "statistics-channels statisticsChannelsGet" [
   let full_url = (build-url $base "/statistics/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Channel Stats
@@ -1960,13 +2034,14 @@ export def "statistics-channels statisticsChannelsByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ChannelName: string, Recipients: int, EmailTotal: int, SmsTotal: int, Delivered: int, Bounced: int, InProgress: int, Opened: int, Clicked: int, Unsubscribed: int, Complaints: int, Inbound: int, ManualCancel: int, NotDelivered: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/statistics/channels/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load SubAccounts
@@ -1981,6 +2056,7 @@ export def "subaccounts subaccountsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<PublicAccountID: string, Email: string, Settings: record<Email: record>, LastActivity: string, EmailCredits: int, TotalEmailsSent: int, Reputation: float, Status: string, ContactsCount: int> {
@@ -1990,7 +2066,7 @@ export def "subaccounts subaccountsGet" [
   let full_url = (build-url $base "/subaccounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add SubAccount
@@ -2006,6 +2082,7 @@ export def "subaccounts subaccountsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Email: string # Proper email address. (format: string, e.g. mail@example.com)
   Password: string # Current password. (format: string, e.g. ********)
   --SendActivation: oneof<nothing, bool> # True, if you want to send activation email to this Account to confirm the creation of a new SubAccount. Otherwise, false (SubAccount will immediately be Active). (format: boolean)
@@ -2019,7 +2096,7 @@ export def "subaccounts subaccountsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SubAccount
@@ -2035,13 +2112,14 @@ export def "subaccounts subaccountsByEmailDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subaccounts/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load SubAccount
@@ -2057,13 +2135,14 @@ export def "subaccounts subaccountsByEmailGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<PublicAccountID: string, Email: string, Settings: record<Email: record<MonthlyRefillCredits: int, RequiresEmailCredits: bool, EmailSizeLimit: int, DailySendLimit: int, MaxContacts: int, EnablePrivateIPPurchase: bool, PoolName: string, ValidSenderDomainOnly: bool>>, LastActivity: string, EmailCredits: int, TotalEmailsSent: int, Reputation: float, Status: string, ContactsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subaccounts/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add, Subtract Email Credits
@@ -2079,6 +2158,7 @@ export def "subaccounts-credits subaccountsByEmailCreditsPatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Credits: int # Positive or negative value; this will be added or subtracted from Subaccount's current email Credits pool. (format: int32)
   --Notes: string # Note to append to this credits change, for history. (format: string)
 ]: any -> any {
@@ -2090,7 +2170,7 @@ export def "subaccounts-credits subaccountsByEmailCreditsPatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update SubAccount Email Settings
@@ -2106,6 +2186,7 @@ export def "subaccounts-settings-email subaccountsByEmailSettingsEmailPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --MonthlyRefillCredits: int # Amount of credits added to Account automatically (format: int32, e.g. 1000)
   --RequiresEmailCredits: oneof<nothing, bool> # True, if Account needs credits to send emails. Otherwise, false (format: boolean, e.g. true)
   --EmailSizeLimit: int # Maximum size of email including attachments in MB's (format: int32, e.g. 10)
@@ -2123,7 +2204,7 @@ export def "subaccounts-settings-email subaccountsByEmailSettingsEmailPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Suppressions
@@ -2138,6 +2219,7 @@ export def "suppressions suppressionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<Email: string, FriendlyErrorMessage: string, ErrorCode: int, DateUpdated: string> {
@@ -2147,7 +2229,7 @@ export def "suppressions suppressionsGet" [
   let full_url = (build-url $base "/suppressions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Suppression
@@ -2163,13 +2245,14 @@ export def "suppressions suppressionsByEmailDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/suppressions/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Suppression
@@ -2185,13 +2268,14 @@ export def "suppressions suppressionsByEmailGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Email: string, FriendlyErrorMessage: string, ErrorCode: int, DateUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/suppressions/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bounce List
@@ -2206,6 +2290,7 @@ export def "suppressions-bounces suppressionsBouncesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Text fragment used for searching. (format: string, e.g. text)
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
@@ -2216,7 +2301,7 @@ export def "suppressions-bounces suppressionsBouncesGet" [
   let full_url = (build-url $base "/suppressions/bounces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Bounces
@@ -2231,6 +2316,7 @@ export def "suppressions-bounces suppressionsBouncesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<Email: string, FriendlyErrorMessage: string, ErrorCode: int, DateUpdated: string> {
   let input = $in
@@ -2240,7 +2326,7 @@ export def "suppressions-bounces suppressionsBouncesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Bounces Async
@@ -2255,6 +2341,7 @@ export def "suppressions-bounces-import suppressionsBouncesImportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -2265,7 +2352,7 @@ export def "suppressions-bounces-import suppressionsBouncesImportPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Complaints List
@@ -2280,6 +2367,7 @@ export def "suppressions-complaints suppressionsComplaintsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Text fragment used for searching. (format: string, e.g. text)
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
@@ -2290,7 +2378,7 @@ export def "suppressions-complaints suppressionsComplaintsGet" [
   let full_url = (build-url $base "/suppressions/complaints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Complaints
@@ -2305,6 +2393,7 @@ export def "suppressions-complaints suppressionsComplaintsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<Email: string, FriendlyErrorMessage: string, ErrorCode: int, DateUpdated: string> {
   let input = $in
@@ -2314,7 +2403,7 @@ export def "suppressions-complaints suppressionsComplaintsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Complaints Async
@@ -2329,6 +2418,7 @@ export def "suppressions-complaints-import suppressionsComplaintsImportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -2339,7 +2429,7 @@ export def "suppressions-complaints-import suppressionsComplaintsImportPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Unsubscribes List
@@ -2354,6 +2444,7 @@ export def "suppressions-unsubscribes suppressionsUnsubscribesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Text fragment used for searching. (format: string, e.g. text)
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
@@ -2364,7 +2455,7 @@ export def "suppressions-unsubscribes suppressionsUnsubscribesGet" [
   let full_url = (build-url $base "/suppressions/unsubscribes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Unsubscribes
@@ -2379,6 +2470,7 @@ export def "suppressions-unsubscribes suppressionsUnsubscribesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<Email: string, FriendlyErrorMessage: string, ErrorCode: int, DateUpdated: string> {
   let input = $in
@@ -2388,7 +2480,7 @@ export def "suppressions-unsubscribes suppressionsUnsubscribesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Unsubscribes Async
@@ -2403,6 +2495,7 @@ export def "suppressions-unsubscribes-import suppressionsUnsubscribesImportPost"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -2413,7 +2506,7 @@ export def "suppressions-unsubscribes-import suppressionsUnsubscribesImportPost"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Load Templates
@@ -2428,6 +2521,7 @@ export def "templates templatesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scopeType: list # Return templates with specified scope only
   --templateTypes: list # Return templates with specified type only
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
@@ -2439,7 +2533,7 @@ export def "templates templatesGet" [
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Template
@@ -2455,6 +2549,7 @@ export def "templates templatesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Template name (format: string)
   --Subject: string # Default subject of email. (format: string, e.g. Hello!)
   --Body: list # Email content of this template — item shape: {ContentType: "HTML"|"PlainText"|"AMP"|"CSS", Content?: string, Charset?: string}
@@ -2468,7 +2563,7 @@ export def "templates templatesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Template
@@ -2484,13 +2579,14 @@ export def "templates templatesByNameDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Template
@@ -2506,13 +2602,14 @@ export def "templates templatesByNameGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<TemplateType: string, Name: string, DateAdded: string, Subject: string, Body: table<ContentType: string, Content: string, Charset: string>, TemplateScope: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Template
@@ -2529,6 +2626,7 @@ export def "templates templatesByNamePut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Template name (format: string)
   --Subject: string # Default subject of email. (format: string, e.g. Hello!)
   --Body: list # Email content of this template — item shape: {ContentType: "HTML"|"PlainText"|"AMP"|"CSS", Content?: string, Charset?: string}
@@ -2542,7 +2640,7 @@ export def "templates templatesByNamePut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Emails Verification Results
@@ -2557,6 +2655,7 @@ export def "verifications verificationsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<Account: string, Domain: string, Email: string, SuggestedSpelling: string, Disposable: bool, Role: bool, Reason: string, DateAdded: string, Result: string, PredictedScore: float, PredictedStatus: string> {
@@ -2566,7 +2665,7 @@ export def "verifications verificationsGet" [
   let full_url = (build-url $base "/verifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Email Verification Result
@@ -2582,13 +2681,14 @@ export def "verifications verificationsByEmailDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Email Verification Result
@@ -2604,13 +2704,14 @@ export def "verifications verificationsByEmailGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Account: string, Domain: string, Email: string, SuggestedSpelling: string, Disposable: bool, Role: bool, Reason: string, DateAdded: string, Result: string, PredictedScore: float, PredictedStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify Email
@@ -2626,13 +2727,14 @@ export def "verifications verificationsByEmailPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Account: string, Domain: string, Email: string, SuggestedSpelling: string, Disposable: bool, Role: bool, Reason: string, DateAdded: string, Result: string, PredictedScore: float, PredictedStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload File with Emails
@@ -2647,6 +2749,7 @@ export def "verifications-files verificationsFilesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> record<VerificationID: string, Filename: string, VerificationStatus: string, FileUploadResult: record<EmailsCount: int, DuplicatedEmailsCount: int>, DateAdded: string, Source: string> {
   let input = $in
@@ -2657,7 +2760,7 @@ export def "verifications-files verificationsFilesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete File Verification Result
@@ -2673,13 +2776,14 @@ export def "verifications-files verificationsFilesByIdDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/files/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Detailed File Verification Result
@@ -2695,6 +2799,7 @@ export def "verifications-files-result verificationsFilesByIdResultGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned email verification results (format: int32)
   --offset: int # How many result items should be returned ahead (format: int32)
 ]: nothing -> record<VerificationResult: table<Account: string, Domain: string, Email: string, SuggestedSpelling: string, Disposable: bool, Role: bool, Reason: string, DateAdded: string, Result: string, PredictedScore: float, PredictedStatus: string>, VerificationID: string, Filename: string, VerificationStatus: string, FileUploadResult: record<EmailsCount: int, DuplicatedEmailsCount: int>, DateAdded: string, Source: string> {
@@ -2704,7 +2809,7 @@ export def "verifications-files-result verificationsFilesByIdResultGet" [
   let full_url = (build-url $base $"/verifications/files/($id)/result" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download File Verification Result
@@ -2720,13 +2825,14 @@ export def "verifications-files-result-download verificationsFilesByIdResultDown
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/files/($id)/result/download")
   let accept_val = "application/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start verification
@@ -2742,13 +2848,14 @@ export def "verifications-files-verification verificationsFilesByIdVerificationP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/verifications/files/($id)/verification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Files Verification Results
@@ -2763,13 +2870,14 @@ export def "verifications-files-result verificationsFilesResultGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<VerificationID: string, Filename: string, VerificationStatus: string, FileUploadResult: record<EmailsCount: int, DuplicatedEmailsCount: int>, DateAdded: string, Source: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/files/result")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Webhooks
@@ -2784,6 +2892,7 @@ export def "webhook webhookGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<WebhookID: string, Name: string, DateCreated: string, DateUpdated: string, URL: string, NotifyOncePerEmail: bool, NotificationForSent: bool, NotificationForOpened: bool, NotificationForClicked: bool, NotificationForUnsubscribed: bool, NotificationForAbuseReport: bool, NotificationForError: bool, IsEnabled: bool> {
@@ -2793,7 +2902,7 @@ export def "webhook webhookGet" [
   let full_url = (build-url $base "/webhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Webhook
@@ -2808,6 +2917,7 @@ export def "webhook webhookPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Filename (format: string, e.g. attachment.txt)
   URL: string # URL of notification. (format: string, e.g. http://address.for.notification.com)
   --NotifyOncePerEmail: oneof<nothing, bool> # format: boolean
@@ -2826,7 +2936,7 @@ export def "webhook webhookPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Webhook
@@ -2842,13 +2952,14 @@ export def "webhook webhookByPublicidDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhook/($publicid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load Webhook
@@ -2864,13 +2975,14 @@ export def "webhook webhookByPublicidGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<WebhookID: string, Name: string, DateCreated: string, DateUpdated: string, URL: string, NotifyOncePerEmail: bool, NotificationForSent: bool, NotificationForOpened: bool, NotificationForClicked: bool, NotificationForUnsubscribed: bool, NotificationForAbuseReport: bool, NotificationForError: bool, IsEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhook/($publicid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webhook
@@ -2886,6 +2998,7 @@ export def "webhook webhookByPublicidPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Filename (format: string, e.g. attachment.txt)
   --URL: string # URL of notification. (format: string, e.g. http://address.for.notification.com)
   --NotifyOncePerEmail: oneof<nothing, bool> # nullable, format: boolean
@@ -2905,5 +3018,5 @@ export def "webhook webhookByPublicidPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

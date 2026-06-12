@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def responseFormat-completer [] { ["agent" "full"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "actors list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,6 +113,7 @@ export def "actors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --my: oneof<nothing, bool> # If `true` or `1` then the returned list only contains Actors owned by the user. The default value is `false`.  (e.g. true)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
@@ -124,7 +126,7 @@ export def "actors list" [
   let full_url = (build-url $base "/v2/actors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Actor
@@ -142,6 +144,7 @@ export def "actors post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --description: string # nullable
   --title: string # nullable
@@ -165,7 +168,7 @@ export def "actors post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Actor
@@ -181,13 +184,14 @@ export def "actors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, userId: string, name: string, username: string, description: string, restartOnError: bool, isPublic: bool, actorPermissionLevel: string, createdAt: string, modifiedAt: string, stats: record<totalBuilds: int, totalRuns: int, totalUsers: int, totalUsers7Days: int, totalUsers30Days: int, totalUsers90Days: int, totalMetamorphs: int, lastRunStartedAt: string, actorReviewCount: int, actorReviewRating: float, bookmarkCount: int, publicActorRunStats30Days: record>, versions: list<record>, pricingInfos: list<any>, defaultRunOptions: record<build: string, timeoutSecs: int, memoryMbytes: int, restartOnError: bool, maxItems: int, forcePermissionLevel: any>, exampleRunInput: any, isDeprecated: bool, deploymentKey: string, title: string, taggedBuilds: any, actorStandby: any, readmeSummary: string, seoTitle: string, seoDescription: string, pictureUrl: string, standbyUrl: string, notice: string, categories: list<string>, isCritical: bool, isGeneric: bool, isSourceCodeHidden: bool, hasNoDataset: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Actor
@@ -205,6 +209,7 @@ export def "actors put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --description: string # nullable
   --isPublic: oneof<nothing, bool>
@@ -230,7 +235,7 @@ export def "actors put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Actor
@@ -246,13 +251,14 @@ export def "actors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of versions
@@ -268,13 +274,14 @@ export def "actors-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create version
@@ -291,6 +298,7 @@ export def "actors-versions post-by-actorId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
@@ -309,7 +317,7 @@ export def "actors-versions post-by-actorId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get version
@@ -326,13 +334,14 @@ export def "actors-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<versionNumber: string, sourceType: any, envVars: list<record>, applyEnvVarsToBuild: bool, buildTag: string, sourceFiles: list<any>, gitRepoUrl: string, tarballUrl: string, gitHubGistUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions/($versionNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update version
@@ -350,6 +359,7 @@ export def "actors-versions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
@@ -368,7 +378,7 @@ export def "actors-versions put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update version (POST)
@@ -386,6 +396,7 @@ export def "actors-versions post-by-actorId-versionNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
@@ -404,7 +415,7 @@ export def "actors-versions post-by-actorId-versionNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete version
@@ -421,13 +432,14 @@ export def "actors-versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions/($versionNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of environment variables
@@ -444,13 +456,14 @@ export def "actors-versions-env-vars list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions/($versionNumber)/env-vars")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create environment variable
@@ -467,6 +480,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
   --isSecret: oneof<nothing, bool> # nullable
@@ -479,7 +493,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get environment variable
@@ -497,13 +511,14 @@ export def "actors-versions-env-vars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<name: string, value: string, isSecret: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions/($versionNumber)/env-vars/($envVarName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update environment variable
@@ -521,6 +536,7 @@ export def "actors-versions-env-vars put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
   --isSecret: oneof<nothing, bool> # nullable
@@ -533,7 +549,7 @@ export def "actors-versions-env-vars put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update environment variable (POST)
@@ -551,6 +567,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber-envVarName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
   --isSecret: oneof<nothing, bool> # nullable
@@ -563,7 +580,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber-envVarName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete environment variable
@@ -581,13 +598,14 @@ export def "actors-versions-env-vars delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/versions/($versionNumber)/env-vars/($envVarName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of webhooks
@@ -603,6 +621,7 @@ export def "actors-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -613,7 +632,7 @@ export def "actors-webhooks get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of builds
@@ -629,6 +648,7 @@ export def "actors-builds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -639,7 +659,7 @@ export def "actors-builds list" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Build Actor
@@ -655,6 +675,7 @@ export def "actors-builds post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Actor version number to be built. (e.g. 0.0)
   --useCache: oneof<nothing, bool> # If `true` or `1`, the system will use a cache to speed up the build process. By default, cache is not used.  (e.g. true)
   --betaPackages: oneof<nothing, bool> # If `true` or `1` then the Actor is built with beta versions of Apify NPM packages. By default, the build uses `latest` packages.  (e.g. true)
@@ -667,7 +688,7 @@ export def "actors-builds post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default build
@@ -683,6 +704,7 @@ export def "actors-builds-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --waitForFinish: float # The maximum number of seconds the server waits for the build to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the build finishes in time then the returned build object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -691,7 +713,7 @@ export def "actors-builds-default get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OpenAPI definition
@@ -708,13 +730,14 @@ export def "actors-builds-openapijson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds/($buildId)/openapi.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build
@@ -733,6 +756,7 @@ export def "actors-builds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --waitForFinish: float # The maximum number of seconds the server waits for the build to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the build finishes in time then the returned build object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -741,7 +765,7 @@ export def "actors-builds get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds/($buildId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort build
@@ -760,13 +784,14 @@ export def "actors-builds-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actors/($actorId)/builds/($buildId)/abort")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of runs
@@ -782,6 +807,7 @@ export def "actors-runs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -795,7 +821,7 @@ export def "actors-runs list" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run Actor
@@ -811,6 +837,7 @@ export def "actors-runs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -830,7 +857,7 @@ export def "actors-runs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run Actor synchronously and return output
@@ -846,6 +873,7 @@ export def "actors-run-sync post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --outputRecordKey: string # Key of the record from run's default key-value store to be returned in the response. By default, it is `OUTPUT`.  (e.g. OUTPUT)
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
@@ -864,7 +892,7 @@ export def "actors-run-sync post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run Actor synchronously without input
@@ -880,6 +908,7 @@ export def "actors-run-sync get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --outputRecordKey: string # Key of the record from run's default key-value store to be returned in the response. By default, it is `OUTPUT`.  (e.g. OUTPUT)
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
@@ -895,7 +924,7 @@ export def "actors-run-sync get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/run-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run Actor synchronously and get dataset items
@@ -911,6 +940,7 @@ export def "actors-run-sync-get-dataset-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -951,7 +981,7 @@ export def "actors-run-sync-get-dataset-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run Actor synchronously without input and get dataset items
@@ -967,6 +997,7 @@ export def "actors-run-sync-get-dataset-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -1004,7 +1035,7 @@ export def "actors-run-sync-get-dataset-items get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/run-sync-get-dataset-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate Actor input
@@ -1020,6 +1051,7 @@ export def "actors-validate-input post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --build: string # Optional tag or number of the Actor build to use for input schema validation. By default, the `latest` build tag is used.  (e.g. latest)
   --body: record
 ]: any -> record<valid: bool> {
@@ -1031,7 +1063,7 @@ export def "actors-validate-input post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resurrect run
@@ -1048,6 +1080,7 @@ export def "actors-runs-resurrect post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run is resurrected with the same build it originally used. Specifically, if a run was first started with the `latest` tag, which resolves to version `0.0.3` at the time, a run resurrected without this parameter will continue running with `0.0.3`, even if `latest` already points to a newer build.  (e.g. 0.1.234)
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout specified in the run that is being resurrected.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit specified in the run that is being resurrected.  (format: double, e.g. 256)
@@ -1059,7 +1092,7 @@ export def "actors-runs-resurrect post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/($runId)/resurrect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run
@@ -1075,6 +1108,7 @@ export def "actors-runs-last get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -1084,7 +1118,7 @@ export def "actors-runs-last get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default dataset
@@ -1100,6 +1134,7 @@ export def "actors-runs-last-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1108,7 +1143,7 @@ export def "actors-runs-last-dataset get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last run's default dataset
@@ -1124,6 +1159,7 @@ export def "actors-runs-last-dataset put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -1137,7 +1173,7 @@ export def "actors-runs-last-dataset put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last run's default dataset
@@ -1153,6 +1189,7 @@ export def "actors-runs-last-dataset delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1161,7 +1198,7 @@ export def "actors-runs-last-dataset delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's dataset items
@@ -1177,6 +1214,7 @@ export def "actors-runs-last-dataset-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
@@ -1210,7 +1248,7 @@ export def "actors-runs-last-dataset-items get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/dataset/items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store items in last run's dataset
@@ -1226,6 +1264,7 @@ export def "actors-runs-last-dataset-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --body: record
 ]: any -> record {
@@ -1237,7 +1276,7 @@ export def "actors-runs-last-dataset-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last run's dataset statistics
@@ -1253,6 +1292,7 @@ export def "actors-runs-last-dataset-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<fieldStatistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1261,7 +1301,7 @@ export def "actors-runs-last-dataset-statistics get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/dataset/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default store
@@ -1277,6 +1317,7 @@ export def "actors-runs-last-key-value-store get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1285,7 +1326,7 @@ export def "actors-runs-last-key-value-store get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last run's default store
@@ -1301,6 +1342,7 @@ export def "actors-runs-last-key-value-store put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -1314,7 +1356,7 @@ export def "actors-runs-last-key-value-store put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last run's default store
@@ -1330,6 +1372,7 @@ export def "actors-runs-last-key-value-store delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1338,7 +1381,7 @@ export def "actors-runs-last-key-value-store delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default store's list of keys
@@ -1354,6 +1397,7 @@ export def "actors-runs-last-key-value-store-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --exclusiveStartKey: string # All keys up to this one (including) are skipped from the result. (e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. (format: int32, default: 1000, e.g. 100)
@@ -1367,7 +1411,7 @@ export def "actors-runs-last-key-value-store-keys get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download last run's default store's records
@@ -1383,6 +1427,7 @@ export def "actors-runs-last-key-value-store-records list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --collection: string # If specified, only records belonging to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work.  (e.g. my-collection)
   --prefix: string # If specified, only records whose key starts with the given prefix are included in the archive.  (e.g. my-prefix/)
@@ -1394,7 +1439,7 @@ export def "actors-runs-last-key-value-store-records list" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store/records" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default store's record
@@ -1411,6 +1456,7 @@ export def "actors-runs-last-key-value-store-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -1422,7 +1468,7 @@ export def "actors-runs-last-key-value-store-records get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store/records/($recordKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store record in last run's default store
@@ -1439,6 +1485,7 @@ export def "actors-runs-last-key-value-store-records put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
@@ -1453,7 +1500,7 @@ export def "actors-runs-last-key-value-store-records put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Store record in last run's default store (POST)
@@ -1470,6 +1517,7 @@ export def "actors-runs-last-key-value-store-records post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
@@ -1484,7 +1532,7 @@ export def "actors-runs-last-key-value-store-records post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last run's default store's record
@@ -1501,6 +1549,7 @@ export def "actors-runs-last-key-value-store-records delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1509,7 +1558,7 @@ export def "actors-runs-last-key-value-store-records delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/key-value-store/records/($recordKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default request queue
@@ -1525,6 +1574,7 @@ export def "actors-runs-last-request-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1533,7 +1583,7 @@ export def "actors-runs-last-request-queue get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last run's default request queue
@@ -1549,6 +1599,7 @@ export def "actors-runs-last-request-queue put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # The new name for the request queue. (nullable)
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -1562,7 +1613,7 @@ export def "actors-runs-last-request-queue put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last run's default request queue
@@ -1578,6 +1629,7 @@ export def "actors-runs-last-request-queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1586,7 +1638,7 @@ export def "actors-runs-last-request-queue delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List last run's default request queue's requests
@@ -1603,6 +1655,7 @@ export def "actors-runs-last-request-queue-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --exclusiveStartId: string # All requests up to this one (including) are skipped from the result. (Deprecated, use `cursor` instead.) (DEPRECATED, e.g. Ihnsp8YrvJ8102Kj)
@@ -1616,7 +1669,7 @@ export def "actors-runs-last-request-queue-requests list" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add request to last run's default request queue
@@ -1632,6 +1685,7 @@ export def "actors-runs-last-request-queue-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
@@ -1656,7 +1710,7 @@ export def "actors-runs-last-request-queue-requests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch add requests to last run's default request queue
@@ -1672,6 +1726,7 @@ export def "actors-runs-last-request-queue-requests-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
@@ -1685,7 +1740,7 @@ export def "actors-runs-last-request-queue-requests-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch delete requests from last run's default request queue
@@ -1701,6 +1756,7 @@ export def "actors-runs-last-request-queue-requests-batch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --Content-Type: string
@@ -1716,7 +1772,7 @@ export def "actors-runs-last-request-queue-requests-batch delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlock requests in last run's default request queue
@@ -1732,6 +1788,7 @@ export def "actors-runs-last-request-queue-requests-unlock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<unlockedCount: int>> {
@@ -1741,7 +1798,7 @@ export def "actors-runs-last-request-queue-requests-unlock post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests/unlock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request from last run's default request queue
@@ -1758,6 +1815,7 @@ export def "actors-runs-last-request-queue-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<uniqueKey: string, url: string, method: string, retryCount: int, loadedUrl: string, payload: string, headers: record, userData: record, noRetry: bool, errorMessages: list<string>, handledAt: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1766,7 +1824,7 @@ export def "actors-runs-last-request-queue-requests get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update request in last run's default request queue
@@ -1783,6 +1841,7 @@ export def "actors-runs-last-request-queue-requests put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -1808,7 +1867,7 @@ export def "actors-runs-last-request-queue-requests put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request from last run's default request queue
@@ -1825,6 +1884,7 @@ export def "actors-runs-last-request-queue-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> any {
@@ -1834,7 +1894,7 @@ export def "actors-runs-last-request-queue-requests delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prolong lock on request in last run's default request queue
@@ -1851,6 +1911,7 @@ export def "actors-runs-last-request-queue-requests-lock put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -1862,7 +1923,7 @@ export def "actors-runs-last-request-queue-requests-lock put" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete lock on request in last run's default request queue
@@ -1879,6 +1940,7 @@ export def "actors-runs-last-request-queue-requests-lock delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock was removed.  (e.g. false)
@@ -1889,7 +1951,7 @@ export def "actors-runs-last-request-queue-requests-lock delete" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last run's default request queue head
@@ -1905,6 +1967,7 @@ export def "actors-runs-last-request-queue-head get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --limit: float # How many items from queue should be returned. (format: double, e.g. 100)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -1915,7 +1978,7 @@ export def "actors-runs-last-request-queue-head get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/head" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get and lock last run's default request queue head
@@ -1931,6 +1994,7 @@ export def "actors-runs-last-request-queue-head-lock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --limit: float # How many items from the queue should be returned. (format: double, e.g. 25)
@@ -1942,7 +2006,7 @@ export def "actors-runs-last-request-queue-head-lock post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/request-queue/head/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last Actor run's log
@@ -1958,6 +2022,7 @@ export def "actors-runs-last-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
   --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
   --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
@@ -1968,7 +2033,7 @@ export def "actors-runs-last-log get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort Actor's last run
@@ -1984,6 +2049,7 @@ export def "actors-runs-last-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -1993,7 +2059,7 @@ export def "actors-runs-last-abort post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/abort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Metamorph Actor's last run
@@ -2009,6 +2075,7 @@ export def "actors-runs-last-metamorph post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --targetActorId: string # ID of a target Actor that the run should be transformed into. (e.g. HDSasDasz78YcAPEB)
   --build: string # Optional build of the target Actor.  It can be either a build tag or build number. By default, the run uses the build specified in the default run configuration for the target Actor (typically `latest`).  (e.g. beta)
@@ -2019,7 +2086,7 @@ export def "actors-runs-last-metamorph post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/metamorph" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reboot Actor's last run
@@ -2035,6 +2102,7 @@ export def "actors-runs-last-reboot post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2043,7 +2111,7 @@ export def "actors-runs-last-reboot post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/last/reboot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get run
@@ -2062,6 +2130,7 @@ export def "actors-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2070,7 +2139,7 @@ export def "actors-runs get" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/($runId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort run
@@ -2089,6 +2158,7 @@ export def "actors-runs-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2097,7 +2167,7 @@ export def "actors-runs-abort post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/($runId)/abort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Metamorph run
@@ -2116,6 +2186,7 @@ export def "actors-runs-metamorph post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetActorId: string # ID of a target Actor that the run should be transformed into. (e.g. HDSasDasz78YcAPEB)
   --build: string # Optional build of the target Actor.  It can be either a build tag or build number. By default, the run uses the build specified in the default run configuration for the target Actor (typically `latest`).  (e.g. beta)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -2125,7 +2196,7 @@ export def "actors-runs-metamorph post" [
   let full_url = (build-url $base $"/v2/actors/($actorId)/runs/($runId)/metamorph" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of tasks
@@ -2140,6 +2211,7 @@ export def "actor-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -2150,7 +2222,7 @@ export def "actor-tasks list" [
   let full_url = (build-url $base "/v2/actor-tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create task
@@ -2165,6 +2237,7 @@ export def "actor-tasks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   actId: string
   --name: string
   --options: any
@@ -2180,7 +2253,7 @@ export def "actor-tasks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get task
@@ -2196,13 +2269,14 @@ export def "actor-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, userId: string, actId: string, name: string, username: string, createdAt: string, modifiedAt: string, removedAt: string, stats: any, options: any, input: any, title: string, actorStandby: any, standbyUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update task
@@ -2218,6 +2292,7 @@ export def "actor-tasks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --options: any
   --input: any
@@ -2232,7 +2307,7 @@ export def "actor-tasks put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete task
@@ -2248,13 +2323,14 @@ export def "actor-tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get task input
@@ -2270,13 +2346,14 @@ export def "actor-tasks-input get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/input")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update task input
@@ -2292,6 +2369,7 @@ export def "actor-tasks-input put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -2301,7 +2379,7 @@ export def "actor-tasks-input put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get list of webhooks
@@ -2317,6 +2395,7 @@ export def "actor-tasks-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -2327,7 +2406,7 @@ export def "actor-tasks-webhooks get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of task runs
@@ -2343,6 +2422,7 @@ export def "actor-tasks-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -2354,7 +2434,7 @@ export def "actor-tasks-runs get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run task
@@ -2370,6 +2450,7 @@ export def "actor-tasks-runs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -2388,7 +2469,7 @@ export def "actor-tasks-runs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run task synchronously
@@ -2404,6 +2485,7 @@ export def "actor-tasks-run-sync get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -2417,7 +2499,7 @@ export def "actor-tasks-run-sync get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/run-sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run task synchronously
@@ -2433,6 +2515,7 @@ export def "actor-tasks-run-sync post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -2451,7 +2534,7 @@ export def "actor-tasks-run-sync post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run task synchronously and get dataset items
@@ -2467,6 +2550,7 @@ export def "actor-tasks-run-sync-get-dataset-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -2502,7 +2586,7 @@ export def "actor-tasks-run-sync-get-dataset-items get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/run-sync-get-dataset-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run task synchronously and get dataset items
@@ -2518,6 +2602,7 @@ export def "actor-tasks-run-sync-get-dataset-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout from its configuration.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
@@ -2558,7 +2643,7 @@ export def "actor-tasks-run-sync-get-dataset-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last run
@@ -2574,6 +2659,7 @@ export def "actor-tasks-runs-last get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -2583,7 +2669,7 @@ export def "actor-tasks-runs-last get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last Actor task run's log
@@ -2599,6 +2685,7 @@ export def "actor-tasks-runs-last-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
   --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
   --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
@@ -2609,7 +2696,7 @@ export def "actor-tasks-runs-last-log get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort Actor task's last run
@@ -2625,6 +2712,7 @@ export def "actor-tasks-runs-last-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -2634,7 +2722,7 @@ export def "actor-tasks-runs-last-abort post" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/abort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Metamorph Actor task's last run
@@ -2650,6 +2738,7 @@ export def "actor-tasks-runs-last-metamorph post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --targetActorId: string # ID of a target Actor that the run should be transformed into. (e.g. HDSasDasz78YcAPEB)
   --build: string # Optional build of the target Actor.  It can be either a build tag or build number. By default, the run uses the build specified in the default run configuration for the target Actor (typically `latest`).  (e.g. beta)
@@ -2660,7 +2749,7 @@ export def "actor-tasks-runs-last-metamorph post" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/metamorph" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reboot Actor task's last run
@@ -2676,6 +2765,7 @@ export def "actor-tasks-runs-last-reboot post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2684,7 +2774,7 @@ export def "actor-tasks-runs-last-reboot post" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/reboot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default dataset
@@ -2700,6 +2790,7 @@ export def "actor-tasks-runs-last-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2708,7 +2799,7 @@ export def "actor-tasks-runs-last-dataset get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last task run's default dataset
@@ -2724,6 +2815,7 @@ export def "actor-tasks-runs-last-dataset put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -2737,7 +2829,7 @@ export def "actor-tasks-runs-last-dataset put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last task run's default dataset
@@ -2753,6 +2845,7 @@ export def "actor-tasks-runs-last-dataset delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2761,7 +2854,7 @@ export def "actor-tasks-runs-last-dataset delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's dataset items
@@ -2777,6 +2870,7 @@ export def "actor-tasks-runs-last-dataset-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
@@ -2810,7 +2904,7 @@ export def "actor-tasks-runs-last-dataset-items get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/dataset/items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store items in last task run's dataset
@@ -2826,6 +2920,7 @@ export def "actor-tasks-runs-last-dataset-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --body: record
 ]: any -> record {
@@ -2837,7 +2932,7 @@ export def "actor-tasks-runs-last-dataset-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last task run's dataset statistics
@@ -2853,6 +2948,7 @@ export def "actor-tasks-runs-last-dataset-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<fieldStatistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2861,7 +2957,7 @@ export def "actor-tasks-runs-last-dataset-statistics get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/dataset/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default store
@@ -2877,6 +2973,7 @@ export def "actor-tasks-runs-last-key-value-store get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2885,7 +2982,7 @@ export def "actor-tasks-runs-last-key-value-store get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last task run's default store
@@ -2901,6 +2998,7 @@ export def "actor-tasks-runs-last-key-value-store put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -2914,7 +3012,7 @@ export def "actor-tasks-runs-last-key-value-store put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last task run's default store
@@ -2930,6 +3028,7 @@ export def "actor-tasks-runs-last-key-value-store delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2938,7 +3037,7 @@ export def "actor-tasks-runs-last-key-value-store delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default store's list of keys
@@ -2954,6 +3053,7 @@ export def "actor-tasks-runs-last-key-value-store-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --exclusiveStartKey: string # All keys up to this one (including) are skipped from the result. (e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. (format: int32, default: 1000, e.g. 100)
@@ -2967,7 +3067,7 @@ export def "actor-tasks-runs-last-key-value-store-keys get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download last task run's default store's records
@@ -2983,6 +3083,7 @@ export def "actor-tasks-runs-last-key-value-store-records list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --collection: string # If specified, only records belonging to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work.  (e.g. my-collection)
   --prefix: string # If specified, only records whose key starts with the given prefix are included in the archive.  (e.g. my-prefix/)
@@ -2994,7 +3095,7 @@ export def "actor-tasks-runs-last-key-value-store-records list" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store/records" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default store's record
@@ -3011,6 +3112,7 @@ export def "actor-tasks-runs-last-key-value-store-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -3022,7 +3124,7 @@ export def "actor-tasks-runs-last-key-value-store-records get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store/records/($recordKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store record in last task run's default store
@@ -3039,6 +3141,7 @@ export def "actor-tasks-runs-last-key-value-store-records put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
@@ -3053,7 +3156,7 @@ export def "actor-tasks-runs-last-key-value-store-records put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Store record in last task run's default store (POST)
@@ -3070,6 +3173,7 @@ export def "actor-tasks-runs-last-key-value-store-records post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
@@ -3084,7 +3188,7 @@ export def "actor-tasks-runs-last-key-value-store-records post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last task run's default store's record
@@ -3101,6 +3205,7 @@ export def "actor-tasks-runs-last-key-value-store-records delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3109,7 +3214,7 @@ export def "actor-tasks-runs-last-key-value-store-records delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/key-value-store/records/($recordKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default request queue
@@ -3125,6 +3230,7 @@ export def "actor-tasks-runs-last-request-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3133,7 +3239,7 @@ export def "actor-tasks-runs-last-request-queue get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update last task run's default request queue
@@ -3149,6 +3255,7 @@ export def "actor-tasks-runs-last-request-queue put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --name: string # The new name for the request queue. (nullable)
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
@@ -3162,7 +3269,7 @@ export def "actor-tasks-runs-last-request-queue put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete last task run's default request queue
@@ -3178,6 +3285,7 @@ export def "actor-tasks-runs-last-request-queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3186,7 +3294,7 @@ export def "actor-tasks-runs-last-request-queue delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get last task run's default request queue head
@@ -3202,6 +3310,7 @@ export def "actor-tasks-runs-last-request-queue-head get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --limit: float # How many items from queue should be returned. (format: double, e.g. 100)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -3212,7 +3321,7 @@ export def "actor-tasks-runs-last-request-queue-head get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/head" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get and lock last task run's default request queue head
@@ -3228,6 +3337,7 @@ export def "actor-tasks-runs-last-request-queue-head-lock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --limit: float # How many items from the queue should be returned. (format: double, e.g. 25)
@@ -3239,7 +3349,7 @@ export def "actor-tasks-runs-last-request-queue-head-lock post" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/head/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List last task run's default request queue's requests
@@ -3256,6 +3366,7 @@ export def "actor-tasks-runs-last-request-queue-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --exclusiveStartId: string # All requests up to this one (including) are skipped from the result. (Deprecated, use `cursor` instead.) (DEPRECATED, e.g. Ihnsp8YrvJ8102Kj)
@@ -3269,7 +3380,7 @@ export def "actor-tasks-runs-last-request-queue-requests list" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add request to last task run's default request queue
@@ -3285,6 +3396,7 @@ export def "actor-tasks-runs-last-request-queue-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
@@ -3309,7 +3421,7 @@ export def "actor-tasks-runs-last-request-queue-requests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch add requests to last task run's default request queue
@@ -3325,6 +3437,7 @@ export def "actor-tasks-runs-last-request-queue-requests-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
@@ -3338,7 +3451,7 @@ export def "actor-tasks-runs-last-request-queue-requests-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch delete requests from last task run's default request queue
@@ -3354,6 +3467,7 @@ export def "actor-tasks-runs-last-request-queue-requests-batch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --Content-Type: string
@@ -3369,7 +3483,7 @@ export def "actor-tasks-runs-last-request-queue-requests-batch delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlock requests in last task run's default request queue
@@ -3385,6 +3499,7 @@ export def "actor-tasks-runs-last-request-queue-requests-unlock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<unlockedCount: int>> {
@@ -3394,7 +3509,7 @@ export def "actor-tasks-runs-last-request-queue-requests-unlock post" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests/unlock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request from last task run's default request queue
@@ -3411,6 +3526,7 @@ export def "actor-tasks-runs-last-request-queue-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
 ]: nothing -> record<data: record<uniqueKey: string, url: string, method: string, retryCount: int, loadedUrl: string, payload: string, headers: record, userData: record, noRetry: bool, errorMessages: list<string>, handledAt: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3419,7 +3535,7 @@ export def "actor-tasks-runs-last-request-queue-requests get" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update request in last task run's default request queue
@@ -3436,6 +3552,7 @@ export def "actor-tasks-runs-last-request-queue-requests put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -3461,7 +3578,7 @@ export def "actor-tasks-runs-last-request-queue-requests put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request from last task run's default request queue
@@ -3478,6 +3595,7 @@ export def "actor-tasks-runs-last-request-queue-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> any {
@@ -3487,7 +3605,7 @@ export def "actor-tasks-runs-last-request-queue-requests delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prolong lock on request in last task run's default request queue
@@ -3504,6 +3622,7 @@ export def "actor-tasks-runs-last-request-queue-requests-lock put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -3515,7 +3634,7 @@ export def "actor-tasks-runs-last-request-queue-requests-lock put" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete lock on request in last task run's default request queue
@@ -3532,6 +3651,7 @@ export def "actor-tasks-runs-last-request-queue-requests-lock delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock was removed.  (e.g. false)
@@ -3542,7 +3662,7 @@ export def "actor-tasks-runs-last-request-queue-requests-lock delete" [
   let full_url = (build-url $base $"/v2/actor-tasks/($actorTaskId)/runs/last/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user runs list
@@ -3557,6 +3677,7 @@ export def "actor-runs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -3570,7 +3691,7 @@ export def "actor-runs list" [
   let full_url = (build-url $base "/v2/actor-runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get run
@@ -3586,6 +3707,7 @@ export def "actor-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3594,7 +3716,7 @@ export def "actor-runs get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update run
@@ -3610,6 +3732,7 @@ export def "actor-runs put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-runId: string
   --statusMessage: string
   --isStatusMessageTerminal: oneof<nothing, bool>
@@ -3623,7 +3746,7 @@ export def "actor-runs put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete run
@@ -3639,13 +3762,14 @@ export def "actor-runs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort run
@@ -3661,6 +3785,7 @@ export def "actor-runs-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3669,7 +3794,7 @@ export def "actor-runs-abort post" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/abort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Metamorph run
@@ -3685,6 +3810,7 @@ export def "actor-runs-metamorph post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetActorId: string # ID of a target Actor that the run should be transformed into. (e.g. HDSasDasz78YcAPEB)
   --build: string # Optional build of the target Actor.  It can be either a build tag or build number. By default, the run uses the build specified in the default run configuration for the target Actor (typically `latest`).  (e.g. beta)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
@@ -3694,7 +3820,7 @@ export def "actor-runs-metamorph post" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/metamorph" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reboot run
@@ -3710,13 +3836,14 @@ export def "actor-runs-reboot post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/reboot")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resurrect run
@@ -3732,6 +3859,7 @@ export def "actor-runs-resurrect PostResurrectRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run is resurrected with the same build it originally used. Specifically, if a run was first started with the `latest` tag, which resolves to version `0.0.3` at the time, a run resurrected without this parameter will continue running with `0.0.3`, even if `latest` already points to a newer build.  (e.g. 0.1.234)
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout specified in the run that is being resurrected.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit specified in the run that is being resurrected.  (format: double, e.g. 256)
@@ -3745,7 +3873,7 @@ export def "actor-runs-resurrect PostResurrectRun" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/resurrect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Charge events in run
@@ -3761,6 +3889,7 @@ export def "actor-runs-charge PostChargeRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # Always pass a unique idempotency key (any unique string) for each charge to avoid double charging in case of retries or network errors. (e.g. 2024-12-09T01:23:45.000Z-random-uuid)
   eventName: string
   count: int
@@ -3775,7 +3904,7 @@ export def "actor-runs-charge PostChargeRun" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default dataset
@@ -3791,13 +3920,14 @@ export def "actor-runs-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/dataset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default dataset
@@ -3813,6 +3943,7 @@ export def "actor-runs-dataset put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
@@ -3824,7 +3955,7 @@ export def "actor-runs-dataset put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default dataset
@@ -3840,13 +3971,14 @@ export def "actor-runs-dataset delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/dataset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default dataset items
@@ -3862,6 +3994,7 @@ export def "actor-runs-dataset-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
   --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
@@ -3894,7 +4027,7 @@ export def "actor-runs-dataset-items get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/dataset/items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store items
@@ -3910,6 +4043,7 @@ export def "actor-runs-dataset-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3919,7 +4053,7 @@ export def "actor-runs-dataset-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default dataset statistics
@@ -3935,13 +4069,14 @@ export def "actor-runs-dataset-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<fieldStatistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/dataset/statistics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default store
@@ -3957,13 +4092,14 @@ export def "actor-runs-key-value-store get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default store
@@ -3979,6 +4115,7 @@ export def "actor-runs-key-value-store put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
@@ -3990,7 +4127,7 @@ export def "actor-runs-key-value-store put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default store
@@ -4006,13 +4143,14 @@ export def "actor-runs-key-value-store delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default store's list of keys
@@ -4028,6 +4166,7 @@ export def "actor-runs-key-value-store-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exclusiveStartKey: string # All keys up to this one (including) are skipped from the result. (e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. (format: int32, default: 1000, e.g. 100)
   --collection: string # Limit the results to keys that belong to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work. (e.g. postImages)
@@ -4040,7 +4179,7 @@ export def "actor-runs-key-value-store-keys get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download default store's records
@@ -4056,6 +4195,7 @@ export def "actor-runs-key-value-store-records list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collection: string # If specified, only records belonging to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work.  (e.g. my-collection)
   --prefix: string # If specified, only records whose key starts with the given prefix are included in the archive.  (e.g. my-prefix/)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -4066,7 +4206,7 @@ export def "actor-runs-key-value-store-records list" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store/records" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default store's record
@@ -4083,6 +4223,7 @@ export def "actor-runs-key-value-store-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
   --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
@@ -4093,7 +4234,7 @@ export def "actor-runs-key-value-store-records get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store/records/($recordKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store record in default store
@@ -4110,6 +4251,7 @@ export def "actor-runs-key-value-store-records put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
 ]: any -> record {
@@ -4122,7 +4264,7 @@ export def "actor-runs-key-value-store-records put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Store record in default store (POST)
@@ -4139,6 +4281,7 @@ export def "actor-runs-key-value-store-records post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
 ]: any -> record {
@@ -4151,7 +4294,7 @@ export def "actor-runs-key-value-store-records post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default store's record
@@ -4168,13 +4311,14 @@ export def "actor-runs-key-value-store-records delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/key-value-store/records/($recordKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default request queue
@@ -4190,13 +4334,14 @@ export def "actor-runs-request-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default request queue
@@ -4212,6 +4357,7 @@ export def "actor-runs-request-queue put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name for the request queue. (nullable)
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
@@ -4223,7 +4369,7 @@ export def "actor-runs-request-queue put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default request queue
@@ -4239,13 +4385,14 @@ export def "actor-runs-request-queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List default request queue's requests
@@ -4262,6 +4409,7 @@ export def "actor-runs-request-queue-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --exclusiveStartId: string # All requests up to this one (including) are skipped from the result. (Deprecated, use `cursor` instead.) (DEPRECATED, e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. Maximum value is `10000`. (format: double, e.g. 100)
@@ -4274,7 +4422,7 @@ export def "actor-runs-request-queue-requests list" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add request to default request queue
@@ -4290,6 +4438,7 @@ export def "actor-runs-request-queue-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --uniqueKey: string # A unique key used for request de-duplication. Requests with the same unique key are considered identical.
@@ -4313,7 +4462,7 @@ export def "actor-runs-request-queue-requests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch add requests to default request queue
@@ -4329,6 +4478,7 @@ export def "actor-runs-request-queue-requests-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --body: record
@@ -4341,7 +4491,7 @@ export def "actor-runs-request-queue-requests-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch delete requests from default request queue
@@ -4357,6 +4507,7 @@ export def "actor-runs-request-queue-requests-batch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --Content-Type: string
   --body: record
@@ -4371,7 +4522,7 @@ export def "actor-runs-request-queue-requests-batch delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlock requests in default request queue
@@ -4387,6 +4538,7 @@ export def "actor-runs-request-queue-requests-unlock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<unlockedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4395,7 +4547,7 @@ export def "actor-runs-request-queue-requests-unlock post" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests/unlock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request from default request queue
@@ -4412,13 +4564,14 @@ export def "actor-runs-request-queue-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<uniqueKey: string, url: string, method: string, retryCount: int, loadedUrl: string, payload: string, headers: record, userData: record, noRetry: bool, errorMessages: list<string>, handledAt: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests/($requestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update request in default request queue
@@ -4435,6 +4588,7 @@ export def "actor-runs-request-queue-requests put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --uniqueKey: string # A unique key used for request de-duplication. Requests with the same unique key are considered identical.
@@ -4459,7 +4613,7 @@ export def "actor-runs-request-queue-requests put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request from default request queue
@@ -4476,6 +4630,7 @@ export def "actor-runs-request-queue-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4484,7 +4639,7 @@ export def "actor-runs-request-queue-requests delete" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prolong lock on request in default request queue
@@ -4501,6 +4656,7 @@ export def "actor-runs-request-queue-requests-lock put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock expires.  (e.g. false)
@@ -4511,7 +4667,7 @@ export def "actor-runs-request-queue-requests-lock put" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete lock on request in default request queue
@@ -4528,6 +4684,7 @@ export def "actor-runs-request-queue-requests-lock delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock was removed.  (e.g. false)
 ]: nothing -> any {
@@ -4537,7 +4694,7 @@ export def "actor-runs-request-queue-requests-lock delete" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default request queue head
@@ -4553,6 +4710,7 @@ export def "actor-runs-request-queue-head get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # How many items from queue should be returned. (format: double, e.g. 100)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<limit: int, queueModifiedAt: string, hadMultipleClients: bool, items: list<record>>> {
@@ -4562,7 +4720,7 @@ export def "actor-runs-request-queue-head get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/head" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get and lock default request queue head
@@ -4578,6 +4736,7 @@ export def "actor-runs-request-queue-head-lock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --limit: float # How many items from the queue should be returned. (format: double, e.g. 25)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -4588,7 +4747,7 @@ export def "actor-runs-request-queue-head-lock post" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/request-queue/head/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get run's log
@@ -4604,6 +4763,7 @@ export def "actor-runs-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
   --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
   --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
@@ -4614,7 +4774,7 @@ export def "actor-runs-log get" [
   let full_url = (build-url $base $"/v2/actor-runs/($runId)/log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user builds list
@@ -4629,6 +4789,7 @@ export def "actor-builds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -4639,7 +4800,7 @@ export def "actor-builds list" [
   let full_url = (build-url $base "/v2/actor-builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build
@@ -4655,6 +4816,7 @@ export def "actor-builds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --waitForFinish: float # The maximum number of seconds the server waits for the build to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the build finishes in time then the returned build object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4663,7 +4825,7 @@ export def "actor-builds get" [
   let full_url = (build-url $base $"/v2/actor-builds/($buildId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete build
@@ -4679,13 +4841,14 @@ export def "actor-builds delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-builds/($buildId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort build
@@ -4701,13 +4864,14 @@ export def "actor-builds-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-builds/($buildId)/abort")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build's Log
@@ -4723,6 +4887,7 @@ export def "actor-builds-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
   --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
 ]: nothing -> any {
@@ -4732,7 +4897,7 @@ export def "actor-builds-log get" [
   let full_url = (build-url $base $"/v2/actor-builds/($buildId)/log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OpenAPI definition
@@ -4748,13 +4913,14 @@ export def "actor-builds-openapijson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actor-builds/($buildId)/openapi.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of key-value stores
@@ -4769,6 +4935,7 @@ export def "key-value-stores list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -4781,7 +4948,7 @@ export def "key-value-stores list" [
   let full_url = (build-url $base "/v2/key-value-stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create key-value store
@@ -4796,6 +4963,7 @@ export def "key-value-stores post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Custom unique name to easily identify the store in the future. (e.g. eshop-values)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4804,7 +4972,7 @@ export def "key-value-stores post" [
   let full_url = (build-url $base "/v2/key-value-stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store
@@ -4820,13 +4988,14 @@ export def "key-value-stores get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update store
@@ -4842,6 +5011,7 @@ export def "key-value-stores put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, username: string, createdAt: string, modifiedAt: string, accessedAt: string, actId: string, actRunId: string, consoleUrl: string, keysPublicUrl: string, recordsPublicUrl: string, schema: record, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, deleteCount: int, listCount: int, s3StorageBytes: int, storageBytes: int>>> {
@@ -4853,7 +5023,7 @@ export def "key-value-stores put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete store
@@ -4869,13 +5039,14 @@ export def "key-value-stores delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of keys
@@ -4891,6 +5062,7 @@ export def "key-value-stores-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exclusiveStartKey: string # All keys up to this one (including) are skipped from the result. (e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. (format: int32, default: 1000, e.g. 100)
   --collection: string # Limit the results to keys that belong to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work. (e.g. postImages)
@@ -4903,7 +5075,7 @@ export def "key-value-stores-keys get" [
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download records
@@ -4919,6 +5091,7 @@ export def "key-value-stores-records list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collection: string # If specified, only records belonging to a specific collection from the key-value store schema. The key-value store need to have a schema defined for this parameter to work.  (e.g. my-collection)
   --prefix: string # If specified, only records whose key starts with the given prefix are included in the archive.  (e.g. my-prefix/)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -4929,7 +5102,7 @@ export def "key-value-stores-records list" [
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)/records" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get record
@@ -4946,6 +5119,7 @@ export def "key-value-stores-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -4956,7 +5130,7 @@ export def "key-value-stores-records get" [
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)/records/($recordKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if a record exists
@@ -4973,13 +5147,14 @@ export def "key-value-stores-records head" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)/records/($recordKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store record
@@ -4996,6 +5171,7 @@ export def "key-value-stores-records put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
 ]: any -> record {
@@ -5008,7 +5184,7 @@ export def "key-value-stores-records put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Store record (POST)
@@ -5025,6 +5201,7 @@ export def "key-value-stores-records post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Encoding: string@Content-Encoding-completer
   --body: record
 ]: any -> record {
@@ -5037,7 +5214,7 @@ export def "key-value-stores-records post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete record
@@ -5054,13 +5231,14 @@ export def "key-value-stores-records delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/key-value-stores/($storeId)/records/($recordKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of datasets
@@ -5075,6 +5253,7 @@ export def "datasets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -5087,7 +5266,7 @@ export def "datasets list" [
   let full_url = (build-url $base "/v2/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create dataset
@@ -5102,6 +5281,7 @@ export def "datasets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Custom unique name to easily identify the dataset in the future. (e.g. eshop-items)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5110,7 +5290,7 @@ export def "datasets post" [
   let full_url = (build-url $base "/v2/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dataset
@@ -5126,13 +5306,14 @@ export def "datasets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/datasets/($datasetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update dataset
@@ -5148,6 +5329,7 @@ export def "datasets put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, createdAt: string, modifiedAt: string, accessedAt: string, itemCount: int, cleanItemCount: int, actId: string, actRunId: string, fields: list<string>, schema: record, consoleUrl: string, itemsPublicUrl: string, urlSigningSecretKey: string, generalAccess: string, stats: record<readCount: int, writeCount: int, storageBytes: int, inflatedBytes: int>>> {
@@ -5159,7 +5341,7 @@ export def "datasets put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete dataset
@@ -5175,13 +5357,14 @@ export def "datasets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/datasets/($datasetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dataset items
@@ -5197,6 +5380,7 @@ export def "datasets-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
   --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
@@ -5229,7 +5413,7 @@ export def "datasets-items get" [
   let full_url = (build-url $base $"/v2/datasets/($datasetId)/items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dataset items headers
@@ -5245,6 +5429,7 @@ export def "datasets-items head" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
   --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
@@ -5276,7 +5461,7 @@ export def "datasets-items head" [
   let full_url = (build-url $base $"/v2/datasets/($datasetId)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store items
@@ -5292,6 +5477,7 @@ export def "datasets-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -5301,7 +5487,7 @@ export def "datasets-items post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dataset statistics
@@ -5317,13 +5503,14 @@ export def "datasets-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<fieldStatistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/datasets/($datasetId)/statistics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of request queues
@@ -5338,6 +5525,7 @@ export def "request-queues list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -5350,7 +5538,7 @@ export def "request-queues list" [
   let full_url = (build-url $base "/v2/request-queues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create request queue
@@ -5365,6 +5553,7 @@ export def "request-queues post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Custom unique name to easily identify the queue in the future. (e.g. example-com)
 ]: nothing -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5373,7 +5562,7 @@ export def "request-queues post" [
   let full_url = (build-url $base "/v2/request-queues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request queue
@@ -5389,13 +5578,14 @@ export def "request-queues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/request-queues/($queueId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update request queue
@@ -5411,6 +5601,7 @@ export def "request-queues put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name for the request queue. (nullable)
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, name: string, userId: string, actId: string, actRunId: string, createdAt: string, modifiedAt: string, accessedAt: string, totalRequestCount: int, handledRequestCount: int, pendingRequestCount: int, hadMultipleClients: bool, consoleUrl: string, stats: record<deleteCount: int, headItemReadCount: int, readCount: int, storageBytes: int, writeCount: int>, generalAccess: string>> {
@@ -5422,7 +5613,7 @@ export def "request-queues put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request queue
@@ -5438,13 +5629,14 @@ export def "request-queues delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/request-queues/($queueId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add requests
@@ -5460,6 +5652,7 @@ export def "request-queues-requests-batch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --body: record
@@ -5472,7 +5665,7 @@ export def "request-queues-requests-batch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete requests
@@ -5488,6 +5681,7 @@ export def "request-queues-requests-batch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --Content-Type: string
   --body: record
@@ -5502,7 +5696,7 @@ export def "request-queues-requests-batch delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlock requests
@@ -5518,6 +5712,7 @@ export def "request-queues-requests-unlock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<unlockedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5526,7 +5721,7 @@ export def "request-queues-requests-unlock post" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests/unlock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List requests
@@ -5543,6 +5738,7 @@ export def "request-queues-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --exclusiveStartId: string # All requests up to this one (including) are skipped from the result. (Deprecated, use `cursor` instead.) (DEPRECATED, e.g. Ihnsp8YrvJ8102Kj)
   --limit: float # Number of keys to be returned. Maximum value is `10000`. (format: double, e.g. 100)
@@ -5555,7 +5751,7 @@ export def "request-queues-requests list" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add request
@@ -5571,6 +5767,7 @@ export def "request-queues-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --uniqueKey: string # A unique key used for request de-duplication. Requests with the same unique key are considered identical.
@@ -5594,7 +5791,7 @@ export def "request-queues-requests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get request
@@ -5611,13 +5808,14 @@ export def "request-queues-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<uniqueKey: string, url: string, method: string, retryCount: int, loadedUrl: string, payload: string, headers: record, userData: record, noRetry: bool, errorMessages: list<string>, handledAt: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests/($requestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update request
@@ -5634,6 +5832,7 @@ export def "request-queues-requests put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forefront: string # Determines if request should be added to the head of the queue or to the end. Default value is `false` (end of queue).  (e.g. false)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --uniqueKey: string # A unique key used for request de-duplication. Requests with the same unique key are considered identical.
@@ -5658,7 +5857,7 @@ export def "request-queues-requests put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request
@@ -5675,6 +5874,7 @@ export def "request-queues-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5683,7 +5883,7 @@ export def "request-queues-requests delete" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get head
@@ -5699,6 +5899,7 @@ export def "request-queues-head get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # How many items from queue should be returned. (format: double, e.g. 100)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
 ]: nothing -> record<data: record<limit: int, queueModifiedAt: string, hadMultipleClients: bool, items: list<record>>> {
@@ -5708,7 +5909,7 @@ export def "request-queues-head get" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/head" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get head and lock
@@ -5724,6 +5925,7 @@ export def "request-queues-head-lock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --limit: float # How many items from the queue should be returned. (format: double, e.g. 25)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
@@ -5734,7 +5936,7 @@ export def "request-queues-head-lock post" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/head/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prolong request lock
@@ -5751,6 +5953,7 @@ export def "request-queues-requests-lock put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lockSecs: float # How long the requests will be locked for (in seconds). (format: double, e.g. 60)
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock expires.  (e.g. false)
@@ -5761,7 +5964,7 @@ export def "request-queues-requests-lock put" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete request lock
@@ -5778,6 +5981,7 @@ export def "request-queues-requests-lock delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientKey: string # A unique identifier of the client accessing the request queue. It must be a string between 1 and 32 characters long. This identifier is used to determine whether the queue was accessed by multiple clients. If `clientKey` is not provided, the system considers this API call to come from a new client. For details, see the `hadMultipleClients` field returned by the [Get head](#/reference/request-queues/queue-head) operation.  (e.g. client-abc)
   --forefront: string # Determines if request should be added to the head of the queue or to the end after lock was removed.  (e.g. false)
 ]: nothing -> any {
@@ -5787,7 +5991,7 @@ export def "request-queues-requests-lock delete" [
   let full_url = (build-url $base $"/v2/request-queues/($queueId)/requests/($requestId)/lock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of webhooks
@@ -5802,6 +6006,7 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -5812,7 +6017,7 @@ export def "webhooks list" [
   let full_url = (build-url $base "/v2/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -5828,6 +6033,7 @@ export def "webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isAdHoc: oneof<nothing, bool> # nullable
   eventTypes: list
   condition: record # shape: {actorId?: string, actorTaskId?: string, actorRunId?: string}
@@ -5848,7 +6054,7 @@ export def "webhooks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhook
@@ -5864,13 +6070,14 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, createdAt: string, modifiedAt: string, userId: string, isAdHoc: bool, shouldInterpolateStrings: bool, eventTypes: list<string>, condition: record<actorId: string, actorTaskId: string, actorRunId: string>, ignoreSslErrors: bool, doNotRetry: bool, requestUrl: string, payloadTemplate: string, headersTemplate: string, description: string, lastDispatch: any, stats: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -5886,6 +6093,7 @@ export def "webhooks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isAdHoc: oneof<nothing, bool> # nullable
   --eventTypes: list # nullable
   --condition: any
@@ -5905,7 +6113,7 @@ export def "webhooks put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete webhook
@@ -5921,13 +6129,14 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test webhook
@@ -5943,13 +6152,14 @@ export def "webhooks-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, userId: string, webhookId: string, createdAt: string, status: string, eventType: string, eventData: record<actorId: string, actorRunId: string>, webhook: any, calls: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/($webhookId)/test")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get collection
@@ -5965,13 +6175,14 @@ export def "webhooks-dispatches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/($webhookId)/dispatches")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of webhook dispatches
@@ -5986,6 +6197,7 @@ export def "webhook-dispatches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -5996,7 +6208,7 @@ export def "webhook-dispatches list" [
   let full_url = (build-url $base "/v2/webhook-dispatches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook dispatch
@@ -6012,13 +6224,14 @@ export def "webhook-dispatches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, userId: string, webhookId: string, createdAt: string, status: string, eventType: string, eventData: record<actorId: string, actorRunId: string>, webhook: any, calls: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhook-dispatches/($dispatchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of schedules
@@ -6033,6 +6246,7 @@ export def "schedules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
@@ -6043,7 +6257,7 @@ export def "schedules list" [
   let full_url = (build-url $base "/v2/schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create schedule
@@ -6058,6 +6272,7 @@ export def "schedules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --isEnabled: oneof<nothing, bool> # nullable
   --isExclusive: oneof<nothing, bool> # nullable
@@ -6075,7 +6290,7 @@ export def "schedules post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get schedule
@@ -6091,13 +6306,14 @@ export def "schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, userId: string, name: string, cronExpression: string, timezone: string, isEnabled: bool, isExclusive: bool, createdAt: string, modifiedAt: string, nextRunAt: string, lastRunAt: string, description: string, title: string, notifications: record<email: bool>, actions: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update schedule
@@ -6113,6 +6329,7 @@ export def "schedules put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --isEnabled: oneof<nothing, bool> # nullable
   --isExclusive: oneof<nothing, bool> # nullable
@@ -6130,7 +6347,7 @@ export def "schedules put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete schedule
@@ -6146,13 +6363,14 @@ export def "schedules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get schedule log
@@ -6168,13 +6386,14 @@ export def "schedules-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<message: string, level: string, createdAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/schedules/($scheduleId)/log")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of Actors in Store
@@ -6189,6 +6408,7 @@ export def "store get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --search: string # String to search by. The search runs on the following fields: `title`, `name`, `description`, `username`, `readme`.  (e.g. web scraper)
@@ -6206,7 +6426,7 @@ export def "store get" [
   let full_url = (build-url $base "/v2/store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get log
@@ -6222,6 +6442,7 @@ export def "logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
   --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
   --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
@@ -6232,7 +6453,7 @@ export def "logs get" [
   let full_url = (build-url $base $"/v2/logs/($buildOrRunId)" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get public user data
@@ -6248,13 +6469,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<username: string, profile: record<bio: string, name: string, pictureUrl: string, githubUsername: string, websiteUrl: string, twitterUsername: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get private user data
@@ -6269,13 +6491,14 @@ export def "users-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, username: string, profile: record<bio: string, name: string, pictureUrl: string, githubUsername: string, websiteUrl: string, twitterUsername: string>, email: string, proxy: record<password: string, groups: list>, plan: record<id: string, description: string, isEnabled: bool, monthlyBasePriceUsd: float, monthlyUsageCreditsUsd: float, usageDiscountPercent: float, enabledPlatformFeatures: list, maxMonthlyUsageUsd: float, maxActorMemoryGbytes: float, maxMonthlyActorComputeUnits: float, maxMonthlyResidentialProxyGbytes: float, maxMonthlyProxySerps: int, maxMonthlyExternalDataTransferGbytes: float, maxActorCount: int, maxActorTaskCount: int, dataRetentionDays: int, availableProxyGroups: record, teamAccountSeatCount: int, supportLevel: string, availableAddOns: list, tier: string, apiRateLimitBoosts: int, maxScheduleCount: int, maxConcurrentActorRuns: int, planPricing: record>, effectivePlatformFeatures: record<ACTORS: record, STORAGE: record, SCHEDULER: record, PROXY: record, PROXY_EXTERNAL_ACCESS: record, PROXY_RESIDENTIAL: record, PROXY_SERPS: record, WEBHOOKS: record, ACTORS_PUBLIC_ALL: record, ACTORS_PUBLIC_DEVELOPER: record>, createdAt: string, isPaying: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get monthly usage
@@ -6290,6 +6513,7 @@ export def "users-me-usage-monthly get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date in the YYYY-MM-DD format. (e.g. 2020-06-14)
 ]: nothing -> record<data: record<usageCycle: record<startAt: string, endAt: string>, monthlyServiceUsage: record, dailyServiceUsages: list<record>, totalUsageCreditsUsdBeforeVolumeDiscount: float, totalUsageCreditsUsdAfterVolumeDiscount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6298,7 +6522,7 @@ export def "users-me-usage-monthly get" [
   let full_url = (build-url $base "/v2/users/me/usage/monthly" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get limits
@@ -6313,13 +6537,14 @@ export def "users-me-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<monthlyUsageCycle: record<startAt: string, endAt: string>, limits: record<maxMonthlyUsageUsd: float, maxMonthlyActorComputeUnits: float, maxMonthlyExternalDataTransferGbytes: float, maxMonthlyProxySerps: int, maxMonthlyResidentialProxyGbytes: float, maxActorMemoryGbytes: float, maxActorCount: int, maxActorTaskCount: int, maxConcurrentActorJobs: int, maxTeamAccountSeatCount: int, dataRetentionDays: int, maxScheduleCount: int>, current: record<monthlyUsageUsd: float, monthlyActorComputeUnits: float, monthlyExternalDataTransferGbytes: float, monthlyProxySerps: int, monthlyResidentialProxyGbytes: float, actorMemoryGbytes: float, actorCount: int, actorTaskCount: int, activeActorJobCount: int, teamAccountSeatCount: int, scheduleCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/me/limits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update limits
@@ -6334,6 +6559,7 @@ export def "users-me-limits put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxMonthlyUsageUsd: float # If your platform usage in the billing period exceeds the prepaid usage, you will be charged extra. Setting this property you can update your hard limit on monthly platform usage to prevent accidental overage or to limit the extra charges.
   --dataRetentionDays: int # Apify securely stores your ten most recent Actor runs indefinitely, ensuring they are always accessible. Unnamed storages and other Actor runs are automatically deleted after the retention period. If you're subscribed, you can change it to keep data for longer or to limit your usage. [Lear more](https://docs.apify.com/platform/storage/usage#data-retention).
 ]: any -> record {
@@ -6345,7 +6571,7 @@ export def "users-me-limits put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get browser info
@@ -6360,6 +6586,7 @@ export def "browser-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
   --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
@@ -6369,7 +6596,7 @@ export def "browser-info get" [
   let full_url = (build-url $base "/v2/browser-info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get browser info
@@ -6384,6 +6611,7 @@ export def "browser-info post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
   --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
@@ -6393,7 +6621,7 @@ export def "browser-info post" [
   let full_url = (build-url $base "/v2/browser-info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get browser info
@@ -6408,6 +6636,7 @@ export def "browser-info put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
   --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
@@ -6417,7 +6646,7 @@ export def "browser-info put" [
   let full_url = (build-url $base "/v2/browser-info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get browser info
@@ -6432,6 +6661,7 @@ export def "browser-info delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
   --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
@@ -6441,7 +6671,7 @@ export def "browser-info delete" [
   let full_url = (build-url $base "/v2/browser-info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Encode and sign object
@@ -6456,6 +6686,7 @@ export def "tools-encode-and-sign post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<data: record<encoded: string>> {
   let input = $in
@@ -6465,7 +6696,7 @@ export def "tools-encode-and-sign post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Decode and verify object
@@ -6480,6 +6711,7 @@ export def "tools-decode-and-verify post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   encoded: string
 ]: any -> record<data: record<decoded: any, encodedByUserId: string, isVerifiedUser: bool>> {
   let input = $in
@@ -6490,5 +6722,5 @@ export def "tools-decode-and-verify post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

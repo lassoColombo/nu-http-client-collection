@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -120,7 +121,7 @@ def input-mode-completer [] { ["CHAT" "EDIT" "INSERT"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -154,6 +155,7 @@ export def "query root" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -164,13 +166,13 @@ export def "query root" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "renderMarkdown highlightCode parseSearchQuery evaluateFeatureFlag organizationFeatureFlagValue areExecutorsConfigured viewerCanChangeLibraryItemVisibilityToPublic indexerKeys codeIntelligenceInferenceScript usersWithPendingPermissions enterpriseLicenseHasFeature isSearchContextAvailable completions" }
     let body = {query: ("query { root { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "root" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "root" }
 }
 
 # Looks up a node by ID.
@@ -184,6 +186,7 @@ export def "query node" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -195,13 +198,13 @@ export def "query node" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id ... on GitserverInstance { address freeDiskSpaceBytes totalDiskSpaceBytes } ... on IndexedSearchInstance { address } ... on ExecutorSecret { key scope overwritesGlobalSecret createdAt updatedAt }" }
     let body = {query: ("query($id: ID!) { node(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "node" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "node" }
 }
 
 # Looks up a repository by either name or cloneURL.
@@ -215,6 +218,7 @@ export def "query repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --name: string # Query the repository by name, for example "github.com/gorilla/mux".
@@ -229,13 +233,13 @@ export def "query repository" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id databaseID name uri sourceType description iconURL language createdAt updatedAt isFork isArchived isPrivate cloneInProgress url viewerCanAdminister stars topics diskSizeBytes isRecordingEnabled" }
     let body = {query: ("query($name: String, $cloneURL: String, $uri: String, $databaseID: Int) { repository(name: $name, cloneURL: $cloneURL, uri: $uri, databaseID: $databaseID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "repository" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "repository" }
 }
 
 # Looks up a repository by either name or cloneURL or hashedName. When the repository does not exist on the server, it returns a Redirect to an external Sourcegraph URL that may have this repository instead. Otherwise, this query returns null.
@@ -249,6 +253,7 @@ export def "query repository-redirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --name: string # Query the repository by name, for example "github.com/gorilla/mux".
@@ -262,13 +267,13 @@ export def "query repository-redirect" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on Repository { id databaseID name uri sourceType description iconURL language createdAt updatedAt isFork isArchived isPrivate cloneInProgress url viewerCanAdminister stars topics diskSizeBytes isRecordingEnabled } ... on Redirect { url }" }
     let body = {query: ("query($name: String, $cloneURL: String, $hashedName: String) { repositoryRedirect(name: $name, cloneURL: $cloneURL, hashedName: $hashedName) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "repositoryRedirect" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "repositoryRedirect" }
 }
 
 # Lists external services under given namespace. If no namespace is given, it returns all external services.
@@ -282,6 +287,7 @@ export def "query external-services" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n external services from the list.
@@ -295,13 +301,13 @@ export def "query external-services" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $repo: ID) { externalServices(first: $first, after: $after, repo: $repo) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServices" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServices" }
 }
 
 # Lists all namespaces for a given external service connection. A namespace is an entity on the code host that repositories are assignable to.
@@ -315,6 +321,7 @@ export def "query external-service-namespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string # The GraphQL ID of the external service whose configuration will be used to define the code host remote url to submit requests to and the token value to authenticate with. If no external service exists which provides the necessary request parameters then leave ID nil and provide kind, remote code host token and url.
@@ -329,13 +336,13 @@ export def "query external-service-namespaces" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($id: ID, $kind: ExternalServiceKind!, $token: String!, $url: String!) { externalServiceNamespaces(id: $id, kind: $kind, token: $token, url: $url) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServiceNamespaces" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServiceNamespaces" }
 }
 
 # Lists all repositories for a given external service connection.
@@ -349,6 +356,7 @@ export def "query external-service-repositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: string # The GraphQL ID of the external service whose configuration will be used to define the code host remote url to submit requests to and the token value to authenticate with. If no external service exists which provides the necessary request parameters then leave ID nil and provide kind, remote code host token and url.
@@ -366,13 +374,13 @@ export def "query external-service-repositories" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: ID, $kind: ExternalServiceKind!, $token: String!, $url: String!, $query: String!, $excludeRepos: [String!]!, $first: Int) { externalServiceRepositories(id: $id, kind: $kind, token: $token, url: $url, query: $query, excludeRepos: $excludeRepos, first: $first) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServiceRepositories" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalServiceRepositories" }
 }
 
 # List all repositories.
@@ -386,6 +394,7 @@ export def "query repositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n repositories from the list.
@@ -412,13 +421,13 @@ export def "query repositories" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $query: String, $after: String, $before: String, $names: [String!], $cloned: Boolean, $cloneStatus: CloneStatus, $notCloned: Boolean, $indexed: Boolean, $notIndexed: Boolean, $failedFetch: Boolean, $corrupted: Boolean, $externalService: ID, $orderBy: RepositoryOrderBy, $descending: Boolean) { repositories(first: $first, last: $last, query: $query, after: $after, before: $before, names: $names, cloned: $cloned, cloneStatus: $cloneStatus, notCloned: $notCloned, indexed: $indexed, notIndexed: $notIndexed, failedFetch: $failedFetch, corrupted: $corrupted, externalService: $externalService, orderBy: $orderBy, descending: $descending) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "repositories" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "repositories" }
 }
 
 # Looks up a Phabricator repository by name.
@@ -432,6 +441,7 @@ export def "query phabricator-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --name: string # The name, for example "github.com/gorilla/mux".
@@ -444,13 +454,13 @@ export def "query phabricator-repo" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name uri callsign url" }
     let body = {query: ("query($name: String, $uri: String) { phabricatorRepo(name: $name, uri: $uri) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "phabricatorRepo" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "phabricatorRepo" }
 }
 
 # The current user.
@@ -464,6 +474,7 @@ export def "query current-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -474,13 +485,13 @@ export def "query current-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag" }
     let body = {query: ("query { currentUser { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "currentUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "currentUser" }
 }
 
 # Looks up a user by username or email address.
@@ -494,6 +505,7 @@ export def "query user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --username: string # Query the user by username.
@@ -507,13 +519,13 @@ export def "query user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag" }
     let body = {query: ("query($username: String, $email: String, $databaseID: Int) { user(username: $username, email: $email, databaseID: $databaseID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "user" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "user" }
 }
 
 # List all users.
@@ -527,6 +539,7 @@ export def "query users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n users from the list.
@@ -542,13 +555,13 @@ export def "query users" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $query: String, $activePeriod: UserActivePeriod, $inactiveSince: DateTime) { users(first: $first, after: $after, query: $query, activePeriod: $activePeriod, inactiveSince: $inactiveSince) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "users" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "users" }
 }
 
 # Looks up an organization by name.
@@ -562,6 +575,7 @@ export def "query organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -573,13 +587,13 @@ export def "query organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name displayName createdAt viewerCanAdminister viewerIsMember url settingsURL namespaceName" }
     let body = {query: ("query($name: String!) { organization(name: $name) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "organization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "organization" }
 }
 
 # List all organizations.
@@ -593,6 +607,7 @@ export def "query organizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n organizations from the list.
@@ -605,13 +620,13 @@ export def "query organizations" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $query: String) { organizations(first: $first, query: $query) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "organizations" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "organizations" }
 }
 
 # Renders Markdown to HTML. The returned HTML is already sanitized and escaped and thus is always safe to render.
@@ -625,6 +640,7 @@ export def "query render-markdown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   markdown: string
@@ -638,12 +654,12 @@ export def "query render-markdown" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($markdown: String!, $options: MarkdownOptions) { renderMarkdown(markdown: $markdown, options: $options) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "renderMarkdown" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "renderMarkdown" }
 }
 
 # EXPERIMENTAL: Syntax highlights a code string.
@@ -657,6 +673,7 @@ export def "query highlight-code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   code: string
@@ -671,12 +688,12 @@ export def "query highlight-code" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($code: String!, $fuzzyLanguage: String!, $disableTimeout: Boolean!, $isLightTheme: Boolean) { highlightCode(code: $code, fuzzyLanguage: $fuzzyLanguage, disableTimeout: $disableTimeout, isLightTheme: $isLightTheme) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "highlightCode" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "highlightCode" }
 }
 
 # Looks up an instance of a type that implements SettingsSubject (i.e., something that has settings). This can be a site (which has global settings), an organization, or a user.
@@ -690,6 +707,7 @@ export def "query settings-subject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -701,13 +719,13 @@ export def "query settings-subject" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id settingsURL viewerCanAdminister ... on User { username email displayName avatarURL url createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag } ... on Org { name displayName createdAt viewerIsMember url namespaceName }" }
     let body = {query: ("query($id: ID!) { settingsSubject(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "settingsSubject" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "settingsSubject" }
 }
 
 # The settings for the viewer. The viewer is either an anonymous visitor (in which case viewer settings is global settings) or an authenticated user (in which case viewer settings are the user's settings).
@@ -721,6 +739,7 @@ export def "query viewer-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -731,13 +750,13 @@ export def "query viewer-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "final" }
     let body = {query: ("query { viewerSettings { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerSettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerSettings" }
 }
 
 # DEPRECATED
@@ -753,6 +772,7 @@ export def "query viewer-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -763,13 +783,13 @@ export def "query viewer-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query { viewerConfiguration { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerConfiguration" }
 }
 
 # The configuration for clients.
@@ -783,6 +803,7 @@ export def "query client-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -793,13 +814,13 @@ export def "query client-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "contentScriptUrls" }
     let body = {query: ("query { clientConfiguration { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "clientConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "clientConfiguration" }
 }
 
 # Runs a search.
@@ -813,6 +834,7 @@ export def "query search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --version: string@version-completer # The version of the search syntax being used. All new clients should use the latest version.
@@ -826,13 +848,13 @@ export def "query search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($version: SearchVersion, $patternType: SearchPatternType, $query: String) { search(version: $version, patternType: $patternType, query: $query) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "search" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "search" }
 }
 
 # EXPERIMENTAL: Return the parse tree of a search query.
@@ -846,6 +868,7 @@ export def "query parse-search-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # The search query (such as "repo:myrepo foo").
@@ -861,12 +884,12 @@ export def "query parse-search-query" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($query: String, $patternType: SearchPatternType, $outputPhase: SearchQueryOutputPhase, $outputFormat: SearchQueryOutputFormat, $outputVerbosity: SearchQueryOutputVerbosity) { parseSearchQuery(query: $query, patternType: $patternType, outputPhase: $outputPhase, outputFormat: $outputFormat, outputVerbosity: $outputVerbosity) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "parseSearchQuery" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "parseSearchQuery" }
 }
 
 # The current site.
@@ -880,6 +903,7 @@ export def "query site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -890,13 +914,13 @@ export def "query site" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id siteID settingsURL canReloadSite viewerCanAdminister permissionsUserMappingBindID buildVersion productVersion needsRepositoryConfiguration externalServicesFromFile allowEditExternalServicesWithFile siteConfigBlocklistPaths siteConfigurationFromFile allowEditSiteConfigurationWithFile globalSettingsFromFile allowEditGlobalSettingsWithFile hasCodeIntelligence sendsEmailVerificationEmails allowSiteSettingsEdits perUserCompletionsQuota perUserCodeCompletionsQuota isCodyEnabled" }
     let body = {query: ("query { site { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "site" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "site" }
 }
 
 # Retrieve responses to surveys.
@@ -910,6 +934,7 @@ export def "query survey-responses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n survey responses from the list.
@@ -921,13 +946,13 @@ export def "query survey-responses" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount last30DaysCount averageScore netPromoterScore" }
     let body = {query: ("query($first: Int) { surveyResponses(first: $first) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "surveyResponses" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "surveyResponses" }
 }
 
 # FOR INTERNAL USE ONLY: Lists all status messages
@@ -941,6 +966,7 @@ export def "query status-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -951,13 +977,13 @@ export def "query status-messages" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on GitUpdatesDisabled { message } ... on NoRepositoriesDetected { message } ... on CloningProgress { message }" }
     let body = {query: ("query { statusMessages { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "statusMessages" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "statusMessages" }
 }
 
 # FOR INTERNAL USE ONLY: Query repository statistics for the site.
@@ -971,6 +997,7 @@ export def "query repository-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -981,13 +1008,13 @@ export def "query repository-stats" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "gitDirBytes indexedLinesCount total cloned cloning notCloned failedFetch indexed corrupted" }
     let body = {query: ("query { repositoryStats { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "repositoryStats" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "repositoryStats" }
 }
 
 # Look up a namespace by ID.
@@ -1001,6 +1028,7 @@ export def "query namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -1012,13 +1040,13 @@ export def "query namespace" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id namespaceName url ... on User { username email displayName avatarURL settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag } ... on Org { name displayName createdAt viewerCanAdminister viewerIsMember settingsURL }" }
     let body = {query: ("query($id: ID!) { namespace(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "namespace" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "namespace" }
 }
 
 # Look up a namespace by name, which is a username or organization name.
@@ -1032,6 +1060,7 @@ export def "query namespace-by-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the namespace.
@@ -1043,13 +1072,13 @@ export def "query namespace-by-name" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id namespaceName url ... on User { username email displayName avatarURL settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag } ... on Org { name displayName createdAt viewerCanAdminister viewerIsMember settingsURL }" }
     let body = {query: ("query($name: String!) { namespaceByName(name: $name) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "namespaceByName" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "namespaceByName" }
 }
 
 # Retrieve all registered out-of-band migrations. Optionally filter deprecated before first version out-of-band-migrations.
@@ -1063,6 +1092,7 @@ export def "query out-of-band-migrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --exclude-deprecated-before-first-version: oneof<nothing, bool>
@@ -1074,13 +1104,13 @@ export def "query out-of-band-migrations" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id team component description introduced deprecated progress created lastUpdated nonDestructive applyReverse" }
     let body = {query: ("query($ExcludeDeprecatedBeforeFirstVersion: Boolean) { outOfBandMigrations(ExcludeDeprecatedBeforeFirstVersion: $ExcludeDeprecatedBeforeFirstVersion) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "outOfBandMigrations" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "outOfBandMigrations" }
 }
 
 # Retrieve the list of defined feature flags
@@ -1094,6 +1124,7 @@ export def "query feature-flags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --search: string
@@ -1106,13 +1137,13 @@ export def "query feature-flags" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on FeatureFlagBoolean { name value createdAt updatedAt } ... on FeatureFlagRollout { name rolloutBasisPoints createdAt updatedAt }" }
     let body = {query: ("query($search: String, $type: String) { featureFlags(search: $search, type: $type) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "featureFlags" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "featureFlags" }
 }
 
 # Retrieve a feature flag
@@ -1126,6 +1157,7 @@ export def "query feature-flag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -1137,13 +1169,13 @@ export def "query feature-flag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on FeatureFlagBoolean { name value createdAt updatedAt } ... on FeatureFlagRollout { name rolloutBasisPoints createdAt updatedAt }" }
     let body = {query: ("query($name: String!) { featureFlag(name: $name) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "featureFlag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "featureFlag" }
 }
 
 # Evaluates a feature flag for the current user Returns null if feature flag does not exist
@@ -1157,6 +1189,7 @@ export def "query evaluate-feature-flag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   flag_name: string
@@ -1168,12 +1201,12 @@ export def "query evaluate-feature-flag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($flagName: String!) { evaluateFeatureFlag(flagName: $flagName) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluateFeatureFlag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluateFeatureFlag" }
 }
 
 # Evaluates multiple feature flags for the current user.
@@ -1187,6 +1220,7 @@ export def "query evaluate-feature-flags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   flag_names: string
@@ -1198,13 +1232,13 @@ export def "query evaluate-feature-flags" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name value" }
     let body = {query: ("query($flagNames: [String!]!) { evaluateFeatureFlags(flagNames: $flagNames) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluateFeatureFlags" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluateFeatureFlags" }
 }
 
 # Retrieve all previously evaluated feature flags for the current user.  DEPRECATED: We will remove this query with Sourcegraph 6.3. Use `evaluateFeatureFlags` to get the feature flags for the current user instead. We will stop to cache information about previously evaluated feature flags.
@@ -1220,6 +1254,7 @@ export def "query evaluated-feature-flags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -1230,13 +1265,13 @@ export def "query evaluated-feature-flags" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name value" }
     let body = {query: ("query { evaluatedFeatureFlags { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluatedFeatureFlags" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "evaluatedFeatureFlags" }
 }
 
 # Retrieve the value of a feature flag for the organization
@@ -1250,6 +1285,7 @@ export def "query organization-feature-flag-value" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   org_id: string
@@ -1262,12 +1298,12 @@ export def "query organization-feature-flag-value" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($orgID: ID!, $flagName: String!) { organizationFeatureFlagValue(orgID: $orgID, flagName: $flagName) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "organizationFeatureFlagValue" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "organizationFeatureFlagValue" }
 }
 
 # Retrieve all organization feature flag overrides for the current user
@@ -1281,6 +1317,7 @@ export def "query organization-feature-flag-overrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -1291,13 +1328,13 @@ export def "query organization-feature-flag-overrides" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id value" }
     let body = {query: ("query { organizationFeatureFlagOverrides { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "organizationFeatureFlagOverrides" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "organizationFeatureFlagOverrides" }
 }
 
 # Retrieves the temporary settings for the current user.
@@ -1311,6 +1348,7 @@ export def "query temporary-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -1321,13 +1359,13 @@ export def "query temporary-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "contents" }
     let body = {query: ("query { temporarySettings { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "temporarySettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "temporarySettings" }
 }
 
 # Returns recently received webhooks across all external services, optionally limiting the returned values to only those that didn't match any external service.  Only site admins can access this field.
@@ -1341,6 +1379,7 @@ export def "query webhook-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n webhook logs.
@@ -1359,13 +1398,13 @@ export def "query webhook-logs" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $onlyErrors: Boolean, $onlyUnmatched: Boolean, $since: DateTime, $until: DateTime, $webhookID: ID, $legacyOnly: Boolean) { webhookLogs(first: $first, after: $after, onlyErrors: $onlyErrors, onlyUnmatched: $onlyUnmatched, since: $since, until: $until, webhookID: $webhookID, legacyOnly: $legacyOnly) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "webhookLogs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "webhookLogs" }
 }
 
 # Get a log of the latest outbound external requests. Only available to site admins.
@@ -1379,6 +1418,7 @@ export def "query outbound-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n log items. If omitted then it returns all of them.
@@ -1391,13 +1431,13 @@ export def "query outbound-requests" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String) { outboundRequests(first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundRequests" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundRequests" }
 }
 
 # Get a list of background jobs that are currently known in the system.
@@ -1411,6 +1451,7 @@ export def "query background-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n jobs. If omitted then it returns all of them.
@@ -1424,13 +1465,13 @@ export def "query background-jobs" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $recentRunCount: Int) { backgroundJobs(first: $first, after: $after, recentRunCount: $recentRunCount) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "backgroundJobs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "backgroundJobs" }
 }
 
 # EXPERIMENTAL: Get invitation based on the JWT in the invitation URL
@@ -1444,6 +1485,7 @@ export def "query invitation-by-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   token: string # The token that uniquely identifies the invitation
@@ -1455,13 +1497,13 @@ export def "query invitation-by-token" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id recipientEmail createdAt notifiedAt respondedAt responseType respondURL revokedAt expiresAt isVerifiedEmail" }
     let body = {query: ("query($token: String!) { invitationByToken(token: $token) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "invitationByToken" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "invitationByToken" }
 }
 
 # Lists webhooks. Only available to site admins. If no kind is given, it returns all webhooks. If first is omitted, 20 items are returned
@@ -1475,6 +1517,7 @@ export def "query webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n webhooks from the list.
@@ -1488,13 +1531,13 @@ export def "query webhooks" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $kind: ExternalServiceKind) { webhooks(first: $first, after: $after, kind: $kind) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "webhooks" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "webhooks" }
 }
 
 # List slow GraphQL requests that were recently captured (requires site-admin permissions).
@@ -1508,6 +1551,7 @@ export def "query slow-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string # Opaque pagnination cursor.
@@ -1519,13 +1563,13 @@ export def "query slow-requests" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($after: String) { slowRequests(after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "slowRequests" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "slowRequests" }
 }
 
 # Roles returns all the roles in the database that matches the arguments.
@@ -1539,6 +1583,7 @@ export def "query roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # The limit argument for forward pagination.
@@ -1553,13 +1598,13 @@ export def "query roles" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $after: String, $before: String) { roles(first: $first, last: $last, after: $after, before: $before) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "roles" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "roles" }
 }
 
 # This returns all permissions in a paginated format.
@@ -1573,6 +1618,7 @@ export def "query permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # The limit argument for forward pagination.
@@ -1587,13 +1633,13 @@ export def "query permissions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $after: String, $before: String) { permissions(first: $first, last: $last, after: $after, before: $before) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "permissions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "permissions" }
 }
 
 # Returns information pertaining to all gitserver instances associated with this Sourcegraph instance.  Site-admin only.
@@ -1607,6 +1653,7 @@ export def "query gitservers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -1617,13 +1664,13 @@ export def "query gitservers" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query { gitservers { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "gitservers" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "gitservers" }
 }
 
 # Returns information pertaining to all indexed search instances associated with this Sourcegraph instance.  Site-admin only.
@@ -1637,6 +1684,7 @@ export def "query indexed-search-instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -1647,13 +1695,13 @@ export def "query indexed-search-instances" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query { indexedSearchInstances { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "indexedSearchInstances" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "indexedSearchInstances" }
 }
 
 # Returns the current instance settings configuration (external URL, CORS origins, branding, HTML injection). Only site admins may query this.
@@ -1667,6 +1715,7 @@ export def "query instance-settings-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -1677,13 +1726,13 @@ export def "query instance-settings-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "externalURL corsOrigin htmlHeadTop htmlHeadBottom htmlBodyTop htmlBodyBottom" }
     let body = {query: ("query { instanceSettingsConfiguration { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "instanceSettingsConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "instanceSettingsConfiguration" }
 }
 
 # The list of all globally available executor secrets.
@@ -1697,6 +1746,7 @@ export def "query executor-secrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   scope: string@scope-completer # The scope for which secrets shall be returned.
@@ -1710,13 +1760,13 @@ export def "query executor-secrets" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($scope: ExecutorSecretScope!, $first: Int, $after: String) { executorSecrets(scope: $scope, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "executorSecrets" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "executorSecrets" }
 }
 
 # Lists the container registries configured in a DOCKER_AUTH_CONFIG executor secret. Credential values themselves are never returned. Returns an empty list when the target namespace has no DOCKER_AUTH_CONFIG secret. `namespace` may be a User ID or an Org ID; non-admins may only target their own user namespace or an org they belong to. When omitted, the site-wide (global) secret is read; this is restricted to site admins.
@@ -1730,6 +1780,7 @@ export def "query docker-registry-credentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --namespace: string # The namespace whose DOCKER_AUTH_CONFIG secret should be inspected. May be a User ID or an Org ID. Non-admins may only target their own user namespace or an org they belong to. When omitted, the site-wide (global) secret is read; this is restricted to site admins.
@@ -1741,13 +1792,13 @@ export def "query docker-registry-credentials" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "registry" }
     let body = {query: ("query($namespace: ID) { dockerRegistryCredentials(namespace: $namespace) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "dockerRegistryCredentials" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "dockerRegistryCredentials" }
 }
 
 # Retrieve active executor compute instances.
@@ -1761,6 +1812,7 @@ export def "query executors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # An (optional) search query that searches over the hostname, queue name, os, architecture, and version properties.
@@ -1775,13 +1827,13 @@ export def "query executors" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($query: String, $active: Boolean, $first: Int, $after: String) { executors(query: $query, active: $active, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "executors" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "executors" }
 }
 
 # Returns true if executors have been configured on the Sourcegraph instance. This is based on heuristics and doesn't necessarily mean that they would be working.
@@ -1795,6 +1847,7 @@ export def "query are-executors-configured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> bool {
@@ -1805,12 +1858,12 @@ export def "query are-executors-configured" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query { areExecutorsConfigured }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "areExecutorsConfigured" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "areExecutorsConfigured" }
 }
 
 # List access requests.
@@ -1824,6 +1877,7 @@ export def "query access-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --status: string@status-completer
@@ -1839,13 +1893,13 @@ export def "query access-requests" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($status: AccessRequestStatus, $first: Int, $last: Int, $after: String, $before: String) { accessRequests(status: $status, first: $first, last: $last, after: $after, before: $before) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "accessRequests" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "accessRequests" }
 }
 
 # Repository key-value pair metadata
@@ -1859,6 +1913,7 @@ export def "query repo-meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -1869,13 +1924,13 @@ export def "query repo-meta" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query { repoMeta { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "repoMeta" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "repoMeta" }
 }
 
 # Find repositories where a specific contributor has made commits.
@@ -1889,6 +1944,7 @@ export def "query contributor-repositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   author: string # Author name or email address to search for.
@@ -1903,13 +1959,13 @@ export def "query contributor-repositories" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($author: String!, $first: Int, $after: String, $minCommits: Int) { contributorRepositories(author: $author, first: $first, after: $after, minCommits: $minCommits) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "contributorRepositories" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "contributorRepositories" }
 }
 
 # List of all configured code hosts on this instance.  Site-admin only.
@@ -1923,6 +1979,7 @@ export def "query code-hosts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int
@@ -1936,13 +1993,13 @@ export def "query code-hosts" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "isMigrationDone totalCount" }
     let body = {query: ("query($first: Int, $after: String, $search: String) { codeHosts(first: $first, after: $after, search: $search) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "codeHosts" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "codeHosts" }
 }
 
 # All configured Slack bot integrations.
@@ -1956,6 +2013,7 @@ export def "query slack-configurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -1966,13 +2024,13 @@ export def "query slack-configurations" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id createdAt webhookVerifiedAt allowDeepSearch" }
     let body = {query: ("query { slackConfigurations { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "slackConfigurations" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "slackConfigurations" }
 }
 
 # Returns the outbound webhooks registered within Sourcegraph, optionally filtered by event type and scope. To filter by scope, event type is also required. If the event type and scope are both omitted, all webhooks are returned.  Only site admins have access to this query.
@@ -1986,6 +2044,7 @@ export def "query outbound-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int
@@ -2000,13 +2059,13 @@ export def "query outbound-webhooks" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $eventType: String, $scope: String) { outboundWebhooks(first: $first, after: $after, eventType: $eventType, scope: $scope) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundWebhooks" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundWebhooks" }
 }
 
 # Returns all possible outbound webhook event types.  Only site admins have access to this query.
@@ -2020,6 +2079,7 @@ export def "query outbound-webhook-event-types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -2030,13 +2090,13 @@ export def "query outbound-webhook-event-types" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "key description" }
     let body = {query: ("query { outboundWebhookEventTypes { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundWebhookEventTypes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "outboundWebhookEventTypes" }
 }
 
 # The current user (if authenticated), or an unauthenticated visitor. On some Sourcegraph sites, unauthenticated visitors can access the GraphQL API and perform a limited set of actions.
@@ -2050,6 +2110,7 @@ export def "query viewer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -2060,13 +2121,13 @@ export def "query viewer" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { " ... on User { id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag }" }
     let body = {query: ("query { viewer { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "viewer" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "viewer" }
 }
 
 # Whether the viewer can change the visibility of a library item (such as a saved search or prompt) to public.
@@ -2080,6 +2141,7 @@ export def "query viewer-can-change-library-item-visibility-to-public" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> bool {
@@ -2090,12 +2152,12 @@ export def "query viewer-can-change-library-item-visibility-to-public" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query { viewerCanChangeLibraryItemVisibilityToPublic }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerCanChangeLibraryItemVisibilityToPublic" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "viewerCanChangeLibraryItemVisibilityToPublic" }
 }
 
 # Fetches the result of an authentication provider validation. Results are one-time fetch only - calling twice returns null. Only site admins can access this.
@@ -2109,6 +2171,7 @@ export def "query auth-provider-validation-result" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   validation_id: string
@@ -2120,13 +2183,13 @@ export def "query auth-provider-validation-result" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "success errorMessage subject email username displayName groups" }
     let body = {query: ("query($validationID: String!) { authProviderValidationResult(validationID: $validationID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "authProviderValidationResult" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "authProviderValidationResult" }
 }
 
 # Returns the current external TLS configuration with parsed certificate metadata. Only site admins may query this.
@@ -2140,6 +2203,7 @@ export def "query external-tls-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -2150,13 +2214,13 @@ export def "query external-tls-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "insecureSkipVerify" }
     let body = {query: ("query { externalTLSConfiguration { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalTLSConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalTLSConfiguration" }
 }
 
 # List of notebooks exported as markdown. The notebooks feature has been removed, but this endpoint allows exporting existing notebook data.  This API will be removed in the future.  Only site admins can access this.
@@ -2170,6 +2234,7 @@ export def "query notebook-exports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --owner: string # Filter by notebook owner (a user ID). If not provided, all notebooks are returned.
@@ -2183,13 +2248,13 @@ export def "query notebook-exports" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($owner: ID, $first: Int, $after: String) { notebookExports(owner: $owner, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "notebookExports" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "notebookExports" }
 }
 
 # Reports on whether or not the caller has enough quota remaining to use the feature specified by the given SKU.  Note: This is used to drive UI gating (e.g., disabling a chat input if the instance doesn't have enough credits remaining, etc.)
@@ -2203,6 +2268,7 @@ export def "query check-quota" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   sku: string@sku-completer
@@ -2214,13 +2280,13 @@ export def "query check-quota" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "blocked" }
     let body = {query: ("query($sku: QuotaSKU!) { checkQuota(sku: $sku) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "checkQuota" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "checkQuota" }
 }
 
 # Query precise code intelligence indexes.
@@ -2234,6 +2300,7 @@ export def "query precise-indexes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repo: string # If supplied, only precise indexes for the given repository will be returned.
@@ -2254,13 +2321,13 @@ export def "query precise-indexes" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($repo: ID, $query: String, $states: [PreciseIndexState!], $indexerKey: String, $indexSource: PreciseIndexSource, $dependencyOf: ID, $dependentOf: ID, $includeDeleted: Boolean, $first: Int, $after: String) { preciseIndexes(repo: $repo, query: $query, states: $states, indexerKey: $indexerKey, indexSource: $indexSource, dependencyOf: $dependencyOf, dependentOf: $dependentOf, includeDeleted: $includeDeleted, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "preciseIndexes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "preciseIndexes" }
 }
 
 # Provides a summary of code intelligence on the instance.
@@ -2274,6 +2341,7 @@ export def "query code-intel-summary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -2284,13 +2352,13 @@ export def "query code-intel-summary" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "numRepositoriesWithCodeIntelligence" }
     let body = {query: ("query { codeIntelSummary { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelSummary" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelSummary" }
 }
 
 # A list of unique indexer keys queryable via the `preciseIndexes.indexerKey` filter.
@@ -2304,6 +2372,7 @@ export def "query indexer-keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repo: string # If supplied, only indexers associated with the given repository will be returned.
@@ -2315,12 +2384,12 @@ export def "query indexer-keys" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($repo: ID) { indexerKeys(repo: $repo) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "indexerKeys" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "indexerKeys" }
 }
 
 # Return the currently set auto-indexing job inference script. Does not return the value stored in the environment variable or the default shipped scripts, only the value set via UI/GraphQL.
@@ -2334,6 +2403,7 @@ export def "query code-intelligence-inference-script" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> string {
@@ -2344,12 +2414,12 @@ export def "query code-intelligence-inference-script" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query { codeIntelligenceInferenceScript }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelligenceInferenceScript" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelligenceInferenceScript" }
 }
 
 # Return (but do not enqueue) descriptions of auto indexing jobs at the current revision.
@@ -2363,6 +2433,7 @@ export def "query infer-auto-index-jobs-for-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string
@@ -2376,13 +2447,13 @@ export def "query infer-auto-index-jobs-for-repo" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "inferenceOutput" }
     let body = {query: ("query($repository: ID!, $rev: String, $script: String) { inferAutoIndexJobsForRepo(repository: $repository, rev: $rev, script: $script) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "inferAutoIndexJobsForRepo" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "inferAutoIndexJobsForRepo" }
 }
 
 # Identify usages for either a semantic symbol, or the symbol(s) implied by a source range. Ordering and uniqueness guarantees: 1. The usages returned will already be de-duplicated. 2. Results are first grouped by provenance in the order precise, syntactic, then search-based. 3. Results for a single repository are contiguous. 4. Results for a single file are contiguous. Related: See `codeGraphData` on GitBlob.  EXPERIMENTAL: This API may make backwards-incompatible changes in the future.
@@ -2400,6 +2471,7 @@ export def "query usages-for-symbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # When specified, indicates that this request should be paginated and the first N results (relative to the cursor) should be returned. i.e. how many results to return per page. May return more results than requested to complete usages for a file.
@@ -2421,13 +2493,13 @@ export def "query usages-for-symbol" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($symbol: SymbolComparator, $range: RangeInput!, $first: Int, $after: String) { usagesForSymbol(first: $first, after: $after, symbol: $symbol, range: $range) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "usagesForSymbol" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "usagesForSymbol" }
 }
 
 # Returns the current managed indexing settings for the Sourcegraph instance. These settings control whether precise and syntactic indexing are enabled via the "[Sourcegraph Managed]" global policy.
@@ -2441,6 +2513,7 @@ export def "query managed-indexing-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -2451,13 +2524,13 @@ export def "query managed-indexing-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "preciseIndexingEnabled syntacticIndexingEnabled" }
     let body = {query: ("query { managedIndexingSettings { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "managedIndexingSettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "managedIndexingSettings" }
 }
 
 # Returns code intelligence configuration policies for precise and syntactic indexing that control data retention and (if enabled) precise auto-indexing behavior.
@@ -2471,6 +2544,7 @@ export def "query code-intelligence-configuration-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repository: string # If repository is supplied, then only the configuration policies that apply to repository are returned. If repository is not supplied, then all policies are returned.
@@ -2489,13 +2563,13 @@ export def "query code-intelligence-configuration-policies" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($repository: ID, $query: String, $forDataRetention: Boolean, $forPreciseIndexing: Boolean, $forSyntacticIndexing: Boolean, $protected: Boolean, $first: Int, $after: String) { codeIntelligenceConfigurationPolicies(repository: $repository, query: $query, forDataRetention: $forDataRetention, forPreciseIndexing: $forPreciseIndexing, forSyntacticIndexing: $forSyntacticIndexing, protected: $protected, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelligenceConfigurationPolicies" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "codeIntelligenceConfigurationPolicies" }
 }
 
 # The set of repositories that match the given glob pattern. This resolver is used by the UI to preview what repositories match a code intelligence policy in a given repository.
@@ -2509,6 +2583,7 @@ export def "query preview-repository-filter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   patterns: string # A set of patterns matching the name of the matching repository.
@@ -2521,13 +2596,13 @@ export def "query preview-repository-filter" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount matchesAllRepos limit totalMatches" }
     let body = {query: ("query($patterns: [String!]!, $first: Int) { previewRepositoryFilter(patterns: $patterns, first: $first) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "previewRepositoryFilter" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "previewRepositoryFilter" }
 }
 
 # Return dashboards visible to the authenticated user.
@@ -2541,6 +2616,7 @@ export def "query insights-dashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int
@@ -2554,13 +2630,13 @@ export def "query insights-dashboards" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($first: Int, $after: String, $id: ID) { insightsDashboards(first: $first, after: $after, id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "insightsDashboards" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "insightsDashboards" }
 }
 
 # Return all insight views visible to the authenticated user.
@@ -2575,6 +2651,7 @@ export def "query insight-views" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int
@@ -2599,13 +2676,13 @@ export def "query insight-views" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $id: ID, $excludeIds: [ID!], $find: String, $isFrozen: Boolean, $filters: InsightViewFiltersInput, $seriesDisplayOptions: SeriesDisplayOptionsInput) { insightViews(first: $first, after: $after, id: $id, excludeIds: $excludeIds, find: $find, isFrozen: $isFrozen, filters: $filters, seriesDisplayOptions: $seriesDisplayOptions) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "insightViews" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "insightViews" }
 }
 
 # Generate an ephemeral time series for a Search based code insight, generally for the purposes of live preview.
@@ -2621,6 +2698,7 @@ export def "query search-insight-live-preview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-query: string # The query string.
@@ -2638,13 +2716,13 @@ export def "query search-insight-live-preview" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "label" }
     let body = {query: ("query($input: SearchInsightLivePreviewInput!) { searchInsightLivePreview(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "searchInsightLivePreview" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "searchInsightLivePreview" }
 }
 
 # Generate an ephemeral set of time series for a code insight, generally for the purposes of live preview.
@@ -2661,6 +2739,7 @@ export def "query search-insight-preview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-repositoryScope: record # The scope of repositories. — shape: {repositories: string, repositoryCriteria?: string}
@@ -2675,13 +2754,13 @@ export def "query search-insight-preview" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "label" }
     let body = {query: ("query($input: SearchInsightPreviewInput!) { searchInsightPreview(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "searchInsightPreview" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "searchInsightPreview" }
 }
 
 # Generate an ephemeral set of time series for a repository statistics insight, generally for the purposes of live preview.
@@ -2698,6 +2777,7 @@ export def "query inventory-stats-preview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-repositoryScope: record # The scope of repositories. — shape: {repositories: string, repositoryCriteria?: string}
@@ -2712,13 +2792,13 @@ export def "query inventory-stats-preview" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "label" }
     let body = {query: ("query($input: InventoryStatsPreviewInput!) { inventoryStatsPreview(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "inventoryStatsPreview" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "inventoryStatsPreview" }
 }
 
 # Retrieve information about queued insights series and their breakout by status. Restricted to admins only.
@@ -2732,6 +2812,7 @@ export def "query insight-series-query-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -2742,13 +2823,13 @@ export def "query insight-series-query-status" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "seriesId query enabled errored completed processing failed queued" }
     let body = {query: ("query { insightSeriesQueryStatus { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "insightSeriesQueryStatus" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "insightSeriesQueryStatus" }
 }
 
 # Retrieve information about an insight view and its status. Restricted to admins only.
@@ -2762,6 +2843,7 @@ export def "query insight-view-debug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -2773,13 +2855,13 @@ export def "query insight-view-debug" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "raw" }
     let body = {query: ("query($id: ID!) { insightViewDebug(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "insightViewDebug" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "insightViewDebug" }
 }
 
 # Validates a query for determining insight scope and returns the number of repositories it matches for the caller.
@@ -2793,6 +2875,7 @@ export def "query validate-scoped-insight-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   query: string
@@ -2804,13 +2887,13 @@ export def "query validate-scoped-insight-query" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "query isValid invalidReason" }
     let body = {query: ("query($query: String!) { validateScopedInsightQuery(query: $query) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "validateScopedInsightQuery" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "validateScopedInsightQuery" }
 }
 
 # Returns the number of repositories matched given a valid query.
@@ -2824,6 +2907,7 @@ export def "query preview-repositories-from-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   query: string
@@ -2835,13 +2919,13 @@ export def "query preview-repositories-from-query" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "query numberOfRepositories" }
     let body = {query: ("query($query: String!) { previewRepositoriesFromQuery(query: $query) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "previewRepositoriesFromQuery" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "previewRepositoriesFromQuery" }
 }
 
 # Fetch information related to the queue of backfilling insights.
@@ -2855,6 +2939,7 @@ export def "query insight-admin-backfill-queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n queue items from the list.
@@ -2873,13 +2958,13 @@ export def "query insight-admin-backfill-queue" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $after: String, $before: String, $orderBy: BackfillQueueOrderBy, $descending: Boolean, $states: [InsightQueueItemState!], $textSearch: String) { insightAdminBackfillQueue(first: $first, last: $last, after: $after, before: $before, orderBy: $orderBy, descending: $descending, states: $states, textSearch: $textSearch) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "insightAdminBackfillQueue" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "insightAdminBackfillQueue" }
 }
 
 # The repositories a user is authorized to access with the given permission. This isn’t defined in the User type because we store permissions for users that don’t yet exist (i.e. late binding). Only one of "username" or "email" is required to identify a user.
@@ -2893,6 +2978,7 @@ export def "query authorized-user-repositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --username: string # The username.
@@ -2908,13 +2994,13 @@ export def "query authorized-user-repositories" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($username: String, $email: String, $perm: RepositoryPermission, $first: Int!, $after: String) { authorizedUserRepositories(username: $username, email: $email, perm: $perm, first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "authorizedUserRepositories" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "authorizedUserRepositories" }
 }
 
 # Returns a list of usernames or emails that have associated pending permissions. The returned list can be used to query authorizedUserRepositories for pending permissions.
@@ -2928,6 +3014,7 @@ export def "query users-with-pending-permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -2938,12 +3025,12 @@ export def "query users-with-pending-permissions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query { usersWithPendingPermissions }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "usersWithPendingPermissions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "usersWithPendingPermissions" }
 }
 
 # Returns a list of recent permissions sync jobs for a given set of parameters.
@@ -2957,6 +3044,7 @@ export def "query permissions-sync-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Number of jobs returned. Maximum number of returned jobs is 500. Up to 100 jobs are returned by default.
@@ -2978,13 +3066,13 @@ export def "query permissions-sync-jobs" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $after: String, $before: String, $reasonGroup: PermissionsSyncJobReasonGroup, $state: PermissionsSyncJobState, $searchType: PermissionsSyncJobsSearchType, $query: String, $userID: ID, $repoID: ID, $partial: Boolean) { permissionsSyncJobs(first: $first, last: $last, after: $after, before: $before, reasonGroup: $reasonGroup, state: $state, searchType: $searchType, query: $query, userID: $userID, repoID: $repoID, partial: $partial) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "permissionsSyncJobs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "permissionsSyncJobs" }
 }
 
 # Returns various permissions syncing statistics.
@@ -2998,6 +3086,7 @@ export def "query permissions-syncing-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -3008,13 +3097,13 @@ export def "query permissions-syncing-stats" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "queueSize usersWithLatestJobFailing reposWithLatestJobFailing usersWithNoPermissions reposWithNoPermissions usersWithStalePermissions reposWithStalePermissions" }
     let body = {query: ("query { permissionsSyncingStats { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "permissionsSyncingStats" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "permissionsSyncingStats" }
 }
 
 # Returns a list of Bitbucket Project permissions sync jobs for a given set of parameters.
@@ -3028,6 +3117,7 @@ export def "query bitbucket-project-permission-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --project-keys: string # Bitbucket project keys which sync jobs are queried
@@ -3041,13 +3131,13 @@ export def "query bitbucket-project-permission-jobs" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($projectKeys: [String!], $status: String, $count: Int) { bitbucketProjectPermissionJobs(projectKeys: $projectKeys, status: $status, count: $count) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "bitbucketProjectPermissionJobs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "bitbucketProjectPermissionJobs" }
 }
 
 # List of auth provider wizard drafts for the current user.
@@ -3061,6 +3151,7 @@ export def "query auth-provider-wizard-drafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # The limit argument for pagination.
@@ -3074,13 +3165,13 @@ export def "query auth-provider-wizard-drafts" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $wizardType: AuthWizardType) { authProviderWizardDrafts(first: $first, after: $after, wizardType: $wizardType) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "authProviderWizardDrafts" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "authProviderWizardDrafts" }
 }
 
 # List of saved searches.
@@ -3094,6 +3185,7 @@ export def "query saved-searches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # Filter saved searches by text in their description and query.
@@ -3113,13 +3205,13 @@ export def "query saved-searches" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($query: String, $owner: ID, $viewerIsAffiliated: Boolean, $includeDrafts: Boolean, $first: Int, $last: Int, $after: String, $before: String, $orderBy: SavedSearchesOrderBy) { savedSearches(query: $query, owner: $owner, viewerIsAffiliated: $viewerIsAffiliated, includeDrafts: $includeDrafts, first: $first, last: $last, after: $after, before: $before, orderBy: $orderBy) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "savedSearches" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "savedSearches" }
 }
 
 # All configured GitHub Apps, optionally filtered by the domain in which they are used. 🚨 SECURITY: Requires site-admin.
@@ -3133,6 +3225,7 @@ export def "query git-hub-apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --domain: string@domain-completer
@@ -3144,13 +3237,13 @@ export def "query git-hub-apps" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($domain: GitHubAppDomain) { gitHubApps(domain: $domain) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "gitHubApps" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "gitHubApps" }
 }
 
 # GitHub Apps configured as Batch Changes credentials for a user. 🚨 SECURITY: Requires site-admin or the same user.
@@ -3164,6 +3257,7 @@ export def "query batch-changes-user-credential-git-hub-apps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -3175,13 +3269,13 @@ export def "query batch-changes-user-credential-git-hub-apps" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($user: ID!) { batchChangesUserCredentialGitHubApps(user: $user) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "batchChangesUserCredentialGitHubApps" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "batchChangesUserCredentialGitHubApps" }
 }
 
 # Looks up a GitHub App by its AppID and BaseURL. 🚨 SECURITY: Requires site-admin.
@@ -3195,6 +3289,7 @@ export def "query git-hub-app-by-app-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   app_id: int
@@ -3207,13 +3302,13 @@ export def "query git-hub-app-by-app-id" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id appID name domain kind slug baseURL appURL clientID clientSecret logo createdAt updatedAt missingRequiredPermissions" }
     let body = {query: ("query($appID: Int!, $baseURL: String!) { gitHubAppByAppID(appID: $appID, baseURL: $baseURL) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "gitHubAppByAppID" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "gitHubAppByAppID" }
 }
 
 # Checks whether the given feature is enabled on Sourcegraph.
@@ -3227,6 +3322,7 @@ export def "query enterprise-license-has-feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   feature: string
@@ -3238,12 +3334,12 @@ export def "query enterprise-license-has-feature" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($feature: String!) { enterpriseLicenseHasFeature(feature: $feature) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "enterpriseLicenseHasFeature" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "enterpriseLicenseHasFeature" }
 }
 
 # Validates a license key and returns information about it without applying it. This allows previewing license details before updating the site configuration. Only accessible to site admins.
@@ -3257,6 +3353,7 @@ export def "query preview-license-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   license_key: string
@@ -3268,13 +3365,13 @@ export def "query preview-license-key" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "error plan userCount expiresAt tags" }
     let body = {query: ("query($licenseKey: String!) { previewLicenseKey(licenseKey: $licenseKey) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "previewLicenseKey" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "previewLicenseKey" }
 }
 
 # All available user-defined search contexts. Excludes auto-defined contexts.
@@ -3288,6 +3385,7 @@ export def "query search-contexts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n search contexts from the list.
@@ -3304,13 +3402,13 @@ export def "query search-contexts" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String, $query: String, $namespaces: [ID], $orderBy: SearchContextsOrderBy, $descending: Boolean) { searchContexts(first: $first, after: $after, query: $query, namespaces: $namespaces, orderBy: $orderBy, descending: $descending) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "searchContexts" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "searchContexts" }
 }
 
 # Fetch search context by spec (global, @username, @username/ctx, etc.).
@@ -3324,6 +3422,7 @@ export def "query search-context-by-spec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   spec: string
@@ -3335,13 +3434,13 @@ export def "query search-context-by-spec" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id databaseID name description spec autoDefined query public updatedAt viewerCanManage viewerHasAsDefault viewerHasStarred" }
     let body = {query: ("query($spec: String!) { searchContextBySpec(spec: $spec) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "searchContextBySpec" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "searchContextBySpec" }
 }
 
 # Determines whether the search context is within the set of search contexts available to the current user. The set consists of contexts created by the user, contexts created by the users' organizations, and instance-level contexts.
@@ -3355,6 +3454,7 @@ export def "query is-search-context-available" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   spec: string
@@ -3366,12 +3466,12 @@ export def "query is-search-context-available" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($spec: String!) { isSearchContextAvailable(spec: $spec) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "isSearchContextAvailable" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "isSearchContextAvailable" }
 }
 
 # Gets the default search context for the current user. This context is guaranteed to be available to the user.
@@ -3385,6 +3485,7 @@ export def "query default-search-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -3395,13 +3496,13 @@ export def "query default-search-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id databaseID name description spec autoDefined query public updatedAt viewerCanManage viewerHasAsDefault viewerHasStarred" }
     let body = {query: ("query { defaultSearchContext { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "defaultSearchContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "defaultSearchContext" }
 }
 
 # Computes valus from search results.
@@ -3415,6 +3516,7 @@ export def "query compute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # The search query.
@@ -3426,13 +3528,13 @@ export def "query compute" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on ComputeMatchContext { commit path } ... on ComputeText { commit path kind value }" }
     let body = {query: ("query($query: String) { compute(query: $query) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "compute" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "compute" }
 }
 
 # Returns information about aggregating the potential results of a search query.
@@ -3446,6 +3548,7 @@ export def "query search-query-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   query: string
@@ -3458,13 +3561,13 @@ export def "query search-query-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($query: String!, $patternType: SearchPatternType!) { searchQueryAggregate(query: $query, patternType: $patternType) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "searchQueryAggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "searchQueryAggregate" }
 }
 
 # Get a list of context related to the query from a set of repositories. This is the first list from getCodyContextAlternatives
@@ -3480,6 +3583,7 @@ export def "query get-cody-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repos: string # The repositories to search.
@@ -3496,13 +3600,13 @@ export def "query get-cody-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on FileChunkContext { startLine endLine chunkContent }" }
     let body = {query: ("query($repos: [ID!]!, $filePatterns: [String!], $query: String!, $codeResultsCount: Int!, $textResultsCount: Int!, $version: String) { getCodyContext(repos: $repos, filePatterns: $filePatterns, query: $query, codeResultsCount: $codeResultsCount, textResultsCount: $textResultsCount, version: $version) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "getCodyContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "getCodyContext" }
 }
 
 # Get lists of context related to the query from a set of repositories.
@@ -3518,6 +3622,7 @@ export def "query get-cody-context-alternatives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repos: string # The repositories to search.
@@ -3534,13 +3639,13 @@ export def "query get-cody-context-alternatives" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($repos: [ID!]!, $filePatterns: [String!], $query: String!, $codeResultsCount: Int!, $textResultsCount: Int!, $version: String) { getCodyContextAlternatives(repos: $repos, filePatterns: $filePatterns, query: $query, codeResultsCount: $codeResultsCount, textResultsCount: $textResultsCount, version: $version) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "getCodyContextAlternatives" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "getCodyContextAlternatives" }
 }
 
 # EXPERIMENTAL: Fetches the relevant context for a mentioned URL
@@ -3554,6 +3659,7 @@ export def "query url-mention-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   url: string
@@ -3565,13 +3671,13 @@ export def "query url-mention-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "title content" }
     let body = {query: ("query($url: String!) { urlMentionContext(url: $url) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "urlMentionContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "urlMentionContext" }
 }
 
 # Returns a string of completion responses
@@ -3588,6 +3694,7 @@ export def "query completions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --fast: oneof<nothing, bool>
@@ -3605,12 +3712,12 @@ export def "query completions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($input: CompletionsInput!, $fast: Boolean) { completions(fast: $fast, input: $input) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "completions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "completions" }
 }
 
 # Returns an entitlement by its ID.
@@ -3624,6 +3731,7 @@ export def "query entitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -3635,13 +3743,13 @@ export def "query entitlement" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name type limit window isDefault updatedAt" }
     let body = {query: ("query($id: ID!) { entitlement(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "entitlement" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "entitlement" }
 }
 
 # Returns all entitlements in a paginated format.
@@ -3655,6 +3763,7 @@ export def "query entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --type: string@type-completer # The type of the entitlement.
@@ -3671,13 +3780,13 @@ export def "query entitlements" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($type: EntitlementType, $isDefault: Boolean, $first: Int, $last: Int, $after: String, $before: String) { entitlements(type: $type, isDefault: $isDefault, first: $first, last: $last, after: $after, before: $before) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "entitlements" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "entitlements" }
 }
 
 # EXPERIMENTAL: Searches the instances indexed code for code matching snippet.
@@ -3691,6 +3800,7 @@ export def "query snippet-attribution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   snippet: string
@@ -3703,13 +3813,13 @@ export def "query snippet-attribution" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount limitHit" }
     let body = {query: ("query($snippet: String!, $first: Int) { snippetAttribution(snippet: $snippet, first: $first) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "snippetAttribution" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "snippetAttribution" }
 }
 
 # Telemetry queries for "Event Logging Everywhere", aka a version 2 of existing event-logging/event-recording APIs.
@@ -3723,6 +3833,7 @@ export def "query telemetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -3733,13 +3844,13 @@ export def "query telemetry" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query { telemetry { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "telemetry" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "telemetry" }
 }
 
 # External API queries for managing and introspecting external API services.
@@ -3753,6 +3864,7 @@ export def "query external-api" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -3763,13 +3875,13 @@ export def "query external-api" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "openAPISchema" }
     let body = {query: ("query { externalAPI { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalAPI" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalAPI" }
 }
 
 # List of prompts, which are templates for chat prompts that can be shared and reused.
@@ -3783,6 +3895,7 @@ export def "query prompts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # Search prompts by name, description, or prompt template text.
@@ -3810,13 +3923,13 @@ export def "query prompts" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($query: String, $owner: ID, $viewerIsAffiliated: Boolean, $includeDrafts: Boolean, $recommendedOnly: Boolean, $builtinOnly: Boolean, $includeBuiltin: Boolean, $includeViewerDrafts: Boolean, $first: Int, $last: Int, $after: String, $before: String, $orderBy: PromptsOrderBy, $orderByMultiple: [PromptsOrderBy!], $tags: [ID!], $exclude: [ID!], $include: [ID!]) { prompts(query: $query, owner: $owner, viewerIsAffiliated: $viewerIsAffiliated, includeDrafts: $includeDrafts, recommendedOnly: $recommendedOnly, builtinOnly: $builtinOnly, includeBuiltin: $includeBuiltin, includeViewerDrafts: $includeViewerDrafts, first: $first, last: $last, after: $after, before: $before, orderBy: $orderBy, orderByMultiple: $orderByMultiple, tags: $tags, exclude: $exclude, include: $include) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "prompts" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "prompts" }
 }
 
 # List of prompt tags, which can be applied to prompts.
@@ -3830,6 +3943,7 @@ export def "query prompt-tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # The limit argument for forward pagination.
@@ -3847,13 +3961,13 @@ export def "query prompt-tags" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $last: Int, $after: String, $before: String, $query: String, $orderBy: PromptTagsOrderBy, $orderByMultiple: [PromptTagsOrderBy!]) { promptTags(first: $first, last: $last, after: $after, before: $before, query: $query, orderBy: $orderBy, orderByMultiple: $orderByMultiple) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "promptTags" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "promptTags" }
 }
 
 # Returns the list of IdP clients that exist in the system. These can be used to authenticate with Sourcegraph.  Requires IDP_CLIENTS#READ permission.
@@ -3867,6 +3981,7 @@ export def "query idp-clients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int
@@ -3879,13 +3994,13 @@ export def "query idp-clients" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "totalCount" }
     let body = {query: ("query($first: Int, $after: String) { idpClients(first: $first, after: $after) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "idpClients" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "idpClients" }
 }
 
 # The list of known IdP scopes.
@@ -3899,6 +4014,7 @@ export def "query idp-scopes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -3909,13 +4025,13 @@ export def "query idp-scopes" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "name description" }
     let body = {query: ("query { idpScopes { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "idpScopes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "idpScopes" }
 }
 
 # Get device authorization details by user code for the authorization flow. Returns the client information and requested scopes that the user needs to approve or deny.
@@ -3929,6 +4045,7 @@ export def "query device-authorization-by-user-code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_code: string
@@ -3940,13 +4057,13 @@ export def "query device-authorization-by-user-code" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "isValid" }
     let body = {query: ("query($userCode: String!) { deviceAuthorizationByUserCode(userCode: $userCode) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deviceAuthorizationByUserCode" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deviceAuthorizationByUserCode" }
 }
 
 # Get consent details for a consent flow ID from the authorization flow. Returns the client information and requested scopes that the user needs to approve or deny. Can only be requested by the user who began the authorization flow.
@@ -3960,6 +4077,7 @@ export def "query consent-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   consent_id: string
@@ -3971,13 +4089,13 @@ export def "query consent-details" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($consentID: String!) { consentDetails(consentID: $consentID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "consentDetails" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "consentDetails" }
 }
 
 # Returns the current Deep Search quota usage for the authenticated user. Returns null if quota tracking is not available or the user is not authenticated.
@@ -3991,6 +4109,7 @@ export def "query deep-search-quota-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -4001,13 +4120,13 @@ export def "query deep-search-quota-usage" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "limit consumed resetTime" }
     let body = {query: ("query { deepSearchQuotaUsage { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deepSearchQuotaUsage" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deepSearchQuotaUsage" }
 }
 
 # Configuration for MCP (Model Context Protocol) integration.
@@ -4021,6 +4140,7 @@ export def "query mcp-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -4031,13 +4151,13 @@ export def "query mcp-config" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "isMCPEnabled isDCREnabled endpoint" }
     let body = {query: ("query { mcpConfig { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "mcpConfig" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "mcpConfig" }
 }
 
 # Updates the user profile information for the user with the given ID.  Only the user and site admins may perform this mutation.
@@ -4051,6 +4171,7 @@ export def "mutation update-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4065,13 +4186,13 @@ export def "mutation update-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag" }
     let body = {query: ("mutation($user: ID!, $username: String, $displayName: String, $avatarURL: String) { updateUser(user: $user, username: $username, displayName: $displayName, avatarURL: $avatarURL) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateUser" }
 }
 
 # Creates an organization. The caller is added as a member of the newly created organization.  Only authenticated users may perform this mutation.
@@ -4085,6 +4206,7 @@ export def "mutation create-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -4097,13 +4219,13 @@ export def "mutation create-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name displayName createdAt viewerCanAdminister viewerIsMember url settingsURL namespaceName" }
     let body = {query: ("mutation($name: String!, $displayName: String) { createOrganization(name: $name, displayName: $displayName) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createOrganization" }
 }
 
 # Updates an organization.  Only site admins and any member of the organization may perform this mutation.
@@ -4117,6 +4239,7 @@ export def "mutation update-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -4129,13 +4252,13 @@ export def "mutation update-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name displayName createdAt viewerCanAdminister viewerIsMember url settingsURL namespaceName" }
     let body = {query: ("mutation($id: ID!, $displayName: String) { updateOrganization(id: $id, displayName: $displayName) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateOrganization" }
 }
 
 # Soft deletes an organization.  Only site admins may perform this mutation.
@@ -4149,6 +4272,7 @@ export def "mutation delete-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   organization: string
@@ -4160,13 +4284,13 @@ export def "mutation delete-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($organization: ID!) { deleteOrganization(organization: $organization) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteOrganization" }
 }
 
 # Creates a webhook for the specified code host. Only site admins may perform this mutation.
@@ -4180,6 +4304,7 @@ export def "mutation create-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -4194,13 +4319,13 @@ export def "mutation create-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id uuid url name codeHostKind codeHostURN secret updatedAt createdAt" }
     let body = {query: ("mutation($name: String!, $codeHostKind: String!, $codeHostURN: String!, $secret: String) { createWebhook(name: $name, codeHostKind: $codeHostKind, codeHostURN: $codeHostURN, secret: $secret) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createWebhook" }
 }
 
 # Deletes a webhook by given ID. Only site admins may perform this mutation.
@@ -4214,6 +4339,7 @@ export def "mutation delete-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -4225,13 +4351,13 @@ export def "mutation delete-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteWebhook(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteWebhook" }
 }
 
 # Updates a webhook with given ID. Null values aren't updated.
@@ -4245,6 +4371,7 @@ export def "mutation update-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -4260,13 +4387,13 @@ export def "mutation update-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id uuid url name codeHostKind codeHostURN secret updatedAt createdAt" }
     let body = {query: ("mutation($id: ID!, $name: String, $codeHostKind: String, $codeHostURN: String, $secret: String) { updateWebhook(id: $id, name: $name, codeHostKind: $codeHostKind, codeHostURN: $codeHostURN, secret: $secret) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateWebhook" }
 }
 
 # Adds a external service. Only site admins may perform this mutation.
@@ -4280,6 +4407,7 @@ export def "mutation add-external-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-kind: string@input-kind-completer # The kind of the external service.
@@ -4295,13 +4423,13 @@ export def "mutation add-external-service" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id kind url displayName config createdAt updatedAt repoCount warning lastSyncError lastSyncAt nextSyncAt suspended hasConnectionCheck supportsRepoExclusion unrestricted" }
     let body = {query: ("mutation($input: AddExternalServiceInput!) { addExternalService(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addExternalService" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addExternalService" }
 }
 
 # Updates a external service. Only site admins may perform this mutation.
@@ -4315,6 +4443,7 @@ export def "mutation update-external-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-id: string # The id of the external service to update.
@@ -4329,13 +4458,13 @@ export def "mutation update-external-service" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id kind url displayName config createdAt updatedAt repoCount warning lastSyncError lastSyncAt nextSyncAt suspended hasConnectionCheck supportsRepoExclusion unrestricted" }
     let body = {query: ("mutation($input: UpdateExternalServiceInput!) { updateExternalService(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateExternalService" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateExternalService" }
 }
 
 # Delete an external service. Only site admins may perform this mutation.
@@ -4349,6 +4478,7 @@ export def "mutation delete-external-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   external_service: string
@@ -4361,13 +4491,13 @@ export def "mutation delete-external-service" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($externalService: ID!, $async: Boolean) { deleteExternalService(externalService: $externalService, async: $async) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExternalService" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExternalService" }
 }
 
 # Excludes a repo from external services configs. Only site admins may perform this mutation.
@@ -4381,6 +4511,7 @@ export def "mutation exclude-repo-from-external-services" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   external_services: string
@@ -4393,13 +4524,13 @@ export def "mutation exclude-repo-from-external-services" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($externalServices: [ID!]!, $repo: ID!) { excludeRepoFromExternalServices(externalServices: $externalServices, repo: $repo) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "excludeRepoFromExternalServices" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "excludeRepoFromExternalServices" }
 }
 
 # Tests the connection to a mirror repository's original source repository. This is an expensive and slow operation, so it should only be used for interactive diagnostics.  Only site admins may perform this mutation.
@@ -4413,6 +4544,7 @@ export def "mutation check-mirror-repository-connection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The ID of the existing repository whose mirror to check.
@@ -4424,13 +4556,13 @@ export def "mutation check-mirror-repository-connection" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "error" }
     let body = {query: ("mutation($repository: ID!) { checkMirrorRepositoryConnection(repository: $repository) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "checkMirrorRepositoryConnection" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "checkMirrorRepositoryConnection" }
 }
 
 # Schedule the mirror repository to be updated from its original source repository. Updating occurs automatically, so this should not normally be needed.  Only site admins may perform this mutation.
@@ -4444,6 +4576,7 @@ export def "mutation update-mirror-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The mirror repository to update.
@@ -4455,13 +4588,13 @@ export def "mutation update-mirror-repository" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!) { updateMirrorRepository(repository: $repository) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateMirrorRepository" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateMirrorRepository" }
 }
 
 # Schedule the mirror repository to be optimized. Optimization occurs automatically, so this should not normally be needed.  Only site admins may perform this mutation.
@@ -4475,6 +4608,7 @@ export def "mutation optimize-mirror-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The mirror repository to optimize.
@@ -4487,13 +4621,13 @@ export def "mutation optimize-mirror-repository" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!, $strategy: GitOptimizationStrategy) { optimizeMirrorRepository(repository: $repository, strategy: $strategy) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "optimizeMirrorRepository" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "optimizeMirrorRepository" }
 }
 
 # Force Zoekt to reindex the repository right now. Reindexing occurs automatically, so this should not normally be needed.
@@ -4507,6 +4641,7 @@ export def "mutation reindex-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The repository to index
@@ -4518,13 +4653,13 @@ export def "mutation reindex-repository" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!) { reindexRepository(repository: $repository) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "reindexRepository" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "reindexRepository" }
 }
 
 # Creates a new user account.  Only site admins may perform this mutation.
@@ -4538,6 +4673,7 @@ export def "mutation create-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   username: string # The new user's username.
@@ -4552,13 +4688,13 @@ export def "mutation create-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "resetPasswordURL" }
     let body = {query: ("mutation($username: String!, $email: String, $verifiedEmail: Boolean, $isServiceAccount: Boolean) { createUser(username: $username, email: $email, verifiedEmail: $verifiedEmail, isServiceAccount: $isServiceAccount) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createUser" }
 }
 
 # Randomize a user's password so that they need to reset it before they can sign in again.  Only site admins may perform this mutation.
@@ -4572,6 +4708,7 @@ export def "mutation randomize-user-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4583,13 +4720,13 @@ export def "mutation randomize-user-password" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "resetPasswordURL emailSent" }
     let body = {query: ("mutation($user: ID!) { randomizeUserPassword(user: $user) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "randomizeUserPassword" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "randomizeUserPassword" }
 }
 
 # Adds an email address to the user's account. The email address will be marked as unverified until the user has followed the email verification process.  Only the user and site admins may perform this mutation.
@@ -4603,6 +4740,7 @@ export def "mutation add-user-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4615,13 +4753,13 @@ export def "mutation add-user-email" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $email: String!) { addUserEmail(user: $user, email: $email) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addUserEmail" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addUserEmail" }
 }
 
 # Removes an email address from the user's account.  Only the user and site admins may perform this mutation.
@@ -4635,6 +4773,7 @@ export def "mutation remove-user-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4647,13 +4786,13 @@ export def "mutation remove-user-email" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $email: String!) { removeUserEmail(user: $user, email: $email) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "removeUserEmail" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "removeUserEmail" }
 }
 
 # Set an email address as the user's primary.  Only the user and site admins may perform this mutation. Check user.viewerCanChangePrimaryEmail for permission and other update inhibitors.
@@ -4667,6 +4806,7 @@ export def "mutation set-user-email-primary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4679,13 +4819,13 @@ export def "mutation set-user-email-primary" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $email: String!) { setUserEmailPrimary(user: $user, email: $email) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserEmailPrimary" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserEmailPrimary" }
 }
 
 # Manually set the verification status of a user's email, without going through the normal verification process (of clicking on a link in the email with a verification code).  Only site admins may perform this mutation.
@@ -4699,6 +4839,7 @@ export def "mutation set-user-email-verified" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4712,13 +4853,13 @@ export def "mutation set-user-email-verified" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $email: String!, $verified: Boolean!) { setUserEmailVerified(user: $user, email: $email, verified: $verified) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserEmailVerified" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserEmailVerified" }
 }
 
 # Resend a verification email, no op if the email is already verified.  Only the user and site admins may perform this mutation.
@@ -4732,6 +4873,7 @@ export def "mutation resend-verification-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4744,13 +4886,13 @@ export def "mutation resend-verification-email" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $email: String!) { resendVerificationEmail(user: $user, email: $email) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "resendVerificationEmail" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "resendVerificationEmail" }
 }
 
 # Deletes a user account. Only site admins may perform this mutation.  If hard == true, a hard delete is performed. By default, deletes are 'soft deletes' and could theoretically be undone with manual DB commands. If a hard delete is performed, the data is truly removed from the database and deletion can NEVER be undone.  Data that is deleted as part of this operation:  - All user data (access tokens, email addresses, external account info, survey responses, etc) - Organization membership information (which organizations the user is a part of, any invitations created by or targeting the user). - User, Organization, or Global settings authored by the user.
@@ -4764,6 +4906,7 @@ export def "mutation delete-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4776,13 +4919,13 @@ export def "mutation delete-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $hard: Boolean) { deleteUser(user: $user, hard: $hard) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteUser" }
 }
 
 # Bulk "deleteUser" action.
@@ -4796,6 +4939,7 @@ export def "mutation delete-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   users: string
@@ -4808,13 +4952,13 @@ export def "mutation delete-users" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($users: [ID!]!, $hard: Boolean) { deleteUsers(users: $users, hard: $hard) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteUsers" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteUsers" }
 }
 
 # Bulk "recoverUser" action.
@@ -4828,6 +4972,7 @@ export def "mutation recover-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_i_ds: string
@@ -4839,13 +4984,13 @@ export def "mutation recover-users" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userIDs: [ID!]!) { recoverUsers(userIDs: $userIDs) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "recoverUsers" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "recoverUsers" }
 }
 
 # Updates the current user's password. The oldPassword arg must match the user's current password.
@@ -4859,6 +5004,7 @@ export def "mutation update-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   old_password: string
@@ -4871,13 +5017,13 @@ export def "mutation update-password" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($oldPassword: String!, $newPassword: String!) { updatePassword(oldPassword: $oldPassword, newPassword: $newPassword) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePassword" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePassword" }
 }
 
 # Creates a password for the current user. It is only permitted if the user does not have a password and password authentication is enabled.
@@ -4891,6 +5037,7 @@ export def "mutation create-password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   new_password: string
@@ -4902,13 +5049,13 @@ export def "mutation create-password" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($newPassword: String!) { createPassword(newPassword: $newPassword) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createPassword" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createPassword" }
 }
 
 # Sets the user to accept the site's Terms of Service and Privacy Policy. If the ID is omitted, the current user is assumed.  Only the user or site admins may perform this mutation.
@@ -4922,6 +5069,7 @@ export def "mutation set-tos-accepted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --user-id: string
@@ -4933,13 +5081,13 @@ export def "mutation set-tos-accepted" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userID: ID) { setTosAccepted(userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setTosAccepted" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setTosAccepted" }
 }
 
 # Creates an access token that grants the privileges of the specified user (referred to as the access token's "subject" user after token creation). The result is the access token value, which the caller is responsible for storing (it is not accessible by Sourcegraph after creation).  The supported scopes are:  - "user:all": Full control of all resources accessible to the user account. - "site-admin:sudo": Ability to perform any action as any other user. (Only site admins may create tokens   with this scope.) - "mcp": Access to MCP (Model Context Protocol) endpoints only. This is a limited scope that does not   grant full API access.  DurationSeconds: If provided, the number of seconds until the token expires automatically.  Only the user or site admins may perform this mutation.
@@ -4953,6 +5101,7 @@ export def "mutation create-access-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -4967,13 +5116,13 @@ export def "mutation create-access-token" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id token" }
     let body = {query: ("mutation($user: ID!, $durationSeconds: Int, $scopes: [String!]!, $note: String!) { createAccessToken(user: $user, durationSeconds: $durationSeconds, scopes: $scopes, note: $note) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createAccessToken" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createAccessToken" }
 }
 
 # Deletes and immediately revokes the specified access token, specified by either its ID or by the token itself.  Only site admins or the user who owns the token may perform this mutation.
@@ -4987,6 +5136,7 @@ export def "mutation delete-access-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --by-id: string
@@ -4999,13 +5149,13 @@ export def "mutation delete-access-token" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($byID: ID, $byToken: String) { deleteAccessToken(byID: $byID, byToken: $byToken) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAccessToken" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAccessToken" }
 }
 
 # Deletes the association between an external account and its Sourcegraph user. It does NOT delete the external account on the external service where it resides.  Only site admins or the user who is associated with the external account may perform this mutation.
@@ -5019,6 +5169,7 @@ export def "mutation delete-external-account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   external_account: string
@@ -5030,13 +5181,13 @@ export def "mutation delete-external-account" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($externalAccount: ID!) { deleteExternalAccount(externalAccount: $externalAccount) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExternalAccount" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExternalAccount" }
 }
 
 # Adds an external account to the authenticated user's account. The service type and service ID must correspond to a valid auth provider on the site. The account details must be a stringified JSON object that contains valid credentials for the provided service type.
@@ -5050,6 +5201,7 @@ export def "mutation add-external-account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   service_type: string
@@ -5063,13 +5215,13 @@ export def "mutation add-external-account" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($serviceType: String!, $serviceID: String!, $accountDetails: String!) { addExternalAccount(serviceType: $serviceType, serviceID: $serviceID, accountDetails: $accountDetails) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addExternalAccount" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addExternalAccount" }
 }
 
 # Invite the user with the given username to join the organization. The invited user account must already exist.  Only site admins and any organization member may perform this mutation.
@@ -5083,6 +5235,7 @@ export def "mutation invite-user-to-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   organization: string
@@ -5095,13 +5248,13 @@ export def "mutation invite-user-to-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "sentInvitationEmail invitationURL" }
     let body = {query: ("mutation($organization: ID!, $username: String!) { inviteUserToOrganization(organization: $organization, username: $username) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "inviteUserToOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "inviteUserToOrganization" }
 }
 
 # Accept or reject an existing organization invitation.  Only the recipient of the invitation may perform this mutation.
@@ -5115,6 +5268,7 @@ export def "mutation respond-to-organization-invitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   organization_invitation: string # The organization invitation.
@@ -5127,13 +5281,13 @@ export def "mutation respond-to-organization-invitation" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($organizationInvitation: ID!, $responseType: OrganizationInvitationResponseType!) { respondToOrganizationInvitation(organizationInvitation: $organizationInvitation, responseType: $responseType) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "respondToOrganizationInvitation" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "respondToOrganizationInvitation" }
 }
 
 # Immediately add a user as a member to the organization, without sending an invitation email.  Only site admins may perform this mutation. Organization members may use the inviteUserToOrganization mutation to invite users.
@@ -5147,6 +5301,7 @@ export def "mutation add-user-to-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   organization: string
@@ -5159,13 +5314,13 @@ export def "mutation add-user-to-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($organization: ID!, $username: String!) { addUserToOrganization(organization: $organization, username: $username) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addUserToOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addUserToOrganization" }
 }
 
 # Removes a user as a member from an organization.  Only site admins and any member of the organization may perform this mutation.
@@ -5179,6 +5334,7 @@ export def "mutation remove-user-from-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -5191,13 +5347,13 @@ export def "mutation remove-user-from-organization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $organization: ID!) { removeUserFromOrganization(user: $user, organization: $organization) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "removeUserFromOrganization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "removeUserFromOrganization" }
 }
 
 # Adds a Phabricator repository to Sourcegraph.
@@ -5211,6 +5367,7 @@ export def "mutation add-phabricator-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   callsign: string # The callsign, for example "MUX".
@@ -5225,13 +5382,13 @@ export def "mutation add-phabricator-repo" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($callsign: String!, $name: String, $uri: String, $url: String!) { addPhabricatorRepo(callsign: $callsign, name: $name, uri: $uri, url: $url) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addPhabricatorRepo" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addPhabricatorRepo" }
 }
 
 # Resolves a revision for a given diff from Phabricator.
@@ -5245,6 +5402,7 @@ export def "mutation resolve-phabricator-diff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo_name: string # The name of the repository that the diff is based on.
@@ -5263,13 +5421,13 @@ export def "mutation resolve-phabricator-diff" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id oid abbreviatedOID message subject body url canonicalURL fileNames languages" }
     let body = {query: ("mutation($repoName: String!, $diffID: ID!, $baseRev: String!, $patch: String, $description: String, $authorName: String, $authorEmail: String, $date: String) { resolvePhabricatorDiff(repoName: $repoName, diffID: $diffID, baseRev: $baseRev, patch: $patch, description: $description, authorName: $authorName, authorEmail: $authorEmail, date: $date) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "resolvePhabricatorDiff" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "resolvePhabricatorDiff" }
 }
 
 # Logs a user event. No longer used, only here for backwards compatibility with IDE and browser extensions.
@@ -5285,6 +5443,7 @@ export def "mutation log-user-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   event: string@event-completer
@@ -5297,13 +5456,13 @@ export def "mutation log-user-event" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($event: UserEvent!, $userCookieID: String!) { logUserEvent(event: $event, userCookieID: $userCookieID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "logUserEvent" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "logUserEvent" }
 }
 
 # Logs an event.
@@ -5319,6 +5478,7 @@ export def "mutation log-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   event: string # The name of the event.
@@ -5350,13 +5510,13 @@ export def "mutation log-event" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($event: String!, $userCookieID: String!, $firstSourceURL: String, $lastSourceURL: String, $url: String!, $source: EventSource!, $cohortID: String, $referrer: String, $originalReferrer: String, $sessionReferrer: String, $sessionFirstURL: String, $deviceSessionID: String, $argument: String, $publicArgument: String, $deviceID: String, $eventID: Int, $insertID: String, $client: String, $billingProductCategory: String, $billingEventID: String, $connectedSiteID: String) { logEvent(event: $event, userCookieID: $userCookieID, firstSourceURL: $firstSourceURL, lastSourceURL: $lastSourceURL, url: $url, source: $source, cohortID: $cohortID, referrer: $referrer, originalReferrer: $originalReferrer, sessionReferrer: $sessionReferrer, sessionFirstURL: $sessionFirstURL, deviceSessionID: $deviceSessionID, argument: $argument, publicArgument: $publicArgument, deviceID: $deviceID, eventID: $eventID, insertID: $insertID, client: $client, billingProductCategory: $billingProductCategory, billingEventID: $billingEventID, connectedSiteID: $connectedSiteID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "logEvent" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "logEvent" }
 }
 
 # Logs a batch of events.
@@ -5373,6 +5533,7 @@ export def "mutation log-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --events: record # item shape: {event: string, userCookieID: string, firstSourceURL?: string, lastSourceURL?: string, url: string, source: "WEB"|"CODEHOSTINTEGRATION"|"BACKEND"|"STATICWEB"|"IDEEXTENSION"|"CODY", cohortID?: string, referrer?: string, originalReferrer?: string, sessionReferrer?: string, sessionFirstURL?: string, deviceSessionID?: string, argument?: string, publicArgument?: string, deviceID?: string, eventID?: int, insertID?: string, client?: string, billingProductCategory?: string, billingEventID?: string, connectedSiteID?: string}
@@ -5384,13 +5545,13 @@ export def "mutation log-events" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($events: [Event!]) { logEvents(events: $events) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "logEvents" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "logEvents" }
 }
 
 # All mutations that update settings (global, organization, and user settings) are under this field.  Only the settings subject whose settings are being mutated (and site admins) may perform this mutation.  This mutation only affects global, organization, and user settings, not site configuration. For site configuration (which is a separate set of configuration properties from global/organization/user settings), use updateSiteConfiguration.
@@ -5404,6 +5565,7 @@ export def "mutation settings-mutation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-subject: string # The subject whose settings to mutate (organization, user, etc.).
@@ -5417,13 +5579,13 @@ export def "mutation settings-mutation" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: SettingsMutationGroupInput!) { settingsMutation(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "settingsMutation" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "settingsMutation" }
 }
 
 # DEPRECATED: Use settingsMutation instead. This field is a deprecated alias for settingsMutation and will be removed in a future release.
@@ -5439,6 +5601,7 @@ export def "mutation configuration-mutation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-subject: string # The subject whose settings to mutate (organization, user, etc.).
@@ -5452,13 +5615,13 @@ export def "mutation configuration-mutation" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: SettingsMutationGroupInput!) { configurationMutation(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "configurationMutation" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "configurationMutation" }
 }
 
 # Updates the site configuration. Returns whether or not a restart is required for the update to be applied.  Only site admins may perform this mutation.
@@ -5472,6 +5635,7 @@ export def "mutation update-site-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   last_id: int # The last ID of the site configuration that is known by the client, to prevent race conditions. An error will be returned if someone else has already written a new update.
@@ -5484,12 +5648,12 @@ export def "mutation update-site-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($lastID: Int!, $input: String!) { updateSiteConfiguration(lastID: $lastID, input: $input) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSiteConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSiteConfiguration" }
 }
 
 # Sets the license key in the site configuration.  Only site admins may perform this mutation.
@@ -5503,6 +5667,7 @@ export def "mutation set-license-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --license-key: string # The license key to set. If null or empty, the license key is removed.
@@ -5514,13 +5679,13 @@ export def "mutation set-license-key" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($licenseKey: String) { setLicenseKey(licenseKey: $licenseKey) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setLicenseKey" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setLicenseKey" }
 }
 
 # Sets the email configuration in the site configuration.  Only site admins may perform this mutation.
@@ -5535,6 +5700,7 @@ export def "mutation set-smtp-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-smtp: record # SMTP server configuration. If null, SMTP configuration is removed. — shape: {host: string, port: int, authentication: "NONE"|"PLAIN"|"CRAM_MD5", username?: string, password?: string, domain?: string, noVerifyTLS?: bool, additionalHeaders?: record}
@@ -5549,13 +5715,13 @@ export def "mutation set-smtp-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: SMTPConfigurationInput!) { setSMTPConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setSMTPConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setSMTPConfiguration" }
 }
 
 # Sets the instance settings (external URL, CORS origins, branding, HTML injection) in the site configuration.  Only site admins may perform this mutation.
@@ -5570,6 +5736,7 @@ export def "mutation set-instance-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-externalURL: string # The externally accessible URL for this Sourcegraph instance.
@@ -5588,13 +5755,13 @@ export def "mutation set-instance-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: InstanceSettingsInput!) { setInstanceSettings(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setInstanceSettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setInstanceSettings" }
 }
 
 # Validates an SMTP configuration by sending a verification email without saving the config. Returns a verification code that was sent in the email, which can be used to confirm the email was received before saving the configuration.  Only site admins may perform this mutation.
@@ -5609,6 +5776,7 @@ export def "mutation validate-smtp-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   to: string # The email address to send the verification email to.
@@ -5631,12 +5799,12 @@ export def "mutation validate-smtp-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($smtp: SMTPConfigInput!, $to: String!, $senderAddress: String!, $senderName: String) { validateSMTPConfiguration(to: $to, senderAddress: $senderAddress, senderName: $senderName, smtp: $smtp) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "validateSMTPConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "validateSMTPConfiguration" }
 }
 
 # Sets session management configuration in the site configuration. This includes session expiry, idle timeout, and access token settings.  Only site admins may perform this mutation.
@@ -5651,6 +5819,7 @@ export def "mutation set-session-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-sessionExpiry: string # How long user login sessions are valid. Format: Go duration string (e.g., "720h", "30m", "60s"). Must be at least 1 hour.
@@ -5665,13 +5834,13 @@ export def "mutation set-session-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: SessionConfigurationInput!) { setSessionConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setSessionConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setSessionConfiguration" }
 }
 
 # Sets signup and self-service configuration in the site configuration. This includes username change settings and access request settings.  Only site admins may perform this mutation.
@@ -5685,6 +5854,7 @@ export def "mutation set-signup-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-enableUsernameChanges: oneof<nothing, bool> # Whether users can change their own usernames.
@@ -5698,13 +5868,13 @@ export def "mutation set-signup-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: SignupConfigurationInput!) { setSignupConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setSignupConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setSignupConfiguration" }
 }
 
 # Sets password policy configuration in the site configuration. This includes minimum password length and complexity requirements.  Only site admins may perform this mutation.
@@ -5718,6 +5888,7 @@ export def "mutation set-password-policy-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-minPasswordLength: int # Minimum password length required.
@@ -5734,13 +5905,13 @@ export def "mutation set-password-policy-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: PasswordPolicyConfigurationInput!) { setPasswordPolicyConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setPasswordPolicyConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setPasswordPolicyConfiguration" }
 }
 
 # Sets access restrictions configuration in the site configuration. This includes repository permission enforcement and IP allowlist settings.  Only site admins may perform this mutation.
@@ -5754,6 +5925,7 @@ export def "mutation set-access-restrictions-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-enforceForSiteAdmins: oneof<nothing, bool> # Whether repository permissions are enforced for site admins.
@@ -5772,13 +5944,13 @@ export def "mutation set-access-restrictions-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: AccessRestrictionsConfigurationInput!) { setAccessRestrictionsConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setAccessRestrictionsConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setAccessRestrictionsConfiguration" }
 }
 
 # Deletes an authentication provider from the site configuration by removing the matching entry from the auth.providers array.  Only site admins may perform this mutation.
@@ -5792,6 +5964,7 @@ export def "mutation delete-auth-provider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   service_type: string # The service type of the auth provider to delete (e.g. "builtin", "saml", "openidconnect", "github", "gitlab").
@@ -5804,13 +5977,13 @@ export def "mutation delete-auth-provider" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($serviceType: String!, $configID: String!) { deleteAuthProvider(serviceType: $serviceType, configID: $configID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAuthProvider" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAuthProvider" }
 }
 
 # Enables or disables the builtin username-password authentication provider. When enabled, adds a builtin provider to auth.providers if not already present. When disabled, removes all builtin providers from auth.providers.  Only site admins may perform this mutation.
@@ -5824,6 +5997,7 @@ export def "mutation set-builtin-auth-enabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --enabled: oneof<nothing, bool> # Whether builtin authentication should be enabled.
@@ -5835,13 +6009,13 @@ export def "mutation set-builtin-auth-enabled" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($enabled: Boolean!) { setBuiltinAuthEnabled(enabled: $enabled) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setBuiltinAuthEnabled" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setBuiltinAuthEnabled" }
 }
 
 # Sets whether an authentication provider is enabled for sign-in. When disabled, the provider is hidden from the sign-in page but can still be used for account linking and permissions syncing.  Only site admins may perform this mutation.
@@ -5855,6 +6029,7 @@ export def "mutation set-auth-provider-sign-in" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   service_type: string # The service type of the auth provider.
@@ -5868,13 +6043,13 @@ export def "mutation set-auth-provider-sign-in" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($serviceType: String!, $configID: String!, $enabled: Boolean!) { setAuthProviderSignIn(serviceType: $serviceType, configID: $configID, enabled: $enabled) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setAuthProviderSignIn" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setAuthProviderSignIn" }
 }
 
 # Reorders authentication providers by setting their order field in site configuration. The providers array specifies the desired display order on the sign-in page (first element = order 1). Providers not included in the list will have their order cleared.  Only site admins may perform this mutation.
@@ -5889,6 +6064,7 @@ export def "mutation reorder-auth-providers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --providers: record # The ordered list of provider identifiers. The first provider in this list will be assigned order 1, the second order 2, etc. — item shape: {serviceType: string, configID: string}
@@ -5900,13 +6076,13 @@ export def "mutation reorder-auth-providers" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($providers: [AuthProviderReorderInput!]!) { reorderAuthProviders(providers: $providers) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "reorderAuthProviders" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "reorderAuthProviders" }
 }
 
 # Sets whether the user with the specified user ID is a site admin.  Only site admins may perform this mutation.
@@ -5920,6 +6096,7 @@ export def "mutation set-user-is-site-admin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string
@@ -5932,13 +6109,13 @@ export def "mutation set-user-is-site-admin" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userID: ID!, $siteAdmin: Boolean!) { setUserIsSiteAdmin(userID: $userID, siteAdmin: $siteAdmin) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserIsSiteAdmin" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserIsSiteAdmin" }
 }
 
 # Invalidates all sessions belonging to a user.  Only site admins may perform this mutation.
@@ -5952,6 +6129,7 @@ export def "mutation invalidate-sessions-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string
@@ -5963,13 +6141,13 @@ export def "mutation invalidate-sessions-by-id" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userID: ID!) { invalidateSessionsByID(userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "invalidateSessionsByID" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "invalidateSessionsByID" }
 }
 
 # Bulk "invalidateSessionsByID" action.
@@ -5983,6 +6161,7 @@ export def "mutation invalidate-sessions-by-i-ds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_i_ds: string
@@ -5994,13 +6173,13 @@ export def "mutation invalidate-sessions-by-i-ds" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userIDs: [ID!]!) { invalidateSessionsByIDs(userIDs: $userIDs) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "invalidateSessionsByIDs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "invalidateSessionsByIDs" }
 }
 
 # Reloads the site by restarting the server. This is not supported for all deployment types. This may cause downtime.  Only site admins may perform this mutation.
@@ -6016,6 +6195,7 @@ export def "mutation reload-site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -6026,13 +6206,13 @@ export def "mutation reload-site" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation { reloadSite { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "reloadSite" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "reloadSite" }
 }
 
 # Submits a user satisfaction (NPS) survey.
@@ -6046,6 +6226,7 @@ export def "mutation submit-survey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-email: string # User-provided email address, if there is no currently authenticated user. If there is, this value will not be used.
@@ -6061,13 +6242,13 @@ export def "mutation submit-survey" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: SurveySubmissionInput!) { submitSurvey(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "submitSurvey" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "submitSurvey" }
 }
 
 # Submits happiness feedback.
@@ -6081,6 +6262,7 @@ export def "mutation submit-happiness-feedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-feedback: string # The feedback text from the user.
@@ -6094,13 +6276,13 @@ export def "mutation submit-happiness-feedback" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: HappinessFeedbackSubmissionInput!) { submitHappinessFeedback(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "submitHappinessFeedback" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "submitHappinessFeedback" }
 }
 
 # OBSERVABILITY  Set the status of a test alert of the specified parameters - useful for validating 'observability.alerts' configuration. Alerts may take up to a minute to fire.
@@ -6114,6 +6296,7 @@ export def "mutation trigger-observability-test-alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   level: string # Level of alert to test - either warning or critical.
@@ -6125,13 +6308,13 @@ export def "mutation trigger-observability-test-alert" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($level: String!) { triggerObservabilityTestAlert(level: $level) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "triggerObservabilityTestAlert" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "triggerObservabilityTestAlert" }
 }
 
 # Updates an out-of-band migration to run in a particular direction.  Applied in the forward direction, an out-of-band migration migrates data into a format that is readable by newer Sourcegraph instances. This may be destructive or non-destructive process, depending on the nature and implementation of the migration.  Applied in the reverse direction, an out-of-band migration ensures that data is moved back into a format that is readable by the previous Sourcegraph instance. Recently introduced migrations should be applied in reverse prior to downgrading the instance.
@@ -6145,6 +6328,7 @@ export def "mutation set-migration-direction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -6157,13 +6341,13 @@ export def "mutation set-migration-direction" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!, $applyReverse: Boolean!) { setMigrationDirection(id: $id, applyReverse: $applyReverse) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setMigrationDirection" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setMigrationDirection" }
 }
 
 # EXPERIMENTAL: Create a new feature flag
@@ -6177,6 +6361,7 @@ export def "mutation create-feature-flag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the feature flag
@@ -6190,13 +6375,13 @@ export def "mutation create-feature-flag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on FeatureFlagBoolean { name value createdAt updatedAt } ... on FeatureFlagRollout { name rolloutBasisPoints createdAt updatedAt }" }
     let body = {query: ("mutation($name: String!, $value: Boolean, $rolloutBasisPoints: Int) { createFeatureFlag(name: $name, value: $value, rolloutBasisPoints: $rolloutBasisPoints) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createFeatureFlag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createFeatureFlag" }
 }
 
 # EXPERIMENTAL: Delete a feature flag
@@ -6210,6 +6395,7 @@ export def "mutation delete-feature-flag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the feature flag
@@ -6221,13 +6407,13 @@ export def "mutation delete-feature-flag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($name: String!) { deleteFeatureFlag(name: $name) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteFeatureFlag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteFeatureFlag" }
 }
 
 # EXPERIMENTAL: Update a feature flag
@@ -6241,6 +6427,7 @@ export def "mutation update-feature-flag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the feature flag
@@ -6254,13 +6441,13 @@ export def "mutation update-feature-flag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename ... on FeatureFlagBoolean { name value createdAt updatedAt } ... on FeatureFlagRollout { name rolloutBasisPoints createdAt updatedAt }" }
     let body = {query: ("mutation($name: String!, $value: Boolean, $rolloutBasisPoints: Int) { updateFeatureFlag(name: $name, value: $value, rolloutBasisPoints: $rolloutBasisPoints) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateFeatureFlag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateFeatureFlag" }
 }
 
 # EXPERIMENTAL: Create a new feature flag override for the given org or user
@@ -6274,6 +6461,7 @@ export def "mutation create-feature-flag-override" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   namespace: string # The namespace for this feature flag. Must be either a user ID or an org ID.
@@ -6287,13 +6475,13 @@ export def "mutation create-feature-flag-override" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id value" }
     let body = {query: ("mutation($namespace: ID!, $flagName: String!, $value: Boolean!) { createFeatureFlagOverride(namespace: $namespace, flagName: $flagName, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createFeatureFlagOverride" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createFeatureFlagOverride" }
 }
 
 # Delete a feature flag override
@@ -6307,6 +6495,7 @@ export def "mutation delete-feature-flag-override" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of the feature flag override to delete
@@ -6318,13 +6507,13 @@ export def "mutation delete-feature-flag-override" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteFeatureFlagOverride(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteFeatureFlagOverride" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteFeatureFlagOverride" }
 }
 
 # Update a feature flag override
@@ -6338,6 +6527,7 @@ export def "mutation update-feature-flag-override" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of the feature flag override to update
@@ -6350,13 +6540,13 @@ export def "mutation update-feature-flag-override" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id value" }
     let body = {query: ("mutation($id: ID!, $value: Boolean!) { updateFeatureFlagOverride(id: $id, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateFeatureFlagOverride" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateFeatureFlagOverride" }
 }
 
 # Overwrites and saves the temporary settings for the current user. If temporary settings for the user do not exist, they are created.
@@ -6370,6 +6560,7 @@ export def "mutation overwrite-temporary-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   contents: string # The new temporary settings for the current user, as a JSON string.
@@ -6381,13 +6572,13 @@ export def "mutation overwrite-temporary-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($contents: String!) { overwriteTemporarySettings(contents: $contents) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "overwriteTemporarySettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "overwriteTemporarySettings" }
 }
 
 # Merges the given settings edit with the current temporary settings for the current user. Keys in the given edit take priority over key in the temporary settings. The merge is not recursive. If temporary settings for the user do not exist, they are created.
@@ -6401,6 +6592,7 @@ export def "mutation edit-temporary-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   settings_to_edit: string # The settings to merge with the current temporary settings for the current user, as a JSON string.
@@ -6412,13 +6604,13 @@ export def "mutation edit-temporary-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($settingsToEdit: String!) { editTemporarySettings(settingsToEdit: $settingsToEdit) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "editTemporarySettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "editTemporarySettings" }
 }
 
 # Sends an email for testing Sourcegraph's email configuration.  Only administrators can use this API.
@@ -6432,6 +6624,7 @@ export def "mutation send-test-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   to: string
@@ -6443,12 +6636,12 @@ export def "mutation send-test-email" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($to: String!) { sendTestEmail(to: $to) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "sendTestEmail" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "sendTestEmail" }
 }
 
 # Enqueues a sync for the external service. It will be picked up in the background.  Site-admin or owner of the external service only.
@@ -6462,6 +6655,7 @@ export def "mutation sync-external-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -6473,13 +6667,13 @@ export def "mutation sync-external-service" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { syncExternalService(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "syncExternalService" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "syncExternalService" }
 }
 
 # Cancels an external service sync job. Must be in queued or processing state.  Site-admin or owner of the external service only.
@@ -6493,6 +6687,7 @@ export def "mutation cancel-external-service-sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -6504,13 +6699,13 @@ export def "mutation cancel-external-service-sync" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { cancelExternalServiceSync(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "cancelExternalServiceSync" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "cancelExternalServiceSync" }
 }
 
 # Associate a new key-value pair with a repo.
@@ -6526,6 +6721,7 @@ export def "mutation add-repo-key-value-pair" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6539,13 +6735,13 @@ export def "mutation add-repo-key-value-pair" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!, $value: String) { addRepoKeyValuePair(repo: $repo, key: $key, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepoKeyValuePair" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepoKeyValuePair" }
 }
 
 # Associate a new key-value pair metadata with a repo.
@@ -6559,6 +6755,7 @@ export def "mutation add-repo-metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6572,13 +6769,13 @@ export def "mutation add-repo-metadata" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!, $value: String) { addRepoMetadata(repo: $repo, key: $key, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepoMetadata" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepoMetadata" }
 }
 
 # Update a key-value pair associated with a repo.
@@ -6594,6 +6791,7 @@ export def "mutation update-repo-key-value-pair" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6607,13 +6805,13 @@ export def "mutation update-repo-key-value-pair" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!, $value: String) { updateRepoKeyValuePair(repo: $repo, key: $key, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepoKeyValuePair" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepoKeyValuePair" }
 }
 
 # Update metadata value for a given metadata key for associated with a repo.
@@ -6627,6 +6825,7 @@ export def "mutation update-repo-metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6640,13 +6839,13 @@ export def "mutation update-repo-metadata" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!, $value: String) { updateRepoMetadata(repo: $repo, key: $key, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepoMetadata" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepoMetadata" }
 }
 
 # Delete a key-value pair associated with a repo.
@@ -6662,6 +6861,7 @@ export def "mutation delete-repo-key-value-pair" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6674,13 +6874,13 @@ export def "mutation delete-repo-key-value-pair" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!) { deleteRepoKeyValuePair(repo: $repo, key: $key) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepoKeyValuePair" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepoKeyValuePair" }
 }
 
 # Delete a key-value pair metadata associated with a repo.
@@ -6694,6 +6894,7 @@ export def "mutation delete-repo-metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6706,13 +6907,13 @@ export def "mutation delete-repo-metadata" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!, $key: String!) { deleteRepoMetadata(repo: $repo, key: $key) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepoMetadata" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepoMetadata" }
 }
 
 # INTERNAL ONLY: Reclone a repository from the gitserver. This involves deleting the file on disk, marking it as not-cloned in the database, and then initiating a repo clone.
@@ -6726,6 +6927,7 @@ export def "mutation reclone-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6737,13 +6939,13 @@ export def "mutation reclone-repository" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!) { recloneRepository(repo: $repo) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "recloneRepository" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "recloneRepository" }
 }
 
 # INTERNAL ONLY: Delete a repository from the gitserver. This involves deleting the file on disk, and marking it as not-cloned in the database.
@@ -6757,6 +6959,7 @@ export def "mutation delete-repository-from-disk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repo: string
@@ -6768,13 +6971,13 @@ export def "mutation delete-repository-from-disk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repo: ID!) { deleteRepositoryFromDisk(repo: $repo) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepositoryFromDisk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRepositoryFromDisk" }
 }
 
 # Sets the completions requests quota for the user per day. Quota: Null means use the default quota.
@@ -6788,6 +6991,7 @@ export def "mutation set-user-completions-quota" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -6800,13 +7004,13 @@ export def "mutation set-user-completions-quota" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag" }
     let body = {query: ("mutation($user: ID!, $quota: Int) { setUserCompletionsQuota(user: $user, quota: $quota) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserCompletionsQuota" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserCompletionsQuota" }
 }
 
 # Sets the code completions requests quota for the user per day. Quota: Null means use the default quota.
@@ -6820,6 +7024,7 @@ export def "mutation set-user-code-completions-quota" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -6832,13 +7037,13 @@ export def "mutation set-user-code-completions-quota" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id username email displayName avatarURL url settingsURL createdAt updatedAt siteAdmin builtinAuth serviceAccount unrestrictedRepoAccess tosAccepted hasVerifiedEmail viewerCanAdminister viewerCanChangeUsername databaseID namespaceName scimControlled viewerCanChangePrimaryEmail completionsQuotaOverride codeCompletionsQuotaOverride evaluateFeatureFlag" }
     let body = {query: ("mutation($user: ID!, $quota: Int) { setUserCodeCompletionsQuota(user: $user, quota: $quota) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserCodeCompletionsQuota" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setUserCodeCompletionsQuota" }
 }
 
 # Dismisses a notification by its ID.  Admin notifications may only be dismissed by site admins. User notifications may only be dismissed by the user they belong to.
@@ -6852,6 +7057,7 @@ export def "mutation dismiss-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -6863,13 +7069,13 @@ export def "mutation dismiss-notification" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id key severity title message href dismissedAt occurrenceCount createdAt updatedAt" }
     let body = {query: ("mutation($id: ID!) { dismissNotification(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "dismissNotification" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "dismissNotification" }
 }
 
 # Deletes a notification by its ID.  Admin notifications may only be deleted by site admins. User notifications may only be deleted by the user they belong to.
@@ -6883,6 +7089,7 @@ export def "mutation delete-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -6894,13 +7101,13 @@ export def "mutation delete-notification" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteNotification(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteNotification" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteNotification" }
 }
 
 # Create a new executor secret. See argument descriptions for more details.
@@ -6914,6 +7121,7 @@ export def "mutation create-executor-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   scope: string@scope-completer # The scope for which the secret is usable.
@@ -6928,13 +7136,13 @@ export def "mutation create-executor-secret" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id key scope overwritesGlobalSecret createdAt updatedAt" }
     let body = {query: ("mutation($scope: ExecutorSecretScope!, $key: String!, $value: String!, $namespace: ID) { createExecutorSecret(scope: $scope, key: $key, value: $value, namespace: $namespace) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createExecutorSecret" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createExecutorSecret" }
 }
 
 # Update the value of an existing executor secret.
@@ -6948,6 +7156,7 @@ export def "mutation update-executor-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   scope: string@scope-completer # The scope of the secret.
@@ -6961,13 +7170,13 @@ export def "mutation update-executor-secret" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id key scope overwritesGlobalSecret createdAt updatedAt" }
     let body = {query: ("mutation($scope: ExecutorSecretScope!, $id: ID!, $value: String!) { updateExecutorSecret(scope: $scope, id: $id, value: $value) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateExecutorSecret" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateExecutorSecret" }
 }
 
 # Deletes the given executor secret.
@@ -6981,6 +7190,7 @@ export def "mutation delete-executor-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   scope: string@scope-completer # The scope of the secret.
@@ -6993,13 +7203,13 @@ export def "mutation delete-executor-secret" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($scope: ExecutorSecretScope!, $id: ID!) { deleteExecutorSecret(scope: $scope, id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExecutorSecret" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteExecutorSecret" }
 }
 
 # Adds or updates a single container registry credential inside a DOCKER_AUTH_CONFIG executor secret. If the DOCKER_AUTH_CONFIG executor secret does not yet exist in the target namespace, it is created with the supplied credential as its single entry. Exactly one of (`username` + `password`) or `auth` must be supplied:   - When `username` and `password` are supplied, the server encodes     `base64(username:password)` and stores that as the credential.   - When `auth` is supplied, it must already be a `base64(username:password)`     string (e.g. taken from `docker login`'s `~/.docker/config.json`). Only BATCHES scope is currently supported. `namespace` selects which DOCKER_AUTH_CONFIG secret to modify. It may be a User ID or an Org ID. Non-admins may only target their own user namespace or an org they belong to; site admins may target any namespace. When `namespace` is omitted, the site-wide (global) DOCKER_AUTH_CONFIG secret is targeted; this is restricted to site admins.
@@ -7013,6 +7223,7 @@ export def "mutation upsert-docker-registry-credential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   registry: string # The container registry host (e.g. "index.docker.io" or "ghcr.io").
@@ -7028,13 +7239,13 @@ export def "mutation upsert-docker-registry-credential" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id key scope overwritesGlobalSecret createdAt updatedAt" }
     let body = {query: ("mutation($registry: String!, $username: String, $password: String, $auth: String, $namespace: ID) { upsertDockerRegistryCredential(registry: $registry, username: $username, password: $password, auth: $auth, namespace: $namespace) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "upsertDockerRegistryCredential" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "upsertDockerRegistryCredential" }
 }
 
 # Removes a single container registry credential from a DOCKER_AUTH_CONFIG executor secret. If the resulting auth config has no remaining entries, the entire executor secret is deleted and null is returned. Only BATCHES scope is currently supported. See `upsertDockerRegistryCredential` for namespace selection rules.
@@ -7048,6 +7259,7 @@ export def "mutation delete-docker-registry-credential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   registry: string # The container registry host whose credential should be removed.
@@ -7060,13 +7272,13 @@ export def "mutation delete-docker-registry-credential" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id key scope overwritesGlobalSecret createdAt updatedAt" }
     let body = {query: ("mutation($registry: String!, $namespace: ID) { deleteDockerRegistryCredential(registry: $registry, namespace: $namespace) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteDockerRegistryCredential" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteDockerRegistryCredential" }
 }
 
 # Marks access_request as rejected
@@ -7080,6 +7292,7 @@ export def "mutation set-access-request-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7092,13 +7305,13 @@ export def "mutation set-access-request-status" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!, $status: AccessRequestStatus!) { setAccessRequestStatus(id: $id, status: $status) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setAccessRequestStatus" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setAccessRequestStatus" }
 }
 
 # Stores config for a Slack bot integration.
@@ -7112,6 +7325,7 @@ export def "mutation connect-slack-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   signing_secret: string
@@ -7124,13 +7338,13 @@ export def "mutation connect-slack-workspace" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($signingSecret: String!, $botToken: String!) { connectSlackWorkspace(signingSecret: $signingSecret, botToken: $botToken) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "connectSlackWorkspace" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "connectSlackWorkspace" }
 }
 
 # Removes config for a Slack bot integration.
@@ -7144,6 +7358,7 @@ export def "mutation disconnect-slack-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7155,13 +7370,13 @@ export def "mutation disconnect-slack-workspace" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { disconnectSlackWorkspace(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "disconnectSlackWorkspace" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "disconnectSlackWorkspace" }
 }
 
 # Updates whether Deep Search is allowed for a Slack bot integration.
@@ -7175,6 +7390,7 @@ export def "mutation set-slack-allow-deep-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7187,13 +7403,13 @@ export def "mutation set-slack-allow-deep-search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!, $allow: Boolean!) { setSlackAllowDeepSearch(id: $id, allow: $allow) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setSlackAllowDeepSearch" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setSlackAllowDeepSearch" }
 }
 
 # Creates a new outbound webhook.  Only site admins have access to this mutation.
@@ -7208,6 +7424,7 @@ export def "mutation create-outbound-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-url: string # The outbound webhook URL.
@@ -7222,13 +7439,13 @@ export def "mutation create-outbound-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id url" }
     let body = {query: ("mutation($input: OutboundWebhookCreateInput!) { createOutboundWebhook(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createOutboundWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createOutboundWebhook" }
 }
 
 # Deletes an outbound webhook.  Only site admins have access to this mutation.
@@ -7242,6 +7459,7 @@ export def "mutation delete-outbound-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7253,13 +7471,13 @@ export def "mutation delete-outbound-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteOutboundWebhook(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteOutboundWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteOutboundWebhook" }
 }
 
 # Updates an outbound webhook.  Only site admins have access to this mutation.
@@ -7274,6 +7492,7 @@ export def "mutation update-outbound-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7288,13 +7507,13 @@ export def "mutation update-outbound-webhook" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id url" }
     let body = {query: ("mutation($id: ID!, $input: OutboundWebhookUpdateInput!) { updateOutboundWebhook(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateOutboundWebhook" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateOutboundWebhook" }
 }
 
 # Validates an external TLS configuration without saving it. Optionally validates connectivity to a specified endpoint.  Only site admins may perform this mutation.
@@ -7310,6 +7529,7 @@ export def "mutation validate-external-tls-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --validate-endpoint: string # Optional URL or host:port to validate TLS connectivity against.
@@ -7325,13 +7545,13 @@ export def "mutation validate-external-tls-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "errors warnings" }
     let body = {query: ("mutation($input: ExternalTLSConfigInput!, $validateEndpoint: String) { validateExternalTLSConfiguration(validateEndpoint: $validateEndpoint, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "validateExternalTLSConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "validateExternalTLSConfiguration" }
 }
 
 # Sets the external TLS configuration in the site configuration.  Only site admins may perform this mutation.
@@ -7347,6 +7567,7 @@ export def "mutation set-external-tls-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-insecureSkipVerify: oneof<nothing, bool> # If true, skip TLS certificate verification for all outgoing connections. WARNING: This makes TLS susceptible to man-in-the-middle attacks.
@@ -7361,13 +7582,13 @@ export def "mutation set-external-tls-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: ExternalTLSConfigInput) { setExternalTLSConfiguration(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setExternalTLSConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setExternalTLSConfiguration" }
 }
 
 # Deletes a precise index.
@@ -7381,6 +7602,7 @@ export def "mutation delete-precise-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7392,13 +7614,13 @@ export def "mutation delete-precise-index" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deletePreciseIndex(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePreciseIndex" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePreciseIndex" }
 }
 
 # Deletes precise indexes by filter criteria.
@@ -7412,6 +7634,7 @@ export def "mutation delete-precise-indexes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # An (optional) search query that filters the state, repository name, commit, root, and indexer properties.
@@ -7428,13 +7651,13 @@ export def "mutation delete-precise-indexes" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($query: String, $states: [PreciseIndexState!], $indexerKey: String, $isLatestForRepo: Boolean, $repository: ID, $indexSource: PreciseIndexSource) { deletePreciseIndexes(query: $query, states: $states, indexerKey: $indexerKey, isLatestForRepo: $isLatestForRepo, repository: $repository, indexSource: $indexSource) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePreciseIndexes" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePreciseIndexes" }
 }
 
 # Queues the index jobs for a repository for execution. An optional resolvable revhash (commit, branch name, or tag name) can be specified; by default the tip of the default branch will be used.  If a configuration is supplied, that configuration is used to determine what jobs to schedule. If no configuration is supplied, it will go through the regular index scheduling rules: first look for any existing in-database configuration, then fall back to the automatically inferred configuration based on the repo contents at the target commit.
@@ -7448,6 +7671,7 @@ export def "mutation queue-auto-index-jobs-for-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string
@@ -7461,13 +7685,13 @@ export def "mutation queue-auto-index-jobs-for-repo" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id inputCommit inputRoot inputIndexer tags state queuedAt indexingStartedAt indexingFinishedAt uploadedAt processingStartedAt processingFinishedAt failure placeInQueue shouldReindex isLatestForRepo" }
     let body = {query: ("mutation($repository: ID!, $rev: String, $configuration: String) { queueAutoIndexJobsForRepo(repository: $repository, rev: $rev, configuration: $configuration) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "queueAutoIndexJobsForRepo" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "queueAutoIndexJobsForRepo" }
 }
 
 # Updates the previously set/overrides the default global auto-indexing job inference Lua script with a new override.
@@ -7481,6 +7705,7 @@ export def "mutation update-code-intelligence-inference-script" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   script: string
@@ -7492,13 +7717,13 @@ export def "mutation update-code-intelligence-inference-script" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($script: String!) { updateCodeIntelligenceInferenceScript(script: $script) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateCodeIntelligenceInferenceScript" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateCodeIntelligenceInferenceScript" }
 }
 
 # Updates the indexing configuration associated with a repository.
@@ -7512,6 +7737,7 @@ export def "mutation update-repository-index-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string
@@ -7524,13 +7750,13 @@ export def "mutation update-repository-index-configuration" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!, $configuration: String!) { updateRepositoryIndexConfiguration(repository: $repository, configuration: $configuration) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepositoryIndexConfiguration" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateRepositoryIndexConfiguration" }
 }
 
 # Updates the managed indexing settings for the Sourcegraph instance. This creates or updates the "[Sourcegraph Managed]" global policy.
@@ -7544,6 +7770,7 @@ export def "mutation update-managed-indexing-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --precise-indexing-enabled: oneof<nothing, bool> # Whether precise indexing should be enabled.
@@ -7556,13 +7783,13 @@ export def "mutation update-managed-indexing-settings" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "preciseIndexingEnabled syntacticIndexingEnabled" }
     let body = {query: ("mutation($preciseIndexingEnabled: Boolean!, $syntacticIndexingEnabled: Boolean!) { updateManagedIndexingSettings(preciseIndexingEnabled: $preciseIndexingEnabled, syntacticIndexingEnabled: $syntacticIndexingEnabled) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateManagedIndexingSettings" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateManagedIndexingSettings" }
 }
 
 # Creates a new configuration policy with the given attributes.
@@ -7576,6 +7803,7 @@ export def "mutation create-code-intelligence-configuration-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repository: string # If supplied, the repository to which this configuration policy applies. If not supplied, this configuration policy is applied to all repositories.
@@ -7598,13 +7826,13 @@ export def "mutation create-code-intelligence-configuration-policy" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name repositoryPatterns type pattern protected retentionEnabled retentionDurationHours retainIntermediateCommits indexingEnabled syntacticIndexingEnabled indexCommitMaxAgeHours indexIntermediateCommits" }
     let body = {query: ("mutation($repository: ID, $repositoryPatterns: [String!], $name: String!, $type: GitObjectType!, $pattern: String!, $retentionEnabled: Boolean!, $retentionDurationHours: Int, $retainIntermediateCommits: Boolean!, $indexingEnabled: Boolean!, $syntacticIndexingEnabled: Boolean, $indexCommitMaxAgeHours: Int, $indexIntermediateCommits: Boolean!) { createCodeIntelligenceConfigurationPolicy(repository: $repository, repositoryPatterns: $repositoryPatterns, name: $name, type: $type, pattern: $pattern, retentionEnabled: $retentionEnabled, retentionDurationHours: $retentionDurationHours, retainIntermediateCommits: $retainIntermediateCommits, indexingEnabled: $indexingEnabled, syntacticIndexingEnabled: $syntacticIndexingEnabled, indexCommitMaxAgeHours: $indexCommitMaxAgeHours, indexIntermediateCommits: $indexIntermediateCommits) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createCodeIntelligenceConfigurationPolicy" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createCodeIntelligenceConfigurationPolicy" }
 }
 
 # Updates the attributes configuration policy with the given identifier.
@@ -7618,6 +7846,7 @@ export def "mutation update-code-intelligence-configuration-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7640,13 +7869,13 @@ export def "mutation update-code-intelligence-configuration-policy" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!, $repositoryPatterns: [String!], $name: String!, $type: GitObjectType!, $pattern: String!, $retentionEnabled: Boolean!, $retentionDurationHours: Int, $retainIntermediateCommits: Boolean!, $indexingEnabled: Boolean!, $syntacticIndexingEnabled: Boolean, $indexCommitMaxAgeHours: Int, $indexIntermediateCommits: Boolean!) { updateCodeIntelligenceConfigurationPolicy(id: $id, repositoryPatterns: $repositoryPatterns, name: $name, type: $type, pattern: $pattern, retentionEnabled: $retentionEnabled, retentionDurationHours: $retentionDurationHours, retainIntermediateCommits: $retainIntermediateCommits, indexingEnabled: $indexingEnabled, syntacticIndexingEnabled: $syntacticIndexingEnabled, indexCommitMaxAgeHours: $indexCommitMaxAgeHours, indexIntermediateCommits: $indexIntermediateCommits) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateCodeIntelligenceConfigurationPolicy" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateCodeIntelligenceConfigurationPolicy" }
 }
 
 # Resets the list of all unprotected configuration policies to the given list.  Protected policies are not affected; they can be individually modified using updateCodeIntelligenceConfigurationPolicy.  EXPERIMENTAL(May 2025): This API may make breaking changes.
@@ -7661,6 +7890,7 @@ export def "mutation reset-code-intelligence-configuration-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --wanted-policies: record # item shape: {name: string, type: "GIT_COMMIT"|"GIT_TAG"|"GIT_TREE"|"GIT_BLOB"|"GIT_UNKNOWN", pattern: string, retentionEnabled: bool, retentionDurationHours?: int, indexingEnabled: bool, syntacticIndexingEnabled: bool, indexCommitMaxAgeHours?: int}
@@ -7672,13 +7902,13 @@ export def "mutation reset-code-intelligence-configuration-policies" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($wantedPolicies: [CodeGraphConfigurationPolicyInput!]!) { resetCodeIntelligenceConfigurationPolicies(wantedPolicies: $wantedPolicies) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "resetCodeIntelligenceConfigurationPolicies" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "resetCodeIntelligenceConfigurationPolicies" }
 }
 
 # Deletes the configuration policy with the given identifier.
@@ -7692,6 +7922,7 @@ export def "mutation delete-code-intelligence-configuration-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   policy: string
@@ -7703,13 +7934,13 @@ export def "mutation delete-code-intelligence-configuration-policy" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($policy: ID!) { deleteCodeIntelligenceConfigurationPolicy(policy: $policy) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteCodeIntelligenceConfigurationPolicy" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteCodeIntelligenceConfigurationPolicy" }
 }
 
 # Create a new dashboard.
@@ -7724,6 +7955,7 @@ export def "mutation create-insights-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-title: string # Dashboard title.
@@ -7737,13 +7969,13 @@ export def "mutation create-insights-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: CreateInsightsDashboardInput!) { createInsightsDashboard(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createInsightsDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createInsightsDashboard" }
 }
 
 # Edit an existing dashboard.
@@ -7758,6 +7990,7 @@ export def "mutation update-insights-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7772,13 +8005,13 @@ export def "mutation update-insights-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($id: ID!, $input: UpdateInsightsDashboardInput!) { updateInsightsDashboard(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInsightsDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInsightsDashboard" }
 }
 
 # Delete a dashboard.
@@ -7792,6 +8025,7 @@ export def "mutation delete-insights-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -7803,13 +8037,13 @@ export def "mutation delete-insights-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteInsightsDashboard(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteInsightsDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteInsightsDashboard" }
 }
 
 # Associate an existing insight view with this dashboard.
@@ -7823,6 +8057,7 @@ export def "mutation add-insight-view-to-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-insightViewId: string # ID of the insight view to attach to the dashboard
@@ -7836,13 +8071,13 @@ export def "mutation add-insight-view-to-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: AddInsightViewToDashboardInput!) { addInsightViewToDashboard(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addInsightViewToDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addInsightViewToDashboard" }
 }
 
 # Remove an insight view from a dashboard.
@@ -7856,6 +8091,7 @@ export def "mutation remove-insight-view-from-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-insightViewId: string # ID of the insight view to remove from the dashboard
@@ -7869,13 +8105,13 @@ export def "mutation remove-insight-view-from-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: RemoveInsightViewFromDashboardInput!) { removeInsightViewFromDashboard(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "removeInsightViewFromDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "removeInsightViewFromDashboard" }
 }
 
 # Update an insight series. Restricted to admins only.
@@ -7889,6 +8125,7 @@ export def "mutation update-insight-series" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-seriesId: string # Unique ID for the series.
@@ -7902,13 +8139,13 @@ export def "mutation update-insight-series" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: UpdateInsightSeriesInput!) { updateInsightSeries(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInsightSeries" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInsightSeries" }
 }
 
 # Create a line chart backed by search insights.
@@ -7927,6 +8164,7 @@ export def "mutation create-line-chart-search-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-dataSeries: record # The list of data series to create (or add) to this insight. — item shape: {seriesId?: string, query: string, options: record, repositoryScope?: record, timeScope?: record, generatedFromCaptureGroups?: bool, groupBy?: "REPO"|"LANG"|"PATH"|"AUTHOR"|"DATE"}
@@ -7944,13 +8182,13 @@ export def "mutation create-line-chart-search-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: LineChartSearchInsightInput!) { createLineChartSearchInsight(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createLineChartSearchInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createLineChartSearchInsight" }
 }
 
 # Create a pie chart backed by search insights.
@@ -7966,6 +8204,7 @@ export def "mutation create-pie-chart-search-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-query: string # The query string.
@@ -7981,13 +8220,13 @@ export def "mutation create-pie-chart-search-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: PieChartSearchInsightInput!) { createPieChartSearchInsight(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createPieChartSearchInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createPieChartSearchInsight" }
 }
 
 # Create a repository statistics insight.
@@ -8006,6 +8245,7 @@ export def "mutation create-inventory-stats-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-series: record # The series metrics to track (max 3: one of each metric type). — item shape: {metric: "LINES_OF_CODE"|"BYTES"|"FILE_COUNT", groupBy?: "REPO"|"LANG"|"PATH"|"AUTHOR"|"DATE", options?: record, timeScope?: record}
@@ -8023,13 +8263,13 @@ export def "mutation create-inventory-stats-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: InventoryStatsInsightInput!) { createInventoryStatsInsight(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createInventoryStatsInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createInventoryStatsInsight" }
 }
 
 # Update a line chart backed by search insights.
@@ -8048,6 +8288,7 @@ export def "mutation update-line-chart-search-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8065,13 +8306,13 @@ export def "mutation update-line-chart-search-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($id: ID!, $input: UpdateLineChartSearchInsightInput!) { updateLineChartSearchInsight(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateLineChartSearchInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateLineChartSearchInsight" }
 }
 
 # Update a pie chart backed by search insights.
@@ -8087,6 +8328,7 @@ export def "mutation update-pie-chart-search-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8102,13 +8344,13 @@ export def "mutation update-pie-chart-search-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($id: ID!, $input: UpdatePieChartSearchInsightInput!) { updatePieChartSearchInsight(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePieChartSearchInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePieChartSearchInsight" }
 }
 
 # Update a repository statistics insight.
@@ -8127,6 +8369,7 @@ export def "mutation update-inventory-stats-insight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8144,13 +8387,13 @@ export def "mutation update-inventory-stats-insight" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($id: ID!, $input: UpdateInventoryStatsInsightInput!) { updateInventoryStatsInsight(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInventoryStatsInsight" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateInventoryStatsInsight" }
 }
 
 # Delete an insight view given the graphql ID.
@@ -8164,6 +8407,7 @@ export def "mutation delete-insight-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8175,13 +8419,13 @@ export def "mutation delete-insight-view" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteInsightView(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteInsightView" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteInsightView" }
 }
 
 # Create a new insight view from an existing view.
@@ -8197,6 +8441,7 @@ export def "mutation save-insight-as-new-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-insightViewId: string # The insight view ID we are creating a new view from.
@@ -8212,13 +8457,13 @@ export def "mutation save-insight-as-new-view" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($input: SaveInsightAsNewViewInput!) { saveInsightAsNewView(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "saveInsightAsNewView" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "saveInsightAsNewView" }
 }
 
 # Retry the backfill for a failed insight series given the graphql ID of the InsightBackfillQueueItem. Can only be used by a site admin.
@@ -8232,6 +8477,7 @@ export def "mutation retry-insight-series-backfill" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8243,13 +8489,13 @@ export def "mutation retry-insight-series-backfill" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id insightViewTitle seriesLabel seriesSearchQuery" }
     let body = {query: ("mutation($id: ID!) { retryInsightSeriesBackfill(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "retryInsightSeriesBackfill" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "retryInsightSeriesBackfill" }
 }
 
 # Updates the priority of an insight series backfill making it the highest priority given the graphql ID of the InsightBackfillQueueItem.
@@ -8263,6 +8509,7 @@ export def "mutation move-insight-series-backfill-to-front-of-queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8274,13 +8521,13 @@ export def "mutation move-insight-series-backfill-to-front-of-queue" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id insightViewTitle seriesLabel seriesSearchQuery" }
     let body = {query: ("mutation($id: ID!) { moveInsightSeriesBackfillToFrontOfQueue(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "moveInsightSeriesBackfillToFrontOfQueue" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "moveInsightSeriesBackfillToFrontOfQueue" }
 }
 
 # Updates the priority of an insight series backfill making it the lowest priority given the graphql ID of the InsightBackfillQueueItem
@@ -8294,6 +8541,7 @@ export def "mutation move-insight-series-backfill-to-back-of-queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8305,13 +8553,13 @@ export def "mutation move-insight-series-backfill-to-back-of-queue" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id insightViewTitle seriesLabel seriesSearchQuery" }
     let body = {query: ("mutation($id: ID!) { moveInsightSeriesBackfillToBackOfQueue(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "moveInsightSeriesBackfillToBackOfQueue" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "moveInsightSeriesBackfillToBackOfQueue" }
 }
 
 # Set the permissions of a repository (i.e., which users may view it on Sourcegraph). This operation overwrites the previous permissions for the repository.
@@ -8326,6 +8574,7 @@ export def "mutation set-repository-permissions-for-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The repository whose permissions to set.
@@ -8338,13 +8587,13 @@ export def "mutation set-repository-permissions-for-users" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!, $userPermissions: [UserPermissionInput!]!) { setRepositoryPermissionsForUsers(repository: $repository, userPermissions: $userPermissions) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsForUsers" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsForUsers" }
 }
 
 # Add permission for a single user to access a repository. This operation preserves existing permissions.
@@ -8358,6 +8607,7 @@ export def "mutation add-repository-permission-for-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string # The user identifier and permission level to add.
@@ -8372,13 +8622,13 @@ export def "mutation add-repository-permission-for-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($permission: RepositoryPermissionInput!, $userID: ID!) { addRepositoryPermissionForUser(userID: $userID, permission: $permission) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepositoryPermissionForUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addRepositoryPermissionForUser" }
 }
 
 # Remove permission for a single user to access a repository. This operation preserves other existing permissions.
@@ -8392,6 +8642,7 @@ export def "mutation remove-repository-permission-for-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The repository to remove permission from.
@@ -8404,13 +8655,13 @@ export def "mutation remove-repository-permission-for-user" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!, $userID: ID!) { removeRepositoryPermissionForUser(repository: $repository, userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "removeRepositoryPermissionForUser" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "removeRepositoryPermissionForUser" }
 }
 
 # Set 'unrestricted' to true or false on a set of repositories. Repositories with 'unrestricted' true will be visible to all users on the Sourcegraph instance.
@@ -8424,6 +8675,7 @@ export def "mutation set-repository-permissions-unrestricted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repositories: string # The repository ids we want to set unrestricted permissions on. Must not contain duplicates.
@@ -8436,13 +8688,13 @@ export def "mutation set-repository-permissions-unrestricted" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repositories: [ID!]!, $unrestricted: Boolean!) { setRepositoryPermissionsUnrestricted(repositories: $repositories, unrestricted: $unrestricted) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsUnrestricted" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsUnrestricted" }
 }
 
 # Schedule a permissions sync for given repository. This queries the repository's code host for all users' permissions associated with the repository, so that the current permissions apply to all users' operations on that repository on Sourcegraph.
@@ -8456,6 +8708,7 @@ export def "mutation schedule-repository-permissions-sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string
@@ -8467,13 +8720,13 @@ export def "mutation schedule-repository-permissions-sync" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!) { scheduleRepositoryPermissionsSync(repository: $repository) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "scheduleRepositoryPermissionsSync" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "scheduleRepositoryPermissionsSync" }
 }
 
 # Schedule a permissions sync for given user. This queries all code hosts for the user's current repository permissions and syncs them to Sourcegraph, so that the current permissions apply to the user's operations on Sourcegraph.
@@ -8487,6 +8740,7 @@ export def "mutation schedule-user-permissions-sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string # User to schedule a sync for.
@@ -8500,13 +8754,13 @@ export def "mutation schedule-user-permissions-sync" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $options: FetchPermissionsOptions) { scheduleUserPermissionsSync(user: $user, options: $options) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "scheduleUserPermissionsSync" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "scheduleUserPermissionsSync" }
 }
 
 # Set the sub-repo permissions of a repository (i.e., which paths are allowed or disallowed for a particular user). This operation overwrites the previous sub-repo permissions for the repository.
@@ -8521,6 +8775,7 @@ export def "mutation set-sub-repository-permissions-for-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repository: string # The repository whose permissions to set.
@@ -8533,13 +8788,13 @@ export def "mutation set-sub-repository-permissions-for-users" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($repository: ID!, $userPermissions: [UserSubRepoPermission!]!) { setSubRepositoryPermissionsForUsers(repository: $repository, userPermissions: $userPermissions) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setSubRepositoryPermissionsForUsers" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setSubRepositoryPermissionsForUsers" }
 }
 
 # Set the repository permissions for a given Bitbucket project. This mutation will apply the user given permissions to all the repositories that are part of the Bitbucket project as identified by the project key and all the users that have access to each repository.
@@ -8554,6 +8809,7 @@ export def "mutation set-repository-permissions-for-bitbucket-project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   project_key: string # Bitbucket project key of which all repository permissions will be updated.
@@ -8568,13 +8824,13 @@ export def "mutation set-repository-permissions-for-bitbucket-project" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($projectKey: String!, $codeHost: ID!, $userPermissions: [UserPermissionInput!]!, $unrestricted: Boolean) { setRepositoryPermissionsForBitbucketProject(projectKey: $projectKey, codeHost: $codeHost, userPermissions: $userPermissions, unrestricted: $unrestricted) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsForBitbucketProject" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setRepositoryPermissionsForBitbucketProject" }
 }
 
 # Cancel permissions sync job with given ID. No error is returned when the job is not in `queued` state or there is no such job with the given ID (latter means that most probably, the job has already been cleaned up).
@@ -8588,6 +8844,7 @@ export def "mutation cancel-permissions-sync-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   job: string # ID of the job to be canceled.
@@ -8600,12 +8857,12 @@ export def "mutation cancel-permissions-sync-job" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($job: ID!, $reason: String) { cancelPermissionsSyncJob(job: $job, reason: $reason) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "cancelPermissionsSyncJob" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "cancelPermissionsSyncJob" }
 }
 
 # Creates a new auth provider wizard draft.
@@ -8619,6 +8876,7 @@ export def "mutation create-auth-provider-wizard-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-wizardType: string@input-wizardType-completer # The type of wizard.
@@ -8632,13 +8890,13 @@ export def "mutation create-auth-provider-wizard-draft" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id wizardType displayName stepConfiguration lastValidatedAt createdAt updatedAt" }
     let body = {query: ("mutation($input: CreateAuthProviderWizardDraftInput!) { createAuthProviderWizardDraft(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createAuthProviderWizardDraft" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createAuthProviderWizardDraft" }
 }
 
 # Updates an existing auth provider wizard draft.
@@ -8652,6 +8910,7 @@ export def "mutation update-auth-provider-wizard-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8667,13 +8926,13 @@ export def "mutation update-auth-provider-wizard-draft" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id wizardType displayName stepConfiguration lastValidatedAt createdAt updatedAt" }
     let body = {query: ("mutation($id: ID!, $input: UpdateAuthProviderWizardDraftInput!) { updateAuthProviderWizardDraft(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateAuthProviderWizardDraft" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateAuthProviderWizardDraft" }
 }
 
 # Deletes an auth provider wizard draft.
@@ -8687,6 +8946,7 @@ export def "mutation delete-auth-provider-wizard-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8698,13 +8958,13 @@ export def "mutation delete-auth-provider-wizard-draft" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteAuthProviderWizardDraft(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAuthProviderWizardDraft" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteAuthProviderWizardDraft" }
 }
 
 # Records a validation result for an auth provider wizard draft.
@@ -8718,6 +8978,7 @@ export def "mutation record-auth-provider-wizard-validation-result" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8738,13 +8999,13 @@ export def "mutation record-auth-provider-wizard-validation-result" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id wizardType displayName stepConfiguration lastValidatedAt createdAt updatedAt" }
     let body = {query: ("mutation($id: ID!, $result: AuthProviderWizardValidationResultInput!) { recordAuthProviderWizardValidationResult(id: $id, result: $result) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "recordAuthProviderWizardValidationResult" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "recordAuthProviderWizardValidationResult" }
 }
 
 # Finalizes an auth provider wizard draft by committing the configuration to site config and deleting the draft.
@@ -8758,6 +9019,7 @@ export def "mutation finalize-auth-provider-wizard-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-id: string # The auth provider wizard draft ID to finalize.
@@ -8771,13 +9033,13 @@ export def "mutation finalize-auth-provider-wizard-draft" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($input: FinalizeAuthProviderWizardDraftInput!) { finalizeAuthProviderWizardDraft(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "finalizeAuthProviderWizardDraft" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "finalizeAuthProviderWizardDraft" }
 }
 
 # Creates a saved search.
@@ -8791,6 +9053,7 @@ export def "mutation create-saved-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-owner: string # The owner of the saved search, either a user or organization.
@@ -8807,13 +9070,13 @@ export def "mutation create-saved-search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id description query draft visibility createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($input: SavedSearchInput!) { createSavedSearch(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createSavedSearch" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createSavedSearch" }
 }
 
 # Updates a saved search.
@@ -8827,6 +9090,7 @@ export def "mutation update-saved-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8842,13 +9106,13 @@ export def "mutation update-saved-search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id description query draft visibility createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($id: ID!, $input: SavedSearchUpdateInput!) { updateSavedSearch(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSavedSearch" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSavedSearch" }
 }
 
 # Deletes a saved search.
@@ -8862,6 +9126,7 @@ export def "mutation delete-saved-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8873,13 +9138,13 @@ export def "mutation delete-saved-search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteSavedSearch(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSavedSearch" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSavedSearch" }
 }
 
 # Transfers ownership of a saved search to a new owner (a namespace, either a user or organization).  Only users who can administer the saved search may transfer it.
@@ -8893,6 +9158,7 @@ export def "mutation transfer-saved-search-ownership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8905,13 +9171,13 @@ export def "mutation transfer-saved-search-ownership" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id description query draft visibility createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($id: ID!, $newOwner: ID!) { transferSavedSearchOwnership(id: $id, newOwner: $newOwner) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "transferSavedSearchOwnership" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "transferSavedSearchOwnership" }
 }
 
 # Change the visibility state of a saved search.  Only users who can administer the saved search may change its visibility state.
@@ -8925,6 +9191,7 @@ export def "mutation change-saved-search-visibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -8937,13 +9204,13 @@ export def "mutation change-saved-search-visibility" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id description query draft visibility createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($id: ID!, $newVisibility: SavedSearchVisibility!) { changeSavedSearchVisibility(id: $id, newVisibility: $newVisibility) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "changeSavedSearchVisibility" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "changeSavedSearchVisibility" }
 }
 
 # EXPERIMENTAL: Mark one or more changed files in a diff as viewed for the current user. Idempotent. Batch capped at 5000 files.
@@ -8958,6 +9225,7 @@ export def "mutation mark-changed-files-as-viewed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-repository: string # The repository containing the diff.
@@ -8973,12 +9241,12 @@ export def "mutation mark-changed-files-as-viewed" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($input: MarkChangedFilesInput!) { markChangedFilesAsViewed(input: $input) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "markChangedFilesAsViewed" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "markChangedFilesAsViewed" }
 }
 
 # EXPERIMENTAL: Remove the "viewed" mark from one or more changed files in a diff for the current user. Batch capped at 5000 files.
@@ -8993,6 +9261,7 @@ export def "mutation mark-changed-files-as-unviewed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-repository: string # The repository containing the diff.
@@ -9008,12 +9277,12 @@ export def "mutation mark-changed-files-as-unviewed" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "mutation($input: MarkChangedFilesInput!) { markChangedFilesAsUnviewed(input: $input) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "markChangedFilesAsUnviewed" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "markChangedFilesAsUnviewed" }
 }
 
 # Delete a GitHub App. The GitHub App, along with all of its associated code host connections and authentication provider, will be deleted. 🚨 SECURITY: Requires site-admin.
@@ -9027,6 +9296,7 @@ export def "mutation delete-git-hub-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   git_hub_app: string
@@ -9038,13 +9308,13 @@ export def "mutation delete-git-hub-app" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($gitHubApp: ID!) { deleteGitHubApp(gitHubApp: $gitHubApp) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteGitHubApp" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteGitHubApp" }
 }
 
 # Refresh a GitHub App. This fetches information about the GitHub app and updates all installations associated with it. 🚨 SECURITY: Requires site-admin.
@@ -9058,6 +9328,7 @@ export def "mutation refresh-git-hub-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   git_hub_app: string
@@ -9069,13 +9340,13 @@ export def "mutation refresh-git-hub-app" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($gitHubApp: ID!) { refreshGitHubApp(gitHubApp: $gitHubApp) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "refreshGitHubApp" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "refreshGitHubApp" }
 }
 
 # Add an existing GitHub App. This uses the provided Client ID and Private Key to fetch the GitHub App details from GitHub and store it in the database. 🚨 SECURITY: Requires site-admin.
@@ -9089,6 +9360,7 @@ export def "mutation create-git-hub-app" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   git_hub_url: string
@@ -9102,13 +9374,13 @@ export def "mutation create-git-hub-app" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id appID name domain kind slug baseURL appURL clientID clientSecret logo createdAt updatedAt missingRequiredPermissions" }
     let body = {query: ("mutation($gitHubURL: String!, $clientID: String!, $privateKey: String!) { createGitHubApp(gitHubURL: $gitHubURL, clientID: $clientID, privateKey: $privateKey) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createGitHubApp" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createGitHubApp" }
 }
 
 # Adds a GitHub App as an authentication provider in the site configuration. This appends a new GitHub auth provider entry (using the app's clientID, clientSecret, and baseURL) to the "auth.providers" list in site config. If a matching provider already exists, this is a no-op. 🚨 SECURITY: Requires site-admin.
@@ -9122,6 +9394,7 @@ export def "mutation add-git-hub-app-auth-provider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   git_hub_app: string
@@ -9133,13 +9406,13 @@ export def "mutation add-git-hub-app-auth-provider" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($gitHubApp: ID!) { addGitHubAppAuthProvider(gitHubApp: $gitHubApp) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addGitHubAppAuthProvider" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addGitHubAppAuthProvider" }
 }
 
 # Create search context.
@@ -9154,6 +9427,7 @@ export def "mutation create-search-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repositories: record # List of search context repository revisions. — item shape: {repositoryID: string, revisions: string}
@@ -9171,13 +9445,13 @@ export def "mutation create-search-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id databaseID name description spec autoDefined query public updatedAt viewerCanManage viewerHasAsDefault viewerHasStarred" }
     let body = {query: ("mutation($searchContext: SearchContextInput!, $repositories: [SearchContextRepositoryRevisionsInput!]!) { createSearchContext(repositories: $repositories, searchContext: $searchContext) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createSearchContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createSearchContext" }
 }
 
 # Delete search context.
@@ -9191,6 +9465,7 @@ export def "mutation delete-search-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9202,13 +9477,13 @@ export def "mutation delete-search-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteSearchContext(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSearchContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSearchContext" }
 }
 
 # Update search context.
@@ -9223,6 +9498,7 @@ export def "mutation update-search-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # Search context ID.
@@ -9240,13 +9516,13 @@ export def "mutation update-search-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id databaseID name description spec autoDefined query public updatedAt viewerCanManage viewerHasAsDefault viewerHasStarred" }
     let body = {query: ("mutation($id: ID!, $searchContext: SearchContextEditInput!, $repositories: [SearchContextRepositoryRevisionsInput!]!) { updateSearchContext(id: $id, repositories: $repositories, searchContext: $searchContext) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSearchContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateSearchContext" }
 }
 
 # Add a star on a search context for the specified user. Only one star can be created per context and user pair. If the star already exists, this is a no-op.
@@ -9260,6 +9536,7 @@ export def "mutation create-search-context-star" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   search_context_id: string
@@ -9272,13 +9549,13 @@ export def "mutation create-search-context-star" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($searchContextID: ID!, $userID: ID!) { createSearchContextStar(searchContextID: $searchContextID, userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createSearchContextStar" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createSearchContextStar" }
 }
 
 # Delete a star on a search context for the specified user. If the star does not exist, this is a no-op.
@@ -9292,6 +9569,7 @@ export def "mutation delete-search-context-star" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   search_context_id: string
@@ -9304,13 +9582,13 @@ export def "mutation delete-search-context-star" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($searchContextID: ID!, $userID: ID!) { deleteSearchContextStar(searchContextID: $searchContextID, userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSearchContextStar" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteSearchContextStar" }
 }
 
 # Set the default search context for the specified user.
@@ -9324,6 +9602,7 @@ export def "mutation set-default-search-context" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   search_context_id: string
@@ -9336,13 +9615,13 @@ export def "mutation set-default-search-context" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($searchContextID: ID!, $userID: ID!) { setDefaultSearchContext(searchContextID: $searchContextID, userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setDefaultSearchContext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setDefaultSearchContext" }
 }
 
 # Deletes a role. This mutation targets only non-system roles. Any users who were assigned to the role will be unassigned and lose any permissions associated with it.
@@ -9356,6 +9635,7 @@ export def "mutation delete-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   role: string
@@ -9367,13 +9647,13 @@ export def "mutation delete-role" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($role: ID!) { deleteRole(role: $role) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRole" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteRole" }
 }
 
 # Creates a role.
@@ -9387,6 +9667,7 @@ export def "mutation create-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -9399,13 +9680,13 @@ export def "mutation create-role" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name system createdAt" }
     let body = {query: ("mutation($name: String!, $permissions: [ID!]!) { createRole(name: $name, permissions: $permissions) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createRole" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createRole" }
 }
 
 # Set permissions for role. This updates the permissions assigned to a role based on the `permissions` passed in the argument. Permissions already assigned to the role that aren't part of the arguments of this mutation will be revoked for the role.
@@ -9419,6 +9700,7 @@ export def "mutation set-permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   role: string
@@ -9431,13 +9713,13 @@ export def "mutation set-permissions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($role: ID!, $permissions: [ID!]!) { setPermissions(role: $role, permissions: $permissions) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setPermissions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setPermissions" }
 }
 
 # Set roles for a user. Similar to `setPermissions`, this updates the roles assigned to a user based on the `roles` passed in the argument. Permissions already assigned to the role that aren't part of the arguments of this mutation will be revoked for the role.
@@ -9451,6 +9733,7 @@ export def "mutation set-roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
@@ -9463,13 +9746,13 @@ export def "mutation set-roles" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($user: ID!, $roles: [ID!]!) { setRoles(user: $user, roles: $roles) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "setRoles" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "setRoles" }
 }
 
 # Creates the entitlement. Site-admin only.
@@ -9483,6 +9766,7 @@ export def "mutation create-entitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the entitlement.
@@ -9498,13 +9782,13 @@ export def "mutation create-entitlement" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name type limit window isDefault updatedAt" }
     let body = {query: ("mutation($name: String!, $type: EntitlementType!, $limit: BigInt!, $window: EntitlementWindow!, $isDefault: Boolean) { createEntitlement(name: $name, type: $type, limit: $limit, window: $window, isDefault: $isDefault) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createEntitlement" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createEntitlement" }
 }
 
 # Updates the entitlement. Site-admin only.
@@ -9518,6 +9802,7 @@ export def "mutation update-entitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of the entitlement to update.
@@ -9533,13 +9818,13 @@ export def "mutation update-entitlement" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name type limit window isDefault updatedAt" }
     let body = {query: ("mutation($id: ID!, $name: String!, $limit: BigInt!, $window: EntitlementWindow!, $isDefault: Boolean) { updateEntitlement(id: $id, name: $name, limit: $limit, window: $window, isDefault: $isDefault) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateEntitlement" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateEntitlement" }
 }
 
 # Deletes the entitlement. Site-admin only.
@@ -9553,6 +9838,7 @@ export def "mutation delete-entitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9564,13 +9850,13 @@ export def "mutation delete-entitlement" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteEntitlement(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteEntitlement" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteEntitlement" }
 }
 
 # Grants the entitlement to the users. Site-admin only.
@@ -9584,6 +9870,7 @@ export def "mutation create-entitlement-grants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   entitlement_id: string # The ID of the entitlement to grant.
@@ -9596,13 +9883,13 @@ export def "mutation create-entitlement-grants" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($entitlementID: ID!, $userIDs: [ID!]!) { createEntitlementGrants(entitlementID: $entitlementID, userIDs: $userIDs) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createEntitlementGrants" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createEntitlementGrants" }
 }
 
 # Deletes the entitlement grants. Site-admin only.
@@ -9616,6 +9903,7 @@ export def "mutation delete-entitlement-grants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   entitlement_id: string # The ID of the entitlement grant to delete.
@@ -9628,13 +9916,13 @@ export def "mutation delete-entitlement-grants" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($entitlementID: ID!, $userIDs: [ID!]!) { deleteEntitlementGrants(entitlementID: $entitlementID, userIDs: $userIDs) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteEntitlementGrants" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteEntitlementGrants" }
 }
 
 # Resets entitlement usage for a user. Site-admin only.
@@ -9648,6 +9936,7 @@ export def "mutation reset-entitlement-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   type: string@type-completer # The type of the entitlement.
@@ -9660,13 +9949,13 @@ export def "mutation reset-entitlement-usage" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "isDefault" }
     let body = {query: ("mutation($type: EntitlementType!, $userID: ID!) { resetEntitlementUsage(type: $type, userID: $userID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "resetEntitlementUsage" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "resetEntitlementUsage" }
 }
 
 # Telemetry mutations for "Event Logging Everywhere", aka a version 2 of existing event-logging/event-recording APIs.
@@ -9680,6 +9969,7 @@ export def "mutation telemetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -9690,13 +9980,13 @@ export def "mutation telemetry" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation { telemetry { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "telemetry" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "telemetry" }
 }
 
 # Create a prompt.
@@ -9710,6 +10000,7 @@ export def "mutation create-prompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-owner: string # The owner of the prompt, either a user or organization.
@@ -9731,13 +10022,13 @@ export def "mutation create-prompt" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description draft visibility nameWithOwner createdAt updatedAt url viewerCanAdminister autoSubmit mode recommended builtin" }
     let body = {query: ("mutation($input: PromptInput!) { createPrompt(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createPrompt" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createPrompt" }
 }
 
 # Update a prompt.
@@ -9751,6 +10042,7 @@ export def "mutation update-prompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9771,13 +10063,13 @@ export def "mutation update-prompt" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description draft visibility nameWithOwner createdAt updatedAt url viewerCanAdminister autoSubmit mode recommended builtin" }
     let body = {query: ("mutation($id: ID!, $input: PromptUpdateInput!) { updatePrompt(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePrompt" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePrompt" }
 }
 
 # Delete a prompt.
@@ -9791,6 +10083,7 @@ export def "mutation delete-prompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9802,13 +10095,13 @@ export def "mutation delete-prompt" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deletePrompt(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePrompt" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePrompt" }
 }
 
 # Transfer ownership of a prompt to a new owner (a namespace, either a user or organization).  Only users who can administer the prompt may transfer it.
@@ -9822,6 +10115,7 @@ export def "mutation transfer-prompt-ownership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9834,13 +10128,13 @@ export def "mutation transfer-prompt-ownership" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description draft visibility nameWithOwner createdAt updatedAt url viewerCanAdminister autoSubmit mode recommended builtin" }
     let body = {query: ("mutation($id: ID!, $newOwner: ID!) { transferPromptOwnership(id: $id, newOwner: $newOwner) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "transferPromptOwnership" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "transferPromptOwnership" }
 }
 
 # Change the visibility state of a prompt.  Only users who can administer the prompt may change its visibility state.
@@ -9854,6 +10148,7 @@ export def "mutation change-prompt-visibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9866,13 +10161,13 @@ export def "mutation change-prompt-visibility" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description draft visibility nameWithOwner createdAt updatedAt url viewerCanAdminister autoSubmit mode recommended builtin" }
     let body = {query: ("mutation($id: ID!, $newVisibility: PromptVisibility!) { changePromptVisibility(id: $id, newVisibility: $newVisibility) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "changePromptVisibility" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "changePromptVisibility" }
 }
 
 # Create a prompt tag.
@@ -9886,6 +10181,7 @@ export def "mutation create-prompt-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-name: string # The name of the prompt tag.
@@ -9898,13 +10194,13 @@ export def "mutation create-prompt-tag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($input: PromptTagCreateInput!) { createPromptTag(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createPromptTag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createPromptTag" }
 }
 
 # Update a prompt tag.
@@ -9918,6 +10214,7 @@ export def "mutation update-prompt-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9931,13 +10228,13 @@ export def "mutation update-prompt-tag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name createdAt updatedAt url viewerCanAdminister" }
     let body = {query: ("mutation($id: ID!, $input: PromptTagUpdateInput!) { updatePromptTag(id: $id, input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePromptTag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updatePromptTag" }
 }
 
 # Delete a prompt tag.
@@ -9951,6 +10248,7 @@ export def "mutation delete-prompt-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -9962,13 +10260,13 @@ export def "mutation delete-prompt-tag" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deletePromptTag(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePromptTag" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deletePromptTag" }
 }
 
 # Create a new IdP client. The secret will be returned and can never be accessed again.  Requires IDP_CLIENTS#WRITE permission.
@@ -9982,6 +10280,7 @@ export def "mutation create-idp-client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # A descriptive name for the client. Will be shown to users.
@@ -9997,13 +10296,13 @@ export def "mutation create-idp-client" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientSecret" }
     let body = {query: ("mutation($name: String!, $description: String, $redirectURIs: [String!]!, $scopes: [String!]!, $public: Boolean!) { createIDPClient(name: $name, description: $description, redirectURIs: $redirectURIs, scopes: $scopes, public: $public) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createIDPClient" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createIDPClient" }
 }
 
 # Update an existing IdP client.  Requires IDP_CLIENTS#WRITE permission.
@@ -10017,6 +10316,7 @@ export def "mutation update-idp-client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of the client to update.
@@ -10032,13 +10332,13 @@ export def "mutation update-idp-client" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id clientID name description redirectURIs responseTypes scopes public audience registrationSource createdAt updatedAt" }
     let body = {query: ("mutation($id: ID!, $name: String!, $description: String, $redirectURIs: [String!]!, $scopes: [String!]!) { updateIDPClient(id: $id, name: $name, description: $description, redirectURIs: $redirectURIs, scopes: $scopes) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "updateIDPClient" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "updateIDPClient" }
 }
 
 # Delete an existing IdP client. Caution: all access tokens issued by this client are no longer usable.  Requires IDP_CLIENTS#WRITE permission.
@@ -10052,6 +10352,7 @@ export def "mutation delete-idp-client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -10063,13 +10364,13 @@ export def "mutation delete-idp-client" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteIDPClient(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteIDPClient" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteIDPClient" }
 }
 
 # Make a determination for device authorization. Identified by the user code from the authorization flow.
@@ -10083,6 +10384,7 @@ export def "mutation resolve-device-authorization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_code: string # The user code associated with the authorization request to respond to.
@@ -10095,13 +10397,13 @@ export def "mutation resolve-device-authorization" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($userCode: String!, $approve: Boolean!) { resolveDeviceAuthorization(userCode: $userCode, approve: $approve) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "resolveDeviceAuthorization" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "resolveDeviceAuthorization" }
 }
 
 # Revoke the UserConsentedIDPClient consent. This will invalidate all access tokens and refresh tokens issued to this client for the current user, and force a consent prompt for the next authorization flow.  Can only be called by the user who owns the consent, or a site-admin.
@@ -10115,6 +10417,7 @@ export def "mutation revoke-idp-client-consent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   consent_id: string
@@ -10126,13 +10429,13 @@ export def "mutation revoke-idp-client-consent" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($consentID: ID!) { revokeIDPClientConsent(consentID: $consentID) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "revokeIDPClientConsent" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "revokeIDPClientConsent" }
 }
 
 # Create a new M2M (Machine-to-Machine) credential for a service account. This creates an IdP client that can use client credentials flow to obtain access tokens with the service account as the subject.  Requires IDP_CLIENTS#WRITE_IMPERSONATION permission.
@@ -10146,6 +10449,7 @@ export def "mutation create-m2m-credential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string # The ID of the service account for which to create the M2M credential.
@@ -10160,13 +10464,13 @@ export def "mutation create-m2m-credential" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientSecret" }
     let body = {query: ("mutation($userID: ID!, $name: String!, $description: String, $scopes: [String!]!) { createM2MCredential(userID: $userID, name: $name, description: $description, scopes: $scopes) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "createM2MCredential" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "createM2MCredential" }
 }
 
 # Delete an M2M credential for a service account. This will delete the associated IdP client and invalidate all access tokens.  Requires IDP_CLIENTS#WRITE_IMPERSONATION permission.
@@ -10180,6 +10484,7 @@ export def "mutation delete-m2m-credential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -10191,11 +10496,11 @@ export def "mutation delete-m2m-credential" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "alwaysNil" }
     let body = {query: ("mutation($id: ID!) { deleteM2MCredential(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteM2MCredential" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "deleteM2MCredential" }
 }

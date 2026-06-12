@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -174,7 +175,7 @@ def type-completer-6 [] { ["usage_exceeded"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-remove-advance-invoice-schedule schedules" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -209,6 +210,7 @@ export def "subscriptions-remove-advance-invoice-schedule schedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -229,7 +231,7 @@ export def "subscriptions-remove-advance-invoice-schedule schedules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update subscription for items
@@ -257,6 +259,7 @@ export def "subscriptions-update-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -322,7 +325,7 @@ export def "subscriptions-update-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove coupons
@@ -338,6 +341,7 @@ export def "subscriptions-remove-coupons coupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -358,7 +362,7 @@ export def "subscriptions-remove-coupons coupons" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resume a subscription
@@ -375,6 +379,7 @@ export def "subscriptions-resume subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -400,7 +405,7 @@ export def "subscriptions-resume subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel subscription for items
@@ -417,6 +422,7 @@ export def "subscriptions-cancel-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -448,7 +454,7 @@ export def "subscriptions-cancel-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Regenerate an invoice
@@ -464,6 +470,7 @@ export def "subscriptions-regenerate-invoice invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -487,7 +494,7 @@ export def "subscriptions-regenerate-invoice invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List subscriptions
@@ -502,6 +509,7 @@ export def "subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # <p class="mb-2">Indicates whether to include deleted objects in the list. The deleted objects have the attribute <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">deleted</code> as <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">true</code> .</p> (default: false)
@@ -539,7 +547,7 @@ export def "subscriptions subscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move a subscription
@@ -555,6 +563,7 @@ export def "subscriptions-move subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -576,7 +585,7 @@ export def "subscriptions-move subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import subscription for Items
@@ -599,6 +608,7 @@ export def "customers-import-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -651,7 +661,7 @@ export def "customers-import-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve advance invoice
@@ -667,6 +677,7 @@ export def "subscriptions-retrieve-advance-invoice-schedule invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -680,7 +691,7 @@ export def "subscriptions-retrieve-advance-invoice-schedule invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove scheduled cancellation
@@ -697,6 +708,7 @@ export def "subscriptions-remove-scheduled-cancellation cancellation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -719,7 +731,7 @@ export def "subscriptions-remove-scheduled-cancellation cancellation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve with scheduled changes
@@ -735,6 +747,7 @@ export def "subscriptions-retrieve-with-scheduled-changes changes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -748,7 +761,7 @@ export def "subscriptions-retrieve-with-scheduled-changes changes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate a subscription
@@ -767,6 +780,7 @@ export def "subscriptions-reactivate subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -798,7 +812,7 @@ export def "subscriptions-reactivate subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create advance invoice or invoicing schedules
@@ -816,6 +830,7 @@ export def "subscriptions-charge-future-renewals renewals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -840,7 +855,7 @@ export def "subscriptions-charge-future-renewals renewals" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add charge at term end
@@ -856,6 +871,7 @@ export def "subscriptions-add-charge-at-term-end end" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -883,7 +899,7 @@ export def "subscriptions-add-charge-at-term-end end" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove scheduled changes
@@ -899,6 +915,7 @@ export def "subscriptions-remove-scheduled-changes changes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -915,7 +932,7 @@ export def "subscriptions-remove-scheduled-changes changes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change term end
@@ -931,6 +948,7 @@ export def "subscriptions-change-term-end end" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -953,7 +971,7 @@ export def "subscriptions-change-term-end end" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a subscription
@@ -969,6 +987,7 @@ export def "subscriptions-delete subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -985,7 +1004,7 @@ export def "subscriptions-delete subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create subscription for Items
@@ -1009,6 +1028,7 @@ export def "customers-subscription-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1064,7 +1084,7 @@ export def "customers-subscription-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import unbilled charges
@@ -1083,6 +1103,7 @@ export def "subscriptions-import-unbilled-charges charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1105,7 +1126,7 @@ export def "subscriptions-import-unbilled-charges charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove scheduled resumption
@@ -1121,6 +1142,7 @@ export def "subscriptions-remove-scheduled-resumption resumption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1137,7 +1159,7 @@ export def "subscriptions-remove-scheduled-resumption resumption" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a subscription
@@ -1153,6 +1175,7 @@ export def "subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1166,7 +1189,7 @@ export def "subscriptions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import contract term
@@ -1183,6 +1206,7 @@ export def "subscriptions-import-contract-term term" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1204,7 +1228,7 @@ export def "subscriptions-import-contract-term term" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Override Billing Profile
@@ -1220,6 +1244,7 @@ export def "subscriptions-override-billing-profile profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1241,7 +1266,7 @@ export def "subscriptions-override-billing-profile profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove scheduled pause
@@ -1257,6 +1282,7 @@ export def "subscriptions-remove-scheduled-pause pause" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1273,7 +1299,7 @@ export def "subscriptions-remove-scheduled-pause pause" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit Advance Invoice Schedule
@@ -1291,6 +1317,7 @@ export def "subscriptions-edit-advance-invoice-schedule schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1314,7 +1341,7 @@ export def "subscriptions-edit-advance-invoice-schedule schedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List discounts for a subscription
@@ -1330,6 +1357,7 @@ export def "subscriptions-discounts subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -1346,7 +1374,7 @@ export def "subscriptions-discounts subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contract terms for a subscription
@@ -1362,6 +1390,7 @@ export def "subscriptions-contract-terms subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --sort-by: record # optional, string filter  Sorts based on the specified attribute. **Supported attributes :** created_at  **Supported sort-orders :** asc, desc  **Example →** *sort_by\[asc\] = "created_at"*  This will sort the result based on the 'created_at' attribute in ascending (earliest first) order.
@@ -1379,7 +1408,7 @@ export def "subscriptions-contract-terms subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause a subscription
@@ -1395,6 +1424,7 @@ export def "subscriptions-pause subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1420,7 +1450,7 @@ export def "subscriptions-pause subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Scheduled_changes a subscription_scheduled_change
@@ -1436,6 +1466,7 @@ export def "subscriptions-scheduled-changes change" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1449,7 +1480,7 @@ export def "subscriptions-scheduled-changes change" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update_scheduled_changes a subscription_scheduled_change
@@ -1465,6 +1496,7 @@ export def "subscriptions-update-scheduled-changes change" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1486,7 +1518,7 @@ export def "subscriptions-update-scheduled-changes change" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a customer
@@ -1502,6 +1534,7 @@ export def "customers-delete customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1522,7 +1555,7 @@ export def "customers-delete customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Link a customer to an account hierarchy
@@ -1540,6 +1573,7 @@ export def "customers-relationships customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1565,7 +1599,7 @@ export def "customers-relationships customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unlink a customer from its parent account
@@ -1581,6 +1615,7 @@ export def "customers-delete-relationship customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1597,7 +1632,7 @@ export def "customers-delete-relationship customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete contacts for a customer
@@ -1614,6 +1649,7 @@ export def "customers-delete-contact customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1634,7 +1670,7 @@ export def "customers-delete-contact customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Assign payment role
@@ -1650,6 +1686,7 @@ export def "customers-assign-payment-role role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1671,7 +1708,7 @@ export def "customers-assign-payment-role role" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Move a customer
@@ -1686,6 +1723,7 @@ export def "customers-move customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1707,7 +1745,7 @@ export def "customers-move customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get account hierarchy for a customer
@@ -1723,6 +1761,7 @@ export def "customers-hierarchy hierarchy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hierarchy-operation-type: string@hierarchy-operation-type-completer # <p class="mb-2">Specifies which part of the account hierarchy to retrieve for the customer identified by <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">{customer_id}</code> .</p> * complete_hierarchy - <p class="mb-2">Retrieve all nodes in the account hierarchy.</p> * subordinates - <p class="mb-2">Retrieve all nodes in the account hierarchy that start from the specified customer (identified by <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">{customer_id}</code> ) and include its subordinates. In other words, get nodes in the account hierarchy tree where the root node is the specified customer.</p> * path_to_root - <p class="mb-2">Retrieve nodes from the specified customer (identified by <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">{customer_id}</code> ) to the root of its account hierarchy.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
@@ -1738,7 +1777,7 @@ export def "customers-hierarchy hierarchy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update payment method for a customer
@@ -1755,6 +1794,7 @@ export def "customers-update-payment-method customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1775,7 +1815,7 @@ export def "customers-update-payment-method customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a customer
@@ -1791,6 +1831,7 @@ export def "customers customer-by-customer_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1804,7 +1845,7 @@ export def "customers customer-by-customer_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a customer
@@ -1821,6 +1862,7 @@ export def "customers customer-by-customer_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1864,7 +1906,7 @@ export def "customers customer-by-customer_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get paginated account hierarchy for a customer
@@ -1880,6 +1922,7 @@ export def "customers-hierarchy-detail details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Used for pagination. Set this to the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> value from the previous API response to fetch the next page.</p>
   --hierarchy-operation-type: string@hierarchy-operation-type-completer # Specifies which part of the hierarchy to fetch. Choose from the available operation types. \* complete_hierarchy -  Fetches all nodes in the full hierarchy that the customer belongs to. \* subordinates -  Fetches all nodes in the sub-hierarchy rooted at the customer, including the customer and its subordinates. \* path_to_root -  Fetches a list of nodes along the path from the customer to the root of the hierarchy.
@@ -1897,7 +1940,7 @@ export def "customers-hierarchy-detail details" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change billing date
@@ -1913,6 +1956,7 @@ export def "customers-change-billing-date date" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -1937,7 +1981,7 @@ export def "customers-change-billing-date date" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List customers
@@ -1952,6 +1996,7 @@ export def "customers customers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '**deleted** ' attribute will be '**true** '.  (default: false)
@@ -1985,7 +2030,7 @@ export def "customers customers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a customer
@@ -2007,6 +2052,7 @@ export def "customers customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2066,7 +2112,7 @@ export def "customers customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add contacts to a customer
@@ -2083,6 +2129,7 @@ export def "customers-add-contact customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2103,7 +2150,7 @@ export def "customers-add-contact customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List of contacts for a customer
@@ -2119,6 +2166,7 @@ export def "customers-contacts customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -2135,7 +2183,7 @@ export def "customers-contacts customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear Personal Data of a customer
@@ -2151,6 +2199,7 @@ export def "customers-clear-personal-data customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2167,7 +2216,7 @@ export def "customers-clear-personal-data customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge customers
@@ -2182,6 +2231,7 @@ export def "customers-merge customers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2203,7 +2253,7 @@ export def "customers-merge customers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Collect payment for customer
@@ -2223,6 +2273,7 @@ export def "customers-collect-payment customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2252,7 +2303,7 @@ export def "customers-collect-payment customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Record an excess payment for a customer
@@ -2269,6 +2320,7 @@ export def "customers-record-excess-payment customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2290,7 +2342,7 @@ export def "customers-record-excess-payment customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update contacts for a customer
@@ -2307,6 +2359,7 @@ export def "customers-update-contact customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2327,7 +2380,7 @@ export def "customers-update-contact customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update account hierarchy access settings for a customer
@@ -2345,6 +2398,7 @@ export def "customers-update-hierarchy-settings customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2367,7 +2421,7 @@ export def "customers-update-hierarchy-settings customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update billing info for a customer
@@ -2386,6 +2440,7 @@ export def "customers-update-billing-info customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2416,7 +2471,7 @@ export def "customers-update-billing-info customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create using vault temp token
@@ -2433,6 +2488,7 @@ export def "tokens-create-using-temp-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2460,7 +2516,7 @@ export def "tokens-create-using-temp-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a card payment method token
@@ -2476,6 +2532,7 @@ export def "tokens-create-for-card token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2496,7 +2553,7 @@ export def "tokens-create-for-card token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a token
@@ -2512,6 +2569,7 @@ export def "tokens token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2525,7 +2583,7 @@ export def "tokens token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create using permanent token
@@ -2542,6 +2600,7 @@ export def "payment-sources-create-using-permanent-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2575,7 +2634,7 @@ export def "payment-sources-create-using-permanent-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a payment source
@@ -2591,6 +2650,7 @@ export def "payment-sources-delete source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2607,7 +2667,7 @@ export def "payment-sources-delete source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a card payment source
@@ -2623,6 +2683,7 @@ export def "payment-sources-create-card source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2645,7 +2706,7 @@ export def "payment-sources-create-card source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Verify bank account payment source
@@ -2661,6 +2722,7 @@ export def "payment-sources-verify-bank-account source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2682,7 +2744,7 @@ export def "payment-sources-verify-bank-account source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List payment sources
@@ -2697,6 +2759,7 @@ export def "payment-sources sources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --subscription-id: string # <p class="mb-2">Unique subscription identifier that helps to retrieve the payment source of a subscription which has <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">mandate</code> associated to it.</p>
@@ -2721,7 +2784,7 @@ export def "payment-sources sources" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export payment source
@@ -2737,6 +2800,7 @@ export def "payment-sources-export-payment-source source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2757,7 +2821,7 @@ export def "payment-sources-export-payment-source source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create using payment intent
@@ -2773,6 +2837,7 @@ export def "payment-sources-create-using-payment-intent intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2795,7 +2860,7 @@ export def "payment-sources-create-using-payment-intent intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a payment source
@@ -2811,6 +2876,7 @@ export def "payment-sources source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2824,7 +2890,7 @@ export def "payment-sources source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a voucher payment method
@@ -2840,6 +2906,7 @@ export def "payment-sources-create-voucher-payment-source method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2861,7 +2928,7 @@ export def "payment-sources-create-voucher-payment-source method" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create using gateway temporary token
@@ -2876,6 +2943,7 @@ export def "payment-sources-create-using-temp-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2902,7 +2970,7 @@ export def "payment-sources-create-using-temp-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a card payment source
@@ -2919,6 +2987,7 @@ export def "payment-sources-update-card source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2941,7 +3010,7 @@ export def "payment-sources-update-card source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Switch gateway account
@@ -2957,6 +3026,7 @@ export def "payment-sources-switch-gateway-account account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -2977,7 +3047,7 @@ export def "payment-sources-switch-gateway-account account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create using Chargebee token
@@ -2992,6 +3062,7 @@ export def "payment-sources-create-using-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3014,7 +3085,7 @@ export def "payment-sources-create-using-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Local delete a payment source
@@ -3030,6 +3101,7 @@ export def "payment-sources-delete-local source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3046,7 +3118,7 @@ export def "payment-sources-delete-local source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a bank account payment source
@@ -3062,6 +3134,7 @@ export def "payment-sources-create-bank-account source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3085,7 +3158,7 @@ export def "payment-sources-create-bank-account source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a bank account payment source
@@ -3102,6 +3175,7 @@ export def "payment-sources-update-bank-account source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3122,7 +3196,7 @@ export def "payment-sources-update-bank-account source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Local delete a virtual bank account
@@ -3138,6 +3212,7 @@ export def "virtual-bank-accounts-delete-local account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3154,7 +3229,7 @@ export def "virtual-bank-accounts-delete-local account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a virtual bank account
@@ -3170,6 +3245,7 @@ export def "virtual-bank-accounts-delete account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3186,7 +3262,7 @@ export def "virtual-bank-accounts-delete account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List virtual bank accounts
@@ -3201,6 +3277,7 @@ export def "virtual-bank-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --customer-id: record # optional, string filter  Identifier of the customer. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *customer_id\[is\] = "3bdjnDnsdQn"*  (e.g. 3bdjnDnsdQn)
@@ -3220,7 +3297,7 @@ export def "virtual-bank-accounts accounts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a virtual bank account
@@ -3235,6 +3312,7 @@ export def "virtual-bank-accounts account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3258,7 +3336,7 @@ export def "virtual-bank-accounts account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a virtual bank account
@@ -3274,6 +3352,7 @@ export def "virtual-bank-accounts account-by-virtual_bank_account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3287,7 +3366,7 @@ export def "virtual-bank-accounts account-by-virtual_bank_account_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a virtual bank account using permanent token
@@ -3302,6 +3381,7 @@ export def "virtual-bank-accounts-create-using-permanent-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3325,7 +3405,7 @@ export def "virtual-bank-accounts-create-using-permanent-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Copy card
@@ -3341,6 +3421,7 @@ export def "customers-copy-card card" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3361,7 +3442,7 @@ export def "customers-copy-card card" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve card for a customer
@@ -3377,6 +3458,7 @@ export def "cards customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3390,7 +3472,7 @@ export def "cards customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch gateway
@@ -3406,6 +3488,7 @@ export def "customers-switch-gateway gateway" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3426,7 +3509,7 @@ export def "customers-switch-gateway gateway" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete card for a customer
@@ -3442,6 +3525,7 @@ export def "customers-delete-card customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3458,7 +3542,7 @@ export def "customers-delete-card customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update card for a customer
@@ -3474,6 +3558,7 @@ export def "customers-credit-card customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3509,7 +3594,7 @@ export def "customers-credit-card customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a promotional credit
@@ -3525,6 +3610,7 @@ export def "promotional-credits credit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3538,7 +3624,7 @@ export def "promotional-credits credit" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List promotional credits
@@ -3553,6 +3639,7 @@ export def "promotional-credits credits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Unique reference ID provided for promotional credits. **Supported operators :** is, is_not, starts_with  **Example →** *id\[is\] = "1bkfc8dw2o"*  (e.g. 1bkfc8dw2o)
@@ -3573,7 +3660,7 @@ export def "promotional-credits credits" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deduct Promotional Credits
@@ -3588,6 +3675,7 @@ export def "promotional-credits-deduct credits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3614,7 +3702,7 @@ export def "promotional-credits-deduct credits" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set Promotional Credits
@@ -3629,6 +3717,7 @@ export def "promotional-credits-set credits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3655,7 +3744,7 @@ export def "promotional-credits-set credits" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add Promotional Credits
@@ -3670,6 +3759,7 @@ export def "promotional-credits-add credits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3696,7 +3786,7 @@ export def "promotional-credits-add credits" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete Line Items
@@ -3713,6 +3803,7 @@ export def "invoices-delete-line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3733,7 +3824,7 @@ export def "invoices-delete-line-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove credit note from an invoice
@@ -3750,6 +3841,7 @@ export def "invoices-remove-credit-note invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3770,7 +3862,7 @@ export def "invoices-remove-credit-note invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove payment from an invoice
@@ -3787,6 +3879,7 @@ export def "invoices-remove-payment invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3807,7 +3900,7 @@ export def "invoices-remove-payment invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Stop dunning for invoice
@@ -3823,6 +3916,7 @@ export def "invoices-stop-dunning invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3843,7 +3937,7 @@ export def "invoices-stop-dunning invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Apply payments for an invoice
@@ -3860,6 +3954,7 @@ export def "invoices-apply-payments invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3881,7 +3976,7 @@ export def "invoices-apply-payments invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Apply payment schedule scheme to an invoice
@@ -3897,6 +3992,7 @@ export def "invoices-apply-payment-schedule-scheme invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3918,7 +4014,7 @@ export def "invoices-apply-payment-schedule-scheme invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Void an invoice
@@ -3934,6 +4030,7 @@ export def "invoices-void invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -3955,7 +4052,7 @@ export def "invoices-void invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add one-time charge to a pending invoice
@@ -3972,6 +4069,7 @@ export def "invoices-add-charge invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4002,7 +4100,7 @@ export def "invoices-add-charge invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Send an einvoice for invoices
@@ -4018,6 +4116,7 @@ export def "invoices-send-einvoice invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4037,7 +4136,7 @@ export def "invoices-send-einvoice invoices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve payment schedules for an invoice
@@ -4053,6 +4152,7 @@ export def "invoices-payment-schedules invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4066,7 +4166,7 @@ export def "invoices-payment-schedules invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Write off an invoice
@@ -4082,6 +4182,7 @@ export def "invoices-write-off invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4102,7 +4203,7 @@ export def "invoices-write-off invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a charge-item to a pending invoice
@@ -4120,6 +4221,7 @@ export def "invoices-add-charge-item invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4143,7 +4245,7 @@ export def "invoices-add-charge-item invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Pause dunning for invoice
@@ -4159,6 +4261,7 @@ export def "invoices-pause-dunning invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4180,7 +4283,7 @@ export def "invoices-pause-dunning invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List invoices
@@ -4195,6 +4298,7 @@ export def "invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '**deleted** ' attribute will be '**true** '.  (default: false)
@@ -4234,7 +4338,7 @@ export def "invoices invoices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a pending invoice
@@ -4251,6 +4355,7 @@ export def "invoices-close invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4275,7 +4380,7 @@ export def "invoices-close invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Apply credits for an invoice
@@ -4292,6 +4397,7 @@ export def "invoices-apply-credits invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4313,7 +4419,7 @@ export def "invoices-apply-credits invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an invoice
@@ -4329,6 +4435,7 @@ export def "invoices invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --line-items-limit: int # Specify the maximum number of line items to include in the response.   **Note:**  * Applicable only when Enterprise-scale Invoicing is enabled. * Enterprise-scale Invoicing is currently in **Private Beta** . Please reach out to [Chargebee Support](https://www.chargebee.com/docs/billing/2.0/kb/getting-started/how-to-contact-chargebees-support-team?utm_source=docs_api&utm_medium=content&utm_campaign=support) to enable this feature.  (format: int32, default: 100)
   --line-items-offset: string # <p class="mb-2">Specify the starting point for retrieving line items. Use the value from the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">line_items_next_offset</code> attribute of the previous retrieve API response.</p> <div class="alert alert-info"><p class="mb-2"><strong class="font-semibold">Note:</strong></p><ul class="list-disc list-outside ml-6 my-4 space-y-2"> <li class="text-base leading-relaxed">Applicable only when Enterprise-scale Invoicing is enabled.</li> <li class="text-base leading-relaxed">Enterprise-scale Invoicing is currently in <strong class="font-semibold">Private Beta</strong>. Please reach out to <a href="https://www.chargebee.com/docs/billing/2.0/kb/getting-started/how-to-contact-chargebees-support-team?utm_source=docs_api&amp;utm_medium=content&amp;utm_campaign=support" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">Chargebee Support</a> to enable this feature.</li> </ul></div>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -4345,7 +4452,7 @@ export def "invoices invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create invoice for items and one-time charges
@@ -4372,6 +4479,7 @@ export def "invoices-create-for-charge-items-and-charges charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4419,7 +4527,7 @@ export def "invoices-create-for-charge-items-and-charges charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update invoice details
@@ -4438,6 +4546,7 @@ export def "invoices-update-details details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4464,7 +4573,7 @@ export def "invoices-update-details details" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Record an invoice payment
@@ -4481,6 +4590,7 @@ export def "invoices-record-payment payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4502,7 +4612,7 @@ export def "invoices-record-payment payment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an invoice
@@ -4518,6 +4628,7 @@ export def "invoices-delete invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4539,7 +4650,7 @@ export def "invoices-delete invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import invoice
@@ -4565,6 +4676,7 @@ export def "invoices-import-invoice invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4617,7 +4729,7 @@ export def "invoices-import-invoice invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resume dunning for invoice
@@ -4633,6 +4745,7 @@ export def "invoices-resume-dunning invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4653,7 +4766,7 @@ export def "invoices-resume-dunning invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Record tax withheld for an invoice
@@ -4670,6 +4783,7 @@ export def "invoices-record-tax-withheld invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4690,7 +4804,7 @@ export def "invoices-record-tax-withheld invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resend failed einvoice in invoices
@@ -4706,6 +4820,7 @@ export def "invoices-resend-einvoice invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4725,7 +4840,7 @@ export def "invoices-resend-einvoice invoices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove tax withheld for an invoice
@@ -4742,6 +4857,7 @@ export def "invoices-remove-tax-withheld invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4762,7 +4878,7 @@ export def "invoices-remove-tax-withheld invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List payment reference numbers
@@ -4777,6 +4893,7 @@ export def "invoices-payment-reference-numbers numbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  An unique identifier for the invoice serves that links the invoice to the corresponding payment reference number (PRN). **Note** : To retrieve the PRN, the API requires either the invoice ID or the payment reference number to be provided by the user. If both values are missing, an error will be returned by the API. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "old_inv_001"*  (e.g. old_inv_001)
@@ -4795,7 +4912,7 @@ export def "invoices-payment-reference-numbers numbers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collect payment for an invoice
@@ -4811,6 +4928,7 @@ export def "invoices-collect-payment invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4835,7 +4953,7 @@ export def "invoices-collect-payment invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sync usages
@@ -4851,6 +4969,7 @@ export def "invoices-sync-usages usages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4867,7 +4986,7 @@ export def "invoices-sync-usages usages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund an invoice
@@ -4884,6 +5003,7 @@ export def "invoices-refund invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4907,7 +5027,7 @@ export def "invoices-refund invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Record refund for an invoice
@@ -4925,6 +5045,7 @@ export def "invoices-record-refund invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4948,7 +5069,7 @@ export def "invoices-record-refund invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve Invoice as PDF
@@ -4964,6 +5085,7 @@ export def "invoices-pdf pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -4984,7 +5106,7 @@ export def "invoices-pdf pdf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Download e-invoice
@@ -5000,6 +5122,7 @@ export def "invoices-download-einvoice e-invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5013,7 +5136,7 @@ export def "invoices-download-einvoice e-invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Record refund for a credit note
@@ -5030,6 +5153,7 @@ export def "credit-notes-record-refund note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5052,7 +5176,7 @@ export def "credit-notes-record-refund note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import credit note
@@ -5073,6 +5197,7 @@ export def "credit-notes-import-credit-note note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5114,7 +5239,7 @@ export def "credit-notes-import-credit-note note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a credit Note
@@ -5130,6 +5255,7 @@ export def "credit-notes-delete note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5150,7 +5276,7 @@ export def "credit-notes-delete note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve credit note as PDF
@@ -5166,6 +5292,7 @@ export def "credit-notes-pdf pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5186,7 +5313,7 @@ export def "credit-notes-pdf pdf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Send an einvoice for credit notes
@@ -5202,6 +5329,7 @@ export def "credit-notes-send-einvoice notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5218,7 +5346,7 @@ export def "credit-notes-send-einvoice notes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Void a credit note
@@ -5234,6 +5362,7 @@ export def "credit-notes-void note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5254,7 +5383,7 @@ export def "credit-notes-void note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refund a credit note
@@ -5270,6 +5399,7 @@ export def "credit-notes-refund note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5292,7 +5422,7 @@ export def "credit-notes-refund note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List credit notes
@@ -5307,6 +5437,7 @@ export def "credit-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '**deleted** ' attribute will be '**true** '.  (default: false)
@@ -5343,7 +5474,7 @@ export def "credit-notes notes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create credit note
@@ -5359,6 +5490,7 @@ export def "credit-notes note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5389,7 +5521,7 @@ export def "credit-notes note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Download e-invoice for credit note
@@ -5405,6 +5537,7 @@ export def "credit-notes-download-einvoice note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5418,7 +5551,7 @@ export def "credit-notes-download-einvoice note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend failed einvoice in credit notes
@@ -5434,6 +5567,7 @@ export def "credit-notes-resend-einvoice notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5450,7 +5584,7 @@ export def "credit-notes-resend-einvoice notes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove tax withheld refunds from a credit note
@@ -5467,6 +5601,7 @@ export def "credit-notes-remove-tax-withheld-refund note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5487,7 +5622,7 @@ export def "credit-notes-remove-tax-withheld-refund note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a credit note
@@ -5503,6 +5638,7 @@ export def "credit-notes note-by-credit_note_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --line-items-limit: int # Specify the maximum number of line items to include in the response.   **Note:**  * Applicable only when Enterprise-scale Invoicing is enabled. * Enterprise-scale Invoicing is currently in **Private Beta** . Please reach out to [Chargebee Support](https://www.chargebee.com/docs/billing/2.0/kb/getting-started/how-to-contact-chargebees-support-team?utm_source=docs_api&utm_medium=content&utm_campaign=support) to enable this feature.  (format: int32, default: 100)
   --line-items-offset: string # <p class="mb-2">Specify the starting point for retrieving line items. Use the value from the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">line_items_next_offset</code> attribute of the previous retrieve API response.</p> <div class="alert alert-info"><p class="mb-2"><strong class="font-semibold">Note:</strong></p><ul class="list-disc list-outside ml-6 my-4 space-y-2"> <li class="text-base leading-relaxed">Applicable only when Enterprise-scale Invoicing is enabled.</li> <li class="text-base leading-relaxed">Enterprise-scale Invoicing is currently in <strong class="font-semibold">Private Beta</strong>. Please reach out to <a href="https://www.chargebee.com/docs/billing/2.0/kb/getting-started/how-to-contact-chargebees-support-team?utm_source=docs_api&amp;utm_medium=content&amp;utm_campaign=support" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">Chargebee Support</a> to enable this feature.</li> </ul></div>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -5519,7 +5655,7 @@ export def "credit-notes note-by-credit_note_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an unbilled charge
@@ -5535,6 +5671,7 @@ export def "unbilled-charges-delete charge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5551,7 +5688,7 @@ export def "unbilled-charges-delete charge" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an estimate for unbilled charges
@@ -5566,6 +5703,7 @@ export def "unbilled-charges-invoice-now-estimate charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5587,7 +5725,7 @@ export def "unbilled-charges-invoice-now-estimate charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an invoice for unbilled charges
@@ -5602,6 +5740,7 @@ export def "unbilled-charges-invoice-unbilled-charges charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5623,7 +5762,7 @@ export def "unbilled-charges-invoice-unbilled-charges charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List unbilled charges
@@ -5638,6 +5777,7 @@ export def "unbilled-charges charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -5658,7 +5798,7 @@ export def "unbilled-charges charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create unbilled charges for item subscription
@@ -5677,6 +5817,7 @@ export def "unbilled-charges subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5702,7 +5843,7 @@ export def "unbilled-charges subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List orders
@@ -5717,6 +5858,7 @@ export def "orders orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -5750,7 +5892,7 @@ export def "orders orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an order
@@ -5765,6 +5907,7 @@ export def "orders order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5793,7 +5936,7 @@ export def "orders order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import an order
@@ -5810,6 +5953,7 @@ export def "orders-import-order order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5853,7 +5997,7 @@ export def "orders-import-order order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Assign order number
@@ -5869,6 +6013,7 @@ export def "orders-assign-order-number number" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5885,7 +6030,7 @@ export def "orders-assign-order-number number" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend an order
@@ -5902,6 +6047,7 @@ export def "orders-resend order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5924,7 +6070,7 @@ export def "orders-resend order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reopen a cancelled order
@@ -5940,6 +6086,7 @@ export def "orders-reopen order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -5960,7 +6107,7 @@ export def "orders-reopen order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel an order
@@ -5977,6 +6124,7 @@ export def "orders-cancel order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6001,7 +6149,7 @@ export def "orders-cancel order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an order
@@ -6017,6 +6165,7 @@ export def "orders order-by-order_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6030,7 +6179,7 @@ export def "orders order-by-order_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an order
@@ -6048,6 +6197,7 @@ export def "orders order-by-order_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6083,7 +6233,7 @@ export def "orders order-by-order_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an imported order
@@ -6099,6 +6249,7 @@ export def "orders-delete order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6115,7 +6266,7 @@ export def "orders-delete order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a refundable credit note
@@ -6132,6 +6283,7 @@ export def "orders-create-refundable-credit-note note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6154,7 +6306,7 @@ export def "orders-create-refundable-credit-note note" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a gift subscription for items
@@ -6175,6 +6327,7 @@ export def "gifts-create-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6206,7 +6359,7 @@ export def "gifts-create-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel a gift
@@ -6222,6 +6375,7 @@ export def "gifts-cancel gift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6238,7 +6392,7 @@ export def "gifts-cancel gift" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a gift
@@ -6255,6 +6409,7 @@ export def "gifts-update-gift gift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6277,7 +6432,7 @@ export def "gifts-update-gift gift" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List gifts
@@ -6292,6 +6447,7 @@ export def "gifts gifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --status: record # optional, enumerated string filter  Status of the gift. Possible values are : scheduled, unclaimed, claimed, cancelled, expired.  **Supported operators :** is, is_not, in, not_in  **Example →** *status\[is\] = "claimed"*  (e.g. claimed)
@@ -6311,7 +6467,7 @@ export def "gifts gifts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a gift
@@ -6327,6 +6483,7 @@ export def "gifts gift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6340,7 +6497,7 @@ export def "gifts gift" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Claim a gift
@@ -6356,6 +6513,7 @@ export def "gifts-claim gift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6372,7 +6530,7 @@ export def "gifts-claim gift" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List transactions
@@ -6387,6 +6545,7 @@ export def "transactions transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -6420,7 +6579,7 @@ export def "transactions transactions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reconcile transaction
@@ -6436,6 +6595,7 @@ export def "transactions-reconcile transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6458,7 +6618,7 @@ export def "transactions-reconcile transaction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a transaction
@@ -6474,6 +6634,7 @@ export def "transactions transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6487,7 +6648,7 @@ export def "transactions transaction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund a payment
@@ -6503,6 +6664,7 @@ export def "transactions-refund payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6524,7 +6686,7 @@ export def "transactions-refund payment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Record an offline refund
@@ -6540,6 +6702,7 @@ export def "transactions-record-refund refund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6565,7 +6728,7 @@ export def "transactions-record-refund refund" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Void an authorization transaction
@@ -6581,6 +6744,7 @@ export def "transactions-void transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6597,7 +6761,7 @@ export def "transactions-void transaction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an authorization payment
@@ -6612,6 +6776,7 @@ export def "transactions-create-authorization payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6635,7 +6800,7 @@ export def "transactions-create-authorization payment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List payments for an invoice
@@ -6651,6 +6816,7 @@ export def "invoices-payments invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -6667,7 +6833,7 @@ export def "invoices-payments invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an offline transaction
@@ -6683,6 +6849,7 @@ export def "transactions-delete-offline-transaction transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6703,7 +6870,7 @@ export def "transactions-delete-offline-transaction transaction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Checkout charge-items and one-time charges
@@ -6728,6 +6895,7 @@ export def "hosted-pages-checkout-one-time-for-items charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6765,7 +6933,7 @@ export def "hosted-pages-checkout-one-time-for-items charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update Payment Method
@@ -6782,6 +6950,7 @@ export def "hosted-pages-update-payment-method method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6807,7 +6976,7 @@ export def "hosted-pages-update-payment-method method" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Extend Subscription
@@ -6823,6 +6992,7 @@ export def "hosted-pages-extend-subscription subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6845,7 +7015,7 @@ export def "hosted-pages-extend-subscription subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Notify an event
@@ -6860,6 +7030,7 @@ export def "hosted-pages-events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6882,7 +7053,7 @@ export def "hosted-pages-events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Checkout Gift subscription for Items
@@ -6900,6 +7071,7 @@ export def "hosted-pages-checkout-gift-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6926,7 +7098,7 @@ export def "hosted-pages-checkout-gift-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List hosted pages
@@ -6941,6 +7113,7 @@ export def "hosted-pages pages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Unique identifier generated for each hosted page requested. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "Edi69nxpu6BeGBd9Fjcd0tqCSwb0sRcuKa"*  (e.g. Edi69nxpu6BeGBd9Fjcd0tqCSwb0sRcuKa)
@@ -6961,7 +7134,7 @@ export def "hosted-pages pages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a hosted page to view Boleto vouchers
@@ -6978,6 +7151,7 @@ export def "hosted-pages-view-voucher vouchers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -6999,7 +7173,7 @@ export def "hosted-pages-view-voucher vouchers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Collect Now
@@ -7016,6 +7190,7 @@ export def "hosted-pages-collect-now now" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7040,7 +7215,7 @@ export def "hosted-pages-collect-now now" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Accept a quote
@@ -7056,6 +7231,7 @@ export def "hosted-pages-accept-quote quote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7078,7 +7254,7 @@ export def "hosted-pages-accept-quote quote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create checkout for a new subscription
@@ -7103,6 +7279,7 @@ export def "hosted-pages-checkout-new-for-items subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7143,7 +7320,7 @@ export def "hosted-pages-checkout-new-for-items subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Claim a Gift subscription
@@ -7160,6 +7337,7 @@ export def "hosted-pages-claim-gift subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7182,7 +7360,7 @@ export def "hosted-pages-claim-gift subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create checkout to update a subscription
@@ -7205,6 +7383,7 @@ export def "hosted-pages-checkout-existing-for-items subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7251,7 +7430,7 @@ export def "hosted-pages-checkout-existing-for-items subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a pre-cancel hosted page
@@ -7267,6 +7446,7 @@ export def "hosted-pages-pre-cancel page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7290,7 +7470,7 @@ export def "hosted-pages-pre-cancel page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Acknowledge a hosted page
@@ -7306,6 +7486,7 @@ export def "hosted-pages-acknowledge page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7322,7 +7503,7 @@ export def "hosted-pages-acknowledge page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Direct Debit Agreement PDF
@@ -7337,6 +7518,7 @@ export def "hosted-pages-retrieve-agreement-pdf pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7357,7 +7539,7 @@ export def "hosted-pages-retrieve-agreement-pdf pdf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a hosted page
@@ -7373,6 +7555,7 @@ export def "hosted-pages page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7386,7 +7569,7 @@ export def "hosted-pages page" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage Payment Sources
@@ -7403,6 +7586,7 @@ export def "hosted-pages-manage-payment-sources sources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7426,7 +7610,7 @@ export def "hosted-pages-manage-payment-sources sources" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Subscription renewal estimate
@@ -7442,6 +7626,7 @@ export def "subscriptions-renewal-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-delayed-charges: oneof<nothing, bool> # If true, all the unbilled charges will be included for the invoice estimate.  (default: true)
   --use-existing-balances: oneof<nothing, bool> # <p class="mb-2">The generated invoice_estimate/next_invoice_estimate will include all the balances - Promotional Credits, Refundable Credits, and Excess Payments - if any. If you don&#x27;t want these balances to be included you can specify &#x27;false&#x27; for the parameter <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">use_existing_balances</code>.</p> (default: true)
   --ignore-scheduled-cancellation: oneof<nothing, bool> # if true, ignores scheduled cancellation for non renewing subscription.  (default: false)
@@ -7461,7 +7646,7 @@ export def "subscriptions-renewal-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Estimate for creating a customer and subscription
@@ -7485,6 +7670,7 @@ export def "estimates-create-subscription-for-items subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7521,7 +7707,7 @@ export def "estimates-create-subscription-for-items subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payment schedule estimate
@@ -7536,6 +7722,7 @@ export def "estimates-payment-schedules schedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7559,7 +7746,7 @@ export def "estimates-payment-schedules schedules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Cancel subscription for items estimate
@@ -7576,6 +7763,7 @@ export def "subscriptions-cancel-subscription-for-items-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7606,7 +7794,7 @@ export def "subscriptions-cancel-subscription-for-items-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resume subscription estimate
@@ -7623,6 +7811,7 @@ export def "subscriptions-resume-subscription-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7645,7 +7834,7 @@ export def "subscriptions-resume-subscription-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create invoice for items estimate
@@ -7669,6 +7858,7 @@ export def "estimates-create-invoice-for-items estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7705,7 +7895,7 @@ export def "estimates-create-invoice-for-items estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gift subscription estimate for items
@@ -7727,6 +7917,7 @@ export def "estimates-gift-subscription-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7754,7 +7945,7 @@ export def "estimates-gift-subscription-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Estimate for updating a subscription
@@ -7777,6 +7968,7 @@ export def "estimates-update-subscription-for-items subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7823,7 +8015,7 @@ export def "estimates-update-subscription-for-items subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Upcoming invoices estimate
@@ -7839,6 +8031,7 @@ export def "customers-upcoming-invoices-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-usage-charges: oneof<nothing, bool> # <p class="mb-2">When set to <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">true</code>, the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">invoice_estimates[]</code> returned in the response includes usage-based line items, if any. These are <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">invoice_estimates[].line_items[]</code> where <a href="/docs/api/estimates/estimate-object#invoice_estimate_line_items_metered" class="text-blue-600 hover:text-blue-800 underline"><code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">line_items[].metered</code></a> is <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">true</code>.</p> <div class="alert alert-info"><p class="mb-2"><p><strong class="font-semibold">See also:</strong></p> <a href="https://www.chargebee.com/docs/billing/2.0/usage-based-billing/link-pricing" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">Pricing for usage-based line items</a>.</p></div> (default: false)
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
@@ -7854,7 +8047,7 @@ export def "customers-upcoming-invoices-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Regenerate Invoice Estimate
@@ -7870,6 +8063,7 @@ export def "subscriptions-regenerate-invoice-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7893,7 +8087,7 @@ export def "subscriptions-regenerate-invoice-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Estimate for creating a subscription
@@ -7917,6 +8111,7 @@ export def "customers-create-subscription-for-items-estimate subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7952,7 +8147,7 @@ export def "customers-create-subscription-for-items-estimate subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Subscription change term end estimate
@@ -7968,6 +8163,7 @@ export def "subscriptions-change-term-end-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -7990,7 +8186,7 @@ export def "subscriptions-change-term-end-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Pause subscription estimate
@@ -8007,6 +8203,7 @@ export def "subscriptions-pause-subscription-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8029,7 +8226,7 @@ export def "subscriptions-pause-subscription-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Advance invoice estimate
@@ -8047,6 +8244,7 @@ export def "subscriptions-advance-invoice-estimate estimate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8071,7 +8269,7 @@ export def "subscriptions-advance-invoice-estimate estimate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a quote for subscription creation
@@ -8095,6 +8293,7 @@ export def "customers-create-subscription-quote-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8132,7 +8331,7 @@ export def "customers-create-subscription-quote-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a quote
@@ -8148,6 +8347,7 @@ export def "quotes quote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8161,7 +8361,7 @@ export def "quotes quote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update quote status
@@ -8177,6 +8377,7 @@ export def "quotes-update-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8198,7 +8399,7 @@ export def "quotes-update-status status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Extend expiry date
@@ -8214,6 +8415,7 @@ export def "quotes-extend-expiry-date date" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8234,7 +8436,7 @@ export def "quotes-extend-expiry-date date" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit a quote for subscription update
@@ -8259,6 +8461,7 @@ export def "quotes-edit-update-subscription-quote-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8302,7 +8505,7 @@ export def "quotes-edit-update-subscription-quote-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List quotes
@@ -8317,6 +8520,7 @@ export def "quotes quotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -8341,7 +8545,7 @@ export def "quotes quotes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Convert a quote
@@ -8358,6 +8562,7 @@ export def "quotes-convert quote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8382,7 +8587,7 @@ export def "quotes-convert quote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a quote
@@ -8398,6 +8603,7 @@ export def "quotes-delete quote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8418,7 +8624,7 @@ export def "quotes-delete quote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit a quote for subscription creation
@@ -8442,6 +8648,7 @@ export def "quotes-edit-create-subscription-quote-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8478,7 +8685,7 @@ export def "quotes-edit-create-subscription-quote-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a quote for subscription update
@@ -8502,6 +8709,7 @@ export def "quotes-update-subscription-quote-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8546,7 +8754,7 @@ export def "quotes-update-subscription-quote-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List quote line groups
@@ -8562,6 +8770,7 @@ export def "quotes-quote-line-groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -8578,7 +8787,7 @@ export def "quotes-quote-line-groups groups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a quote for charges and charge items
@@ -8601,6 +8810,7 @@ export def "quotes-edit-for-charge-items-and-charges charges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8634,7 +8844,7 @@ export def "quotes-edit-for-charge-items-and-charges charges" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a quote as PDF
@@ -8650,6 +8860,7 @@ export def "quotes-pdf pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8671,7 +8882,7 @@ export def "quotes-pdf pdf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a quote for charges and charge items
@@ -8693,6 +8904,7 @@ export def "quotes-create-for-charge-items-and-charges items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8728,7 +8940,7 @@ export def "quotes-create-for-charge-items-and-charges items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List coupons
@@ -8743,6 +8955,7 @@ export def "coupons coupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # <dfn class="text-muted"><p class="mb-2">optional, string filter</p></dfn> <p class="mb-2">Used to uniquely identify the coupon in your website/application and to integrate with Chargebee.</p> <div class="alert alert-info"><p class="mb-2"><strong class="font-semibold">Note:</strong></p><p class="mb-2">When the coupon ID contains a special character; for example: <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">#</code>, the API returns an error. Make sure that you <a href="https://www.urlencoder.org/">encode</a> the coupon ID in the path parameter before making an API call.</p></div> <p class="mb-2">. <strong class="font-semibold">Supported operators :</strong> is, is_not, starts_with, in, not_in</p> <p class="mb-2"><strong class="font-semibold">Example →</strong> <em class="italic">id[is] = &quot;OFF2008&quot;</em></p> (e.g. OFF2008)
@@ -8770,7 +8983,7 @@ export def "coupons coupons" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a coupon for items
@@ -8789,6 +9002,7 @@ export def "coupons-update-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8829,7 +9043,7 @@ export def "coupons-update-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unarchive a coupon
@@ -8845,6 +9059,7 @@ export def "coupons-unarchive coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8861,7 +9076,7 @@ export def "coupons-unarchive coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a coupon
@@ -8877,6 +9092,7 @@ export def "coupons-delete coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8893,7 +9109,7 @@ export def "coupons-delete coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy a coupon
@@ -8908,6 +9124,7 @@ export def "coupons-copy coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8931,7 +9148,7 @@ export def "coupons-copy coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a coupon
@@ -8947,6 +9164,7 @@ export def "coupons coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -8960,7 +9178,7 @@ export def "coupons coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a coupon for items
@@ -8978,6 +9196,7 @@ export def "coupons-create-for-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9020,7 +9239,7 @@ export def "coupons-create-for-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List coupon sets
@@ -9035,6 +9254,7 @@ export def "coupon-sets sets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Uniquely identifies a coupon_set. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "bulk-codes-1"*  (e.g. bulk-codes-1)
@@ -9057,7 +9277,7 @@ export def "coupon-sets sets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a coupon set
@@ -9072,6 +9292,7 @@ export def "coupon-sets set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9095,7 +9316,7 @@ export def "coupon-sets set" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a coupon set
@@ -9111,6 +9332,7 @@ export def "coupon-sets-update set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9132,7 +9354,7 @@ export def "coupon-sets-update set" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a coupon set
@@ -9148,6 +9370,7 @@ export def "coupon-sets set-by-coupon_set_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9161,7 +9384,7 @@ export def "coupon-sets set-by-coupon_set_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add coupon codes to coupon set
@@ -9177,6 +9400,7 @@ export def "coupon-sets-add-coupon-codes set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9197,7 +9421,7 @@ export def "coupon-sets-add-coupon-codes set" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete unused coupon codes
@@ -9213,6 +9437,7 @@ export def "coupon-sets-delete-unused-coupon-codes codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9229,7 +9454,7 @@ export def "coupon-sets-delete-unused-coupon-codes codes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a coupon set
@@ -9245,6 +9470,7 @@ export def "coupon-sets-delete set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9261,7 +9487,7 @@ export def "coupon-sets-delete set" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List coupon codes
@@ -9276,6 +9502,7 @@ export def "coupon-codes codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --code: record # optional, string filter  Unique coupon code that can be redeemed only once. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *code\[is_not\] = "OFF2009"*  (e.g. OFF2009)
@@ -9296,7 +9523,7 @@ export def "coupon-codes codes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a coupon code
@@ -9312,6 +9539,7 @@ export def "coupon-codes code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9325,7 +9553,7 @@ export def "coupon-codes code" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a coupon code
@@ -9341,6 +9569,7 @@ export def "coupon-codes-archive code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9357,7 +9586,7 @@ export def "coupon-codes-archive code" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an address
@@ -9372,6 +9601,7 @@ export def "addresses address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-id: string # A unique and immutable identifier for the subscription. If not provided, it is autogenerated.
   --label: string # Label to identify the address. This is unique for all the address for a subscription.
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -9388,7 +9618,7 @@ export def "addresses address" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an address
@@ -9403,6 +9633,7 @@ export def "addresses address-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9438,7 +9669,7 @@ export def "addresses address-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve Usages for an Invoice as PDF
@@ -9454,6 +9685,7 @@ export def "usages-pdf pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9475,7 +9707,7 @@ export def "usages-pdf pdf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a usage
@@ -9491,6 +9723,7 @@ export def "subscriptions-usages usage-by-subscription_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for the usage record to be retrieved.
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
@@ -9506,7 +9739,7 @@ export def "subscriptions-usages usage-by-subscription_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a usage
@@ -9522,6 +9755,7 @@ export def "subscriptions-usages usage-by-subscription_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9546,7 +9780,7 @@ export def "subscriptions-usages usage-by-subscription_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a usage
@@ -9562,6 +9796,7 @@ export def "subscriptions-delete-usage usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9582,7 +9817,7 @@ export def "subscriptions-delete-usage usage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List usages
@@ -9597,6 +9832,7 @@ export def "usages usages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  A unique and immutable id for the usage. If not provided, it is autogenerated. **Supported operators :** is, is_not, starts_with  **Example →** *id\[is\] = "usage_lsfja24411"*  (e.g. usage_lsfja24411)
@@ -9621,7 +9857,7 @@ export def "usages usages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events
@@ -9636,6 +9872,7 @@ export def "events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Uniquely identifies a event. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "8ndk0hbKm"*  (e.g. 8ndk0hbKm)
@@ -9658,7 +9895,7 @@ export def "events events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an event
@@ -9674,6 +9911,7 @@ export def "events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9687,7 +9925,7 @@ export def "events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment
@@ -9703,6 +9941,7 @@ export def "comments-delete comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9719,7 +9958,7 @@ export def "comments-delete comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a comment
@@ -9735,6 +9974,7 @@ export def "comments comment-by-comment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9748,7 +9988,7 @@ export def "comments comment-by-comment_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List comments
@@ -9763,6 +10003,7 @@ export def "comments comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --entity-type: string@entity-type-completer # Type of the entity this comment generated for. \* item -  Entity that represents item \* order -  Entity that represents an order \* item_price -  Entity that represents item price \* customer -  Entity that represents a customer \* invoice -  Invoice description \* business_entity -  Entity that represents item of type business entity \* plan -  Entity that represents a subscription plan \* price_variant - \* coupon -  Entity that represents a discount coupon \* subscription -  Entity that represents a subscription of a customer \* item_family -  Entity that represents item family \* transaction -  Entity that represents a transaction. \* addon -  Entity that represents an addon \* credit_note -  Credit note description \* quote -  Entity that represents a quote
@@ -9783,7 +10024,7 @@ export def "comments comments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment
@@ -9798,6 +10039,7 @@ export def "comments comment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9821,7 +10063,7 @@ export def "comments comment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a portal session
@@ -9837,6 +10079,7 @@ export def "portal-sessions session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9859,7 +10102,7 @@ export def "portal-sessions session" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Activate a portal session
@@ -9875,6 +10118,7 @@ export def "portal-sessions-activate session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9895,7 +10139,7 @@ export def "portal-sessions-activate session" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Logout a portal session
@@ -9911,6 +10155,7 @@ export def "portal-sessions-logout session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9927,7 +10172,7 @@ export def "portal-sessions-logout session" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a portal session
@@ -9943,6 +10188,7 @@ export def "portal-sessions session-by-portal_session_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -9956,7 +10202,7 @@ export def "portal-sessions session-by-portal_session_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List site migration details
@@ -9971,6 +10217,7 @@ export def "site-migration-details details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --entity-id-at-other-site: record # optional, string filter  Entity Id of the record in the other site. **Supported operators :** is, is_not, starts_with  **Example →** *entity_id_at_other_site\[is\] = "null"*
@@ -9992,7 +10239,7 @@ export def "site-migration-details details" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve latest migration details
@@ -10007,6 +10254,7 @@ export def "resource-migrations-retrieve-latest details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-site: string # Domain name to which the item is moved.
   --entity-type: string@entity-type-completer-1 # Type of the entity this record is stored for. \* customer -  Entity that represents a customer
   --entity-id: string # Handle of the customer in the current site.
@@ -10024,7 +10272,7 @@ export def "resource-migrations-retrieve-latest details" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a time machine
@@ -10040,6 +10288,7 @@ export def "time-machines machine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10053,7 +10302,7 @@ export def "time-machines machine" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Travel forward
@@ -10069,6 +10318,7 @@ export def "time-machines-travel-forward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10089,7 +10339,7 @@ export def "time-machines-travel-forward forward" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Start Afresh
@@ -10105,6 +10355,7 @@ export def "time-machines-start-afresh afresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10125,7 +10376,7 @@ export def "time-machines-start-afresh afresh" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Customers
@@ -10143,6 +10394,7 @@ export def "exports-customers customers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10166,7 +10418,7 @@ export def "exports-customers customers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Attached Items
@@ -10183,6 +10435,7 @@ export def "exports-attached-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10204,7 +10457,7 @@ export def "exports-attached-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Transactions
@@ -10220,6 +10473,7 @@ export def "exports-transactions transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10240,7 +10494,7 @@ export def "exports-transactions transactions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Differential Price
@@ -10257,6 +10511,7 @@ export def "exports-differential-prices price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10278,7 +10533,7 @@ export def "exports-differential-prices price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Item Families
@@ -10296,6 +10551,7 @@ export def "exports-item-families families" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10318,7 +10574,7 @@ export def "exports-item-families families" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Invoices
@@ -10335,6 +10591,7 @@ export def "exports-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10356,7 +10613,7 @@ export def "exports-invoices invoices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an export
@@ -10372,6 +10629,7 @@ export def "exports export" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10385,7 +10643,7 @@ export def "exports export" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export Price Variants
@@ -10403,6 +10661,7 @@ export def "exports-price-variants variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10425,7 +10684,7 @@ export def "exports-price-variants variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Items
@@ -10443,6 +10702,7 @@ export def "exports-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10465,7 +10725,7 @@ export def "exports-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Deferred Revenue Reports
@@ -10489,6 +10749,7 @@ export def "exports-deferred-revenue reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10524,7 +10785,7 @@ export def "exports-deferred-revenue reports" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Revenue Recognition Reports
@@ -10548,6 +10809,7 @@ export def "exports-revenue-recognition reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10583,7 +10845,7 @@ export def "exports-revenue-recognition reports" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Credit Notes
@@ -10599,6 +10861,7 @@ export def "exports-credit-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10619,7 +10882,7 @@ export def "exports-credit-notes notes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Coupons
@@ -10637,6 +10900,7 @@ export def "exports-coupons coupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10659,7 +10923,7 @@ export def "exports-coupons coupons" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Orders
@@ -10676,6 +10940,7 @@ export def "exports-orders orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10697,7 +10962,7 @@ export def "exports-orders orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Item Prices
@@ -10718,6 +10983,7 @@ export def "exports-item-prices prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10743,7 +11009,7 @@ export def "exports-item-prices prices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Export Subscriptions
@@ -10762,6 +11028,7 @@ export def "exports-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10786,7 +11053,7 @@ export def "exports-subscriptions subscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve full export status
@@ -10801,6 +11068,7 @@ export def "full-exports-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --table: string # The name of the table for which the export status is to be retrieved. For example, invoices.
   --date: string # The date for which the export status is required, formatted in YYYY-MM-DD format. For example, 2023-08-29.  (format: date)
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -10817,7 +11085,7 @@ export def "full-exports-status status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a payment intent
@@ -10833,6 +11101,7 @@ export def "payment-intents intent-by-payment_intent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10846,7 +11115,7 @@ export def "payment-intents intent-by-payment_intent_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a payment intent
@@ -10862,6 +11131,7 @@ export def "payment-intents intent-by-payment_intent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10887,7 +11157,7 @@ export def "payment-intents intent-by-payment_intent_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a payment intent
@@ -10902,6 +11172,7 @@ export def "payment-intents intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -10931,7 +11202,7 @@ export def "payment-intents intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a custom field configuration
@@ -10946,6 +11217,7 @@ export def "custom-field-configs-retrieve data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entity-type: string@entity-type-completer-2 # Allowed entity types for custom fields. \* customer -  Entity that represents a customer. \* invoice -  Entity that represents an invoice. \* addon_item -  Entity that represents item of type addon. \* plan -  Entity that represents a subscription plan. \* subscription -  Entity that represents a subscription of a customer. \* coupon -  Entity that represents a discount coupon. \* charge_price -  Entity that represents charge price. \* item_family -  Entity that represents item family. \* addon -  Entity that represents an addon. \* addon_price -  Entity that represents addon price. \* credit_note -  Entity that represents a credit note. \* charge_item -  Entity that represents item of type charge. \* plan_item -  Entity that represents item of type plan. \* quote -  Entity that represents a quote. \* plan_price -  Entity that represents plan price.
   --api-name: string # Custom field identifier.
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -10962,7 +11234,7 @@ export def "custom-field-configs-retrieve data" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List custom field configurations
@@ -10977,6 +11249,7 @@ export def "custom-field-configs configs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --entity-type: string@entity-type-completer-2 # Allowed entity types for custom fields. \* customer -  Entity that represents a customer. \* invoice -  Entity that represents an invoice. \* addon_item -  Entity that represents item of type addon. \* plan -  Entity that represents a subscription plan. \* subscription -  Entity that represents a subscription of a customer. \* coupon -  Entity that represents a discount coupon. \* charge_price -  Entity that represents charge price. \* item_family -  Entity that represents item family. \* addon -  Entity that represents an addon. \* addon_price -  Entity that represents addon price. \* credit_note -  Entity that represents a credit note. \* charge_item -  Entity that represents item of type charge. \* plan_item -  Entity that represents item of type plan. \* quote -  Entity that represents a quote. \* plan_price -  Entity that represents plan price.
@@ -10994,7 +11267,7 @@ export def "custom-field-configs configs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an item family
@@ -11010,6 +11283,7 @@ export def "item-families-delete family" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11026,7 +11300,7 @@ export def "item-families-delete family" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List item families
@@ -11041,6 +11315,7 @@ export def "item-families families" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  The identifier for the item family. It is unique and immutable. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "family-id"*  (e.g. family-id)
@@ -11062,7 +11337,7 @@ export def "item-families families" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an item family
@@ -11077,6 +11352,7 @@ export def "item-families family" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11100,7 +11376,7 @@ export def "item-families family" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an item family
@@ -11116,6 +11392,7 @@ export def "item-families family-by-item_family_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11129,7 +11406,7 @@ export def "item-families family-by-item_family_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an item family
@@ -11145,6 +11422,7 @@ export def "item-families family-by-item_family_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11166,7 +11444,7 @@ export def "item-families family-by-item_family_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a product
@@ -11182,6 +11460,7 @@ export def "products product-by-product_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11195,7 +11474,7 @@ export def "products product-by-product_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a product
@@ -11211,6 +11490,7 @@ export def "products product-by-product_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11237,7 +11517,7 @@ export def "products product-by-product_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a product
@@ -11253,6 +11533,7 @@ export def "products-delete product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11269,7 +11550,7 @@ export def "products-delete product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add remove or update options for the product
@@ -11286,6 +11567,7 @@ export def "products-update-options product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11307,7 +11589,7 @@ export def "products-update-options product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List products
@@ -11322,6 +11604,7 @@ export def "products products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -11347,7 +11630,7 @@ export def "products products" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a product
@@ -11362,6 +11645,7 @@ export def "products product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11389,7 +11673,7 @@ export def "products product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List product variants
@@ -11405,6 +11689,7 @@ export def "products-variants variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -11429,7 +11714,7 @@ export def "products-variants variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a product variant
@@ -11446,6 +11731,7 @@ export def "products-variants variant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11473,7 +11759,7 @@ export def "products-variants variant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a product variant
@@ -11489,6 +11775,7 @@ export def "variants variant-by-product_variant_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11502,7 +11789,7 @@ export def "variants variant-by-product_variant_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a product variant
@@ -11518,6 +11805,7 @@ export def "variants variant-by-product_variant_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11543,7 +11831,7 @@ export def "variants variant-by-product_variant_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a product variant
@@ -11559,6 +11847,7 @@ export def "variants-delete variant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11575,7 +11864,7 @@ export def "variants-delete variant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List items
@@ -11590,6 +11879,7 @@ export def "items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Filter items based on item id. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "basic"*  (e.g. basic)
@@ -11623,7 +11913,7 @@ export def "items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an item
@@ -11640,6 +11930,7 @@ export def "items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11682,7 +11973,7 @@ export def "items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an item
@@ -11698,6 +11989,7 @@ export def "items-delete item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11714,7 +12006,7 @@ export def "items-delete item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an item
@@ -11730,6 +12022,7 @@ export def "items item-by-item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11743,7 +12036,7 @@ export def "items item-by-item_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an item
@@ -11763,6 +12056,7 @@ export def "items item-by-item_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11802,7 +12096,7 @@ export def "items item-by-item_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a price variant
@@ -11818,6 +12112,7 @@ export def "price-variants-delete variant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11834,7 +12129,7 @@ export def "price-variants-delete variant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List price variants
@@ -11849,6 +12144,7 @@ export def "price-variants variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Filter variant based on their [id](/docs/api/price_variants) . **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "basic"*  (e.g. basic)
@@ -11873,7 +12169,7 @@ export def "price-variants variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a price variant
@@ -11889,6 +12185,7 @@ export def "price-variants variant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11915,7 +12212,7 @@ export def "price-variants variant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a price variant
@@ -11931,6 +12228,7 @@ export def "price-variants variant-by-price_variant_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11944,7 +12242,7 @@ export def "price-variants variant-by-price_variant_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a price variant
@@ -11961,6 +12259,7 @@ export def "price-variants variant-by-price_variant_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -11986,7 +12285,7 @@ export def "price-variants variant-by-price_variant_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an item price
@@ -12002,6 +12301,7 @@ export def "item-prices price-by-item_price_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12015,7 +12315,7 @@ export def "item-prices price-by-item_price_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an item price
@@ -12035,6 +12335,7 @@ export def "item-prices price-by-item_price_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12084,7 +12385,7 @@ export def "item-prices price-by-item_price_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an item price
@@ -12100,6 +12401,7 @@ export def "item-prices-delete price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12116,7 +12418,7 @@ export def "item-prices-delete price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List applicable item prices for a plan-item price
@@ -12132,6 +12434,7 @@ export def "item-prices-applicable-item-prices price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --item-id: string # The id of the item that the item price belongs to.
@@ -12150,7 +12453,7 @@ export def "item-prices-applicable-item-prices price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List applicable items for a plan-item price
@@ -12166,6 +12469,7 @@ export def "item-prices-applicable-items price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --sort-by: record # optional, string filter  Sorts based on the specified attribute. **Supported attributes :** name, id, updated_at  **Supported sort-orders :** asc, desc  **Example →** *sort_by\[asc\] = "name"*  This will sort the result based on the 'name' attribute in ascending(earliest first) order.
@@ -12183,7 +12487,7 @@ export def "item-prices-applicable-items price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List item prices
@@ -12198,6 +12502,7 @@ export def "item-prices prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Filter item prices based on their [id](/docs/api/item_prices) . **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "basic_USD"*  (e.g. basic_USD)
@@ -12232,7 +12537,7 @@ export def "item-prices prices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an item price
@@ -12251,6 +12556,7 @@ export def "item-prices price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12302,7 +12608,7 @@ export def "item-prices price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an attached item
@@ -12318,6 +12624,7 @@ export def "attached-items " [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent-item-id: string # <p class="mb-2">The <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">id</code> of the plan-item to which the item is attached.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
@@ -12333,7 +12640,7 @@ export def "attached-items " [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an attached item
@@ -12349,6 +12656,7 @@ export def "attached-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12375,7 +12683,7 @@ export def "attached-items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List attached items
@@ -12391,6 +12699,7 @@ export def "items-attached-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --id: record # optional, string filter  Filter attached items based on their id. **Supported operators :** is, is_not, starts_with, in, not_in  **Example →** *id\[is\] = "bec0c324-adb6-44d3-ad4f-694f449be97c"*  (e.g. bec0c324-adb6-44d3-ad4f-694f449be97c)
@@ -12413,7 +12722,7 @@ export def "items-attached-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an attached item
@@ -12429,6 +12738,7 @@ export def "items-attached-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12456,7 +12766,7 @@ export def "items-attached-items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an attached item
@@ -12472,6 +12782,7 @@ export def "attached-items-delete item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12492,7 +12803,7 @@ export def "attached-items-delete item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a differential price
@@ -12508,6 +12819,7 @@ export def "differential-prices-delete price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12528,7 +12840,7 @@ export def "differential-prices-delete price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a differential price
@@ -12546,6 +12858,7 @@ export def "item-prices-differential-prices price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12571,7 +12884,7 @@ export def "item-prices-differential-prices price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List differential prices
@@ -12586,6 +12899,7 @@ export def "differential-prices prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --item-price-id: record # <dfn class="text-muted"><p class="mb-2">optional, string filter</p></dfn> <p class="mb-2">The id of the item price (<code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">addon</code> or <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">charge</code> ) whose price should change according to the plan-item it is applied to. <strong class="font-semibold">Supported operators :</strong> is, is_not, starts_with, in, not_in</p> <p class="mb-2"><strong class="font-semibold">Example →</strong> <em class="italic">item_price_id[is] = &quot;day-pass-USD&quot;</em></p> (e.g. day-pass-USD)
@@ -12606,7 +12920,7 @@ export def "differential-prices prices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a differential price
@@ -12622,6 +12936,7 @@ export def "differential-prices price-by-differential_price_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --item-price-id: string # <p class="mb-2">The id of the item price (<code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">addon</code> or <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">charge</code> ) whose price should change according to the plan-item it is applied to.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
@@ -12637,7 +12952,7 @@ export def "differential-prices price-by-differential_price_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a differential price
@@ -12655,6 +12970,7 @@ export def "differential-prices price-by-differential_price_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12679,7 +12995,7 @@ export def "differential-prices price-by-differential_price_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List site configurations
@@ -12694,6 +13010,7 @@ export def "configurations configurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12707,7 +13024,7 @@ export def "configurations configurations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List features
@@ -12722,6 +13039,7 @@ export def "features features" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --name: record # <dfn class="text-muted"><p class="mb-2">optional, string filter</p></dfn> <p class="mb-2">A case-sensitive unique name for the feature. For example: <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">user license</code> , <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">data storage</code> , <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">Salesforce Integration</code> , <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">devices</code> , <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">UHD Streaming</code> , and so on.</p> <p class="mb-2"><strong class="font-semibold">Note:</strong> This name is not displayed on any customer-facing documents or pages such as <a href="/docs/api/invoices/retrieve-invoice-as-pdf">invoice PDFs</a> or <a href="/docs/api/hosted_pages">hosted pages</a>. However, in the future, it is likely to be introduced on the <a href="/docs/api/portal_sessions">Self-Serve Portal</a> . <strong class="font-semibold">Supported operators :</strong> is, is_not, starts_with, in, not_in</p> <p class="mb-2"><strong class="font-semibold">Example →</strong> <em class="italic">name[is] = &quot;User licenses&quot;</em></p> (e.g. User licenses)
@@ -12742,7 +13060,7 @@ export def "features features" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a feature
@@ -12758,6 +13076,7 @@ export def "features feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12784,7 +13103,7 @@ export def "features feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a feature
@@ -12800,6 +13119,7 @@ export def "features-delete feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12816,7 +13136,7 @@ export def "features-delete feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a feature
@@ -12832,6 +13152,7 @@ export def "features feature-by-feature_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12845,7 +13166,7 @@ export def "features feature-by-feature_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a feature
@@ -12862,6 +13183,7 @@ export def "features feature-by-feature_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12886,7 +13208,7 @@ export def "features feature-by-feature_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Archive a feature
@@ -12902,6 +13224,7 @@ export def "features-archive-command feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12918,7 +13241,7 @@ export def "features-archive-command feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate a feature
@@ -12934,6 +13257,7 @@ export def "features-activate-command feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12950,7 +13274,7 @@ export def "features-activate-command feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate a feature
@@ -12966,6 +13290,7 @@ export def "features-reactivate-command feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -12982,7 +13307,7 @@ export def "features-reactivate-command feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable or disable subscription entitlements
@@ -12999,6 +13324,7 @@ export def "subscriptions-subscription-entitlements-set-availability entitlement
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13020,7 +13346,7 @@ export def "subscriptions-subscription-entitlements-set-availability entitlement
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List subscription entitlements
@@ -13036,6 +13362,7 @@ export def "subscriptions-subscription-entitlements entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -13052,7 +13379,7 @@ export def "subscriptions-subscription-entitlements entitlements" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List customer entitlements
@@ -13068,6 +13395,7 @@ export def "customers-customer-entitlements entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # <p class="mb-2">The number of features for which to return <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">customer_entitlement</code> objects.</p> <div class="alert alert-info"><p class="mb-2"><strong class="font-semibold">See also</strong> <a href="/docs/api/customer_entitlements">Pagination for List customer entitlements</a>.</p></div> (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --consolidate-entitlements: oneof<nothing, bool> # <p class="mb-2">When set to <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">true</code> , the response returns a unified view of entitlement values for each feature across the customer. This includes entitlements assigned directly to the customer as well as those inherited from any of the customer&#x27;s subscriptions. In this mode, the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">subscription_id</code> field is omitted from the response objects. The consolidated entitlement value is derived using the same logic described in the <a href="/docs/api/subscription_entitlements">Subscription Entitlements documentation</a> , based on the feature type.</p> (default: false)
@@ -13085,7 +13413,7 @@ export def "customers-customer-entitlements entitlements" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List item entitlements for a feature
@@ -13101,6 +13429,7 @@ export def "features-item-entitlements feature-by-feature_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -13117,7 +13446,7 @@ export def "features-item-entitlements feature-by-feature_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert or remove item entitlements for a feature
@@ -13134,6 +13463,7 @@ export def "features-item-entitlements feature-by-feature_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13155,7 +13485,7 @@ export def "features-item-entitlements feature-by-feature_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List item entitlements for an item
@@ -13171,6 +13501,7 @@ export def "items-item-entitlements item-by-item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -13187,7 +13518,7 @@ export def "items-item-entitlements item-by-item_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert or remove item entitlements for an item
@@ -13204,6 +13535,7 @@ export def "items-item-entitlements item-by-item_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13225,7 +13557,7 @@ export def "items-item-entitlements item-by-item_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List entitlements
@@ -13240,6 +13572,7 @@ export def "entitlements entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --feature-id: record # <dfn class="text-muted"><p class="mb-2">optional, string filter</p></dfn> <p class="mb-2">The <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">id</code> of the feature associated with this entitlement. <strong class="font-semibold">Supported operators :</strong> is, is_not, starts_with, in, not_in</p> <p class="mb-2"><strong class="font-semibold">Example →</strong> <em class="italic">feature_id[is] = &quot;user-licenses&quot;</em></p> (e.g. user-licenses)
@@ -13259,7 +13592,7 @@ export def "entitlements entitlements" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage entitlements for a feature
@@ -13275,6 +13608,7 @@ export def "entitlements feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13297,7 +13631,7 @@ export def "entitlements feature" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve Store Subscription
@@ -13313,6 +13647,7 @@ export def "in-app-subscriptions-retrieve subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13333,7 +13668,7 @@ export def "in-app-subscriptions-retrieve subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import Receipt
@@ -13351,6 +13686,7 @@ export def "in-app-subscriptions-import-receipt receipt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13373,7 +13709,7 @@ export def "in-app-subscriptions-import-receipt receipt" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Import Subscription Without Receipt
@@ -13391,6 +13727,7 @@ export def "in-app-subscriptions-import-subscription receipt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13412,7 +13749,7 @@ export def "in-app-subscriptions-import-subscription receipt" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Process Purchase Command
@@ -13430,6 +13767,7 @@ export def "in-app-subscriptions-process-purchase-command command" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13452,7 +13790,7 @@ export def "in-app-subscriptions-process-purchase-command command" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # One time purchase
@@ -13470,6 +13808,7 @@ export def "non-subscriptions-one-time-purchase purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13492,7 +13831,7 @@ export def "non-subscriptions-one-time-purchase purchase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List entitlement overrides for a subscription
@@ -13508,6 +13847,7 @@ export def "subscriptions-entitlement-overrides subscription-by-subscription_id"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -13524,7 +13864,7 @@ export def "subscriptions-entitlement-overrides subscription-by-subscription_id"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert or remove entitlement overrides for a subscription
@@ -13541,6 +13881,7 @@ export def "subscriptions-entitlement-overrides subscription-by-subscription_id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13562,7 +13903,7 @@ export def "subscriptions-entitlement-overrides subscription-by-subscription_id-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List business entity transfers
@@ -13577,6 +13918,7 @@ export def "business-entities-transfers transfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --resource-type: record # <p class="mb-2">Filter <code><a href="/docs/api/business_entity_transfers">business_entity_transfer</a></code> resources based on <code><a href="/docs/api/business_entity_transfers/business_entity_transfer-object#resource_type">resource_type</a></code>.</p> <div class="alert alert-info"><p class="mb-2"><strong class="font-semibold">Tip</strong> Use this filter along with <code><a href="/docs/api/business_entities/list-the-business-entity-transfers">active_resource_id[is]</a></code> to retrieve the history of all the business entity transfers for a resource.</p></div> (e.g. customer)
@@ -13598,7 +13940,7 @@ export def "business-entities-transfers transfers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer a customer to another business entity
@@ -13613,6 +13955,7 @@ export def "business-entities-transfers entity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13635,7 +13978,7 @@ export def "business-entities-transfers entity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a purchase
@@ -13660,6 +14003,7 @@ export def "purchases purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13692,7 +14036,7 @@ export def "purchases purchase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Estimates for purchase
@@ -13715,6 +14059,7 @@ export def "purchases-estimate purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13744,7 +14089,7 @@ export def "purchases-estimate purchase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List vouchers for a customer
@@ -13760,6 +14105,7 @@ export def "customers-payment-vouchers customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --status: record # optional, enumerated string filter  Current status of Payment Voucher. Possible values are : active, consumed, expired, failure.  **Supported operators :** is, is_not, in, not_in, in, not_in  **Example →** *status\[is\] = "active, consumed, expired"*  (e.g. active, consumed, expired)
@@ -13778,7 +14124,7 @@ export def "customers-payment-vouchers customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List vouchers for an invoice
@@ -13794,6 +14140,7 @@ export def "invoices-payment-vouchers invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --status: record # optional, enumerated string filter  Current status of Payment Voucher. Possible values are : active, consumed, expired, failure.  **Supported operators :** is, is_not, in, not_in, in, not_in  **Example →** *status\[is_not\] = "active, consumed, expired"*  (e.g. active, consumed, expired)
@@ -13812,7 +14159,7 @@ export def "invoices-payment-vouchers invoice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve voucher data
@@ -13828,6 +14175,7 @@ export def "payment-vouchers data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13841,7 +14189,7 @@ export def "payment-vouchers data" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a voucher for the customer to initiate payment
@@ -13858,6 +14206,7 @@ export def "payment-vouchers payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13881,7 +14230,7 @@ export def "payment-vouchers payment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Taxes Csv import
@@ -13896,6 +14245,7 @@ export def "csv-tax-rules import" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13946,7 +14296,7 @@ export def "csv-tax-rules import" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add schedule
@@ -13962,6 +14312,7 @@ export def "currencies-add-schedule schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -13983,7 +14334,7 @@ export def "currencies-add-schedule schedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a new currency
@@ -13998,6 +14349,7 @@ export def "currencies currency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14020,7 +14372,7 @@ export def "currencies currency" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a currency
@@ -14036,6 +14388,7 @@ export def "currencies currency-by-site_currency_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14049,7 +14402,7 @@ export def "currencies currency-by-site_currency_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a currency
@@ -14065,6 +14418,7 @@ export def "currencies currency-by-site_currency_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14086,7 +14440,7 @@ export def "currencies currency-by-site_currency_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove schedule
@@ -14102,6 +14456,7 @@ export def "currencies-remove-schedule schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14118,7 +14473,7 @@ export def "currencies-remove-schedule schedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List currencies
@@ -14133,6 +14488,7 @@ export def "currencies-list currencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -14149,7 +14505,7 @@ export def "currencies-list currencies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a subscription ramp
@@ -14165,6 +14521,7 @@ export def "ramps ramp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14178,7 +14535,7 @@ export def "ramps ramp" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a subscription ramp
@@ -14200,6 +14557,7 @@ export def "subscriptions-create-ramp ramp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14230,7 +14588,7 @@ export def "subscriptions-create-ramp ramp" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List subscription ramps
@@ -14245,6 +14603,7 @@ export def "ramps ramps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --include-deleted: oneof<nothing, bool> # If set to true, includes the deleted resources in the response. For the deleted resources in the response, the '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*deleted\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* ' attribute will be '\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*true\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* '.  (default: false)
@@ -14267,7 +14626,7 @@ export def "ramps ramps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription ramp
@@ -14289,6 +14648,7 @@ export def "ramps-update ramp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14319,7 +14679,7 @@ export def "ramps-update ramp" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a subscription ramp
@@ -14335,6 +14695,7 @@ export def "ramps-delete ramp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14351,7 +14712,7 @@ export def "ramps-delete ramp" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a payment schedule scheme
@@ -14367,6 +14728,7 @@ export def "payment-schedule-schemes scheme-by-payment_schedule_scheme_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14380,7 +14742,7 @@ export def "payment-schedule-schemes scheme-by-payment_schedule_scheme_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a payment schedule scheme
@@ -14396,6 +14758,7 @@ export def "payment-schedule-schemes scheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14420,7 +14783,7 @@ export def "payment-schedule-schemes scheme" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a payment schedule scheme
@@ -14436,6 +14799,7 @@ export def "payment-schedule-schemes-delete scheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14452,7 +14816,7 @@ export def "payment-schedule-schemes-delete scheme" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Contact_support a pc2_migration
@@ -14468,6 +14832,7 @@ export def "pc2-migrations-contact-support migration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14484,7 +14849,7 @@ export def "pc2-migrations-contact-support migration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a pc2 migration
@@ -14500,6 +14865,7 @@ export def "pc2-migrations migration-by-pc2_migration_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14513,7 +14879,7 @@ export def "pc2-migrations migration-by-pc2_migration_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pc2_migration
@@ -14528,6 +14894,7 @@ export def "pc2-migrations migration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14544,7 +14911,7 @@ export def "pc2-migrations migration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate a pc2_migration
@@ -14560,6 +14927,7 @@ export def "pc2-migrations-initiate migration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14576,7 +14944,7 @@ export def "pc2-migrations-initiate migration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete draft family
@@ -14592,6 +14960,7 @@ export def "pc2-migration-item-families-delete family" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14608,7 +14977,7 @@ export def "pc2-migration-item-families-delete family" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a pc2 migration item family
@@ -14624,6 +14993,7 @@ export def "pc2-migration-item-families family-by-pc2_migration_item_family_id" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14637,7 +15007,7 @@ export def "pc2-migration-item-families family-by-pc2_migration_item_family_id" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a pc2_migration_item_family
@@ -14653,6 +15023,7 @@ export def "pc2-migration-item-families family-by-pc2_migration_item_family_id-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14676,7 +15047,7 @@ export def "pc2-migration-item-families family-by-pc2_migration_item_family_id-1
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List pc2 migration item families
@@ -14691,6 +15062,7 @@ export def "pc2-migration-item-families families" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --pc2-migration-id: record
@@ -14708,7 +15080,7 @@ export def "pc2-migration-item-families families" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pc2_migration_item_family
@@ -14723,6 +15095,7 @@ export def "pc2-migration-item-families family" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14747,7 +15120,7 @@ export def "pc2-migration-item-families family" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a pc2 migration item
@@ -14763,6 +15136,7 @@ export def "pc2-migration-items item-by-pc2_migration_item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14776,7 +15150,7 @@ export def "pc2-migration-items item-by-pc2_migration_item_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a pc2_migration_item
@@ -14793,6 +15167,7 @@ export def "pc2-migration-items item-by-pc2_migration_item_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14827,7 +15202,7 @@ export def "pc2-migration-items item-by-pc2_migration_item_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete draft item
@@ -14843,6 +15218,7 @@ export def "pc2-migration-items-delete item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14859,7 +15235,7 @@ export def "pc2-migration-items-delete item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pc2 migration items
@@ -14874,6 +15250,7 @@ export def "pc2-migration-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --pc2-migration-item-family: record
@@ -14891,7 +15268,7 @@ export def "pc2-migration-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pc2_migration_item
@@ -14907,6 +15284,7 @@ export def "pc2-migration-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -14943,7 +15321,7 @@ export def "pc2-migration-items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Applicable_items a pc2_migration_item
@@ -14958,6 +15336,7 @@ export def "pc2-migration-items-applicable-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --is-recurring: record
@@ -14975,7 +15354,7 @@ export def "pc2-migration-items-applicable-items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pc2 migration item prices
@@ -14990,6 +15369,7 @@ export def "pc2-migration-item-prices prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --pc2-migration-id: record
@@ -15011,7 +15391,7 @@ export def "pc2-migration-item-prices prices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete draft item price
@@ -15027,6 +15407,7 @@ export def "pc2-migration-item-prices-delete price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15043,7 +15424,7 @@ export def "pc2-migration-item-prices-delete price" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a pc2 migration item price
@@ -15059,6 +15440,7 @@ export def "pc2-migration-item-prices price-by-pc2_migration_item_price_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15072,7 +15454,7 @@ export def "pc2-migration-item-prices price-by-pc2_migration_item_price_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a pc2_migration_item_price
@@ -15088,6 +15470,7 @@ export def "pc2-migration-item-prices price-by-pc2_migration_item_price_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15113,7 +15496,7 @@ export def "pc2-migration-item-prices price-by-pc2_migration_item_price_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create pricing page for existing subscription
@@ -15132,6 +15515,7 @@ export def "pricing-page-sessions-create-for-existing-subscription subscription"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15157,7 +15541,7 @@ export def "pricing-page-sessions-create-for-existing-subscription subscription"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create pricing page for new subscription
@@ -15179,6 +15563,7 @@ export def "pricing-page-sessions-create-for-new-subscription subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15209,7 +15594,7 @@ export def "pricing-page-sessions-create-for-new-subscription subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List site pc meta records
@@ -15224,6 +15609,7 @@ export def "site-pc-meta-records records" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --offset: string
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -15240,7 +15626,7 @@ export def "site-pc-meta-records records" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move an Omnichannel subscription
@@ -15256,6 +15642,7 @@ export def "omnichannel-subscriptions-move subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15276,7 +15663,7 @@ export def "omnichannel-subscriptions-move subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an Omnichannel subscription
@@ -15292,6 +15679,7 @@ export def "omnichannel-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15305,7 +15693,7 @@ export def "omnichannel-subscriptions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Omnichannel transactions of an Omnichannel subscription
@@ -15321,6 +15709,7 @@ export def "omnichannel-subscriptions-omnichannel-transactions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -15337,7 +15726,7 @@ export def "omnichannel-subscriptions-omnichannel-transactions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Omnichannel subscriptions
@@ -15352,6 +15741,7 @@ export def "omnichannel-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --qp-source: record # optional, enumerated string filter  To filter based on OmnichannelSubscription Source. Possible values are : apple_app_store, google_play_store.  **Supported operators :** is, is_not, in, not_in  **Example →** *source\[is_not\] = "apple_app_store"*  (e.g. apple_app_store)
@@ -15375,7 +15765,7 @@ export def "omnichannel-subscriptions subscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List scheduled changes for omnichannel subscription item
@@ -15391,6 +15781,7 @@ export def "omnichannel-subscription-items-scheduled-changes item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -15407,7 +15798,7 @@ export def "omnichannel-subscription-items-scheduled-changes item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a recorded purchase
@@ -15423,6 +15814,7 @@ export def "recorded-purchases purchase-by-recorded_purchase_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15436,7 +15828,7 @@ export def "recorded-purchases purchase-by-recorded_purchase_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Record a purchase
@@ -15455,6 +15847,7 @@ export def "recorded-purchases purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15479,7 +15872,7 @@ export def "recorded-purchases purchase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Omnichannel one time orders
@@ -15494,6 +15887,7 @@ export def "omnichannel-one-time-orders orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --qp-source: record # optional, enumerated string filter  To filter based on OmnichannelOneTimeOrder Source. Possible values are : apple_app_store, google_play_store.  **Supported operators :** is, is_not, in, not_in  **Example →** *source\[is_not\] = "apple_app_store"*  (e.g. apple_app_store)
@@ -15512,7 +15906,7 @@ export def "omnichannel-one-time-orders orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a one time order
@@ -15528,6 +15922,7 @@ export def "omnichannel-one-time-orders order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15541,7 +15936,7 @@ export def "omnichannel-one-time-orders order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve rule data
@@ -15557,6 +15952,7 @@ export def "rules data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15570,7 +15966,7 @@ export def "rules data" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ingest a usage event
@@ -15585,6 +15981,7 @@ export def "usage-events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15608,7 +16005,7 @@ export def "usage-events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Ingest usage events in batch
@@ -15624,6 +16021,7 @@ export def "batch-usage-events batch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15644,7 +16042,7 @@ export def "batch-usage-events batch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve file processing status
@@ -15660,6 +16058,7 @@ export def "usage-files-processing-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15673,7 +16072,7 @@ export def "usage-files-processing-status status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve usage file upload URL
@@ -15688,6 +16087,7 @@ export def "usage-files-upload-url url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15709,7 +16109,7 @@ export def "usage-files-upload-url url" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List personalized offers
@@ -15725,6 +16125,7 @@ export def "personalized-offers offers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15753,7 +16154,7 @@ export def "personalized-offers offers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an offer fulfillment
@@ -15768,6 +16169,7 @@ export def "offer-fulfillments fulfillment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15789,7 +16191,7 @@ export def "offer-fulfillments fulfillment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve an offer fulfillment
@@ -15805,6 +16207,7 @@ export def "offer-fulfillments fulfillment-by-offer_fulfillment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15818,7 +16221,7 @@ export def "offer-fulfillments fulfillment-by-offer_fulfillment_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an offer fulfillment
@@ -15834,6 +16237,7 @@ export def "offer-fulfillments fulfillment-by-offer_fulfillment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15856,7 +16260,7 @@ export def "offer-fulfillments fulfillment-by-offer_fulfillment_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create an offer event
@@ -15871,6 +16275,7 @@ export def "offer-events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15892,7 +16297,7 @@ export def "offer-events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a webhook endpoint
@@ -15908,6 +16313,7 @@ export def "webhook-endpoints-delete endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15924,7 +16330,7 @@ export def "webhook-endpoints-delete endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a webhook endpoint
@@ -15940,6 +16346,7 @@ export def "webhook-endpoints endpoint-by-webhook_endpoint_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15953,7 +16360,7 @@ export def "webhook-endpoints endpoint-by-webhook_endpoint_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook endpoint
@@ -15969,6 +16376,7 @@ export def "webhook-endpoints endpoint-by-webhook_endpoint_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -15997,7 +16405,7 @@ export def "webhook-endpoints endpoint-by-webhook_endpoint_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List webhook endpoints
@@ -16012,6 +16420,7 @@ export def "webhook-endpoints endpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
@@ -16028,7 +16437,7 @@ export def "webhook-endpoints endpoints" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook endpoint
@@ -16043,6 +16452,7 @@ export def "webhook-endpoints endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -16072,7 +16482,7 @@ export def "webhook-endpoints endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve usage summary for a subscription
@@ -16088,6 +16498,7 @@ export def "subscriptions-usage-summary subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --feature-id: string # Unique identifier of the metered [feature](/docs/api/features/feature-object#id) for which usage is aggregated
@@ -16108,7 +16519,7 @@ export def "subscriptions-usage-summary subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve usage charges for a subscription
@@ -16124,6 +16535,7 @@ export def "subscriptions-usage-charges subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of resources to be returned.  (format: int32, default: 10)
   --offset: string # <p class="mb-2">Determines your position in the list for pagination. To ensure that the next page is retrieved correctly, always set <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">offset</code> to the value of <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> obtained in the previous iteration of the API call.</p>
   --feature-id: record # optional, string filter  Unique identifier of the metered [feature](/docs/api/features/feature-object#id) for which usage is tracked. **Supported operators :** is  **Example →** *feature_id\[is\] = "fea-user-licenses"*  (e.g. feat_123)
@@ -16141,7 +16553,7 @@ export def "subscriptions-usage-charges subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List applicable alerts for a subscription
@@ -16157,6 +16569,7 @@ export def "subscriptions-applicable-alerts subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # optional, integer  Maximum number of results to return.  **Example →** *limit = 25*  (format: int32, default: 10)
   --offset: string # <dfn class="text-muted"><p class="mb-2">optional, string</p></dfn> <p class="mb-2">Pagination cursor returned by a previous list call. Use the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> value from the previous response.</p>
   --status: record # optional, enumerated string filter  Filter by [status](/docs/api/alerts/alert-object#status).  **Example →** *status\[is\] = "enabled"*
@@ -16175,7 +16588,7 @@ export def "subscriptions-applicable-alerts subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an alert
@@ -16191,6 +16604,7 @@ export def "alerts alert-by-alert_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -16204,7 +16618,7 @@ export def "alerts alert-by-alert_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an alert
@@ -16221,6 +16635,7 @@ export def "alerts alert-by-alert_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -16242,7 +16657,7 @@ export def "alerts alert-by-alert_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an alert
@@ -16258,6 +16673,7 @@ export def "alerts-delete alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -16274,7 +16690,7 @@ export def "alerts-delete alert" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List alerts
@@ -16289,6 +16705,7 @@ export def "alerts alerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # optional, integer  Maximum number of results to return.  **Example →** *limit = 10*  (format: int32, default: 10)
   --offset: string # <dfn class="text-muted"><p class="mb-2">optional, string</p></dfn> <p class="mb-2">Pagination cursor returned by a previous list call. Use the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> value from the previous response.</p> <p class="mb-2"><strong class="font-semibold">Example →</strong> <em class="italic">offset = &quot;MjAyNC0xMi0yMFQxMjozMjo1MSswMDowMHw5OTk5OTk5OTk=&quot;</em></p>
   --id: record # optional, string filter  Filter alerts by [id](/docs/api/alerts/alert-object#id).  **Example →** *id\[in\] = "alert___dev__3Nl7purV3LwbKYH"*
@@ -16309,7 +16726,7 @@ export def "alerts alerts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an alert
@@ -16326,6 +16743,7 @@ export def "alerts alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chargebee-request-origin-device: string # The device from which the customer has made the request (e.g. Android)
   --chargebee-request-origin-user: string # The email address of your customer/user. Use this when the email address has only ASCII characters. (e.g. user@example.com)
   --chargebee-request-origin-user-encoded: string # The Base64-encoded email address of your customer/user. Use this if the email address has UTF-8 characters. When this header is provided, the header chargebee-request-origin-user is ignored. (e.g. dXNlci7QutCy0ZbRgtC+0YfQutCwQGV4YW1wbGUuY29t)
@@ -16353,7 +16771,7 @@ export def "alerts alert" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List alert statuses for a subscription
@@ -16369,6 +16787,7 @@ export def "subscriptions-alert-statuses subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # optional, integer  Maximum number of results to return.  **Example →** *limit = 10*  (format: int32, default: 10)
   --offset: string # <dfn class="text-muted"><p class="mb-2">optional, string</p></dfn> <p class="mb-2">Pagination cursor returned by a previous list call. Use the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> value from the previous response.</p>
   --alarm-status: record # optional, enumerated string filter  Filter by [alarm_status](/docs/api/alert_statuses/alert-status-object#alarm_status) to find alerts in a specific runtime state.  **Example →** *alarm_status\[is\] = "in_alarm"*
@@ -16387,7 +16806,7 @@ export def "subscriptions-alert-statuses subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List alert statuses for an alert
@@ -16403,6 +16822,7 @@ export def "alerts-alert-statuses alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # optional, integer  Maximum number of results to return.  **Example →** *limit = 25*  (format: int32, default: 10)
   --offset: string # <dfn class="text-muted"><p class="mb-2">optional, string</p></dfn> <p class="mb-2">Pagination cursor returned by a previous list call. Use the <code class="bg-gray-100 text-gray-800 font-medium border border-gray-300 rounded px-1.5 py-0.5 mx-1 text-sm font-mono whitespace-nowrap">next_offset</code> value from the previous response.</p>
   --alarm-status: record # optional, enumerated string filter  Filter by [alarm_status](/docs/api/alert_statuses/alert-status-object#alarm_status) to find subscriptions in a specific runtime state.  **Example →** *alarm_status\[is\] = "in_alarm"*
@@ -16420,5 +16840,5 @@ export def "alerts-alert-statuses alert" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

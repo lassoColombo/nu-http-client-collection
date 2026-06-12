@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -94,7 +95,7 @@ def resource-type-completer-3 [] { ["AccessRequestDecision" "AccessReview" "Acce
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-mgmt-access-token post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -126,13 +127,14 @@ export def "accounts-mgmt-access-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auths: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/accounts_mgmt/v1/access_token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of accounts
@@ -146,6 +148,7 @@ export def "accounts-mgmt-accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -160,7 +163,7 @@ export def "accounts-mgmt-accounts list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new account
@@ -176,6 +179,7 @@ export def "accounts-mgmt-accounts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: oneof<nothing, bool> # If true, instructs API to avoid making any changes, but rather run through validations only.
   --href: string
   --id: string
@@ -206,7 +210,7 @@ export def "accounts-mgmt-accounts post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an account by id
@@ -221,6 +225,7 @@ export def "accounts-mgmt-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteAssociatedResources: oneof<nothing, bool> # If true, deletes the associated resources (e.g. role bindings) for an account along with the account itself
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -229,7 +234,7 @@ export def "accounts-mgmt-accounts delete" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an account by id
@@ -244,6 +249,7 @@ export def "accounts-mgmt-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
   --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
   --fetchRhit: oneof<nothing, bool> # If true, includes the RHIT account_id in the output. Could slow request response time.
@@ -254,7 +260,7 @@ export def "accounts-mgmt-accounts get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account
@@ -269,6 +275,7 @@ export def "accounts-mgmt-accounts patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ban-code: string
   --ban-description: string
   --banned: oneof<nothing, bool>
@@ -286,7 +293,7 @@ export def "accounts-mgmt-accounts patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of labels
@@ -301,6 +308,7 @@ export def "accounts-mgmt-accounts-labels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -312,7 +320,7 @@ export def "accounts-mgmt-accounts-labels list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -327,6 +335,7 @@ export def "accounts-mgmt-accounts-labels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -349,7 +358,7 @@ export def "accounts-mgmt-accounts-labels post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label
@@ -365,13 +374,14 @@ export def "accounts-mgmt-accounts-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account labels by label key
@@ -387,13 +397,14 @@ export def "accounts-mgmt-accounts-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -409,6 +420,7 @@ export def "accounts-mgmt-accounts-labels patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -431,7 +443,7 @@ export def "accounts-mgmt-accounts-labels patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List of pull secrets rotation
@@ -446,6 +458,7 @@ export def "accounts-mgmt-accounts-pull-secret-rotation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -457,7 +470,7 @@ export def "accounts-mgmt-accounts-pull-secret-rotation list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/pull_secret_rotation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate pull secret rotation for this account id
@@ -472,6 +485,7 @@ export def "accounts-mgmt-accounts-pull-secret-rotation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -484,7 +498,7 @@ export def "accounts-mgmt-accounts-pull-secret-rotation post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a single Pull Secret Rotation record
@@ -500,13 +514,14 @@ export def "accounts-mgmt-accounts-pull-secret-rotation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/pull_secret_rotation/($rotationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pull secret rotation by id for a specific account
@@ -522,13 +537,14 @@ export def "accounts-mgmt-accounts-pull-secret-rotation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account_id: string, created_at: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/accounts/($id)/pull_secret_rotation/($rotationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of available billing models
@@ -542,6 +558,7 @@ export def "accounts-mgmt-billing-models list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, billing_model_type: string, description: string, display_name: string, marketplace: string>> {
@@ -551,7 +568,7 @@ export def "accounts-mgmt-billing-models list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/billing_models" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a billing model
@@ -566,13 +583,14 @@ export def "accounts-mgmt-billing-models get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, billing_model_type: string, description: string, display_name: string, marketplace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/billing_models/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of available capabilities
@@ -586,6 +604,7 @@ export def "accounts-mgmt-capabilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -596,7 +615,7 @@ export def "accounts-mgmt-capabilities get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch certificates of a particular type
@@ -611,6 +630,7 @@ export def "accounts-mgmt-certificates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   arch: string@arch-completer
   --type: string@type-completer # DEPRECATED
 ]: any -> record<cert: string, id: string, key: string, metadata: record, organization_id: string, serial: record<created: string, expiration: string, id: int, serial: int, updated: string>> {
@@ -622,7 +642,7 @@ export def "accounts-mgmt-certificates post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of cloud resources
@@ -636,6 +656,7 @@ export def "accounts-mgmt-cloud-resources list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -646,7 +667,7 @@ export def "accounts-mgmt-cloud-resources list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/cloud_resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new cloud resource
@@ -660,6 +681,7 @@ export def "accounts-mgmt-cloud-resources post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -687,7 +709,7 @@ export def "accounts-mgmt-cloud-resources post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a cloud resource
@@ -702,13 +724,14 @@ export def "accounts-mgmt-cloud-resources delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/cloud_resources/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a cloud resource
@@ -723,13 +746,14 @@ export def "accounts-mgmt-cloud-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, active: bool, category: string, category_pretty: string, ccs_only: bool, cloud_provider: string, cpu_cores: int, created_at: string, generic_name: string, hcp_only: bool, memory: int, memory_pretty: string, name_pretty: string, resource_type: string, size_pretty: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/cloud_resources/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a cloud resource
@@ -744,6 +768,7 @@ export def "accounts-mgmt-cloud-resources patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -771,7 +796,7 @@ export def "accounts-mgmt-cloud-resources patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorizes new cluster creation against an exsiting RH Subscription.
@@ -786,6 +811,7 @@ export def "accounts-mgmt-cluster-authorizations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   --availability-zone: string
   --byoc: oneof<nothing, bool>
@@ -812,7 +838,7 @@ export def "accounts-mgmt-cluster-authorizations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Finds or creates a cluster registration with a registy credential token and cluster ID
@@ -826,6 +852,7 @@ export def "accounts-mgmt-cluster-registrations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization-token: string
   --cluster-id: string
 ]: any -> record<account_id: string, authorization_token: string, cluster_id: string, expires_at: string> {
@@ -837,7 +864,7 @@ export def "accounts-mgmt-cluster-registrations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List cluster transfers - returns either an empty result set or a valid ClusterTransfer instance that is within a valid transfer window.
@@ -851,6 +878,7 @@ export def "accounts-mgmt-cluster-transfers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -862,7 +890,7 @@ export def "accounts-mgmt-cluster-transfers get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/cluster_transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate cluster transfer.
@@ -876,6 +904,7 @@ export def "accounts-mgmt-cluster-transfers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-uuid: string
   --owner: string
   --recipient: string
@@ -890,7 +919,7 @@ export def "accounts-mgmt-cluster-transfers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update specific cluster transfer
@@ -905,6 +934,7 @@ export def "accounts-mgmt-cluster-transfers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string
 ]: any -> record<href: string, id: string, kind: string, cluster_uuid: string, created_at: string, expiration_date: string, owner: string, pull_secret_rotation_id: string, recipient: string, recipient_ebs_account_id: string, recipient_external_org_id: string, secret: string, status: string, status_description: string, updated_at: string> {
   let input = $in
@@ -915,7 +945,7 @@ export def "accounts-mgmt-cluster-transfers patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of skus
@@ -929,6 +959,7 @@ export def "accounts-mgmt-config-skus list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -939,7 +970,7 @@ export def "accounts-mgmt-config-skus list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/config/skus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new sku
@@ -953,6 +984,7 @@ export def "accounts-mgmt-config-skus post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -968,7 +1000,7 @@ export def "accounts-mgmt-config-skus post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a sku
@@ -983,13 +1015,14 @@ export def "accounts-mgmt-config-skus delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/config/skus/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a sku
@@ -1004,13 +1037,14 @@ export def "accounts-mgmt-config-skus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, created_at: string, description: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/config/skus/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Sku
@@ -1025,6 +1059,7 @@ export def "accounts-mgmt-config-skus patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -1040,7 +1075,7 @@ export def "accounts-mgmt-config-skus patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the authenticated account
@@ -1054,6 +1089,7 @@ export def "accounts-mgmt-current-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
 ]: nothing -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1062,7 +1098,7 @@ export def "accounts-mgmt-current-account get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/current_account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of default capabilities
@@ -1076,13 +1112,14 @@ export def "accounts-mgmt-default-capabilities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, name: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/accounts_mgmt/v1/default_capabilities")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new default capability or update an existing one
@@ -1096,6 +1133,7 @@ export def "accounts-mgmt-default-capabilities post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1110,7 +1148,7 @@ export def "accounts-mgmt-default-capabilities post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a default capability
@@ -1125,13 +1163,14 @@ export def "accounts-mgmt-default-capabilities delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/default_capabilities/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default capability by label name
@@ -1146,13 +1185,14 @@ export def "accounts-mgmt-default-capabilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/default_capabilities/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new default capability or update an existing one
@@ -1167,6 +1207,7 @@ export def "accounts-mgmt-default-capabilities patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1181,7 +1222,7 @@ export def "accounts-mgmt-default-capabilities patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of deleted subscriptions
@@ -1195,6 +1236,7 @@ export def "accounts-mgmt-deleted-subscriptions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1206,7 +1248,7 @@ export def "accounts-mgmt-deleted-subscriptions list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/deleted_subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a deleted subscription by id
@@ -1221,13 +1263,14 @@ export def "accounts-mgmt-deleted-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, id: string, metrics: string, original_id: string, query_timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/deleted_subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch all certificates of a sca type based on the architectures
@@ -1242,6 +1285,7 @@ export def "accounts-mgmt-entitlement-certificates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   arch: list # e.g. [x86, x86_64, ppc]
   --type: string@type-completer # DEPRECATED
 ]: any -> record<items: table<cert: string, id: string, key: string, metadata: record, organization_id: string, serial: record>, kind: string, total: int> {
@@ -1253,7 +1297,7 @@ export def "accounts-mgmt-entitlement-certificates post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of errors
@@ -1267,6 +1311,7 @@ export def "accounts-mgmt-errors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1277,7 +1322,7 @@ export def "accounts-mgmt-errors list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/errors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an error by id
@@ -1292,13 +1337,14 @@ export def "accounts-mgmt-errors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, code: string, operation_id: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/errors/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query a feature toggle by id
@@ -1315,6 +1361,7 @@ export def "accounts-mgmt-feature-toggles-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: string
 ]: any -> record<href: string, id: string, kind: string, enabled: bool> {
   let input = $in
@@ -1325,7 +1372,7 @@ export def "accounts-mgmt-feature-toggles-query post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of labels
@@ -1339,6 +1386,7 @@ export def "accounts-mgmt-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1350,7 +1398,7 @@ export def "accounts-mgmt-labels get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a console.redhat.com landing page content JSON schema
@@ -1364,13 +1412,14 @@ export def "accounts-mgmt-landing-page-self-service get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<configTryLearn: record<configure: list<record>, try: list<record>>, estate: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/accounts_mgmt/v1/landing_page/self_service")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of metrics
@@ -1384,6 +1433,7 @@ export def "accounts-mgmt-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, external_id: string, health_state: string, metrics: string, query_timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1392,7 +1442,7 @@ export def "accounts-mgmt-metrics get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get and validate notification details
@@ -1406,6 +1456,7 @@ export def "accounts-mgmt-notify-details post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bcc-address: string
   --cluster-id: string
   --cluster-uuid: string
@@ -1424,7 +1475,7 @@ export def "accounts-mgmt-notify-details post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of organizations
@@ -1438,6 +1489,7 @@ export def "accounts-mgmt-organizations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1452,7 +1504,7 @@ export def "accounts-mgmt-organizations list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new organization
@@ -1468,6 +1520,7 @@ export def "accounts-mgmt-organizations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1487,7 +1540,7 @@ export def "accounts-mgmt-organizations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an organization by id
@@ -1502,6 +1555,7 @@ export def "accounts-mgmt-organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
   --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
 ]: nothing -> record<href: string, id: string, kind: string, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, ebs_account_id: string, external_id: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, name: string, updated_at: string> {
@@ -1511,7 +1565,7 @@ export def "accounts-mgmt-organizations get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization
@@ -1526,6 +1580,7 @@ export def "accounts-mgmt-organizations patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ebs-account-id: string
   --external-id: string
   --name: string
@@ -1538,7 +1593,7 @@ export def "accounts-mgmt-organizations patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of labels
@@ -1553,6 +1608,7 @@ export def "accounts-mgmt-organizations-labels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1564,7 +1620,7 @@ export def "accounts-mgmt-organizations-labels list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($id)/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -1579,6 +1635,7 @@ export def "accounts-mgmt-organizations-labels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -1601,7 +1658,7 @@ export def "accounts-mgmt-organizations-labels post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label
@@ -1617,13 +1674,14 @@ export def "accounts-mgmt-organizations-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization labels by label key
@@ -1639,13 +1697,14 @@ export def "accounts-mgmt-organizations-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -1661,6 +1720,7 @@ export def "accounts-mgmt-organizations-labels patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -1683,7 +1743,7 @@ export def "accounts-mgmt-organizations-labels patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a summary of organizations clusters based on metrics
@@ -1698,13 +1758,14 @@ export def "accounts-mgmt-organizations-summary-dashboard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, metrics: table<name: string, vector: list>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($id)/summary_dashboard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of account group assignments for the given org
@@ -1719,6 +1780,7 @@ export def "accounts-mgmt-organizations-account-group-assignments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1730,7 +1792,7 @@ export def "accounts-mgmt-organizations-account-group-assignments list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_group_assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new AccountGroupAssignment
@@ -1745,6 +1807,7 @@ export def "accounts-mgmt-organizations-account-group-assignments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1762,7 +1825,7 @@ export def "accounts-mgmt-organizations-account-group-assignments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an account group assignment
@@ -1778,13 +1841,14 @@ export def "accounts-mgmt-organizations-account-group-assignments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_group_assignments/($acctGrpAsgnId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account group assignment by id
@@ -1800,13 +1864,14 @@ export def "accounts-mgmt-organizations-account-group-assignments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account_group_id: string, account_id: string, created_at: string, managed_by: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_group_assignments/($acctGrpAsgnId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of account groups for the given org
@@ -1821,6 +1886,7 @@ export def "accounts-mgmt-organizations-account-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -1832,7 +1898,7 @@ export def "accounts-mgmt-organizations-account-groups list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new AccountGroup
@@ -1847,6 +1913,7 @@ export def "accounts-mgmt-organizations-account-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1861,7 +1928,7 @@ export def "accounts-mgmt-organizations-account-groups post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an account group
@@ -1877,13 +1944,14 @@ export def "accounts-mgmt-organizations-account-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_groups/($acctGrpId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account group by id
@@ -1899,13 +1967,14 @@ export def "accounts-mgmt-organizations-account-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, created_at: string, description: string, external_id: string, managed_by: string, name: string, organization_id: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/account_groups/($acctGrpId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account group
@@ -1921,6 +1990,7 @@ export def "accounts-mgmt-organizations-account-groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -1935,7 +2005,7 @@ export def "accounts-mgmt-organizations-account-groups patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of consumed quota for an organization
@@ -1950,6 +2020,7 @@ export def "accounts-mgmt-organizations-consumed-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forceRecalc: oneof<nothing, bool> # If true, includes that ConsumedQuota should be recalculated.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, availability_zone_type: string, billing_model: string, byoc: bool, cloud_provider_id: string, count: int, organization_id: string, plan_id: string, resource_name: string, resource_type: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1958,7 +2029,7 @@ export def "accounts-mgmt-organizations-consumed-quota get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/consumed_quota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a summary of quota cost
@@ -1973,6 +2044,7 @@ export def "accounts-mgmt-organizations-quota-cost get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
@@ -1986,7 +2058,7 @@ export def "accounts-mgmt-organizations-quota-cost get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/quota_cost" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of resource quota objects
@@ -2001,6 +2073,7 @@ export def "accounts-mgmt-organizations-resource-quota list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2012,7 +2085,7 @@ export def "accounts-mgmt-organizations-resource-quota list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/resource_quota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new resource quota
@@ -2027,6 +2100,7 @@ export def "accounts-mgmt-organizations-resource-quota post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sku: string
   sku_count: int
   --type: string@type-completer-1
@@ -2039,7 +2113,7 @@ export def "accounts-mgmt-organizations-resource-quota post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a resource quota
@@ -2055,13 +2129,14 @@ export def "accounts-mgmt-organizations-resource-quota delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/resource_quota/($quotaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a resource quota by id
@@ -2077,13 +2152,14 @@ export def "accounts-mgmt-organizations-resource-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, created_at: string, organization_id: string, sku: string, sku_count: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/organizations/($orgId)/resource_quota/($quotaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a resource quota
@@ -2099,6 +2175,7 @@ export def "accounts-mgmt-organizations-resource-quota patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sku: string
   sku_count: int
   --type: string@type-completer-1
@@ -2111,7 +2188,7 @@ export def "accounts-mgmt-organizations-resource-quota patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all plans
@@ -2125,6 +2202,7 @@ export def "accounts-mgmt-plans list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2135,7 +2213,7 @@ export def "accounts-mgmt-plans list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a plan by id
@@ -2150,13 +2228,14 @@ export def "accounts-mgmt-plans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, category: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/plans/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return access token generated from registries in docker format
@@ -2170,6 +2249,7 @@ export def "accounts-mgmt-pull-secrets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   external_resource_id: string
 ]: any -> record<auths: record> {
   let input = $in
@@ -2180,7 +2260,7 @@ export def "accounts-mgmt-pull-secrets post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a pull secret
@@ -2195,13 +2275,14 @@ export def "accounts-mgmt-pull-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/pull_secrets/($externalResourceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authorizes a user to consume or release a single quantity of quota
@@ -2216,6 +2297,7 @@ export def "accounts-mgmt-quota-authorizations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   --availability-zone: string
   --cloud-provider-id: string
@@ -2235,7 +2317,7 @@ export def "accounts-mgmt-quota-authorizations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a summary of quota cost for the authenticated user
@@ -2249,6 +2331,7 @@ export def "accounts-mgmt-quota-cost get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
@@ -2261,7 +2344,7 @@ export def "accounts-mgmt-quota-cost get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/quota_cost" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of UHC product Quota Rules
@@ -2275,6 +2358,7 @@ export def "accounts-mgmt-quota-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2285,7 +2369,7 @@ export def "accounts-mgmt-quota-rules get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/quota_rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of quotas
@@ -2299,6 +2383,7 @@ export def "accounts-mgmt-quotas list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2309,7 +2394,7 @@ export def "accounts-mgmt-quotas list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/quotas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new quota
@@ -2323,6 +2408,7 @@ export def "accounts-mgmt-quotas post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -2339,7 +2425,7 @@ export def "accounts-mgmt-quotas post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a quota
@@ -2354,13 +2440,14 @@ export def "accounts-mgmt-quotas delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/quotas/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a quota
@@ -2375,13 +2462,14 @@ export def "accounts-mgmt-quotas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, created_at: string, description: string, resource_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/quotas/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a quota
@@ -2396,6 +2484,7 @@ export def "accounts-mgmt-quotas patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -2412,7 +2501,7 @@ export def "accounts-mgmt-quotas patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of regions to which a user has access
@@ -2426,13 +2515,14 @@ export def "accounts-mgmt-regions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, cloud_provider_id: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/accounts_mgmt/v1/regions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a summary of clusters by region
@@ -2446,13 +2536,14 @@ export def "accounts-mgmt-regions-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, cloud_provider_id: string, count: int, region_id: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/accounts_mgmt/v1/regions/summary")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of registries
@@ -2466,6 +2557,7 @@ export def "accounts-mgmt-registries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2477,7 +2569,7 @@ export def "accounts-mgmt-registries list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/registries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an registry by id
@@ -2492,13 +2584,14 @@ export def "accounts-mgmt-registries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, cloudAlias: bool, created_at: string, name: string, org_name: string, team_name: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/registries/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Registry Credentials
@@ -2512,6 +2605,7 @@ export def "accounts-mgmt-registry-credentials list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2523,7 +2617,7 @@ export def "accounts-mgmt-registry-credentials list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/registry_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request the creation of a registry credential
@@ -2539,6 +2633,7 @@ export def "accounts-mgmt-registry-credentials post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -2558,7 +2653,7 @@ export def "accounts-mgmt-registry-credentials post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a registry credential by id
@@ -2573,13 +2668,14 @@ export def "accounts-mgmt-registry-credentials delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/registry_credentials/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a registry credentials by id
@@ -2594,13 +2690,14 @@ export def "accounts-mgmt-registry-credentials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account: record<href: string, id: string, kind: string>, created_at: string, external_resource_id: string, registry: record<href: string, id: string, kind: string>, token: string, updated_at: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/registry_credentials/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a registry credential
@@ -2615,6 +2712,7 @@ export def "accounts-mgmt-registry-credentials patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string
   --external-resource-id: string
   --registry-id: string
@@ -2629,7 +2727,7 @@ export def "accounts-mgmt-registry-credentials patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of reserved resources
@@ -2643,6 +2741,7 @@ export def "accounts-mgmt-reserved-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2654,7 +2753,7 @@ export def "accounts-mgmt-reserved-resources get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/reserved_resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of resource quota objects
@@ -2668,6 +2767,7 @@ export def "accounts-mgmt-resource-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2679,7 +2779,7 @@ export def "accounts-mgmt-resource-quota get" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/resource_quota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of role bindings
@@ -2693,6 +2793,7 @@ export def "accounts-mgmt-role-bindings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2704,7 +2805,7 @@ export def "accounts-mgmt-role-bindings list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/role_bindings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new role binding
@@ -2718,6 +2819,7 @@ export def "accounts-mgmt-role-bindings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-group-id: string
   --account-id: string
   --config-managed: oneof<nothing, bool>
@@ -2735,7 +2837,7 @@ export def "accounts-mgmt-role-bindings post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a role binding
@@ -2750,13 +2852,14 @@ export def "accounts-mgmt-role-bindings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/role_bindings/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a role binding
@@ -2771,13 +2874,14 @@ export def "accounts-mgmt-role-bindings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account: record<href: string, id: string, kind: string>, account_group: record<href: string, id: string, kind: string>, config_managed: bool, created_at: string, managed_by: string, organization: record<href: string, id: string, kind: string>, role: record<href: string, id: string, kind: string>, subscription: record<href: string, id: string, kind: string>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/role_bindings/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role binding
@@ -2792,6 +2896,7 @@ export def "accounts-mgmt-role-bindings patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-group-id: string
   --account-id: string
   --config-managed: oneof<nothing, bool>
@@ -2809,7 +2914,7 @@ export def "accounts-mgmt-role-bindings patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of roles
@@ -2823,6 +2928,7 @@ export def "accounts-mgmt-roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -2833,7 +2939,7 @@ export def "accounts-mgmt-roles list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a role by id
@@ -2848,13 +2954,14 @@ export def "accounts-mgmt-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, name: string, permissions: table<action: string, resource: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/roles/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or renew the entitlement to support a product for the user's organization.
@@ -2869,13 +2976,14 @@ export def "accounts-mgmt-self-entitlement post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<product: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/self_entitlement/($product)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of UHC product SKU Rules
@@ -2889,6 +2997,7 @@ export def "accounts-mgmt-sku-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
@@ -2899,7 +3008,7 @@ export def "accounts-mgmt-sku-rules list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/sku_rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new sku rule
@@ -2913,6 +3022,7 @@ export def "accounts-mgmt-sku-rules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --id: string
   --kind: string
@@ -2928,7 +3038,7 @@ export def "accounts-mgmt-sku-rules post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a sku rule
@@ -2943,13 +3053,14 @@ export def "accounts-mgmt-sku-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/sku_rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a sku rules by id
@@ -2964,13 +3075,14 @@ export def "accounts-mgmt-sku-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, allowed: int, quota_id: string, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/sku_rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a sku rule
@@ -2985,6 +3097,7 @@ export def "accounts-mgmt-sku-rules patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -3000,7 +3113,7 @@ export def "accounts-mgmt-sku-rules patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of UHC product SKUs
@@ -3016,6 +3129,7 @@ export def "accounts-mgmt-skus list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, created_at: string, description: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3024,7 +3138,7 @@ export def "accounts-mgmt-skus list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/skus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a sku by id
@@ -3041,13 +3155,14 @@ export def "accounts-mgmt-skus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, created_at: string, description: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/skus/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of subscriptions
@@ -3061,6 +3176,7 @@ export def "accounts-mgmt-subscriptions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -3078,7 +3194,7 @@ export def "accounts-mgmt-subscriptions list" [
   let full_url = (build-url $base "/api/accounts_mgmt/v1/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new subscription
@@ -3092,6 +3208,7 @@ export def "accounts-mgmt-subscriptions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cluster_uuid: string
   --console-url: string
   --display-name: string
@@ -3106,7 +3223,7 @@ export def "accounts-mgmt-subscriptions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a subscription by id
@@ -3121,13 +3238,14 @@ export def "accounts-mgmt-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a subscription by id
@@ -3142,6 +3260,7 @@ export def "accounts-mgmt-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchAccounts: oneof<nothing, bool> # If true, includes the account reference information in the output. Could slow request response time.
   --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
   --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
@@ -3154,7 +3273,7 @@ export def "accounts-mgmt-subscriptions get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription
@@ -3169,6 +3288,7 @@ export def "accounts-mgmt-subscriptions patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-expiration-date: string # format: date-time
   --cloud-account-id: string
   --cloud-provider-id: string
@@ -3203,7 +3323,7 @@ export def "accounts-mgmt-subscriptions patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of labels
@@ -3218,6 +3338,7 @@ export def "accounts-mgmt-subscriptions-labels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -3229,7 +3350,7 @@ export def "accounts-mgmt-subscriptions-labels list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -3244,6 +3365,7 @@ export def "accounts-mgmt-subscriptions-labels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -3266,7 +3388,7 @@ export def "accounts-mgmt-subscriptions-labels post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label
@@ -3282,13 +3404,14 @@ export def "accounts-mgmt-subscriptions-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subscription labels by label key
@@ -3304,13 +3427,14 @@ export def "accounts-mgmt-subscriptions-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/labels/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new label or update an existing label
@@ -3326,6 +3450,7 @@ export def "accounts-mgmt-subscriptions-labels patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string
   --body-id: string
   --kind: string
@@ -3348,7 +3473,7 @@ export def "accounts-mgmt-subscriptions-labels patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get subscription's metrics by metric name
@@ -3364,6 +3489,7 @@ export def "accounts-mgmt-subscriptions-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # The `search` paramter specifies the PromQL selector. The syntax is defined by Prometheus at https://prometheus.io/docs/prometheus/latest/querying/basics/#time-series-selectors. It only supports simple selections as shown in https://prometheus.io/docs/prometheus/latest/querying/examples/#simple-time-series-selection. For example, in order to retrieve subscription_sync_total with names starting with `managed` and with a channel = `production`:  ``` name=~'managed.*',channel='production' ```  If the parameter isn't provided, or if the value is empty, then all the records will be returned.
   --qp-fields: string # Supplies a comma-separated list of fields to be returned. Fields of sub-structures and of arrays use <structure>.<field> notation. <stucture>.* means all field of a structure Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)  ``` ocm get subscriptions --parameter fields=id,href,plan.id,plan.kind,labels.* --parameter fetchLabels=true ```
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<_id: string>> {
@@ -3373,7 +3499,7 @@ export def "accounts-mgmt-subscriptions-metrics get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/metrics/($metric_name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an ondemand metrics of a subscription by id
@@ -3388,13 +3514,14 @@ export def "accounts-mgmt-subscriptions-ondemand-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alerts: table<name: string, severity: string>, cluster_operators: table<condition: string, name: string, reason: string, time: string, version: string>, nodes: table<name: string, severity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/ondemand_metrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of reserved resources
@@ -3409,6 +3536,7 @@ export def "accounts-mgmt-subscriptions-reserved-resources list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -3420,7 +3548,7 @@ export def "accounts-mgmt-subscriptions-reserved-resources list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/reserved_resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of open support creates opened against the external cluster id of this subscrption
@@ -3435,6 +3563,7 @@ export def "accounts-mgmt-subscriptions-support-cases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
 ]: nothing -> any {
@@ -3444,7 +3573,7 @@ export def "accounts-mgmt-subscriptions-support-cases get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($id)/support_cases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of notification contacts for the given subscription
@@ -3459,6 +3588,7 @@ export def "accounts-mgmt-subscriptions-notification-contacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -3471,7 +3601,7 @@ export def "accounts-mgmt-subscriptions-notification-contacts get" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/notification_contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an account as a notification contact to this subscription
@@ -3486,6 +3616,7 @@ export def "accounts-mgmt-subscriptions-notification-contacts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-identifier: string
 ]: any -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
   let input = $in
@@ -3496,7 +3627,7 @@ export def "accounts-mgmt-subscriptions-notification-contacts post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a notification contact by subscription and account id
@@ -3512,13 +3643,14 @@ export def "accounts-mgmt-subscriptions-notification-contacts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/notification_contacts/($accountId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete reserved resources by id
@@ -3534,13 +3666,14 @@ export def "accounts-mgmt-subscriptions-reserved-resources delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/reserved_resources/($reservedResourceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reserved resources by id
@@ -3556,13 +3689,14 @@ export def "accounts-mgmt-subscriptions-reserved-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, availability_zone_type: string, billing_marketplace_account: string, billing_model: string, byoc: bool, cluster: bool, count: int, created_at: string, resource_name: string, resource_type: string, scope: string, subscription: record<href: string, id: string, kind: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/reserved_resources/($reservedResourceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a reserved resource
@@ -3578,6 +3712,7 @@ export def "accounts-mgmt-subscriptions-reserved-resources patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-model: string@billing-model-completer
   --scope: string
 ]: any -> record<href: string, id: string, kind: string, availability_zone_type: string, billing_marketplace_account: string, billing_model: string, byoc: bool, cluster: bool, count: int, created_at: string, resource_name: string, resource_type: string, scope: string, subscription: record<href: string, id: string, kind: string>, updated_at: string> {
@@ -3589,7 +3724,7 @@ export def "accounts-mgmt-subscriptions-reserved-resources patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get subscription role bindings
@@ -3604,6 +3739,7 @@ export def "accounts-mgmt-subscriptions-role-bindings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
@@ -3616,7 +3752,7 @@ export def "accounts-mgmt-subscriptions-role-bindings list" [
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/role_bindings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new subscription role binding
@@ -3631,6 +3767,7 @@ export def "accounts-mgmt-subscriptions-role-bindings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   role_id: string
 ]: any -> record<href: string, id: string, kind: string, account: record<href: string, id: string, kind: string, email: string, first_name: string, last_name: string, name: string, username: string>, account_email: string, account_username: string, created_at: string, role: record<href: string, id: string, kind: string>, subscription: record<href: string, id: string, kind: string>, updated_at: string> {
@@ -3642,7 +3779,7 @@ export def "accounts-mgmt-subscriptions-role-bindings post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a subscription role binding
@@ -3658,13 +3795,14 @@ export def "accounts-mgmt-subscriptions-role-bindings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/role_bindings/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Subscription Role Binding by id
@@ -3680,13 +3818,14 @@ export def "accounts-mgmt-subscriptions-role-bindings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, kind: string, account: record<href: string, id: string, kind: string, email: string, first_name: string, last_name: string, name: string, username: string>, account_email: string, account_username: string, created_at: string, role: record<href: string, id: string, kind: string>, subscription: record<href: string, id: string, kind: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/subscriptions/($subId)/role_bindings/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # create a support case for the subscription
@@ -3700,6 +3839,7 @@ export def "accounts-mgmt-support-cases post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-number: string
   --case-language: string
   --cluster-id: string
@@ -3722,7 +3862,7 @@ export def "accounts-mgmt-support-cases post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a support case
@@ -3737,13 +3877,14 @@ export def "accounts-mgmt-support-cases delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/accounts_mgmt/v1/support_cases/($caseId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Finds the account owner of the provided token
@@ -3757,6 +3898,7 @@ export def "accounts-mgmt-token-authorization post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization-token: string
 ]: any -> record<account: record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: list<record>, created_at: string, email: string, first_name: string, labels: list<record>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list, created_at: string, ebs_account_id: string, external_id: string, labels: list, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string>> {
   let input = $in
@@ -3767,7 +3909,7 @@ export def "accounts-mgmt-token-authorization post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review an account's access to perform an action on a particular resource or resource type
@@ -3781,6 +3923,7 @@ export def "authorizations-access-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   action: string@action-completer
   --cluster-id: string
@@ -3797,7 +3940,7 @@ export def "authorizations-access-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review an account's capabilities
@@ -3811,6 +3954,7 @@ export def "authorizations-capability-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   capability: string@capability-completer
   --cluster-id: string
@@ -3826,7 +3970,7 @@ export def "authorizations-capability-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Determine whether a user is restricted from downloading Red Hat software based on export control compliance.
@@ -3840,6 +3984,7 @@ export def "authorizations-export-control-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   --ignore-cache: oneof<nothing, bool>
 ]: any -> record<restricted: bool> {
@@ -3851,7 +3996,7 @@ export def "authorizations-export-control-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review feature to perform an action on it such as toggle a feature on/off
@@ -3865,6 +4010,7 @@ export def "authorizations-feature-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-username: string
   --cluster-id: string
   feature: string
@@ -3878,7 +4024,7 @@ export def "authorizations-feature-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Obtain resource ids for resources an account may perform the specified action upon. Resource ids returned as ["*"] is shorthand for all ids.
@@ -3894,6 +4040,7 @@ export def "authorizations-resource-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reduceClusterList: oneof<nothing, bool> # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
   --excludeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Subscriptions with these statuses will be excluded from results. This options is mutually exclusive with includeSubscriptionStatuses.
   --includeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Only subscriptions with these statuses will be included into results. This options is mutually exclusive with excludeSubscriptionStatuses.
@@ -3910,7 +4057,7 @@ export def "authorizations-resource-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review your ability to perform an action on a particular resource or resource type
@@ -3924,6 +4071,7 @@ export def "authorizations-self-access-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer
   --cluster-id: string
   --cluster-uuid: string
@@ -3939,7 +4087,7 @@ export def "authorizations-self-access-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review your ability to toggle a feature
@@ -3953,6 +4101,7 @@ export def "authorizations-self-feature-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   feature: string
 ]: any -> record<enabled: bool, feature_id: string> {
   let input = $in
@@ -3963,7 +4112,7 @@ export def "authorizations-self-feature-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Obtain resource ids for resources you may perform the specified action upon. Resource ids returned as ["*"] is shorthand for all ids.
@@ -3977,6 +4126,7 @@ export def "authorizations-self-resource-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reduceClusterList: oneof<nothing, bool> # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
   --excludeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Subscriptions with these statuses will be excluded from results. This options is mutually exclusive with includeSubscriptionStatuses.
   --includeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Only subscriptions with these statuses will be included into results. This options is mutually exclusive with excludeSubscriptionStatuses.
@@ -3992,7 +4142,7 @@ export def "authorizations-self-resource-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review your status of Terms
@@ -4006,6 +4156,7 @@ export def "authorizations-self-terms-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --check-optional-terms: oneof<nothing, bool> # default: true
   --event-code: string
   --site-code: string
@@ -4018,7 +4169,7 @@ export def "authorizations-self-terms-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Review an account's status of Terms
@@ -4032,6 +4183,7 @@ export def "authorizations-terms-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_username: string
   --check-optional-terms: oneof<nothing, bool> # default: true
   --event-code: string
@@ -4045,5 +4197,5 @@ export def "authorizations-terms-review post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

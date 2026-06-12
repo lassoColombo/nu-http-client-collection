@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -81,7 +82,7 @@ def expansion-completer-3 [] { ["categories" "compatibility" "definition" "defin
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "annotations get-by-globalCompanyId" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +116,7 @@ export def "annotations get-by-globalCompanyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional annotation metadata fields to include on response.
   --includeType: list # Include additional annotations not owned by user. The "all" option takes precedence over "shared"
   --locale: string # Locale (default: en_US)
@@ -136,7 +138,7 @@ export def "annotations get-by-globalCompanyId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new annotation
@@ -154,6 +156,7 @@ export def "annotations createAnnotation-by-globalCompanyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional annotation metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -190,7 +193,7 @@ export def "annotations createAnnotation-by-globalCompanyId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get existing annotation
@@ -207,6 +210,7 @@ export def "annotations get-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional annotation metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -220,7 +224,7 @@ export def "annotations get-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update existing annotation
@@ -239,6 +243,7 @@ export def "annotations updateAnnotation-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional annotation metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -275,7 +280,7 @@ export def "annotations updateAnnotation-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete existing annotation
@@ -292,6 +297,7 @@ export def "annotations delete-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -304,7 +310,7 @@ export def "annotations delete-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve multiple calculated metrics
@@ -320,6 +326,7 @@ export def "calculatedmetrics findCalculatedMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsids: string # Filter list to only include calculated metrics tied to specified RSID list (comma-delimited)
   --ownerId: int # Filter list to only include calculated metrics owned by the specified loginId (format: int32)
   --filterByIds: string # Filter list to only include calculated metrics in the specified list (comma-delimited list of IDs) (this is the same as calculatedMetricFilter, and is overwritten by calculatedMetricFilter
@@ -346,7 +353,7 @@ export def "calculatedmetrics findCalculatedMetrics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new calculated metric
@@ -364,6 +371,7 @@ export def "calculatedmetrics createCalculatedMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --expansion: list@expansion-completer # Comma-delimited list of additional calculated metric metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -392,7 +400,7 @@ export def "calculatedmetrics createCalculatedMetric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve calculated metric functions
@@ -408,6 +416,7 @@ export def "calculatedmetrics-functions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -420,7 +429,7 @@ export def "calculatedmetrics-functions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a calculated metric function by ID
@@ -437,6 +446,7 @@ export def "calculatedmetrics-functions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -449,7 +459,7 @@ export def "calculatedmetrics-functions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate a calculated metric definition
@@ -467,6 +477,7 @@ export def "calculatedmetrics-validate validateCalculatedMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --migrating: oneof<nothing, bool> # Include migration functions in validation (default: false)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -495,7 +506,7 @@ export def "calculatedmetrics-validate validateCalculatedMetric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a single calculated metric by ID
@@ -512,6 +523,7 @@ export def "calculatedmetrics findOneCalculatedMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --expansion: list@expansion-completer # Comma-delimited list of additional calculated metric metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -525,7 +537,7 @@ export def "calculatedmetrics findOneCalculatedMetric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing calculated metric
@@ -544,6 +556,7 @@ export def "calculatedmetrics updateCalculatedMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --expansion: list@expansion-completer # Comma-delimited list of additional calculated metric metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -572,7 +585,7 @@ export def "calculatedmetrics updateCalculatedMetric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete calculated metrics by ID
@@ -589,6 +602,7 @@ export def "calculatedmetrics delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -601,7 +615,7 @@ export def "calculatedmetrics delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve components shared by user
@@ -616,6 +630,7 @@ export def "componentmetadata-shares list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeType: list # Include additional shares not owned by the user
   --userid: int # The user ID to return details for. Only admins may use this option. (format: int32)
   --limit: int # Number of results per page (default: 10)
@@ -631,7 +646,7 @@ export def "componentmetadata-shares list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Share component with user
@@ -646,6 +661,7 @@ export def "componentmetadata-shares post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -672,7 +688,7 @@ export def "componentmetadata-shares post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update shared components with users
@@ -688,6 +704,7 @@ export def "componentmetadata-shares modifyShares" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --useCache: oneof<nothing, bool> # Use caching for faster requests (default: true)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -704,7 +721,7 @@ export def "componentmetadata-shares modifyShares" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create search for shared components
@@ -720,6 +737,7 @@ export def "componentmetadata-shares-component-search searchComponentTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --expansion: list # Comma-delimited list of additional project metadata fields to include on response.
   --limit: int # Number of results per page (default: 10)
@@ -740,7 +758,7 @@ export def "componentmetadata-shares-component-search searchComponentTags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve details of share by ID
@@ -757,6 +775,7 @@ export def "componentmetadata-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
 ]: nothing -> record<shareId: string, imsOrgId: string, shareToId: int, shareToImsId: string, shareToType: string, shareFromImsId: string, componentType: string, componentId: string, shareToDisplayName: string, shareToLogin: string, accessLevel: string> {
@@ -767,7 +786,7 @@ export def "componentmetadata-shares get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete share by ID
@@ -784,6 +803,7 @@ export def "componentmetadata-shares delete-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -796,7 +816,7 @@ export def "componentmetadata-shares delete-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve component IDs shared with user
@@ -812,6 +832,7 @@ export def "componentmetadata-shares-sharedto-me findAllSharesToCurrentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --componentType: string # ComponentType to return
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -824,7 +845,7 @@ export def "componentmetadata-shares-sharedto-me findAllSharesToCurrentUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create search for component tags
@@ -840,6 +861,7 @@ export def "componentmetadata-tags-component-search searchComponentTags-by-globa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results per page (default: 10)
   --page: int # Page number (base 0 - first page is "0") (default: 0)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -858,7 +880,7 @@ export def "componentmetadata-tags-component-search searchComponentTags-by-globa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve tags for current user company
@@ -874,6 +896,7 @@ export def "componentmetadata-tags findAllForCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results per page (default: 10)
   --page: int # Page number (base 0 - first page is "0") (default: 0)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -887,7 +910,7 @@ export def "componentmetadata-tags findAllForCompany" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tags for current user company
@@ -903,6 +926,7 @@ export def "componentmetadata-tags saveTagList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --body: record
@@ -916,7 +940,7 @@ export def "componentmetadata-tags saveTagList" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete tags from components
@@ -932,6 +956,7 @@ export def "componentmetadata-tags delete-by-globalCompanyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --componentIds: string # Comma-separated list of componentIds to operate on.
   --componentType: string@componentType-completer # The component type to operate on.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -945,7 +970,7 @@ export def "componentmetadata-tags delete-by-globalCompanyId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve component tags by component ID and component type
@@ -961,6 +986,7 @@ export def "componentmetadata-tags-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --componentId: string # The componentId to operate on. Currently this is just the segmentId.
   --componentType: string@componentType-completer # The component type to operate on.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -974,7 +1000,7 @@ export def "componentmetadata-tags-search get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update tags for component
@@ -990,6 +1016,7 @@ export def "componentmetadata-tags-tagitems saveTagComponentList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --body: record
@@ -1003,7 +1030,7 @@ export def "componentmetadata-tags-tagitems saveTagComponentList" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve tag by ID
@@ -1020,6 +1047,7 @@ export def "componentmetadata-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
 ]: nothing -> record<id: int, name: string, description: string, components: table<componentType: string, componentId: string, tags: list>> {
@@ -1030,7 +1058,7 @@ export def "componentmetadata-tags get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete tag from component
@@ -1047,6 +1075,7 @@ export def "componentmetadata-tags delete-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
 ]: nothing -> list<record> {
@@ -1057,7 +1086,7 @@ export def "componentmetadata-tags delete-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve component IDs associated with tag names
@@ -1073,6 +1102,7 @@ export def "componentmetadata-tags-tagnames get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tagNames: string # Comma separated list of tag names.
   --componentType: string@componentType-completer # The component type to operate on.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1086,7 +1116,7 @@ export def "componentmetadata-tags-tagnames get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve configuration for a date range
@@ -1103,6 +1133,7 @@ export def "dateranges get-by-globalCompanyId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
   --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
@@ -1117,7 +1148,7 @@ export def "dateranges get-by-globalCompanyId-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update configuration for a date range
@@ -1134,6 +1165,7 @@ export def "dateranges put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
   --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
@@ -1170,7 +1202,7 @@ export def "dateranges put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a date range
@@ -1186,6 +1218,7 @@ export def "dateranges delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1198,7 +1231,7 @@ export def "dateranges delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve user's date ranges
@@ -1214,6 +1247,7 @@ export def "dateranges get-by-globalCompanyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeType: list # Include additional dateranges not owned by user. The "all" option takes precedence over "shared"
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
   --locale: string # Locale (default: en_US)
@@ -1234,7 +1268,7 @@ export def "dateranges get-by-globalCompanyId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a date range
@@ -1250,6 +1284,7 @@ export def "dateranges post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
   --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
@@ -1286,7 +1321,7 @@ export def "dateranges post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve dimensions for a report suite
@@ -1302,6 +1337,7 @@ export def "dimensions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # A report suite ID
   --locale: string # Locale (default: en_US)
   --segmentable: oneof<nothing, bool> # Only include dimensions that are valid within a segment.
@@ -1319,7 +1355,7 @@ export def "dimensions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a dimension by ID
@@ -1336,6 +1372,7 @@ export def "dimensions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # The report suite ID.
   --locale: string # The locale to use for returning system named dimensions. (default: en_US)
   --expansion: list@expansion-completer-1 # Add extra metadata to items (comma-delimited list)
@@ -1350,7 +1387,7 @@ export def "dimensions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve metrics for a report suite
@@ -1366,6 +1403,7 @@ export def "metrics list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # ID of desired report suite
   --locale: string # Locale that system named metrics should be returned in (default: en_US)
   --segmentable: oneof<nothing, bool> # Filter the metrics by if they are valid in a segment. (default: false)
@@ -1381,7 +1419,7 @@ export def "metrics list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a metric by ID
@@ -1398,6 +1436,7 @@ export def "metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # ID of desired report suite
   --locale: string # Locale that system named metrics should be returned in (default: en_US)
   --expansion: list@expansion-completer-2 # Add extra metadata to items (comma-delimited list)
@@ -1412,7 +1451,7 @@ export def "metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve project configuration
@@ -1429,6 +1468,7 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional project metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1442,7 +1482,7 @@ export def "projects get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project configuration
@@ -1461,6 +1501,7 @@ export def "projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional project metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1498,7 +1539,7 @@ export def "projects updateProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a project
@@ -1515,6 +1556,7 @@ export def "projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1527,7 +1569,7 @@ export def "projects delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a valid project definition
@@ -1545,6 +1587,7 @@ export def "projects-validate validateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1581,7 +1624,7 @@ export def "projects-validate validateProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve user's projects
@@ -1597,6 +1640,7 @@ export def "projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeType: list # Include additional projects not owned by user. The "all" option takes precedence over "shared". If neither guided, or project is included, both types are returned
   --expansion: list # Comma-delimited list of additional project metadata fields to include on response.
   --filterByIds: string # Filter list to only include projects in the specified list (comma-delimited list of IDs)
@@ -1616,7 +1660,7 @@ export def "projects list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project
@@ -1634,6 +1678,7 @@ export def "projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expansion: list # Comma-delimited list of additional project metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1671,7 +1716,7 @@ export def "projects createProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a report
@@ -1694,6 +1739,7 @@ export def "reports runReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --rsid: string
@@ -1717,7 +1763,7 @@ export def "reports runReport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a realtime report
@@ -1740,6 +1786,7 @@ export def "reports-realtime runRealtimeReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --rsid: string
@@ -1763,7 +1810,7 @@ export def "reports-realtime runRealtimeReport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve top items report
@@ -1779,6 +1826,7 @@ export def "reports-top-items runTopItemReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # ID of desired report suite ie. myrsid
   --dimension: string # Dimension to run the report against. Example: 'variables/page'
   --locale: string # Locale that system named metrics should be returned in (default: en_US)
@@ -1804,7 +1852,7 @@ export def "reports-top-items runTopItemReport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all segments
@@ -1820,6 +1868,7 @@ export def "segments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsids: string # Filter list to only include segments tied to specified RSID list (comma-delimited)
   --segmentFilter: string # Filter list to only include segments in the specified list (comma-delimited list of IDs)
   --locale: string # Locale (default: en_US)
@@ -1843,7 +1892,7 @@ export def "segments list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a segment
@@ -1863,6 +1912,7 @@ export def "segments createSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale. Valid values include 'en_US', 'fr_FR', 'ja_JP', 'de_DE', 'es_ES', 'ko_KR', 'pt_BR', 'zh_CN', and 'zh_TW'. (default: en_US)
   --expansion: list@expansion-completer-3 # Comma-delimited list of additional segment metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1892,7 +1942,7 @@ export def "segments createSegment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create validation for segment
@@ -1908,6 +1958,7 @@ export def "segments-validate validateSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rsid: string # RSID to run the report against
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1923,7 +1974,7 @@ export def "segments-validate validateSegment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a segment by ID
@@ -1940,6 +1991,7 @@ export def "segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale. Valid values include 'en_US', 'fr_FR', 'ja_JP', 'de_DE', 'es_ES', 'ko_KR', 'pt_BR', 'zh_CN', and 'zh_TW'. (default: en_US)
   --expansion: list@expansion-completer-3 # Comma-delimited list of additional segment metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1953,7 +2005,7 @@ export def "segments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a segment by ID
@@ -1970,6 +2022,7 @@ export def "segments updateSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale. Valid values include 'en_US', 'fr_FR', 'ja_JP', 'de_DE', 'es_ES', 'ko_KR', 'pt_BR', 'zh_CN', and 'zh_TW'. (default: en_US)
   --expansion: list@expansion-completer-3 # Comma-delimited list of additional segment metadata fields to include on response.
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -1986,7 +2039,7 @@ export def "segments updateSegment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a segment by ID
@@ -2003,6 +2056,7 @@ export def "segments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale. Valid values include 'en_US', 'fr_FR', 'ja_JP', 'de_DE', 'es_ES', 'ko_KR', 'pt_BR', 'zh_CN', and 'zh_TW'. (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -2015,7 +2069,7 @@ export def "segments delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve users for current company
@@ -2030,6 +2084,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results per page (default: 10)
   --page: int # Page number (base 0 - first page is "0") (default: 0)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
@@ -2043,7 +2098,7 @@ export def "users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve current user
@@ -2059,13 +2114,14 @@ export def "users-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyid: int, loginId: int, login: string, changePassword: bool, createDate: string, disabled: bool, email: string, firstName: string, fullName: string, imsUserId: string, lastName: string, lastAccess: string, phoneNumber: string, tempLoginEnd: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($globalCompanyId)/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve logs for provided search criteria
@@ -2081,6 +2137,7 @@ export def "auditlogs-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDate: string # Start date for the maximum of a 3 month period. (default: 2021-01-01T00:00:00-07)
   --endDate: string # End date for the maximum of a 3 month period. (default: 2021-01-02T14:32:33-07)
   --login: string # The login value of the user you want to filter logs by.
@@ -2101,5 +2158,5 @@ export def "auditlogs-usage get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def sourceType-completer [] { ["EDGE_IP" "LOCATION"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "connectivity-problems post-connectivity-problems" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "connectivity-problems post-connectivity-problems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --clientIp: string # Client IP for the Connectivity problems scenario to start MTR from. You can use the `ip` value from the `edgeIps` array in the [collected diagnostic data](https://techdocs.akamai.com/edge-diagnostics/reference/get-user-diagnostic-data-group-records). (e.g. {{clientIp}})
   --edgeLocationId: string # Unique identifier for an edge server location closest to end users experiencing issues with the URL. Run the [List available edge server locations](https://techdocs.akamai.com/edge-diagnostics/reference/get-edge-locations) operation to get this value. (e.g. {{edgeLocationId}})
@@ -134,7 +136,7 @@ export def "connectivity-problems post-connectivity-problems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Connectivity problems scenario response
@@ -151,6 +153,7 @@ export def "connectivity-problems-requests get-connectivity-problems-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeContentResponseBody: oneof<nothing, bool> # Includes response bodies in the response. (e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<clientIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, connectivity: table<additionalRequestParameters: record, destinationContext: string, destinationIpLocation: record, errorResponse: record, executionContext: string, executionStatus: string, info: record, result: record, sourceContext: string, sourceIpLocation: record, suggestedActions: list>, content: table<additionalRequestParameters: record, errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, createdBy: string, createdTime: string, errorResponse: record<detail: string, errors: list<string>, status: string, title: string, type: string>, executionStatus: string, internalIp: string, internalIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, link: string, logLines: table<errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, request: record<clientIp: string, edgeLocationId: string, ipVersion: string, packetType: string, port: int, requestHeaders: list<string>, runFromSiteShield: bool, sensitiveRequestHeaderKeys: list<string>, spoofEdgeIp: string, url: string>, requestId: int, retryAfter: int, siteShieldIp: string, siteShieldIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, spoofEdgeIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, summary: record<connectivity: list<record>, content: list<record>, logLines: list<record>>> {
@@ -160,7 +163,7 @@ export def "connectivity-problems-requests get-connectivity-problems-request" [
   let full_url = (build-url $base $"/connectivity-problems/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run the content problems scenario
@@ -176,6 +179,7 @@ export def "content-problems post-content-problems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --edgeLocationId: string # Unique identifier for an edge server location closest to end users experiencing issues with the URL. Run the [List available edge server locations](https://techdocs.akamai.com/edge-diagnostics/reference/get-edge-locations) operation to get this value. (e.g. {{edgeLocationId}})
   --ipVersion: string@ipVersion-completer # IP version for the Content problems scenario to use to run cURL and MTR commands, either `IPV4` or `IPV6`. (e.g. {{ipVersion}})
@@ -194,7 +198,7 @@ export def "content-problems post-content-problems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Content problems scenario response
@@ -211,6 +215,7 @@ export def "content-problems-requests get-content-problems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeContentResponseBody: oneof<nothing, bool> # Includes response bodies in the response. (e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<content: table<additionalRequestParameters: record, errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, createdBy: string, createdTime: string, errorResponse: record<detail: string, errors: list<string>, status: string, title: string, type: string>, executionStatus: string, internalIp: string, internalIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, link: string, logLines: table<errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, request: record<edgeLocationId: string, ipVersion: string, requestHeaders: list<string>, runFromSiteShield: bool, sensitiveRequestHeaderKeys: list<string>, spoofEdgeIp: string, url: string>, requestId: int, retryAfter: int, siteShieldIp: string, siteShieldIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, spoofEdgeIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, summary: record<content: list<record>, logLines: list<record>>> {
@@ -220,7 +225,7 @@ export def "content-problems-requests get-content-problems" [
   let full_url = (build-url $base $"/content-problems/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request content with cURL
@@ -236,6 +241,7 @@ export def "curl post-curl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --edgeIp: string # IP of the edge server you want to run the operation from. If you don't know if an IP is the edge IP, run the [Verify an IP](https://techdocs.akamai.com/edge-diagnostics/reference/post-verify-edge-ip) operation. You need to provide either this value or `edgeLocationId`. (e.g. {{edgeIp}})
   --edgeLocationId: string # Unique identifier for an edge server location closest to your end users. To get this value, run the [List available edge server locations](https://techdocs.akamai.com/edge-diagnostics/reference/get-edge-locations) operation first. You need to provide either this value or `edgeIp`. (e.g. {{edgeLocationId}})
@@ -255,7 +261,7 @@ export def "curl post-curl" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get domain details with dig
@@ -271,6 +277,7 @@ export def "dig post-dig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --edgeIp: string # IP of an edge server you want to run the `dig` command from. Provide either this value or `edgeLocationId`. To verify if an IP belongs to an edge server, run the [Verify an IP](https://techdocs.akamai.com/edge-diagnostics/reference/post-verify-edge-ip) operation. (e.g. {{edgeIp}})
   --edgeLocationId: string # Unique identifier for an edge server location closest to your end users. Provide either this value or `edgeIp`. To get this value, run the [List available edge server locations](https://techdocs.akamai.com/edge-diagnostics/reference/get-edge-locations) operation first. (e.g. {{edgeLocationId}})
@@ -287,7 +294,7 @@ export def "dig post-dig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available edge server locations
@@ -303,6 +310,7 @@ export def "edge-locations get-edge-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<edgeLocations: table<id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -311,7 +319,7 @@ export def "edge-locations get-edge-locations" [
   let full_url = (build-url $base "/edge-locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Translate error string
@@ -327,6 +335,7 @@ export def "error-translator post-error-translator" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   errorCode: string # Alphanumeric part of the error reference code you want to get the data for. (e.g. {{errorCode}})
   --traceForwardLogs: oneof<nothing, bool> # Gets logs from all edge servers involved in serving the request. When `false`, you get logs only from the edge server where the error occurred. Tracing forward logs may prolong the time of fetching data. The default value is `false`. (e.g. {{traceForwardLogs}})
@@ -340,7 +349,7 @@ export def "error-translator post-error-translator" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a translate error string response
@@ -357,6 +366,7 @@ export def "error-translator-requests get-error-translator-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<completedTime: string, createdBy: string, createdTime: string, executionStatus: string, link: string, request: record<errorCode: string, traceForwardLogs: bool>, requestId: int, result: record<cacheKeyHostname: string, certificateErrorDetails: record<error: string, fingerPrint: string, solution: string>, clientIp: record<ip: string, ipLocation: record>, clientRequestMethod: string, connectingIp: record<ip: string, ipLocation: record>, cpCode: int, date: string, edgeServerIp: record<ip: string, ipLocation: record>, epochTime: int, grepUrl: string, httpResponseCode: int, logLines: record<legend: record, logs: list>, noLogsErrorTitle: string, noLogsErrorType: string, originIp: record<ip: string, ipLocation: record>, propertyName: string, propertyUrl: string, reasonForFailure: string, url: string, userAgent: string, wafDetails: string, wafDetailsUrl: string, wsaUrl: string>, retryAfter: int, suggestedActions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -365,7 +375,7 @@ export def "error-translator-requests get-error-translator-request" [
   let full_url = (build-url $base $"/error-translator/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an ESI debugging report
@@ -381,6 +391,7 @@ export def "esi-debugger-api-debug post-debug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --clientIP: string # The client IP that emulates a location for specific EdgeScape GEO (geographic) data. (e.g. {{clientIP}})
   --clientRequestHeaders: record # Custom HTTP headers used in the client's requests.
@@ -396,7 +407,7 @@ export def "esi-debugger-api-debug post-debug" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get error statistics
@@ -412,6 +423,7 @@ export def "estats post-estats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --cpCode: int # CP code you want to get the error statistics for. You need to provide either this value or `url`. (e.g. {{cpCode}})
   --delivery: string@delivery-completer # Type of network you want to get traffic data for, either `STANDARD_TLS` or `ENHANCED_TLS`. Without this filter, Edge Diagnostics checks on its own the type of delivery used by the requested CP code or URL and returns data for it. If it uses both types, then Edge Diagnostics returns data for the type which got all data collected faster. If you choose the delivery type not used by your resource, then the results are empty. To verify the delivery type of your resource, run the [Get an edge hostname](https://techdocs.akamai.com/edge-hostnames/reference/get-edgehostnameid#getedgehostname) operation in [Edge Hostnames API](https://techdocs.akamai.com/edge-hostnames/reference/api). It is the `securityType` value. (e.g. {{delivery}})
@@ -427,7 +439,7 @@ export def "estats post-estats" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Launch a GREP request
@@ -445,6 +457,7 @@ export def "grep post-grep" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --arls: record # Collects ARLs to filter the logs by. — shape: {comparison: "CONTAINS"|"NOT_CONTAINS", value: list}
   --clientIps: list # Lists client IPs to filter the logs by.
@@ -466,7 +479,7 @@ export def "grep post-grep" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get specific logs
@@ -482,6 +495,7 @@ export def "grep get-grep" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --edgeIp: string # IP address that belongs to edge server and you want to get the logs for. To verify if an IP address belongs to an edge server, run the [Verify an IP](https://techdocs.akamai.com/edge-diagnostics/reference/post-verify-edge-ip) operation. To get the IP, you may need to run the [Get domain details with dig](https://techdocs.akamai.com/edge-diagnostics/reference/post-dig) or [Get diagnostic data of a group](https://techdocs.akamai.com/edge-diagnostics/reference/get-user-diagnostic-data-group-records) operation first. This is the IP value from the `answerSection` array in the [Get domain details with dig](https://techdocs.akamai.com/edge-diagnostics/reference/post-dig) operation response or the `ip` value from the `edgeIps` array in the [collected diagnostic data](https://techdocs.akamai.com/edge-diagnostics/reference/get-user-diagnostic-data-group-records). (e.g. 192.0.2.192)
   --cpCode: int # CP code you want to get the logs for. (e.g. 746478)
   --clientIp: string # Client IP to filter the logs by. (e.g. 192.0.2.95)
@@ -500,7 +514,7 @@ export def "grep get-grep" [
   let full_url = (build-url $base "/grep" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check a GREP request status
@@ -517,6 +531,7 @@ export def "grep-requests get-grep-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<completedTime: string, createdBy: string, createdTime: string, edgeIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, errorResponse: record<detail: string, errors: list<string>, status: string, title: string, type: string>, executionStatus: string, link: string, logLinesCount: int, request: record<arls: record<comparison: string, value: list>, clientIps: list<string>, cpCodes: list<int>, edgeIp: string, end: string, hostnames: list<string>, httpStatusCodes: record<comparison: string, value: list>, logType: string, start: string, userAgents: list<string>>, requestId: int, result: record<legend: record<fObjectStatus: record, fObjectStatus2: record, fObjectStatus3: record, logType: record, rObjectStatus: record, rObjectStatus2: record, rObjectStatus3: record>, logs: list<record>>, retryAfter: int, suggestedActions: list<string>, warning: record<key: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -525,7 +540,7 @@ export def "grep-requests get-grep-request" [
   let full_url = (build-url $base $"/grep/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List GTM properties
@@ -541,6 +556,7 @@ export def "gtm-gtm-properties get-gtm-properties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<gtmProperties: table<domain: string, hostname: string, property: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -549,7 +565,7 @@ export def "gtm-gtm-properties get-gtm-properties" [
   let full_url = (build-url $base "/gtm/gtm-properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List test and target IPs for a GTM hostname
@@ -567,6 +583,7 @@ export def "gtm-gtm-property-ips get-gtm-property-domain-gtm-property-ips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<gtmPropertyIps: record<domain: string, property: string, targets: list<string>, testIps: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -575,7 +592,7 @@ export def "gtm-gtm-property-ips get-gtm-property-domain-gtm-property-ips" [
   let full_url = (build-url $base $"/gtm/($property)/($domain)/gtm-property-ips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List IP acceleration hostnames
@@ -591,6 +608,7 @@ export def "ipa-hostnames get-ipa-hostnames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<hostnames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -599,7 +617,7 @@ export def "ipa-hostnames get-ipa-hostnames" [
   let full_url = (build-url $base "/ipa/hostnames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Locate an IP network
@@ -615,6 +633,7 @@ export def "locate-ip post-locate-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   ipAddresses: list # Up to 10 IP addresses you want to get the data for.
 ]: any -> record<completedTime: string, createdBy: string, createdTime: string, executionStatus: string, request: record<ipAddresses: list<string>>, results: table<executionStatus: string, geoLocation: record, ipAddress: string>> {
@@ -627,7 +646,7 @@ export def "locate-ip post-locate-ip" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Launch a metadata tracing request
@@ -643,6 +662,7 @@ export def "metadata-tracer post-mdt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --edgeIp: string # IP of the edge server you want to run the operation from. If you don't know if an IP is the edge IP, run the [Verify an IP](https://techdocs.akamai.com/edge-diagnostics/reference/post-verify-edge-ip) operation. Provide either this value or `mdtLocationId`. (e.g. {{edgeIp}})
   --httpBody: string # The POST call's request body. (e.g. {{httpBody}})
@@ -662,7 +682,7 @@ export def "metadata-tracer post-mdt" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available edge server locations for metadata tracing
@@ -678,6 +698,7 @@ export def "metadata-tracer-locations get-mdt-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<mdtLocations: table<id: string, supportedMethods: list, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -686,7 +707,7 @@ export def "metadata-tracer-locations get-mdt-locations" [
   let full_url = (build-url $base "/metadata-tracer/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check a metadata tracing request status
@@ -703,6 +724,7 @@ export def "metadata-tracer-requests get-mdt-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<completedTime: string, createdBy: string, createdTime: string, edgeIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, executionStatus: string, internalIp: string, link: string, request: record<edgeIp: string, httpBody: string, httpMethod: string, mdtLocationId: string, requestHeaders: list<string>, sensitiveRequestHeaderKeys: list<string>, url: string, useStaging: bool>, requestId: int, result: record<arlDataXml: string, exitCode: int, httpStatusCode: int, httpVersion: string, reasonPhrase: string, responseHeaderList: list<string>, traceInformation: list<record>>, retryAfter: int, summary: record<accountId: string, assetId: string, contractId: string, groupId: string, propertyId: string, propertyName: string, propertyVersion: int, ruleFormat: string, rules: record<options: record, behaviors: list, children: list, comments: string, criteria: list, criteriaMustSatisfy: string, name: string, uuid: string, variables: list>>> {
@@ -712,7 +734,7 @@ export def "metadata-tracer-requests get-mdt-request" [
   let full_url = (build-url $base $"/metadata-tracer/requests/($requestId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test network connectivity with MTR
@@ -728,6 +750,7 @@ export def "mtr post-mtr" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   destination: string # MTR destination compliant with the `destinationType`, either a hostname or a destination IP. To build an object for a GTM hostname, enter the `target` value returned by the [List test and target IPs for a GTM hostname](https://techdocs.akamai.com/edge-diagnostics/reference/get-gtm-property-domain-gtm-property-ips) operation. For a Site Shield hostname, enter a destination IP address. (e.g. {{destination}})
   destinationType: string@destinationType-completer # Type of destination input, either `IP` or `HOST`. To build an object for a GTM or Site Shield hostname, choose `IP`. (e.g. {{destinationType}})
@@ -749,7 +772,7 @@ export def "mtr post-mtr" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Translate an Akamaized URL
@@ -765,6 +788,7 @@ export def "translated-url post-translated-url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --body-url: string # Fully qualified [Akamaized URL](https://techdocs.akamai.com/edge-diagnostics/docs/arl-syntax) you want to get the details for. (e.g. {{url}})
 ]: any -> record<request: record<url: string>, translatedUrl: record<cacheControl: string, cacheKeyHostname: string, cpCode: int, pragma: string, serialNumber: string, ttl: string, typeCode: string>> {
@@ -777,7 +801,7 @@ export def "translated-url post-translated-url" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Run the URL health check
@@ -793,6 +817,7 @@ export def "url-health-check post-url-health-check" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --edgeLocationId: string # Unique identifier for an edge server location closest to your end users. Run the [List available edge server locations](https://techdocs.akamai.com/edge-diagnostics/reference/get-edge-locations) operation to get this value. (e.g. {{edgeLocationId}})
   --ipVersion: string@ipVersion-completer # IP version for the URL health check to use to run cURL and MTR, either `IPV4` or `IPV6`. (e.g. {{ipVersion}})
@@ -815,7 +840,7 @@ export def "url-health-check post-url-health-check" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a URL health check response
@@ -832,6 +857,7 @@ export def "url-health-check-requests get-url-health-check-requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeContentResponseBody: oneof<nothing, bool> # Includes response bodies in the response. (e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<connectivity: table<additionalRequestParameters: record, destinationContext: string, destinationIpLocation: record, errorResponse: record, executionContext: string, executionStatus: string, info: record, result: record, sourceContext: string, sourceIpLocation: record, suggestedActions: list>, content: table<additionalRequestParameters: record, errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, createdBy: string, createdTime: string, domainDetails: table<additionalRequestParameters: record, errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, errorResponse: record<detail: string, errors: list<string>, status: string, title: string, type: string>, executionStatus: string, internalIp: string, internalIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, link: string, logLines: table<errorResponse: record, executionContext: string, executionStatus: string, result: record, suggestedActions: list>, request: record<edgeLocationId: string, ipVersion: string, packetType: string, port: int, queryType: string, requestHeaders: list<string>, runFromSiteShield: bool, sensitiveRequestHeaderKeys: list<string>, spoofEdgeIp: string, url: string, viewsAllowed: list<string>>, requestId: int, retryAfter: int, siteShieldIp: string, siteShieldIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, spoofEdgeIpLocation: record<asNumber: int, city: string, countryCode: string, regionCode: string>, summary: record<cacheKeyHostname: string, cacheSetting: string, connectivity: list<record>, content: list<record>, cpCode: int, domainDetails: list<record>, edgeServerIp: string, edgeStatusCode: string, errorMessage: string, logLines: list<record>, originResponseCode: string, originServerHostname: string, originServerIp: string, serialNumber: string, ttl: string, typeCode: string>> {
@@ -841,7 +867,7 @@ export def "url-health-check-requests get-url-health-check-requests" [
   let full_url = (build-url $base $"/url-health-check/requests/($requestId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a diagnostic link
@@ -857,6 +883,7 @@ export def "user-diagnostic-data-groups post-user-diagnostic-data-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --ipaHostname: string # IP acceleration hostname you want to collect the diagnostic data for. You need to provide either this value or `url`. To get the available hostnames, run the [List IP acceleration hostnames](https://techdocs.akamai.com/edge-diagnostics/reference/get-ipa-hostnames) operation. (format: hostname, e.g. {{ipaHostname}})
   --note: string # Notes about the group or issues experienced by group's end users.  (e.g. {{note}})
@@ -871,7 +898,7 @@ export def "user-diagnostic-data-groups post-user-diagnostic-data-groups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List end user groups
@@ -887,6 +914,7 @@ export def "user-diagnostic-data-groups get-user-diagnostic-data-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<groups: table<createdBy: string, createdTime: string, diagnosticLink: string, diagnosticLinkStatus: string, groupId: string, ipaHostname: string, note: string, recordCount: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -895,7 +923,7 @@ export def "user-diagnostic-data-groups get-user-diagnostic-data-groups" [
   let full_url = (build-url $base "/user-diagnostic-data/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get diagnostic data for an end user group
@@ -912,6 +940,7 @@ export def "user-diagnostic-data-groups-records get-user-diagnostic-data-group-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCurl: oneof<nothing, bool> # Includes `curl` results in the response. (e.g. true)
   --includeDig: oneof<nothing, bool> # Includes `dig` results in the response. (e.g. true)
   --includeMtr: oneof<nothing, bool> # Includes MTR results in the response. (e.g. true)
@@ -923,7 +952,7 @@ export def "user-diagnostic-data-groups-records get-user-diagnostic-data-group-r
   let full_url = (build-url $base $"/user-diagnostic-data/groups/($groupId)/records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify an IP
@@ -939,6 +968,7 @@ export def "verify-edge-ip post-verify-edge-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   ipAddresses: list # Up to 10 IP addresses you want to get the data for.
 ]: any -> record<completedTime: string, createdBy: string, createdTime: string, executionStatus: string, request: record<ipAddresses: list<string>>, results: table<executionStatus: string, ipAddress: string, isEdgeIp: bool>> {
@@ -951,7 +981,7 @@ export def "verify-edge-ip post-verify-edge-ip" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify and locate an IP
@@ -967,6 +997,7 @@ export def "verify-locate-ip post-verify-locate-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   ipAddress: string # IP address you want to get the data for. (e.g. {{ipAddress}})
 ]: any -> record<createdBy: string, createdTime: string, executionStatus: string, request: record<ipAddress: string>, result: record<geoLocation: record<areaCode: string, asNumber: int, city: string, continent: string, countryCode: string, county: string, dma: int, fips: string, latitude: float, longitude: float, msa: int, network: string, networkType: string, pmsa: int, proxy: string, regionCode: string, throughput: string, timeZone: string, zipCode: string>, isEdgeIp: bool>> {
@@ -979,5 +1010,5 @@ export def "verify-locate-ip post-verify-locate-ip" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

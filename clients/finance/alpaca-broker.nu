@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -90,7 +91,7 @@ def date-type-completer [] { ["declaration_date" "ex_date" "payable_date" "recor
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -123,6 +124,7 @@ export def "accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Pass space-delimited tokens. The response will contain accounts that match with each of the tokens (logical AND). A match means the token is present in either the account’s associated account number, phone number, name, or e-mail address (logical OR).
   --created-after: string # format: date-time
   --created-before: string # format: date-time
@@ -136,7 +138,7 @@ export def "accounts list" [
   let full_url = (build-url $base "/v1/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an account
@@ -157,6 +159,7 @@ export def "accounts createAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   contact: record # Contact is the model for the account owner contact information. — shape: {email_address?: string, phone_number?: string, street_address?: list, city?: string, state?: string, postal_code?: string}
   identity: record # Identity is the model to provide account owner’s identity information.  (e.g. {given_name: John, family_name: Doe, date_of_birth: 1990-01-01, tax_id: 666-55-4321, tax_id_type: USA_SSN, country_of_citizenship: AUS, country_of_birth: AUS, country_of_tax_residence: USA, funding_source: [employment_income]}) — shape: {given_name: string, family_name: string, date_of_birth: string, tax_id?: string, tax_id_type?: "NOT_SPECIFIED"|"USA_SSN"|"ARG_AG_CUIT"|"AUS_TFN"|"AUS_ABN"|"BOL_NIT"|"BRA_CPF"|"CHL_RUT"|"COL_NIT"|"CRI_NITE"|"DEU_TAX_ID"|"DOM_RNC"|"ECU_RUC"|"FRA_SPI"|"GBR_UTR"|"GBR_NINO"|"GTM_NIT"|"HND_RTN"|"HUN_TIN"|"IDN_KTP"|"IND_PAN"|"ISR_TAX_ID"|"ITA_TAX_ID"|"JPN_TAX_ID"|"MEX_RFC"|"NIC_RUC"|"NLD_TIN"|"PAN_RUC"|"PER_RUC"|"PRY_RUC"|"SGP_NRIC"|"SGP_FIN"|"SGP_ASGD"|"SGP_ITR"|"SLV_NIT"|"SWE_TAX_ID"|"URY_RUT"|"VEN_RIF", country_of_citizenship?: string, country_of_birth?: string, country_of_tax_residence: string, funding_source: list, annual_income_min?: float, annual_income_max?: float, liquid_net_worth_min?: float, liquid_net_worth_max?: float, total_net_worth_min?: float, total_net_worth_max?: float, extra?: record}
   disclosures: record # Disclosures fields denote if the account owner falls under each category defined by FINRA rule. The client has to ask questions for the end user and the values should reflect their answers. If one of the answers is true (yes), the account goes into ACTION_REQUIRED status.  (e.g. {is_control_person: false, is_affiliated_exchange_or_finra: false, is_politically_exposed: false, immediate_family_exposed: false}) — shape: {employment_status?: "unemployed"|"employed"|"student"|"retired", employer_name?: string, employer_address?: string, employment_position?: string, is_control_person: bool, is_affiliated_exchange_or_finra: bool, is_politically_exposed: bool, immediate_family_exposed: bool, context?: list}
@@ -172,7 +175,7 @@ export def "accounts createAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an account by Id.
@@ -188,13 +191,14 @@ export def "accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_number: string, status: string, crypto_status: string, kyc_result: record<reject: record, accept: record, indeterminate: record, addidional_information: string>, currency: string, last_equity: string, created_at: string, contact: record<email_address: string, phone_number: string, street_address: list<string>, city: string, state: string, postal_code: string>, identity: record<given_name: string, family_name: string, date_of_birth: string, tax_id: string, tax_id_type: string, country_of_citizenship: string, country_of_birth: string, country_of_tax_residence: string, funding_source: list<string>, annual_income_min: float, annual_income_max: float, liquid_net_worth_min: float, liquid_net_worth_max: float, total_net_worth_min: float, total_net_worth_max: float, extra: record>, disclosures: record<employment_status: string, employer_name: string, employer_address: string, employment_position: string, is_control_person: bool, is_affiliated_exchange_or_finra: bool, is_politically_exposed: bool, immediate_family_exposed: bool, context: list<record>>, agreements: table<agreement: string, signed_at: string, ip_address: string, revision: string>, documents: table<id: string, document_type: string, document_sub_type: string, mime_type: string, created_at: string>, trusted_contact: record<given_name: string, family_name: string, email_address: string, phone_number: string, street_address: list<string>, city: string, state: string, postal_code: string, country: string>, account_name: string, account_type: string, custodial_account_type: string, minor_identity: record<given_name: string, family_name: string, date_of_birth: string, tax_id: string, tax_id_type: string, country_of_citizenship: string, country_of_birth: string, country_of_tax_residence: string, state: string, email: string>, trading_configurations: record<dtbp_check: string, trade_confirm_email: string, suspend_trade: bool, no_shorting: bool, fractional_trading: bool, max_margin_multiplier: string, pdt_check: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account
@@ -214,6 +218,7 @@ export def "accounts patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contact: record # Contact is the model for the account owner contact information. — shape: {email_address?: string, phone_number?: string, street_address?: list, city?: string, state?: string, postal_code?: string}
   --identity: record # Identity is the model to provide account owner’s identity information.  (e.g. {given_name: John, family_name: Doe, date_of_birth: 1990-01-01, tax_id: 666-55-4321, tax_id_type: USA_SSN, country_of_citizenship: AUS, country_of_birth: AUS, country_of_tax_residence: USA, funding_source: [employment_income]}) — shape: {given_name: string, family_name: string, date_of_birth: string, tax_id?: string, tax_id_type?: "NOT_SPECIFIED"|"USA_SSN"|"ARG_AG_CUIT"|"AUS_TFN"|"AUS_ABN"|"BOL_NIT"|"BRA_CPF"|"CHL_RUT"|"COL_NIT"|"CRI_NITE"|"DEU_TAX_ID"|"DOM_RNC"|"ECU_RUC"|"FRA_SPI"|"GBR_UTR"|"GBR_NINO"|"GTM_NIT"|"HND_RTN"|"HUN_TIN"|"IDN_KTP"|"IND_PAN"|"ISR_TAX_ID"|"ITA_TAX_ID"|"JPN_TAX_ID"|"MEX_RFC"|"NIC_RUC"|"NLD_TIN"|"PAN_RUC"|"PER_RUC"|"PRY_RUC"|"SGP_NRIC"|"SGP_FIN"|"SGP_ASGD"|"SGP_ITR"|"SLV_NIT"|"SWE_TAX_ID"|"URY_RUT"|"VEN_RIF", country_of_citizenship?: string, country_of_birth?: string, country_of_tax_residence: string, funding_source: list, annual_income_min?: float, annual_income_max?: float, liquid_net_worth_min?: float, liquid_net_worth_max?: float, total_net_worth_min?: float, total_net_worth_max?: float, extra?: record}
   --disclosures: record # Disclosures fields denote if the account owner falls under each category defined by FINRA rule. The client has to ask questions for the end user and the values should reflect their answers. If one of the answers is true (yes), the account goes into ACTION_REQUIRED status.  (e.g. {is_control_person: false, is_affiliated_exchange_or_finra: false, is_politically_exposed: false, immediate_family_exposed: false}) — shape: {employment_status?: "unemployed"|"employed"|"student"|"retired", employer_name?: string, employer_address?: string, employment_position?: string, is_control_person: bool, is_affiliated_exchange_or_finra: bool, is_politically_exposed: bool, immediate_family_exposed: bool, context?: list}
@@ -227,7 +232,7 @@ export def "accounts patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to close an account
@@ -243,13 +248,14 @@ export def "accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of account documents.
@@ -265,6 +271,7 @@ export def "accounts-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # optional date value to filter the list (inclusive). (format: date)
   --end-date: string # optional date value to filter the list (inclusive). (format: date)
   --type: string@type-completer # See DocumentType model for reference and explanation of values (e.g. identity_verification)
@@ -275,7 +282,7 @@ export def "accounts-documents get" [
   let full_url = (build-url $base $"/v1/accounts/($account_id)/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a document to an already existing account
@@ -291,6 +298,7 @@ export def "accounts-documents-upload uploadDocToAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   document_type: string@document-type-completer # - identity_verification:   identity verification document  - address_verification:   address verification document  - date_of_birth_verification:   date of birth verification document  - tax_id_verification:   tax ID verification document  - account_approval_letter:   407 approval letter  - cip_result:   initial CIP result  (e.g. identity_verification)
   --document-sub-type: string # e.g. passport
   content: string # format: base64, e.g. /9j/Cg==
@@ -304,7 +312,7 @@ export def "accounts-documents-upload uploadDocToAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download a document file that belongs to an account.
@@ -321,13 +329,14 @@ export def "accounts-documents-download downloadDocFromAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/documents/($document_id)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download a document file directly
@@ -343,13 +352,14 @@ export def "documents downloadDocumentById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/documents/($document_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve bank relationships for an account
@@ -365,6 +375,7 @@ export def "accounts-recipient-banks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # e.g. ACTIVE
   --bank-name: string
 ]: nothing -> table<id: string, created_at: string, updated_at: string, account_id: string, status: string, name: string, bank_code: string, bank_code_type: string, country: string, state_province: string, postal_code: string, city: string, street_address: string, account_number: string> {
@@ -374,7 +385,7 @@ export def "accounts-recipient-banks get" [
   let full_url = (build-url $base $"/v1/accounts/($account_id)/recipient_banks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Bank Relationship for an account
@@ -390,6 +401,7 @@ export def "accounts-recipient-banks createRecipientBank" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of recipient bank
   bank_code: string # 9-Digit ABA RTN (Routing Number) or BIC
   bank_code_type: string@bank-code-type-completer # ABA (Domestic) or BIC (International)
@@ -408,7 +420,7 @@ export def "accounts-recipient-banks createRecipientBank" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Bank Relationship for an account
@@ -425,13 +437,14 @@ export def "accounts-recipient-banks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/recipient_banks/($bank_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of transfers for an account.
@@ -447,6 +460,7 @@ export def "accounts-transfers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direction: string@direction-completer # INCOMING or OUTGOING
   --limit: int # format: int32
   --offset: int # format: int32
@@ -457,7 +471,7 @@ export def "accounts-transfers get" [
   let full_url = (build-url $base $"/v1/accounts/($account_id)/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request a new transfer
@@ -474,6 +488,7 @@ export def "accounts-transfers createTransferForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   transfer_type: string@transfer-type-completer # **NOTE:** The Sandbox environment currently only supports `ach`  - **ach** Transfer via ACH (US Only). - **wire** Transfer via wire (international).  (e.g. ach)
   --relationship-id: string # Required if type = `ach`  The ach_relationship created for the account_id [here](https://alpaca.markets/docs/api-references/broker-api/funding/ach/#creating-an-ach-relationship) (format: uuid)
   --bank-id: string # Required if type = `wire`  The bank_relationship created for the account_id [here](https://alpaca.markets/docs/api-references/broker-api/funding/bank/#creating-a-new-bank-relationship) (format: uuid)
@@ -490,7 +505,7 @@ export def "accounts-transfers createTransferForAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to close a transfer
@@ -507,13 +522,14 @@ export def "accounts-transfers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/transfers/($transfer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve account activities
@@ -528,6 +544,7 @@ export def "accounts-activities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # id of a single account to filter by (format: uuid)
   --date: string # Both formats YYYY-MM-DD and YYYY-MM-DDTHH:MM:SSZ supported.
   --until: string # Both formats YYYY-MM-DD and YYYY-MM-DDTHH:MM:SSZ supported.
@@ -542,7 +559,7 @@ export def "accounts-activities list" [
   let full_url = (build-url $base "/v1/accounts/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve specific account activities
@@ -558,6 +575,7 @@ export def "accounts-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # id of a single account to filter by (format: uuid)
   --date: string # Both formats YYYY-MM-DD and YYYY-MM-DDTHH:MM:SSZ supported. (format: date-time)
   --until: string # Both formats YYYY-MM-DD and YYYY-MM-DDTHH:MM:SSZ supported. (format: date-time)
@@ -572,7 +590,7 @@ export def "accounts-activities get" [
   let full_url = (build-url $base $"/v1/accounts/activities/($activity_type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve ACH Relationships for an account
@@ -588,6 +606,7 @@ export def "accounts-ach-relationships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statuses: string # Comma-separated status values
 ]: nothing -> table<id: string, created_at: string, updated_at: string, account_id: string, status: string, account_owner_name: string, bank_account_type: string, bank_account_number: string, bank_routing_number: string, nickname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -596,7 +615,7 @@ export def "accounts-ach-relationships get" [
   let full_url = (build-url $base $"/v1/accounts/($account_id)/ach_relationships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an ACH Relationship
@@ -612,6 +631,7 @@ export def "accounts-ach-relationships createACHRelationshipForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   account_owner_name: string
   bank_account_type: string@bank-account-type-completer # Must be CHECKING or SAVINGS
   bank_account_number: string # In sandbox, this still must be a valid format
@@ -627,7 +647,7 @@ export def "accounts-ach-relationships createACHRelationshipForAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing ACH relationship
@@ -644,13 +664,14 @@ export def "accounts-ach-relationships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/ach_relationships/($ach_relationship_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve trading details for an account.
@@ -666,13 +687,14 @@ export def "trading-accounts-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_number: string, status: string, currency: string, buying_power: string, regt_buying_power: string, daytrading_buying_power: string, cash: string, cash_withdrawable: string, cash_transferable: string, pending_transfer_out: string, portfolio_value: string, pattern_day_trader: bool, trading_blocked: bool, transfers_blocked: bool, account_blocked: bool, created_at: string, trade_suspended_by_user: bool, multiplier: string, shorting_enabled: bool, equity: string, last_equity: string, long_market_value: string, short_market_value: string, initial_margin: string, maintenance_margin: string, last_maintenance_margin: string, sma: string, daytrade_count: int, previous_close: string, last_long_market_value: string, last_short_market_value: string, last_cash: string, last_initial_margin: string, last_regt_buying_power: string, last_daytrading_buying_power: string, last_buying_power: string, last_daytrade_count: int, clearing_broker: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List open positions for an account
@@ -688,13 +710,14 @@ export def "trading-accounts-positions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<asset_id: string, symbol: string, exchange: string, asset_class: string, asset_marginable: bool, avg_entry_price: string, qty: string, side: string, market_value: string, cost_basis: string, unrealized_pl: string, unrealized_plpc: string, unrealized_intraday_pl: string, unrealized_intraday_plpc: string, current_price: string, lastday_price: string, change_today: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/positions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close All Positions for an Account
@@ -710,6 +733,7 @@ export def "trading-accounts-positions closeAllPositionsForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancel-orders: oneof<nothing, bool> # If true is specified, cancel all open orders before liquidating all positions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -718,7 +742,7 @@ export def "trading-accounts-positions closeAllPositionsForAccount" [
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/positions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Open Position for account by Symbol or AssetId
@@ -735,13 +759,14 @@ export def "trading-accounts-positions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<asset_id: string, symbol: string, exchange: string, asset_class: string, asset_marginable: bool, avg_entry_price: string, qty: string, side: string, market_value: string, cost_basis: string, unrealized_pl: string, unrealized_plpc: string, unrealized_intraday_pl: string, unrealized_intraday_plpc: string, current_price: string, lastday_price: string, change_today: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/positions/($symbol_or_asset_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a Position for an Account
@@ -758,6 +783,7 @@ export def "trading-accounts-positions closePositionForAccountBySymbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qty: string # Optional the number of shares to liquidate. Can accept up to 9 decimal points. Cannot work with percentage
   --percentage: string # percentage of position to liquidate. Must be between 0 and 100. Would only sell fractional if position is originally fractional. Can accept up to 9 decimal points. Cannot work with qty
 ]: nothing -> record<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_price: string, trail_percent: string, hwm: string, commission: string> {
@@ -767,7 +793,7 @@ export def "trading-accounts-positions closePositionForAccountBySymbol" [
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/positions/($symbol_or_asset_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a single order for the given order_id.
@@ -784,13 +810,14 @@ export def "trading-accounts-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_price: string, trail_percent: string, hwm: string, commission: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/orders/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replaces a single order with updated parameters
@@ -807,6 +834,7 @@ export def "trading-accounts-orders replaceOrderForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qty: string # You can only patch full shares for now (format: decimal, e.g. 4.2)
   --time-in-force: string@time-in-force-completer # e.g. gtc
   --limit-price: string # Required if original order's `type` field was limit or stop_limit (format: decimal, e.g. 3.14)
@@ -822,7 +850,7 @@ export def "trading-accounts-orders replaceOrderForAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Attempts to cancel an open order.
@@ -839,13 +867,14 @@ export def "trading-accounts-orders delete-by-account_id-order_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/orders/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a list of orders for the account, filtered by the supplied query parameters.
@@ -861,6 +890,7 @@ export def "trading-accounts-orders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Order status to be queried. open, closed or all. Defaults to open.
   --limit: int # The maximum number of orders in response. Defaults to 50 and max is 500. (e.g. 500)
   --after: string # The response will include only ones submitted after this timestamp (exclusive.) (format: date-time, e.g. 2021-03-16T18:38:01.942282Z)
@@ -875,7 +905,7 @@ export def "trading-accounts-orders list" [
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an order for an account.
@@ -893,6 +923,7 @@ export def "trading-accounts-orders createOrderForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   symbol: string # Symbol or asset ID to identify the asset to trade (e.g. AAPL)
   --qty: string # Number of shares to trade. Can be fractionable for only market and day order types. (format: decimal, e.g. 4.124)
   --notional: string # Dollar amount to trade. Cannot work with qty. Can only work for market order types and time_in_force = day. (format: decimal, e.g. 3)
@@ -918,7 +949,7 @@ export def "trading-accounts-orders createOrderForAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Attempts to cancel all open orders. A response will be provided for each order that is attempted to be cancelled.
@@ -934,13 +965,14 @@ export def "trading-accounts-orders delete-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/orders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all assets
@@ -955,6 +987,7 @@ export def "assets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # Asset status to filter by, will default to `all` (default: all, e.g. all)
   --asset-class: string@asset-class-completer # Asset class to filter by, `us_equity` or `crypto`. Defaults to `us_equity` (default: us_equity, e.g. us_equity)
 ]: nothing -> table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool, last_close_pct_change: string, last_price: string, last_close: string> {
@@ -964,7 +997,7 @@ export def "assets list" [
   let full_url = (build-url $base "/v1/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an asset by UUID
@@ -980,13 +1013,14 @@ export def "assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool, last_close_pct_change: string, last_price: string, last_close: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/assets/($symbol_or_asset_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query market calendar
@@ -1001,6 +1035,7 @@ export def "calendar queryMarketCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The first date to retrieve data for. (Inclusive) in YYYY-MM-DD format (format: date, e.g. 2022-01-01)
   --end: string # The last date to retrieve data for. (Inclusive) in YYYY-MM-DD format (format: date, e.g. 2022-01-01)
 ]: nothing -> table<date: string, open: string, close: string, session_open: string, session_close: string> {
@@ -1010,7 +1045,7 @@ export def "calendar queryMarketCalendar" [
   let full_url = (build-url $base "/v1/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query market clock
@@ -1025,13 +1060,14 @@ export def "clock queryMarketClock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<timestamp: string, is_open: bool, next_open: string, next_close: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/clock")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe to account status events (SSE).
@@ -1046,6 +1082,7 @@ export def "events-accounts-status suscribeToAccountStatusSSE" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Format: YYYY-MM-DD (format: date)
   --until: string # Format: YYYY-MM-DD (format: date)
   --since-id: int
@@ -1057,7 +1094,7 @@ export def "events-accounts-status suscribeToAccountStatusSSE" [
   let full_url = (build-url $base "/v1/events/accounts/status" $qp)
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe to journal events (SSE).
@@ -1072,6 +1109,7 @@ export def "events-journals-status subscribeToJournalStatusSSE" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Format: YYYY-MM-DD (format: date-time)
   --until: string # Format: YYYY-MM-DD (format: date-time)
   --since-id: int
@@ -1083,7 +1121,7 @@ export def "events-journals-status subscribeToJournalStatusSSE" [
   let full_url = (build-url $base "/v1/events/journals/status" $qp)
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe to Transfer Events (SSE)
@@ -1098,6 +1136,7 @@ export def "events-transfers-status subscribeToTransferStatusSSE" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Format: YYYY-MM-DD (format: date-time)
   --until: string # Format: YYYY-MM-DD (format: date-time)
   --since-id: int
@@ -1109,7 +1148,7 @@ export def "events-transfers-status subscribeToTransferStatusSSE" [
   let full_url = (build-url $base "/v1/events/transfers/status" $qp)
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe to Trade Events (SSE)
@@ -1124,6 +1163,7 @@ export def "events-trades subscribeToTradeSSE" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Format: YYYY-MM-DD (format: date-time)
   --until: string # Format: YYYY-MM-DD (format: date-time)
   --since-id: int
@@ -1135,7 +1175,7 @@ export def "events-trades subscribeToTradeSSE" [
   let full_url = (build-url $base "/v1/events/trades" $qp)
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of requested journals.
@@ -1151,6 +1191,7 @@ export def "journals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # By journal creation date. Format: 2020-01-01 (format: date)
   --before: string # By journal creation date. Format: 2020-01-01 (format: date)
   --status: string@status-completer-3 # See the JournalStatus model for more info
@@ -1164,7 +1205,7 @@ export def "journals get" [
   let full_url = (build-url $base "/v1/journals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Journal.
@@ -1179,6 +1220,7 @@ export def "journals createJournal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   to_account: string # The account_id you wish to journal to (format: uuid)
   from_account: string # The account_id you wish to journal from (format: uuid)
   entry_type: string@entry-type-completer # This enum represents the various kinds of Journal alpaca supports.  Current values are:  - **JNLC**    Journal Cash between accounts  - **JNLS**    Journal Securities between accounts
@@ -1200,7 +1242,7 @@ export def "journals createJournal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a pending journal.
@@ -1216,13 +1258,14 @@ export def "journals delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/journals/($journal_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Batch Journal Transaction (One-to-Many)
@@ -1238,6 +1281,7 @@ export def "journals-batch createBatchJournal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entry_type: string@entry-type-completer-1 # Only supports `JNLC` for now
   from_account: string # The account id that is the originator of the funds being moved. Most likely is your Sweep Firm Account (format: uuid)
   --description: string # Journal description, gets returned in the response
@@ -1251,7 +1295,7 @@ export def "journals-batch createBatchJournal" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an OAuth client
@@ -1267,6 +1311,7 @@ export def "oauth-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --response-type: string@response-type-completer # code or token (e.g. token)
   --redirect-uri: string # Redirect URI of the OAuth flow (e.g. https://example.com/authorize)
   --scope: string # Requested scopes by the OAuth flow (e.g. general)
@@ -1277,7 +1322,7 @@ export def "oauth-clients get" [
   let full_url = (build-url $base $"/v1/oauth/clients/($client_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issue an OAuth token.
@@ -1292,6 +1337,7 @@ export def "oauth-token issueOAuthToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # OAuth client ID
   client_secret: string # OAuth client secret
   redirect_uri: string # redirect URI for the OAuth flow
@@ -1306,7 +1352,7 @@ export def "oauth-token issueOAuthToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorize an OAuth Token
@@ -1321,6 +1367,7 @@ export def "oauth-authorize authorizeOAuthToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # OAuth client ID
   client_secret: string # OAuth client secret
   redirect_uri: string # redirect URI for the OAuth flow
@@ -1335,7 +1382,7 @@ export def "oauth-authorize authorizeOAuthToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all watchlists
@@ -1351,13 +1398,14 @@ export def "trading-accounts-watchlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/trading/accounts/($account_id)/watchlists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new watchlist
@@ -1373,6 +1421,7 @@ export def "trading-accounts-watchlists createWatchlistForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The watchlist name
   symbols: list # The new list of symbol names to watch
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool, last_close_pct_change: string, last_price: string, last_close: string>> {
@@ -1384,7 +1433,7 @@ export def "trading-accounts-watchlists createWatchlistForAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Manage watchlists
@@ -1401,13 +1450,14 @@ export def "accounts-watchlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool, last_close_pct_change: string, last_price: string, last_close: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/watchlists/($watchlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing watchlist
@@ -1424,6 +1474,7 @@ export def "accounts-watchlists replaceWatchlistForAccountById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The watchlist name
   symbols: list # The new list of symbol names to watch
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool, last_close_pct_change: string, last_price: string, last_close: string>> {
@@ -1435,7 +1486,7 @@ export def "accounts-watchlists replaceWatchlistForAccountById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a watchlist
@@ -1452,13 +1503,14 @@ export def "accounts-watchlists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($account_id)/watchlists/($watchlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieving Announcements
@@ -1473,6 +1525,7 @@ export def "corporate-actions-announcements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ca-types: string # A comma-delimited list of CorporateActionType values
   --since: string # The start (inclusive) of the date range when searching corporate action announcements. This should follow the YYYY-MM-DD format. The date range is limited to 90 days. (format: date)
   --until: string # The end (inclusive) of the date range when searching corporate action announcements. This should follow the YYYY-MM-DD format. The date range is limited to 90 days. (format: date)
@@ -1486,5 +1539,5 @@ export def "corporate-actions-announcements get" [
   let full_url = (build-url $base "/v1/corporate_actions/announcements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -87,7 +88,7 @@ def extractiveness-completer [] { ["high" "low" "medium"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "chat chat-stream" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -123,6 +124,7 @@ export def "chat chat-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --stream: oneof<nothing, bool> # Defaults to `false`.  When `true`, the response will be a SSE stream of events.  Streaming is beneficial for user interfaces that render the contents of the response piece by piece, as it gets generated.
@@ -157,7 +159,7 @@ export def "chat chat-stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rerank API (v2)
@@ -172,6 +174,7 @@ export def "rerank rerank" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   model: string # The identifier of the model to use, eg `rerank-v3.5`.
@@ -191,7 +194,7 @@ export def "rerank rerank" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Embed API (v2)
@@ -207,6 +210,7 @@ export def "embed embed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --texts: list # An array of strings for the model to embed. Maximum number of texts per call is `96`.
@@ -230,7 +234,7 @@ export def "embed embed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an Embed Job
@@ -245,6 +249,7 @@ export def "embed-jobs create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   model: string # ID of the embedding model.  Available models and corresponding embedding dimensions:  - `embed-english-v3.0` : 1024 - `embed-multilingual-v3.0` : 1024 - `embed-english-light-v3.0` : 384 - `embed-multilingual-light-v3.0` : 384  (format: string)
@@ -264,7 +269,7 @@ export def "embed-jobs create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Embed Jobs
@@ -279,6 +284,7 @@ export def "embed-jobs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<embed_jobs: table<job_id: string, name: string, status: string, created_at: string, input_dataset_id: string, output_dataset_id: string, model: string, truncate: string, meta: record>> {
@@ -289,7 +295,7 @@ export def "embed-jobs list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an Embed Job
@@ -305,6 +311,7 @@ export def "embed-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<job_id: string, name: string, status: string, created_at: string, input_dataset_id: string, output_dataset_id: string, model: string, truncate: string, meta: record<api_version: record<version: string, is_deprecated: bool, is_experimental: bool>, billed_units: record<images: float, input_tokens: float, image_tokens: float, output_tokens: float, search_units: float, classifications: float>, tokens: record<input_tokens: float, output_tokens: float>, cached_tokens: float, warnings: list<string>>> {
@@ -315,7 +322,7 @@ export def "embed-jobs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel an Embed Job
@@ -331,6 +338,7 @@ export def "embed-jobs-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record {
@@ -341,7 +349,7 @@ export def "embed-jobs-cancel cancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a transcription
@@ -356,6 +364,7 @@ export def "audio-transcriptions create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   model: string # ID of the model to use.
   language: string # The language of the input audio, supplied in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes) format.
@@ -372,7 +381,7 @@ export def "audio-transcriptions create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create a batch
@@ -387,6 +396,7 @@ export def "batches create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --id: string # read-only. Batch ID.
@@ -416,7 +426,7 @@ export def "batches create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List batches
@@ -431,6 +441,7 @@ export def "batches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # The maximum number of batches to return. The service may return fewer than this value. If unspecified, at most 50 batches will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListBatches` call. Provide this to retrieve the subsequent page.
   --order-by: string # Batches can be ordered by creation time or last updated time. Use `created_at` for creation time or `updated_at` for last updated time.
@@ -445,7 +456,7 @@ export def "batches list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a batch
@@ -461,6 +472,7 @@ export def "batches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<batch: record<id: string, name: string, creator_id: string, org_id: string, status: string, created_at: string, updated_at: string, input_dataset_id: string, output_dataset_id: string, input_tokens: string, output_tokens: string, model: string, num_records: int, num_successful_records: int, num_failed_records: int, status_reason: string>> {
@@ -471,7 +483,7 @@ export def "batches get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a batch
@@ -487,6 +499,7 @@ export def "batches cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record {
@@ -497,7 +510,7 @@ export def "batches cancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Dataset
@@ -512,6 +525,7 @@ export def "datasets create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the uploaded dataset.
   --type: string@type-completer # The dataset type, which is used to validate the data. The only valid type is `embed-input` used in conjunction with the Embed Jobs API.
   --keep-original-file: oneof<nothing, bool> # Indicates if the original file should be stored.
@@ -536,7 +550,7 @@ export def "datasets create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Datasets
@@ -551,6 +565,7 @@ export def "datasets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --datasetType: string # optional filter by dataset type
   --before: string # optional filter before a date (format: date-time)
   --after: string # optional filter after a date (format: date-time)
@@ -568,7 +583,7 @@ export def "datasets list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dataset Usage
@@ -583,6 +598,7 @@ export def "datasets-usage get-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<organization_usage: int> {
@@ -593,7 +609,7 @@ export def "datasets-usage get-usage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Dataset
@@ -609,6 +625,7 @@ export def "datasets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<dataset: record<id: string, name: string, created_at: string, updated_at: string, dataset_type: string, validation_status: string, validation_error: string, schema: string, required_fields: list<string>, preserve_fields: list<string>, dataset_parts: list<record>, validation_warnings: list<string>, parse_info: record<separator: string, delimiter: string>, metrics: record<finetune_dataset_metrics: record>>> {
@@ -619,7 +636,7 @@ export def "datasets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Dataset
@@ -635,6 +652,7 @@ export def "datasets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record {
@@ -645,7 +663,7 @@ export def "datasets delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tokenize
@@ -660,6 +678,7 @@ export def "tokenize tokenize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   text: string # The string to be tokenized, the minimum text length is 1 character, and the maximum text length is 65536 characters.
@@ -675,7 +694,7 @@ export def "tokenize tokenize" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Detokenize
@@ -690,6 +709,7 @@ export def "detokenize detokenize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   tokens: list # The list of tokens to be detokenized.
@@ -705,7 +725,7 @@ export def "detokenize detokenize" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Model
@@ -721,6 +741,7 @@ export def "models get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<name: string, is_deprecated: bool, endpoints: list<string>, finetuned: bool, context_length: float, tokenizer_url: string, default_endpoints: list<string>, features: list<string>, sampling_defaults: record<temperature: float, k: int, p: float, frequency_penalty: float, presence_penalty: float, max_tokens_per_doc: int>> {
@@ -731,7 +752,7 @@ export def "models get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Models
@@ -746,6 +767,7 @@ export def "models list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: float # Maximum number of models to include in a page Defaults to `20`, min value of `1`, max value of `1000`. (format: double)
   --page-token: string # Page token provided in the `next_page_token` field of a previous response.
   --endpoint: string@endpoint-completer # When provided, filters the list of models to only those that are compatible with the specified endpoint.
@@ -760,7 +782,7 @@ export def "models list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Chat API (v1)
@@ -778,6 +800,7 @@ export def "chat chat-stream-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --Accepts: string@Accepts-completer # Pass text/event-stream to receive the streamed response as server-sent events. The default is `\n` delimited events.
@@ -818,7 +841,7 @@ export def "chat chat-stream-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rerank API (v1)
@@ -833,6 +856,7 @@ export def "rerank rerank-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --model: string # The identifier of the model to use, eg `rerank-v3.5`.
@@ -853,7 +877,7 @@ export def "rerank rerank-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Embed API (v1)
@@ -869,6 +893,7 @@ export def "embed embed-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --texts: list # An array of strings for the model to embed. Maximum number of texts per call is `96`.
@@ -888,7 +913,7 @@ export def "embed embed-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check API key
@@ -903,6 +928,7 @@ export def "check-api-key check-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<valid: bool, organization_id: string, owner_id: string> {
@@ -913,7 +939,7 @@ export def "check-api-key check-api-key" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Classify
@@ -929,6 +955,7 @@ export def "classify classify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   inputs: list # A list of up to 96 texts to be classified. Each one must be a non-empty string. There is, however, no consistent, universal limit to the length a particular input can be. We perform classification on the first `x` tokens of each input, and `x` varies depending on which underlying model is powering classification. The maximum token length for each model is listed in the "max tokens" column [here](https://docs.cohere.com/docs/models). Note: by default the `truncate` parameter is set to `END`, so tokens exceeding the limit will be automatically dropped. This behavior can be disabled by setting `truncate` to `NONE`, which will result in validation errors for longer texts.
@@ -947,7 +974,7 @@ export def "classify classify" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Connectors
@@ -962,6 +989,7 @@ export def "connectors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Maximum number of connectors to return [0, 100]. (format: double, default: 30)
   --offset: float # Number of connectors to skip before returning results [0, inf]. (format: double, default: 0)
   --Authorization: string # Bearer authentication
@@ -975,7 +1003,7 @@ export def "connectors list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Connector
@@ -992,6 +1020,7 @@ export def "connectors create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   name: string # A human-readable name for the connector.
@@ -1013,7 +1042,7 @@ export def "connectors create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Connector
@@ -1029,6 +1058,7 @@ export def "connectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<connector: record<id: string, organization_id: string, name: string, description: string, url: string, created_at: string, updated_at: string, excludes: list<string>, auth_type: string, oauth: record<client_id: string, client_secret: string, authorize_url: string, token_url: string, scope: string>, auth_status: string, active: bool, continue_on_failure: bool>> {
@@ -1039,7 +1069,7 @@ export def "connectors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Connector
@@ -1057,6 +1087,7 @@ export def "connectors update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --name: string # A human-readable name for the connector.
@@ -1077,7 +1108,7 @@ export def "connectors update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Connector
@@ -1093,6 +1124,7 @@ export def "connectors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record {
@@ -1103,7 +1135,7 @@ export def "connectors delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authorize with oAuth
@@ -1119,6 +1151,7 @@ export def "connectors-oauth-authorize o-auth-authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after-token-redirect: string # The URL to redirect to after the connector has been authorized.
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
@@ -1131,7 +1164,7 @@ export def "connectors-oauth-authorize o-auth-authorize" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists fine-tuned models.
@@ -1146,6 +1179,7 @@ export def "finetuning-finetuned-models list-finetuned-models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Maximum number of results to be returned by the server. If 0, defaults to 50.
   --page-token: string # Request a specific page of the list results.
   --order-by: string # Comma separated list of fields. For example: "created_at,name". The default sorting order is ascending. To specify descending order for a field, append " desc" to the field name. For example: "created_at desc,name".  Supported sorting fields:   - created_at (default)
@@ -1160,7 +1194,7 @@ export def "finetuning-finetuned-models list-finetuned-models" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trains and deploys a fine-tuned model.
@@ -1176,6 +1210,7 @@ export def "finetuning-finetuned-models create-finetuned-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --id: string # read-only. FinetunedModel ID.
@@ -1199,7 +1234,7 @@ export def "finetuning-finetuned-models create-finetuned-model" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a fine-tuned model.
@@ -1216,6 +1251,7 @@ export def "finetuning-finetuned-models update-finetuned-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   name: string # FinetunedModel name (e.g. `foobar`).
@@ -1238,7 +1274,7 @@ export def "finetuning-finetuned-models update-finetuned-model" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a fine-tuned model by ID.
@@ -1254,6 +1290,7 @@ export def "finetuning-finetuned-models get-finetuned-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<finetuned_model: record<id: string, name: string, creator_id: string, organization_id: string, settings: record<base_model: record, dataset_id: string, hyperparameters: record, multi_label: bool, wandb: record>, status: string, created_at: string, updated_at: string, completed_at: string, last_used: string>> {
@@ -1264,7 +1301,7 @@ export def "finetuning-finetuned-models get-finetuned-model" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a fine-tuned model.
@@ -1280,6 +1317,7 @@ export def "finetuning-finetuned-models delete-finetuned-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record {
@@ -1290,7 +1328,7 @@ export def "finetuning-finetuned-models delete-finetuned-model" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch history of statuses for a fine-tuned model.
@@ -1306,6 +1344,7 @@ export def "finetuning-finetuned-models-events list-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Maximum number of results to be returned by the server. If 0, defaults to 50.
   --page-token: string # Request a specific page of the list results.
   --order-by: string # Comma separated list of fields. For example: "created_at,name". The default sorting order is ascending. To specify descending order for a field, append " desc" to the field name. For example: "created_at desc,name".  Supported sorting fields:   - created_at (default)
@@ -1320,7 +1359,7 @@ export def "finetuning-finetuned-models-events list-events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve training metrics for fine-tuned models.
@@ -1336,6 +1375,7 @@ export def "finetuning-finetuned-models-training-step-metrics list-training-step
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Maximum number of results to be returned by the server. If 0, defaults to 50.
   --page-token: string # Request a specific page of the list results.
   --Authorization: string # Bearer authentication
@@ -1349,7 +1389,7 @@ export def "finetuning-finetuned-models-training-step-metrics list-training-step
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate
@@ -1364,6 +1404,7 @@ export def "generate generate-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   prompt: string # The input text that serves as the starting point for generating the response. Note: The prompt will be pre-processed and modified before reaching the model.
@@ -1394,7 +1435,7 @@ export def "generate generate-stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Summarize
@@ -1409,6 +1450,7 @@ export def "summarize summarize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   text: string # The text to generate a summary for. Can be up to 100,000 characters long. Currently the only supported language is English.
@@ -1429,7 +1471,7 @@ export def "summarize summarize" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Chat prompt (v2)
@@ -1447,6 +1489,7 @@ export def "prompt prompt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
   --stream: oneof<nothing, bool> # Defaults to `false`.  When `true`, the response will be a SSE stream of events.  Streaming is beneficial for user interfaces that render the contents of the response piece by piece, as it gets generated.
@@ -1481,5 +1524,5 @@ export def "prompt prompt" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

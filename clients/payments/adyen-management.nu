@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -93,7 +94,7 @@ def status-completer [] { ["active" "closed" "inactive"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies get-companies" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -126,6 +127,7 @@ export def "companies get-companies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, dataCenters: list, description: string, id: string, name: string, reference: string, status: string>, itemsTotal: int, pagesTotal: int> {
@@ -135,7 +137,7 @@ export def "companies get-companies" [
   let full_url = (build-url $base "/companies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a company account
@@ -151,13 +153,14 @@ export def "companies get-companies-companyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, dataCenters: table<livePrefix: string, name: string>, description: string, id: string, name: string, reference: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Android apps
@@ -173,6 +176,7 @@ export def "companies-android-apps get-companies-companyId-androidApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
   --packageName: string # The package name that uniquely identifies the Android app.
@@ -184,7 +188,7 @@ export def "companies-android-apps get-companies-companyId-androidApps" [
   let full_url = (build-url $base $"/companies/($companyId)/androidApps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Android App
@@ -200,13 +204,14 @@ export def "companies-android-apps post-companies-companyId-androidApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/androidApps")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Android app
@@ -223,13 +228,14 @@ export def "companies-android-apps get-companies-companyId-androidApps-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, errorCode: string, errors: table<errorCode: string, terminalModels: list>, id: string, label: string, packageName: string, status: string, versionCode: int, versionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/androidApps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reprocess Android App
@@ -246,13 +252,14 @@ export def "companies-android-apps patch-companies-companyId-androidApps-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/androidApps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Android certificates
@@ -268,6 +275,7 @@ export def "companies-android-certificates get-companies-companyId-androidCertif
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
   --certificateName: string # The name of the certificate.
@@ -278,7 +286,7 @@ export def "companies-android-certificates get-companies-companyId-androidCertif
   let full_url = (build-url $base $"/companies/($companyId)/androidCertificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Android Certificate
@@ -294,13 +302,14 @@ export def "companies-android-certificates post-companies-companyId-androidCerti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/androidCertificates")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of API credentials
@@ -316,6 +325,7 @@ export def "companies-api-credentials get-companies-companyId-apiCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, associatedMerchantAccounts: list, clientKey: string, description: string, id: string, roles: list, subjectDN: string, username: string>, itemsTotal: int, pagesTotal: int> {
@@ -325,7 +335,7 @@ export def "companies-api-credentials get-companies-companyId-apiCredentials" [
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API credential.
@@ -341,6 +351,7 @@ export def "companies-api-credentials post-companies-companyId-apiCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowedOrigins: list # List of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the new API credential.
   --associatedMerchantAccounts: list # List of merchant accounts that the API credential has access to.
   --description: string # Description of the API credential.
@@ -354,7 +365,7 @@ export def "companies-api-credentials post-companies-companyId-apiCredentials" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an API credential
@@ -371,13 +382,14 @@ export def "companies-api-credentials get-companies-companyId-apiCredentials-api
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, roles: list<string>, subjectDN: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an API credential.
@@ -394,6 +406,7 @@ export def "companies-api-credentials patch-companies-companyId-apiCredentials-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Indicates if the API credential is enabled.
   --allowedOrigins: list # The new list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the API credential.
   --associatedMerchantAccounts: list # List of merchant accounts that the API credential has access to.
@@ -409,7 +422,7 @@ export def "companies-api-credentials patch-companies-companyId-apiCredentials-a
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of allowed origins
@@ -426,13 +439,14 @@ export def "companies-api-credentials-allowed-origins get-companies-companyId-ap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)/allowedOrigins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an allowed origin
@@ -450,6 +464,7 @@ export def "companies-api-credentials-allowed-origins post-companies-companyId-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin. (e.g. https://adyen.com)
   --id: string # Unique identifier of the allowed origin.
@@ -462,7 +477,7 @@ export def "companies-api-credentials-allowed-origins post-companies-companyId-a
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an allowed origin
@@ -480,13 +495,14 @@ export def "companies-api-credentials-allowed-origins delete-companies-companyId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an allowed origin
@@ -504,13 +520,14 @@ export def "companies-api-credentials-allowed-origins get-companies-companyId-ap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate new API key
@@ -527,13 +544,14 @@ export def "companies-api-credentials-generate-api-key post-companies-companyId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)/generateApiKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate new client key
@@ -550,13 +568,14 @@ export def "companies-api-credentials-generate-client-key post-companies-company
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<clientKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/apiCredentials/($apiCredentialId)/generateClientKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of billing entities
@@ -572,6 +591,7 @@ export def "companies-billing-entities get-companies-companyId-billingEntities" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the billing entity.
 ]: nothing -> record<data: table<address: record, email: string, id: string, name: string, taxId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -580,7 +600,7 @@ export def "companies-billing-entities get-companies-companyId-billingEntities" 
   let full_url = (build-url $base $"/companies/($companyId)/billingEntities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of merchant accounts
@@ -596,6 +616,7 @@ export def "companies-merchants get-companies-companyId-merchants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int> {
@@ -605,7 +626,7 @@ export def "companies-merchants get-companies-companyId-merchants" [
   let full_url = (build-url $base $"/companies/($companyId)/merchants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of shipping locations
@@ -621,6 +642,7 @@ export def "companies-shipping-locations get-companies-companyId-shippingLocatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the shipping location.
   --offset: int # The number of locations to skip. (format: int32)
   --limit: int # The number of locations to return. (format: int32)
@@ -631,7 +653,7 @@ export def "companies-shipping-locations get-companies-companyId-shippingLocatio
   let full_url = (build-url $base $"/companies/($companyId)/shippingLocations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a shipping location
@@ -649,6 +671,7 @@ export def "companies-shipping-locations post-companies-companyId-shippingLocati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
   --contact: record # shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
   --id: string # The unique identifier of the shipping location, for use as `shippingLocationId` when creating an order.
@@ -662,7 +685,7 @@ export def "companies-shipping-locations post-companies-companyId-shippingLocati
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of terminal actions
@@ -678,6 +701,7 @@ export def "companies-terminal-actions get-companies-companyId-terminalActions" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
   --status: string # Returns terminal actions with the specified status.  Allowed values: **pending**, **successful**, **failed**, **cancelled**, **tryLater**.
@@ -689,7 +713,7 @@ export def "companies-terminal-actions get-companies-companyId-terminalActions" 
   let full_url = (build-url $base $"/companies/($companyId)/terminalActions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get terminal action
@@ -706,13 +730,14 @@ export def "companies-terminal-actions get-companies-companyId-terminalActions-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actionType: string, config: string, confirmedAt: string, id: string, result: string, scheduledAt: string, status: string, terminalId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/terminalActions/($actionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the terminal logo
@@ -728,6 +753,7 @@ export def "companies-terminal-logos get-companies-companyId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -736,7 +762,7 @@ export def "companies-terminal-logos get-companies-companyId-terminalLogos" [
   let full_url = (build-url $base $"/companies/($companyId)/terminalLogos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the terminal logo
@@ -752,6 +778,7 @@ export def "companies-terminal-logos patch-companies-companyId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
@@ -764,7 +791,7 @@ export def "companies-terminal-logos patch-companies-companyId-terminalLogos" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of terminal models
@@ -780,13 +807,14 @@ export def "companies-terminal-models get-companies-companyId-terminalModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/terminalModels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of orders
@@ -802,6 +830,7 @@ export def "companies-terminal-orders get-companies-companyId-terminalOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customerOrderReference: string # Your purchase order number.
   --status: string # The order status. Possible values (not case-sensitive): Placed, Confirmed, Cancelled, Shipped, Delivered.
   --offset: int # The number of orders to skip. (format: int32)
@@ -813,7 +842,7 @@ export def "companies-terminal-orders get-companies-companyId-terminalOrders" [
   let full_url = (build-url $base $"/companies/($companyId)/terminalOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an order
@@ -830,6 +859,7 @@ export def "companies-terminal-orders post-companies-companyId-terminalOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billingEntityId: string # The identification of the billing entity to use for the order.    > When ordering products in Brazil, you do not need to include the `billingEntityId` in the request.
   --customerOrderReference: string # The merchant-defined purchase order reference.
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
@@ -845,7 +875,7 @@ export def "companies-terminal-orders post-companies-companyId-terminalOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an order
@@ -862,13 +892,14 @@ export def "companies-terminal-orders get-companies-companyId-terminalOrders-ord
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/terminalOrders/($orderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an order
@@ -886,6 +917,7 @@ export def "companies-terminal-orders patch-companies-companyId-terminalOrders-o
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billingEntityId: string # The identification of the billing entity to use for the order.    > When ordering products in Brazil, you do not need to include the `billingEntityId` in the request.
   --customerOrderReference: string # The merchant-defined purchase order reference.
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
@@ -901,7 +933,7 @@ export def "companies-terminal-orders patch-companies-companyId-terminalOrders-o
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an order
@@ -918,13 +950,14 @@ export def "companies-terminal-orders-cancel post-companies-companyId-terminalOr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/terminalOrders/($orderId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of terminal products
@@ -940,6 +973,7 @@ export def "companies-terminal-products get-companies-companyId-terminalProducts
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US**
   --terminalModelId: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/companies/{companyId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
@@ -951,7 +985,7 @@ export def "companies-terminal-products get-companies-companyId-terminalProducts
   let full_url = (build-url $base $"/companies/($companyId)/terminalProducts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get terminal settings
@@ -967,13 +1001,14 @@ export def "companies-terminal-settings get-companies-companyId-terminalSettings
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string, terminalIPAddressURL: record<eventLocalUrls: list, eventPublicUrls: list>>, dcc: record<enableDcc: bool>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int, resetTotalsHour: int, restartHour: int>, homeScreen: record<hideNavigationBar: bool, showPaymentsMenu: bool, showSettingsMenu: bool>, kioskMode: record<allowedAppsInKioskMode: list<string>, kioskAppOnStartup: string>, localization: record<language: string, secondaryLanguage: string, timezone: string>, moto: record<enableMoto: bool, maxAmount: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>, notification: record<category: string, details: string, enabled: bool, showButton: bool, title: string>>, offlineProcessing: record<chipFloorLimit: int>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool, paymentInstrument: string>, payment: record<contactlessCurrency: string, hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<headerLine1: string, headerLine2: string, logo: string, promptBeforePrinting: bool, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, refunds: record<referenced: record<enableStandaloneRefunds: bool>, unreferenced: record<enableUnreferencedRefunds: bool>>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableGratuities: bool, enableStandalone: bool>, storeAndForward: record<maxAmount: list<record>, maxPayments: int, supportedCardTypes: record<credit: bool, debit: bool, deferredDebit: bool, prepaid: bool, unknown: bool>>, surcharge: record<askConfirmation: bool, configurations: list<record>, excludeGratuityFromSurcharge: bool>, tapToPay: record<merchantDisplayName: string>, terminalInstructions: record<adyenAppRestart: bool>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/terminalSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terminal settings
@@ -1015,6 +1050,7 @@ export def "companies-terminal-settings patch-companies-companyId-terminalSettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholderReceipt: record # shape: {headerForAuthorizedReceipt?: string}
   --connectivity: record # shape: {simcardStatus?: "ACTIVATED"|"INVENTORY", terminalIPAddressURL?: record}
   --dcc: record # shape: {enableDcc?: bool}
@@ -1050,7 +1086,7 @@ export def "companies-terminal-settings patch-companies-companyId-terminalSettin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of users
@@ -1066,6 +1102,7 @@ export def "companies-users get-companies-companyId-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to return. (format: int32)
   --pageSize: int # The number of items to have on a page. Maximum value is **100**. The default is **10** items on a page. (format: int32)
   --username: string # The partial or complete username to select all users that match.
@@ -1076,7 +1113,7 @@ export def "companies-users get-companies-companyId-users" [
   let full_url = (build-url $base $"/companies/($companyId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new user
@@ -1093,6 +1130,7 @@ export def "companies-users post-companies-companyId-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
   --associatedMerchantAccounts: list # The list of [merchant accounts](https://docs.adyen.com/account/account-structure#merchant-accounts) associated with this user.
   email: string # The email address of the user.
@@ -1110,7 +1148,7 @@ export def "companies-users post-companies-companyId-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user details
@@ -1127,13 +1165,14 @@ export def "companies-users get-companies-companyId-users-userId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, apps: list<string>, associatedMerchantAccounts: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user details
@@ -1151,6 +1190,7 @@ export def "companies-users patch-companies-companyId-users-userId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
   --active: oneof<nothing, bool> # Indicates whether this user is active.
   --associatedMerchantAccounts: list # The list of [merchant accounts](https://docs.adyen.com/account/account-structure#merchant-accounts) to associate the user with.
@@ -1168,7 +1208,7 @@ export def "companies-users patch-companies-companyId-users-userId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all webhooks
@@ -1184,6 +1224,7 @@ export def "companies-webhooks get-companies-companyId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int> {
@@ -1193,7 +1234,7 @@ export def "companies-webhooks get-companies-companyId-webhooks" [
   let full_url = (build-url $base $"/companies/($companyId)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set up a webhook
@@ -1210,6 +1251,7 @@ export def "companies-webhooks post-companies-companyId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
   --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
   --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
@@ -1235,7 +1277,7 @@ export def "companies-webhooks post-companies-companyId-webhooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a webhook
@@ -1252,13 +1294,14 @@ export def "companies-webhooks delete-companies-companyId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook
@@ -1275,13 +1318,14 @@ export def "companies-webhooks get-companies-companyId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -1299,6 +1343,7 @@ export def "companies-webhooks patch-companies-companyId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
   --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
   --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
@@ -1323,7 +1368,7 @@ export def "companies-webhooks patch-companies-companyId-webhooks-webhookId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate an HMAC key
@@ -1340,13 +1385,14 @@ export def "companies-webhooks-generate-hmac post-companies-companyId-webhooks-w
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hmacKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/companies/($companyId)/webhooks/($webhookId)/generateHmac")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test a webhook
@@ -1364,6 +1410,7 @@ export def "companies-webhooks-test post-companies-companyId-webhooks-webhookId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merchantIds: list # List of `merchantId` values for which test webhooks will be sent. The list can have a maximum of 20 `merchantId` values.  If not specified, we send sample notifications to all the merchant accounts that the webhook is configured for. If this is more than 20 merchant accounts, use this list to specify a subset of the merchant accounts for which to send test notifications.
   --notification: record # shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
   --types: list # List of event codes for which to send test notifications. Only the webhook types below are supported.   Possible values if webhook `type`: **standard**:  * **AUTHORISATION** * **CHARGEBACK_REVERSED** * **ORDER_CLOSED** * **ORDER_OPENED** * **PAIDOUT_REVERSED** * **PAYOUT_THIRDPARTY** * **REFUNDED_REVERSED** * **REFUND_WITH_DATA** * **REPORT_AVAILABLE** * **CUSTOM** - set your custom notification fields in the [`notification`](https://docs.adyen.com/api-explorer/#/ManagementService/v1/post/companies/{companyId}/webhooks/{webhookId}/test__reqParam_notification) object.  Possible values if webhook `type`: **banktransfer-notification**:  * **PENDING**  Possible values if webhook `type`: **report-notification**:  * **REPORT_AVAILABLE**  Possible values if webhook `type`: **ideal-notification**:  * **AUTHORISATION**  Possible values if webhook `type`: **pending-notification**:  * **PENDING**
@@ -1376,7 +1423,7 @@ export def "companies-webhooks-test post-companies-companyId-webhooks-webhookId-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get API credential details
@@ -1391,13 +1438,14 @@ export def "me get-me" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, companyName: string, description: string, id: string, roles: list<string>, subjectDN: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get allowed origins
@@ -1412,13 +1460,14 @@ export def "me-allowed-origins get-me-allowedOrigins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/allowedOrigins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add allowed origin
@@ -1434,6 +1483,7 @@ export def "me-allowed-origins post-me-allowedOrigins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin. (e.g. https://adyen.com)
   --id: string # Unique identifier of the allowed origin.
@@ -1446,7 +1496,7 @@ export def "me-allowed-origins post-me-allowedOrigins" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove allowed origin
@@ -1462,13 +1512,14 @@ export def "me-allowed-origins delete-me-allowedOrigins-originId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/me/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get allowed origin details
@@ -1484,13 +1535,14 @@ export def "me-allowed-origins get-me-allowedOrigins-originId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/me/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a client key
@@ -1505,13 +1557,14 @@ export def "me-generate-client-key post-me-generateClientKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<clientKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/generateClientKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of merchant accounts
@@ -1526,6 +1579,7 @@ export def "merchants get-merchants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int> {
@@ -1535,7 +1589,7 @@ export def "merchants get-merchants" [
   let full_url = (build-url $base "/merchants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a merchant account
@@ -1550,6 +1604,7 @@ export def "merchants post-merchants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --businessLineId: string # The unique identifier of the [business line](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/businessLines). Required for an Adyen for Platforms Manage integration.
   companyId: string # The unique identifier of the company account.
   --description: string # Your description for the merchant account, maximum 300 characters.
@@ -1566,7 +1621,7 @@ export def "merchants post-merchants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a merchant account
@@ -1582,13 +1637,14 @@ export def "merchants get-merchants-merchantId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, captureDelay: string, companyId: string, dataCenters: table<livePrefix: string, name: string>, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request to activate a merchant account
@@ -1604,13 +1660,14 @@ export def "merchants-activate post-merchants-merchantId-activate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyId: string, merchantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of API credentials
@@ -1626,6 +1683,7 @@ export def "merchants-api-credentials get-merchants-merchantId-apiCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, clientKey: string, description: string, id: string, roles: list, subjectDN: string, username: string>, itemsTotal: int, pagesTotal: int> {
@@ -1635,7 +1693,7 @@ export def "merchants-api-credentials get-merchants-merchantId-apiCredentials" [
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API credential
@@ -1651,6 +1709,7 @@ export def "merchants-api-credentials post-merchants-merchantId-apiCredentials" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowedOrigins: list # The list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the new API credential.
   --description: string # Description of the API credential.
   --roles: list # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) for the API credential. Only roles assigned to 'ws@Company.<CompanyName>' can be assigned to other API credentials.
@@ -1663,7 +1722,7 @@ export def "merchants-api-credentials post-merchants-merchantId-apiCredentials" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an API credential
@@ -1680,13 +1739,14 @@ export def "merchants-api-credentials get-merchants-merchantId-apiCredentials-ap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, description: string, id: string, roles: list<string>, subjectDN: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an API credential
@@ -1703,6 +1763,7 @@ export def "merchants-api-credentials patch-merchants-merchantId-apiCredentials-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Indicates if the API credential is enabled.
   --allowedOrigins: list # The new list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the API credential.
   --description: string # Description of the API credential.
@@ -1717,7 +1778,7 @@ export def "merchants-api-credentials patch-merchants-merchantId-apiCredentials-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of allowed origins
@@ -1734,13 +1795,14 @@ export def "merchants-api-credentials-allowed-origins get-merchants-merchantId-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)/allowedOrigins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an allowed origin
@@ -1758,6 +1820,7 @@ export def "merchants-api-credentials-allowed-origins post-merchants-merchantId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin. (e.g. https://adyen.com)
   --id: string # Unique identifier of the allowed origin.
@@ -1770,7 +1833,7 @@ export def "merchants-api-credentials-allowed-origins post-merchants-merchantId-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an allowed origin
@@ -1788,13 +1851,14 @@ export def "merchants-api-credentials-allowed-origins delete-merchants-merchantI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an allowed origin
@@ -1812,13 +1876,14 @@ export def "merchants-api-credentials-allowed-origins get-merchants-merchantId-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)/allowedOrigins/($originId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate new API key
@@ -1835,13 +1900,14 @@ export def "merchants-api-credentials-generate-api-key post-merchants-merchantId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)/generateApiKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate new client key
@@ -1858,13 +1924,14 @@ export def "merchants-api-credentials-generate-client-key post-merchants-merchan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<clientKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/apiCredentials/($apiCredentialId)/generateClientKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of billing entities
@@ -1880,6 +1947,7 @@ export def "merchants-billing-entities get-merchants-merchantId-billingEntities"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the billing entity.
 ]: nothing -> record<data: table<address: record, email: string, id: string, name: string, taxId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1888,7 +1956,7 @@ export def "merchants-billing-entities get-merchants-merchantId-billingEntities"
   let full_url = (build-url $base $"/merchants/($merchantId)/billingEntities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all payment methods
@@ -1904,6 +1972,7 @@ export def "merchants-payment-method-settings get-merchants-merchantId-paymentMe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storeId: string # The unique identifier of the store for which to return the payment methods.
   --businessLineId: string # The unique identifier of the Business Line for which to return the payment methods.
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
@@ -1915,7 +1984,7 @@ export def "merchants-payment-method-settings get-merchants-merchantId-paymentMe
   let full_url = (build-url $base $"/merchants/($merchantId)/paymentMethodSettings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request a payment method
@@ -1976,6 +2045,7 @@ export def "merchants-payment-method-settings post-merchants-merchantId-paymentM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accel: record # shape: {processingType: "billpay"|"ecom"|"pos", transactionDescription?: record}
   --affirm: record # shape: {pricePlan?: string, supportEmail: string}
   --afterpayTouch: record # shape: {supportEmail?: string, supportUrl: string}
@@ -2038,7 +2108,7 @@ export def "merchants-payment-method-settings post-merchants-merchantId-paymentM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get payment method details
@@ -2055,13 +2125,14 @@ export def "merchants-payment-method-settings get-merchants-merchantId-paymentMe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accel: record<processingType: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, affirm: record<publicApiKey: string>, afterpayTouch: record<supportEmail: string, supportUrl: string>, alipayPlus: record<settlementCurrencyCode: string>, allowed: bool, amex: record<midNumber: string, reuseMidNumber: bool, serviceLevel: string>, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool, transactionDescription: record<doingBusinessAsName: string, type: string>>, businessLineId: string, carnet: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, cartesBancaires: record<siret: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, clearpay: record<supportUrl: string>, countries: list<string>, cup: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, currencies: list<string>, customRoutingFlags: list<string>, diners: record<midNumber: string, reuseMidNumber: bool, serviceLevel: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, discover: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, eft_directdebit_CA: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, eftpos_australia: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, enabled: bool, girocard: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, givex: record<currencyCode: string, password: string, paymentFlow: string, username: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, ideal: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, interac_card: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, jcb: record<midNumber: string, reuseMidNumber: bool, serviceLevel: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, maestro: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, maestro_usa: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, mc: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, nyce: record<processingType: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, paybybank_plaid: record<logo: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, payme: record<displayName: string, logo: string, supportEmail: string>, paypal: record<directCapture: bool, payerId: string, subject: string>, payto: record<merchantName: string, payToPurpose: string>, pulse: record<processingType: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, reference: string, sepadirectdebit: record<creditorId: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, shopperInteraction: string, sodexo: record<merchantContactPhone: string>, sofort: record<currencyCode: string, logo: string>, star: record<processingType: string, transactionDescription: record<doingBusinessAsName: string, type: string>>, storeIds: list<string>, svs: record<authorisationMid: string, currencyCode: string>, swish: record<swishNumber: string>, ticket: record<requestorId: string>, twint: record<logo: string>, type: string, valuelink: record<authorisationMid: string, pinSupport: string, submitterId: string, terminalId: string>, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>, visa: record<transactionDescription: record<doingBusinessAsName: string, type: string>>, wechatpay: record<contactPersonName: string, email: string>, wechatpay_pos: record<contactPersonName: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/paymentMethodSettings/($paymentMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a payment method
@@ -2102,6 +2173,7 @@ export def "merchants-payment-method-settings patch-merchants-merchantId-payment
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accel: record # shape: {transactionDescription?: record}
   --affirm: record # shape: {pricePlan?: string}
   --bcmc: record # shape: {transactionDescription?: record}
@@ -2140,7 +2212,7 @@ export def "merchants-payment-method-settings patch-merchants-merchantId-payment
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add an Apple Pay domain
@@ -2157,6 +2229,7 @@ export def "merchants-payment-method-settings-add-apple-pay-domains post-merchan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domains: list # The list of merchant domains. Maximum: 99 domains per request.  For more information, see [Apple Pay documentation](https://docs.adyen.com/payment-methods/apple-pay/web-drop-in?tab=adyen-certificate-live_1#going-live).
 ]: any -> any {
   let input = $in
@@ -2167,7 +2240,7 @@ export def "merchants-payment-method-settings-add-apple-pay-domains post-merchan
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Apple Pay domains
@@ -2184,13 +2257,14 @@ export def "merchants-payment-method-settings-get-apple-pay-domains get-merchant
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<domains: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/paymentMethodSettings/($paymentMethodId)/getApplePayDomains")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of payout settings
@@ -2206,13 +2280,14 @@ export def "merchants-payout-settings get-merchants-merchantId-payoutSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/payoutSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a payout setting
@@ -2228,6 +2303,7 @@ export def "merchants-payout-settings post-merchants-merchantId-payoutSettings" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
   --enabledFromDate: string # The date when Adyen starts paying out to this bank account.  Format: [ISO 8601](https://www.w3.org/TR/NOTE-datetime), for example, **2019-11-23T12:25:28Z** or **2020-05-27T20:25:28+08:00**.  If not specified, the `enabled` field indicates if payouts are enabled for this bank account.  If a date is specified and:  * `enabled`: **true**, payouts are enabled starting the specified date. * `enabled`: **false**, payouts are disabled until the specified date. On the specified date, `enabled` changes to **true** and this field is reset to **null**.
   transferInstrumentId: string # The unique identifier of the [transfer instrument](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/transferInstruments) that contains the details of the bank account.
@@ -2240,7 +2316,7 @@ export def "merchants-payout-settings post-merchants-merchantId-payoutSettings" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a payout setting
@@ -2257,13 +2333,14 @@ export def "merchants-payout-settings delete-merchants-merchantId-payoutSettings
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/payoutSettings/($payoutSettingsId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a payout setting
@@ -2280,13 +2357,14 @@ export def "merchants-payout-settings get-merchants-merchantId-payoutSettings-pa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/payoutSettings/($payoutSettingsId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a payout setting
@@ -2303,6 +2381,7 @@ export def "merchants-payout-settings patch-merchants-merchantId-payoutSettings-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
 ]: any -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
   let input = $in
@@ -2313,7 +2392,7 @@ export def "merchants-payout-settings patch-merchants-merchantId-payoutSettings-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of shipping locations
@@ -2329,6 +2408,7 @@ export def "merchants-shipping-locations get-merchants-merchantId-shippingLocati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the shipping location.
   --offset: int # The number of locations to skip. (format: int32)
   --limit: int # The number of locations to return. (format: int32)
@@ -2339,7 +2419,7 @@ export def "merchants-shipping-locations get-merchants-merchantId-shippingLocati
   let full_url = (build-url $base $"/merchants/($merchantId)/shippingLocations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a shipping location
@@ -2357,6 +2437,7 @@ export def "merchants-shipping-locations post-merchants-merchantId-shippingLocat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
   --contact: record # shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
   --id: string # The unique identifier of the shipping location, for use as `shippingLocationId` when creating an order.
@@ -2370,7 +2451,7 @@ export def "merchants-shipping-locations post-merchants-merchantId-shippingLocat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of split configuration profiles
@@ -2386,13 +2467,14 @@ export def "merchants-split-configurations get-merchants-merchantId-splitConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<description: string, rules: list, splitConfigurationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/splitConfigurations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a split configuration profile
@@ -2409,6 +2491,7 @@ export def "merchants-split-configurations post-merchants-merchantId-splitConfig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Your description for the split configuration.
   rules: list # Array of rules that define the split configuration behavior. — item shape: {cardRegion?: "international"|"intraEEA"|"intraRegional"|"interRegional"|"domestic"|"ANY", currency: string, fundingSource: "charged"|"credit"|"debit"|"deferred_debit"|"prepaid"|"ANY", paymentMethod: string, shopperInteraction: "Ecommerce"|"ContAuth"|"Moto"|"POS"|"ANY", splitLogic: record}
 ]: any -> record<description: string, rules: table<cardRegion: string, currency: string, fundingSource: string, paymentMethod: string, ruleId: string, shopperInteraction: string, splitLogic: record>, splitConfigurationId: string> {
@@ -2420,7 +2503,7 @@ export def "merchants-split-configurations post-merchants-merchantId-splitConfig
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a split configuration profile
@@ -2437,13 +2520,14 @@ export def "merchants-split-configurations delete-merchants-merchantId-splitConf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, rules: table<cardRegion: string, currency: string, fundingSource: string, paymentMethod: string, ruleId: string, shopperInteraction: string, splitLogic: record>, splitConfigurationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/splitConfigurations/($splitConfigurationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a split configuration profile
@@ -2460,13 +2544,14 @@ export def "merchants-split-configurations get-merchants-merchantId-splitConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, rules: table<cardRegion: string, currency: string, fundingSource: string, paymentMethod: string, ruleId: string, shopperInteraction: string, splitLogic: record>, splitConfigurationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/splitConfigurations/($splitConfigurationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the description of the split configuration profile
@@ -2483,6 +2568,7 @@ export def "merchants-split-configurations patch-merchants-merchantId-splitConfi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Your description for the split configuration.
 ]: any -> record<description: string, rules: table<cardRegion: string, currency: string, fundingSource: string, paymentMethod: string, ruleId: string, shopperInteraction: string, splitLogic: record>, splitConfigurationId: string> {
   let input = $in
@@ -2493,7 +2579,7 @@ export def "merchants-split-configurations patch-merchants-merchantId-splitConfi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a rule
@@ -2511,6 +2597,7 @@ export def "merchants-split-configurations post-merchants-merchantId-splitConfig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardRegion: string@cardRegion-completer # The card region condition that determines whether the [split logic](https://docs.adyen.com/api-explorer/Management/latest/post/merchants/(merchantId)/splitConfigurations#request-rules-splitLogic) applies to the transaction.  > This condition is in pilot phase, and not yet available for all platforms.  Possible values: * **domestic**: The card issuer and the store where the transaction is processed are registered in the same country. * **international**: The card issuer and the store where the transaction is processed are registered in different countries or regions. Includes all **interRegional** and **intraRegional** transactions. * **interRegional**: The card issuer and the store where the transaction is processed are registered in different regions. * **intraRegional**: The card issuer and the store where the transaction is processed are registered in different countries, but in the same region. * **intraEEA**: The card issuer and the store where the transaction is processed are registered in different countries, but in the European Economic Area (EEA). * **ANY**: Applies to all transactions, regardless of the processing and issuing country/region.
   currency: string # The currency condition that defines whether the split logic applies. Its value must be a three-character [ISO currency code](https://en.wikipedia.org/wiki/ISO_4217).
   fundingSource: string@fundingSource-completer # The funding source of the payment method.  Possible values: * **credit** * **debit** * **prepaid** * **deferred_debit** * **charged** * **ANY**
@@ -2526,7 +2613,7 @@ export def "merchants-split-configurations post-merchants-merchantId-splitConfig
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a rule
@@ -2544,13 +2631,14 @@ export def "merchants-split-configurations-rules delete-merchants-merchantId-spl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, rules: table<cardRegion: string, currency: string, fundingSource: string, paymentMethod: string, ruleId: string, shopperInteraction: string, splitLogic: record>, splitConfigurationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/splitConfigurations/($splitConfigurationId)/rules/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the split conditions
@@ -2568,6 +2656,7 @@ export def "merchants-split-configurations-rules patch-merchants-merchantId-spli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # The currency condition that defines whether the split logic applies. Its value must be a three-character [ISO currency code](https://en.wikipedia.org/wiki/ISO_4217).
   fundingSource: string # The funding source of the payment method.  Possible values: * **credit** * **debit** * **prepaid** * **deferred_debit** * **charged** * **ANY**
   paymentMethod: string # The payment method condition that defines whether the split logic applies.  Possible values: * [Payment method variant](https://docs.adyen.com/development-resources/paymentmethodvariant): Apply the split logic for a specific payment method. * **ANY**: Apply the split logic for all available payment methods.
@@ -2581,7 +2670,7 @@ export def "merchants-split-configurations-rules patch-merchants-merchantId-spli
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the split logic
@@ -2602,6 +2691,7 @@ export def "merchants-split-configurations-rules-split-logic patch-merchants-mer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acquiringFees: string@acquiringFees-completer # Deducts the acquiring fees (the aggregated amount of interchange and scheme fee) from the specified balance account.  Possible values: **deductFromLiableAccount**, **deductFromOneBalanceAccount**.
   --additionalCommission: record # shape: {balanceAccountId?: string, fixedAmount?: int, variablePercentage?: int}
   --adyenCommission: string@adyenCommission-completer # Deducts the transaction fee due to Adyen under [blended rates](https://www.adyen.com/knowledge-hub/guides/payments-training-guide/get-the-best-from-your-card-processing) from the specified balance account.  Possible values: **deductFromLiableAccount**, **deductFromOneBalanceAccount**.
@@ -2627,7 +2717,7 @@ export def "merchants-split-configurations-rules-split-logic patch-merchants-mer
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of stores
@@ -2643,6 +2733,7 @@ export def "merchants-stores get-merchants-merchantId-stores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
   --reference: string # The reference of the store.
@@ -2653,7 +2744,7 @@ export def "merchants-stores get-merchants-merchantId-stores" [
   let full_url = (build-url $base $"/merchants/($merchantId)/stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a store
@@ -2673,6 +2764,7 @@ export def "merchants-stores post-merchants-merchantId-stores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   address: record # shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
   --businessLineIds: list # The unique identifiers of the [business lines](https://docs.adyen.com/api-explorer/legalentity/latest/post/businessLines#responses-200-id) that the store is associated with. If not specified, the business line of the merchant account is used. Required when there are multiple business lines under the merchant account.
   description: string # Your description of the store.
@@ -2692,7 +2784,7 @@ export def "merchants-stores post-merchants-merchantId-stores" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the terminal logo
@@ -2709,6 +2801,7 @@ export def "merchants-stores-terminal-logos get-merchants-merchantId-stores-refe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2717,7 +2810,7 @@ export def "merchants-stores-terminal-logos get-merchants-merchantId-stores-refe
   let full_url = (build-url $base $"/merchants/($merchantId)/stores/($reference)/terminalLogos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the terminal logo
@@ -2734,6 +2827,7 @@ export def "merchants-stores-terminal-logos patch-merchants-merchantId-stores-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
@@ -2746,7 +2840,7 @@ export def "merchants-stores-terminal-logos patch-merchants-merchantId-stores-re
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get terminal settings
@@ -2763,13 +2857,14 @@ export def "merchants-stores-terminal-settings get-merchants-merchantId-stores-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string, terminalIPAddressURL: record<eventLocalUrls: list, eventPublicUrls: list>>, dcc: record<enableDcc: bool>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int, resetTotalsHour: int, restartHour: int>, homeScreen: record<hideNavigationBar: bool, showPaymentsMenu: bool, showSettingsMenu: bool>, kioskMode: record<allowedAppsInKioskMode: list<string>, kioskAppOnStartup: string>, localization: record<language: string, secondaryLanguage: string, timezone: string>, moto: record<enableMoto: bool, maxAmount: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>, notification: record<category: string, details: string, enabled: bool, showButton: bool, title: string>>, offlineProcessing: record<chipFloorLimit: int>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool, paymentInstrument: string>, payment: record<contactlessCurrency: string, hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<headerLine1: string, headerLine2: string, logo: string, promptBeforePrinting: bool, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, refunds: record<referenced: record<enableStandaloneRefunds: bool>, unreferenced: record<enableUnreferencedRefunds: bool>>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableGratuities: bool, enableStandalone: bool>, storeAndForward: record<maxAmount: list<record>, maxPayments: int, supportedCardTypes: record<credit: bool, debit: bool, deferredDebit: bool, prepaid: bool, unknown: bool>>, surcharge: record<askConfirmation: bool, configurations: list<record>, excludeGratuityFromSurcharge: bool>, tapToPay: record<merchantDisplayName: string>, terminalInstructions: record<adyenAppRestart: bool>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/stores/($reference)/terminalSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terminal settings
@@ -2812,6 +2907,7 @@ export def "merchants-stores-terminal-settings patch-merchants-merchantId-stores
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholderReceipt: record # shape: {headerForAuthorizedReceipt?: string}
   --connectivity: record # shape: {simcardStatus?: "ACTIVATED"|"INVENTORY", terminalIPAddressURL?: record}
   --dcc: record # shape: {enableDcc?: bool}
@@ -2847,7 +2943,7 @@ export def "merchants-stores-terminal-settings patch-merchants-merchantId-stores
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a store
@@ -2864,13 +2960,14 @@ export def "merchants-stores get-merchants-merchantId-stores-storeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, localizedInformation: record<localShopperStatement: list<record>>, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string, subMerchantData: record<email: string, id: string, mcc: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a store
@@ -2890,6 +2987,7 @@ export def "merchants-stores patch-merchants-merchantId-stores-storeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
   --businessLineIds: list # The unique identifiers of the [business lines](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/businessLines__resParam_id) that the store is associated with.
   --description: string # The description of the store.
@@ -2907,7 +3005,7 @@ export def "merchants-stores patch-merchants-merchantId-stores-storeId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the terminal logo
@@ -2923,6 +3021,7 @@ export def "merchants-terminal-logos get-merchants-merchantId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2931,7 +3030,7 @@ export def "merchants-terminal-logos get-merchants-merchantId-terminalLogos" [
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalLogos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the terminal logo
@@ -2947,6 +3046,7 @@ export def "merchants-terminal-logos patch-merchants-merchantId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Allowed values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
@@ -2959,7 +3059,7 @@ export def "merchants-terminal-logos patch-merchants-merchantId-terminalLogos" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of terminal models
@@ -2975,13 +3075,14 @@ export def "merchants-terminal-models get-merchants-merchantId-terminalModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalModels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of orders
@@ -2997,6 +3098,7 @@ export def "merchants-terminal-orders get-merchants-merchantId-terminalOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customerOrderReference: string # Your purchase order number.
   --status: string # The order status. Possible values (not case-sensitive): Placed, Confirmed, Cancelled, Shipped, Delivered.
   --offset: int # The number of orders to skip. (format: int32)
@@ -3008,7 +3110,7 @@ export def "merchants-terminal-orders get-merchants-merchantId-terminalOrders" [
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an order
@@ -3025,6 +3127,7 @@ export def "merchants-terminal-orders post-merchants-merchantId-terminalOrders" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billingEntityId: string # The identification of the billing entity to use for the order.    > When ordering products in Brazil, you do not need to include the `billingEntityId` in the request.
   --customerOrderReference: string # The merchant-defined purchase order reference.
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
@@ -3040,7 +3143,7 @@ export def "merchants-terminal-orders post-merchants-merchantId-terminalOrders" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an order
@@ -3057,13 +3160,14 @@ export def "merchants-terminal-orders get-merchants-merchantId-terminalOrders-or
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalOrders/($orderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an order
@@ -3081,6 +3185,7 @@ export def "merchants-terminal-orders patch-merchants-merchantId-terminalOrders-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billingEntityId: string # The identification of the billing entity to use for the order.    > When ordering products in Brazil, you do not need to include the `billingEntityId` in the request.
   --customerOrderReference: string # The merchant-defined purchase order reference.
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
@@ -3096,7 +3201,7 @@ export def "merchants-terminal-orders patch-merchants-merchantId-terminalOrders-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an order
@@ -3113,13 +3218,14 @@ export def "merchants-terminal-orders-cancel post-merchants-merchantId-terminalO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalOrders/($orderId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of terminal products
@@ -3135,6 +3241,7 @@ export def "merchants-terminal-products get-merchants-merchantId-terminalProduct
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US**
   --terminalModelId: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/merchants/{merchantId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
@@ -3146,7 +3253,7 @@ export def "merchants-terminal-products get-merchants-merchantId-terminalProduct
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalProducts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get terminal settings
@@ -3162,13 +3269,14 @@ export def "merchants-terminal-settings get-merchants-merchantId-terminalSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string, terminalIPAddressURL: record<eventLocalUrls: list, eventPublicUrls: list>>, dcc: record<enableDcc: bool>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int, resetTotalsHour: int, restartHour: int>, homeScreen: record<hideNavigationBar: bool, showPaymentsMenu: bool, showSettingsMenu: bool>, kioskMode: record<allowedAppsInKioskMode: list<string>, kioskAppOnStartup: string>, localization: record<language: string, secondaryLanguage: string, timezone: string>, moto: record<enableMoto: bool, maxAmount: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>, notification: record<category: string, details: string, enabled: bool, showButton: bool, title: string>>, offlineProcessing: record<chipFloorLimit: int>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool, paymentInstrument: string>, payment: record<contactlessCurrency: string, hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<headerLine1: string, headerLine2: string, logo: string, promptBeforePrinting: bool, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, refunds: record<referenced: record<enableStandaloneRefunds: bool>, unreferenced: record<enableUnreferencedRefunds: bool>>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableGratuities: bool, enableStandalone: bool>, storeAndForward: record<maxAmount: list<record>, maxPayments: int, supportedCardTypes: record<credit: bool, debit: bool, deferredDebit: bool, prepaid: bool, unknown: bool>>, surcharge: record<askConfirmation: bool, configurations: list<record>, excludeGratuityFromSurcharge: bool>, tapToPay: record<merchantDisplayName: string>, terminalInstructions: record<adyenAppRestart: bool>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/terminalSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terminal settings
@@ -3210,6 +3318,7 @@ export def "merchants-terminal-settings patch-merchants-merchantId-terminalSetti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholderReceipt: record # shape: {headerForAuthorizedReceipt?: string}
   --connectivity: record # shape: {simcardStatus?: "ACTIVATED"|"INVENTORY", terminalIPAddressURL?: record}
   --dcc: record # shape: {enableDcc?: bool}
@@ -3245,7 +3354,7 @@ export def "merchants-terminal-settings patch-merchants-merchantId-terminalSetti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of users
@@ -3261,6 +3370,7 @@ export def "merchants-users get-merchants-merchantId-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page. Maximum value is **100**. The default is **10** items on a page. (format: int32)
   --username: string # The partial or complete username to select all users that match.
@@ -3271,7 +3381,7 @@ export def "merchants-users get-merchants-merchantId-users" [
   let full_url = (build-url $base $"/merchants/($merchantId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new user
@@ -3288,6 +3398,7 @@ export def "merchants-users post-merchants-merchantId-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
   email: string # The email address of the user.
   --loginMethod: string # The requested login method for the user. To use SSO, you must already have SSO configured with Adyen before creating the user.  Possible values: **Email** or **SSO** 
@@ -3304,7 +3415,7 @@ export def "merchants-users post-merchants-merchantId-users" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user details
@@ -3321,13 +3432,14 @@ export def "merchants-users get-merchants-merchantId-users-userId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, apps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -3345,6 +3457,7 @@ export def "merchants-users patch-merchants-merchantId-users-userId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
   --active: oneof<nothing, bool> # Sets the status of the user to active (**true**) or inactive (**false**).
   --email: string # The email address of the user.
@@ -3361,7 +3474,7 @@ export def "merchants-users patch-merchants-merchantId-users-userId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all webhooks
@@ -3377,6 +3490,7 @@ export def "merchants-webhooks get-merchants-merchantId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
 ]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int> {
@@ -3386,7 +3500,7 @@ export def "merchants-webhooks get-merchants-merchantId-webhooks" [
   let full_url = (build-url $base $"/merchants/($merchantId)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set up a webhook
@@ -3403,6 +3517,7 @@ export def "merchants-webhooks post-merchants-merchantId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
   --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
   --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
@@ -3426,7 +3541,7 @@ export def "merchants-webhooks post-merchants-merchantId-webhooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a webhook
@@ -3443,13 +3558,14 @@ export def "merchants-webhooks delete-merchants-merchantId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook
@@ -3466,13 +3582,14 @@ export def "merchants-webhooks get-merchants-merchantId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -3490,6 +3607,7 @@ export def "merchants-webhooks patch-merchants-merchantId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
   --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
   --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
@@ -3512,7 +3630,7 @@ export def "merchants-webhooks patch-merchants-merchantId-webhooks-webhookId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate an HMAC key
@@ -3529,13 +3647,14 @@ export def "merchants-webhooks-generate-hmac post-merchants-merchantId-webhooks-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hmacKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/merchants/($merchantId)/webhooks/($webhookId)/generateHmac")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test a webhook
@@ -3553,6 +3672,7 @@ export def "merchants-webhooks-test post-merchants-merchantId-webhooks-webhookId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notification: record # shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
   --types: list # List of event codes for which to send test notifications. Only the webhook types below are supported.   Possible values if webhook `type`: **standard**:  * **AUTHORISATION** * **CHARGEBACK_REVERSED** * **ORDER_CLOSED** * **ORDER_OPENED** * **PAIDOUT_REVERSED** * **PAYOUT_THIRDPARTY** * **REFUNDED_REVERSED** * **REFUND_WITH_DATA** * **REPORT_AVAILABLE** * **CUSTOM** - set your custom notification fields in the [`notification`](https://docs.adyen.com/api-explorer/#/ManagementService/v1/post/companies/{companyId}/webhooks/{webhookId}/test__reqParam_notification) object.  Possible values if webhook `type`: **banktransfer-notification**:  * **PENDING**  Possible values if webhook `type`: **report-notification**:  * **REPORT_AVAILABLE**  Possible values if webhook `type`: **ideal-notification**:  * **AUTHORISATION**  Possible values if webhook `type`: **pending-notification**:  * **PENDING**
 ]: any -> record<data: table<merchantId: string, output: string, requestSent: string, responseCode: string, responseTime: string, status: string>> {
@@ -3564,7 +3684,7 @@ export def "merchants-webhooks-test post-merchants-merchantId-webhooks-webhookId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of stores
@@ -3579,6 +3699,7 @@ export def "stores get-stores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # The number of the page to fetch. (format: int32)
   --pageSize: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
   --reference: string # The reference of the store.
@@ -3590,7 +3711,7 @@ export def "stores get-stores" [
   let full_url = (build-url $base "/stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a store
@@ -3609,6 +3730,7 @@ export def "stores post-stores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   address: record # shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
   --businessLineIds: list # The unique identifiers of the [business lines](https://docs.adyen.com/api-explorer/legalentity/latest/post/businessLines#responses-200-id) that the store is associated with. If not specified, the business line of the merchant account is used. Required when there are multiple business lines under the merchant account.
   description: string # Your description of the store.
@@ -3629,7 +3751,7 @@ export def "stores post-stores" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a store
@@ -3645,13 +3767,14 @@ export def "stores get-stores-storeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, localizedInformation: record<localShopperStatement: list<record>>, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string, subMerchantData: record<email: string, id: string, mcc: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a store
@@ -3670,6 +3793,7 @@ export def "stores patch-stores-storeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
   --businessLineIds: list # The unique identifiers of the [business lines](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/businessLines__resParam_id) that the store is associated with.
   --description: string # The description of the store.
@@ -3687,7 +3811,7 @@ export def "stores patch-stores-storeId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the terminal logo
@@ -3703,6 +3827,7 @@ export def "stores-terminal-logos get-stores-storeId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3711,7 +3836,7 @@ export def "stores-terminal-logos get-stores-storeId-terminalLogos" [
   let full_url = (build-url $base $"/stores/($storeId)/terminalLogos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the terminal logo
@@ -3727,6 +3852,7 @@ export def "stores-terminal-logos patch-stores-storeId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
@@ -3739,7 +3865,7 @@ export def "stores-terminal-logos patch-stores-storeId-terminalLogos" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get terminal settings
@@ -3755,13 +3881,14 @@ export def "stores-terminal-settings get-stores-storeId-terminalSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string, terminalIPAddressURL: record<eventLocalUrls: list, eventPublicUrls: list>>, dcc: record<enableDcc: bool>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int, resetTotalsHour: int, restartHour: int>, homeScreen: record<hideNavigationBar: bool, showPaymentsMenu: bool, showSettingsMenu: bool>, kioskMode: record<allowedAppsInKioskMode: list<string>, kioskAppOnStartup: string>, localization: record<language: string, secondaryLanguage: string, timezone: string>, moto: record<enableMoto: bool, maxAmount: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>, notification: record<category: string, details: string, enabled: bool, showButton: bool, title: string>>, offlineProcessing: record<chipFloorLimit: int>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool, paymentInstrument: string>, payment: record<contactlessCurrency: string, hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<headerLine1: string, headerLine2: string, logo: string, promptBeforePrinting: bool, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, refunds: record<referenced: record<enableStandaloneRefunds: bool>, unreferenced: record<enableUnreferencedRefunds: bool>>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableGratuities: bool, enableStandalone: bool>, storeAndForward: record<maxAmount: list<record>, maxPayments: int, supportedCardTypes: record<credit: bool, debit: bool, deferredDebit: bool, prepaid: bool, unknown: bool>>, surcharge: record<askConfirmation: bool, configurations: list<record>, excludeGratuityFromSurcharge: bool>, tapToPay: record<merchantDisplayName: string>, terminalInstructions: record<adyenAppRestart: bool>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($storeId)/terminalSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terminal settings
@@ -3803,6 +3930,7 @@ export def "stores-terminal-settings patch-stores-storeId-terminalSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholderReceipt: record # shape: {headerForAuthorizedReceipt?: string}
   --connectivity: record # shape: {simcardStatus?: "ACTIVATED"|"INVENTORY", terminalIPAddressURL?: record}
   --dcc: record # shape: {enableDcc?: bool}
@@ -3838,7 +3966,7 @@ export def "stores-terminal-settings patch-stores-storeId-terminalSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of terminals
@@ -3853,6 +3981,7 @@ export def "terminals get-terminals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchQuery: string # Returns terminals with an ID that contains the specified string. If present, other query parameters are ignored.
   --otpQuery: string # Returns one or more terminals associated with the one-time passwords specified in the request. If this query parameter is used, other query parameters are ignored.
   --countries: string # Returns terminals located in the countries specified by their [two-letter country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).
@@ -3868,7 +3997,7 @@ export def "terminals get-terminals" [
   let full_url = (build-url $base "/terminals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a terminal action
@@ -3883,6 +4012,7 @@ export def "terminals-schedule-actions post-terminals-scheduleActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actionDetails: any # Information about the action to take.
   --scheduledAt: string # The date and time when the action should happen.  Format: [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339), but without the **Z** before the time offset. For example, **2021-11-15T12:16:21+0100**  The action is sent with the first [maintenance call](https://docs.adyen.com/point-of-sale/automating-terminal-management/terminal-actions-api#when-actions-take-effect) after the specified date and time in the time zone of the terminal.  An empty value causes the action to be sent as soon as possible: at the next maintenance call.
   --storeId: string # The unique ID of the [store](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/stores). If present, all terminals in the `terminalIds` list must be assigned to this store.
@@ -3896,7 +4026,7 @@ export def "terminals-schedule-actions post-terminals-scheduleActions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reassign a terminal
@@ -3912,6 +4042,7 @@ export def "terminals-reassign post-terminals-terminalId-reassign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --companyId: string # The unique identifier of the company account to which the terminal is reassigned.
   --inventory: oneof<nothing, bool> # Must be specified when reassigning terminals to a merchant account:  - If set to **true**, reassigns terminals to the inventory of the merchant account and the terminals cannot process transactions.  - If set to **false**, reassigns terminals directly to the merchant account and the terminals can process transactions.
   --merchantId: string # The unique identifier of the merchant account to which the terminal is reassigned. When reassigning terminals to a merchant account, you must specify the `inventory` field.
@@ -3925,7 +4056,7 @@ export def "terminals-reassign post-terminals-terminalId-reassign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the terminal logo
@@ -3941,13 +4072,14 @@ export def "terminals-terminal-logos get-terminals-terminalId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/terminals/($terminalId)/terminalLogos")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the logo
@@ -3963,6 +4095,7 @@ export def "terminals-terminal-logos patch-terminals-terminalId-terminalLogos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
   let input = $in
@@ -3973,7 +4106,7 @@ export def "terminals-terminal-logos patch-terminals-terminalId-terminalLogos" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get terminal settings
@@ -3989,13 +4122,14 @@ export def "terminals-terminal-settings get-terminals-terminalId-terminalSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string, terminalIPAddressURL: record<eventLocalUrls: list, eventPublicUrls: list>>, dcc: record<enableDcc: bool>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int, resetTotalsHour: int, restartHour: int>, homeScreen: record<hideNavigationBar: bool, showPaymentsMenu: bool, showSettingsMenu: bool>, kioskMode: record<allowedAppsInKioskMode: list<string>, kioskAppOnStartup: string>, localization: record<language: string, secondaryLanguage: string, timezone: string>, moto: record<enableMoto: bool, maxAmount: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>, notification: record<category: string, details: string, enabled: bool, showButton: bool, title: string>>, offlineProcessing: record<chipFloorLimit: int>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool, paymentInstrument: string>, payment: record<contactlessCurrency: string, hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<headerLine1: string, headerLine2: string, logo: string, promptBeforePrinting: bool, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, refunds: record<referenced: record<enableStandaloneRefunds: bool>, unreferenced: record<enableUnreferencedRefunds: bool>>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableGratuities: bool, enableStandalone: bool>, storeAndForward: record<maxAmount: list<record>, maxPayments: int, supportedCardTypes: record<credit: bool, debit: bool, deferredDebit: bool, prepaid: bool, unknown: bool>>, surcharge: record<askConfirmation: bool, configurations: list<record>, excludeGratuityFromSurcharge: bool>, tapToPay: record<merchantDisplayName: string>, terminalInstructions: record<adyenAppRestart: bool>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/terminals/($terminalId)/terminalSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update terminal settings
@@ -4037,6 +4171,7 @@ export def "terminals-terminal-settings patch-terminals-terminalId-terminalSetti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cardholderReceipt: record # shape: {headerForAuthorizedReceipt?: string}
   --connectivity: record # shape: {simcardStatus?: "ACTIVATED"|"INVENTORY", terminalIPAddressURL?: record}
   --dcc: record # shape: {enableDcc?: bool}
@@ -4072,5 +4207,5 @@ export def "terminals-terminal-settings patch-terminals-terminalId-terminalSetti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

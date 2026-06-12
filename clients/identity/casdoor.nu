@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def category-completer [] { ["TransactionCategoryPurchase = "Purchase"" "Transac
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-jwks RootControllerGetJwks" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,13 +104,14 @@ export def "well-known-jwks RootControllerGetJwks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/jwks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Oidc Discovery
@@ -124,13 +126,14 @@ export def "well-known-openid-configuration RootControllerGetOidcDiscovery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorization_endpoint: string, claims_supported: list<string>, device_authorization_endpoint: string, end_session_endpoint: string, grant_types_supported: list<string>, id_token_signing_alg_values_supported: list<string>, introspection_endpoint: string, issuer: string, jwks_uri: string, request_object_signing_alg_values_supported: list<string>, request_parameter_supported: bool, response_modes_supported: list<string>, response_types_supported: list<string>, scopes_supported: list<string>, subject_types_supported: list<string>, token_endpoint: string, userinfo_endpoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /.well-known/webfinger
@@ -144,6 +147,7 @@ export def "well-known-webfinger RootControllerGetWebFinger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource: string # resource
 ]: nothing -> record<aliases: record, links: table<href: string, rel: string>, properties: record, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -152,7 +156,7 @@ export def "well-known-webfinger RootControllerGetWebFinger" [
   let full_url = (build-url $base "/.well-known/webfinger" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /.well-known/{application}/jwks
@@ -167,13 +171,14 @@ export def "well-known-jwks RootControllerGetJwksByApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/.well-known/($application)/jwks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Oidc Discovery for specific application
@@ -189,13 +194,14 @@ export def "well-known-openid-configuration RootControllerGetOidcDiscoveryByAppl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorization_endpoint: string, claims_supported: list<string>, device_authorization_endpoint: string, end_session_endpoint: string, grant_types_supported: list<string>, id_token_signing_alg_values_supported: list<string>, introspection_endpoint: string, issuer: string, jwks_uri: string, request_object_signing_alg_values_supported: list<string>, request_parameter_supported: bool, response_modes_supported: list<string>, response_types_supported: list<string>, scopes_supported: list<string>, subject_types_supported: list<string>, token_endpoint: string, userinfo_endpoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/.well-known/($application)/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /.well-known/{application}/webfinger
@@ -210,6 +216,7 @@ export def "well-known-webfinger RootControllerGetWebFingerByApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource: string # resource
 ]: nothing -> record<aliases: record, links: table<href: string, rel: string>, properties: record, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -218,7 +225,7 @@ export def "well-known-webfinger RootControllerGetWebFingerByApplication" [
   let full_url = (build-url $base $"/.well-known/($application)/webfinger" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Login Error Counts
@@ -233,13 +240,14 @@ export def "callback ApiControllerCallback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Callback")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # add adapter
@@ -254,6 +262,7 @@ export def "add-adapter ApiControllerAddAdapter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --database: string
   --databaseType: string
@@ -275,7 +284,7 @@ export def "add-adapter ApiControllerAddAdapter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add an application
@@ -298,6 +307,7 @@ export def "add-application ApiControllerAddApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --affiliationUrl: string
   --cert: string
   --certPublicKey: string
@@ -380,7 +390,7 @@ export def "add-application ApiControllerAddApplication" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add cert
@@ -395,6 +405,7 @@ export def "add-cert ApiControllerAddCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bitSize: int # format: int64
   --certificate: string
   --createdTime: string
@@ -415,7 +426,7 @@ export def "add-cert ApiControllerAddCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add enforcer
@@ -430,6 +441,7 @@ export def "add-enforcer ApiControllerAddEnforcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<adapter: string, createdTime: string, description: string, displayName: string, model: string, modelCfg: any, name: string, owner: string, updatedTime: string> {
   let input = $in
@@ -439,7 +451,7 @@ export def "add-enforcer ApiControllerAddEnforcer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add form
@@ -455,6 +467,7 @@ export def "add-form ApiControllerAddForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --displayName: string
   --formItems: list # item shape: {label?: string, name?: string, visible?: bool, width?: string}
@@ -471,7 +484,7 @@ export def "add-form ApiControllerAddForm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add group
@@ -487,6 +500,7 @@ export def "add-group ApiControllerAddGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --children: list # item shape: {children?: list, contactEmail?: string, createdTime?: string, displayName?: string, haveChildren?: bool, isEnabled?: bool, isTopGroup?: bool, key?: string, manager?: string, name?: string, owner?: string, parentId?: string, parentName?: string, title?: string, type?: string, updatedTime?: string, users?: list}
   --contactEmail: string
   --createdTime: string
@@ -513,7 +527,7 @@ export def "add-group ApiControllerAddGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add invitation
@@ -528,6 +542,7 @@ export def "add-invitation ApiControllerAddInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --code: string
   --createdTime: string
@@ -553,7 +568,7 @@ export def "add-invitation ApiControllerAddInvitation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add ldap
@@ -568,6 +583,7 @@ export def "add-ldap ApiControllerAddLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
@@ -595,7 +611,7 @@ export def "add-ldap ApiControllerAddLdap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add model
@@ -610,6 +626,7 @@ export def "add-model ApiControllerAddModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -625,7 +642,7 @@ export def "add-model ApiControllerAddModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add order
@@ -641,6 +658,7 @@ export def "add-order ApiControllerAddOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --displayName: string
@@ -663,7 +681,7 @@ export def "add-order ApiControllerAddOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add organization
@@ -681,6 +699,7 @@ export def "add-organization ApiControllerAddOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountItems: list # item shape: {modifyRule?: string, name?: string, regex?: string, tab?: string, viewRule?: string, visible?: bool}
   --accountMenu: string
   --balanceCredit: float # format: double
@@ -734,7 +753,7 @@ export def "add-organization ApiControllerAddOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add payment
@@ -750,6 +769,7 @@ export def "add-payment ApiControllerAddPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --detail: string
@@ -787,7 +807,7 @@ export def "add-payment ApiControllerAddPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add permission
@@ -802,6 +822,7 @@ export def "add-permission ApiControllerAddPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list
   --adapter: string
   --approveTime: string
@@ -831,7 +852,7 @@ export def "add-permission ApiControllerAddPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add plan
@@ -846,6 +867,7 @@ export def "add-plan ApiControllerAddPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --description: string
@@ -868,7 +890,7 @@ export def "add-plan ApiControllerAddPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add policy
@@ -883,6 +905,7 @@ export def "add-policy ApiControllerAddPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --body: record
 ]: any -> record {
@@ -894,7 +917,7 @@ export def "add-policy ApiControllerAddPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add pricing
@@ -909,6 +932,7 @@ export def "add-pricing ApiControllerAddPricing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --createdTime: string
   --description: string
@@ -927,7 +951,7 @@ export def "add-pricing ApiControllerAddPricing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add product
@@ -943,6 +967,7 @@ export def "add-product ApiControllerAddProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --description: string
@@ -971,7 +996,7 @@ export def "add-product ApiControllerAddProduct" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add provider
@@ -986,6 +1011,7 @@ export def "add-provider ApiControllerAddProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --appId: string
   --bucket: string
   --category: string
@@ -1038,7 +1064,7 @@ export def "add-provider ApiControllerAddProvider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add a record
@@ -1053,6 +1079,7 @@ export def "add-record ApiControllerAddRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -1062,7 +1089,7 @@ export def "add-record ApiControllerAddRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/add-resource
@@ -1076,6 +1103,7 @@ export def "add-resource ApiControllerAddResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --createdTime: string
   --description: string
@@ -1099,7 +1127,7 @@ export def "add-resource ApiControllerAddResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add role
@@ -1114,6 +1142,7 @@ export def "add-role ApiControllerAddRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -1133,7 +1162,7 @@ export def "add-role ApiControllerAddRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add session for one user in one application. If there are other existing sessions, join the session into the list.
@@ -1148,6 +1177,7 @@ export def "add-session ApiControllerAddSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
@@ -1163,7 +1193,7 @@ export def "add-session ApiControllerAddSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add subscription
@@ -1178,6 +1208,7 @@ export def "add-subscription ApiControllerAddSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -1200,7 +1231,7 @@ export def "add-subscription ApiControllerAddSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add syncer
@@ -1216,6 +1247,7 @@ export def "add-syncer ApiControllerAddSyncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --affiliationTable: string
   --avatarBaseUrl: string
   --cert: string
@@ -1251,7 +1283,7 @@ export def "add-syncer ApiControllerAddSyncer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add ticket
@@ -1267,6 +1299,7 @@ export def "add-ticket ApiControllerAddTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content: string
   --createdTime: string
   --displayName: string
@@ -1286,7 +1319,7 @@ export def "add-ticket ApiControllerAddTicket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add a message to a ticket
@@ -1301,6 +1334,7 @@ export def "add-ticket-message ApiControllerAddTicketMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the ticket
   --author: string
   --isAdmin: oneof<nothing, bool>
@@ -1316,7 +1350,7 @@ export def "add-ticket-message ApiControllerAddTicketMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add token
@@ -1331,6 +1365,7 @@ export def "add-token ApiControllerAddToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessToken: string
   --accessTokenHash: string
   --application: string
@@ -1357,7 +1392,7 @@ export def "add-token ApiControllerAddToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add transaction
@@ -1372,6 +1407,7 @@ export def "add-transaction ApiControllerAddTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: string # Dry run mode: set to 'true' or '1' to validate without committing
   --amount: float # format: double
   --application: string
@@ -1399,7 +1435,7 @@ export def "add-transaction ApiControllerAddTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # add user
@@ -1423,6 +1459,7 @@ export def "add-user ApiControllerAddUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessKey: string
   --accessSecret: string
   --accessToken: string
@@ -1613,7 +1650,7 @@ export def "add-user ApiControllerAddUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/add-user-keys
@@ -1627,13 +1664,14 @@ export def "add-user-keys ApiControllerAddUserKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/add-user-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # add webhook
@@ -1649,6 +1687,7 @@ export def "add-webhook ApiControllerAddWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string
   --createdTime: string
   --events: list
@@ -1672,7 +1711,7 @@ export def "add-webhook ApiControllerAddWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Call Casbin BatchEnforce API
@@ -1687,6 +1726,7 @@ export def "batch-enforce ApiControllerBatchEnforce" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permissionId: string # permission id
   --modelId: string # model id
   --owner: string # owner
@@ -1700,7 +1740,7 @@ export def "batch-enforce ApiControllerBatchEnforce" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # cancel an order
@@ -1715,6 +1755,7 @@ export def "cancel-order ApiControllerCancelOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the order
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1723,7 +1764,7 @@ export def "cancel-order ApiControllerCancelOrder" [
   let full_url = (build-url $base "/api/cancel-order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/check-user-password
@@ -1737,13 +1778,14 @@ export def "check-user-password ApiControllerCheckUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/check-user-password")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # buy product using the deprecated compatibility endpoint, prefer place-order plus pay-order for new integrations
@@ -1760,6 +1802,7 @@ export def "buy-product ApiControllerBuyProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the product
   --providerName: string # The name of the provider
   --pricingName: string # The name of the pricing (for subscription)
@@ -1774,7 +1817,7 @@ export def "buy-product ApiControllerBuyProduct" [
   let full_url = (build-url $base "/api/buy-product" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # delete adapter
@@ -1789,6 +1832,7 @@ export def "delete-adapter ApiControllerDeleteAdapter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --database: string
   --databaseType: string
@@ -1810,7 +1854,7 @@ export def "delete-adapter ApiControllerDeleteAdapter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete an application
@@ -1833,6 +1877,7 @@ export def "delete-application ApiControllerDeleteApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --affiliationUrl: string
   --cert: string
   --certPublicKey: string
@@ -1915,7 +1960,7 @@ export def "delete-application ApiControllerDeleteApplication" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete cert
@@ -1930,6 +1975,7 @@ export def "delete-cert ApiControllerDeleteCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bitSize: int # format: int64
   --certificate: string
   --createdTime: string
@@ -1950,7 +1996,7 @@ export def "delete-cert ApiControllerDeleteCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete enforcer
@@ -1965,6 +2011,7 @@ export def "delete-enforcer ApiControllerDeleteEnforcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --adapter: string
   --createdTime: string
   --description: string
@@ -1983,7 +2030,7 @@ export def "delete-enforcer ApiControllerDeleteEnforcer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete form
@@ -1999,6 +2046,7 @@ export def "delete-form ApiControllerDeleteForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --displayName: string
   --formItems: list # item shape: {label?: string, name?: string, visible?: bool, width?: string}
@@ -2015,7 +2063,7 @@ export def "delete-form ApiControllerDeleteForm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete group
@@ -2031,6 +2079,7 @@ export def "delete-group ApiControllerDeleteGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --children: list # item shape: {children?: list, contactEmail?: string, createdTime?: string, displayName?: string, haveChildren?: bool, isEnabled?: bool, isTopGroup?: bool, key?: string, manager?: string, name?: string, owner?: string, parentId?: string, parentName?: string, title?: string, type?: string, updatedTime?: string, users?: list}
   --contactEmail: string
   --createdTime: string
@@ -2057,7 +2106,7 @@ export def "delete-group ApiControllerDeleteGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete invitation
@@ -2072,6 +2121,7 @@ export def "delete-invitation ApiControllerDeleteInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --code: string
   --createdTime: string
@@ -2097,7 +2147,7 @@ export def "delete-invitation ApiControllerDeleteInvitation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete ldap
@@ -2112,6 +2162,7 @@ export def "delete-ldap ApiControllerDeleteLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
@@ -2139,7 +2190,7 @@ export def "delete-ldap ApiControllerDeleteLdap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # : Delete MFA
@@ -2154,13 +2205,14 @@ export def "delete-mfa ApiControllerDeleteMfa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/delete-mfa/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # delete model
@@ -2175,6 +2227,7 @@ export def "delete-model ApiControllerDeleteModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -2190,7 +2243,7 @@ export def "delete-model ApiControllerDeleteModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete order
@@ -2206,6 +2259,7 @@ export def "delete-order ApiControllerDeleteOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --displayName: string
@@ -2228,7 +2282,7 @@ export def "delete-order ApiControllerDeleteOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete organization
@@ -2246,6 +2300,7 @@ export def "delete-organization ApiControllerDeleteOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountItems: list # item shape: {modifyRule?: string, name?: string, regex?: string, tab?: string, viewRule?: string, visible?: bool}
   --accountMenu: string
   --balanceCredit: float # format: double
@@ -2299,7 +2354,7 @@ export def "delete-organization ApiControllerDeleteOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete payment
@@ -2315,6 +2370,7 @@ export def "delete-payment ApiControllerDeletePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --detail: string
@@ -2352,7 +2408,7 @@ export def "delete-payment ApiControllerDeletePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete permission
@@ -2367,6 +2423,7 @@ export def "delete-permission ApiControllerDeletePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list
   --adapter: string
   --approveTime: string
@@ -2396,7 +2453,7 @@ export def "delete-permission ApiControllerDeletePermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete plan
@@ -2411,6 +2468,7 @@ export def "delete-plan ApiControllerDeletePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --description: string
@@ -2433,7 +2491,7 @@ export def "delete-plan ApiControllerDeletePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete pricing
@@ -2448,6 +2506,7 @@ export def "delete-pricing ApiControllerDeletePricing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --createdTime: string
   --description: string
@@ -2466,7 +2525,7 @@ export def "delete-pricing ApiControllerDeletePricing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete product
@@ -2482,6 +2541,7 @@ export def "delete-product ApiControllerDeleteProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --description: string
@@ -2510,7 +2570,7 @@ export def "delete-product ApiControllerDeleteProduct" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete provider
@@ -2525,6 +2585,7 @@ export def "delete-provider ApiControllerDeleteProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --appId: string
   --bucket: string
   --category: string
@@ -2577,7 +2638,7 @@ export def "delete-provider ApiControllerDeleteProvider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/delete-resource
@@ -2591,6 +2652,7 @@ export def "delete-resource ApiControllerDeleteResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: string
   --createdTime: string
   --description: string
@@ -2614,7 +2676,7 @@ export def "delete-resource ApiControllerDeleteResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete role
@@ -2629,6 +2691,7 @@ export def "delete-role ApiControllerDeleteRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -2648,7 +2711,7 @@ export def "delete-role ApiControllerDeleteRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete session for one user in one application.
@@ -2663,6 +2726,7 @@ export def "delete-session ApiControllerDeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
@@ -2678,7 +2742,7 @@ export def "delete-session ApiControllerDeleteSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete subscription
@@ -2693,6 +2757,7 @@ export def "delete-subscription ApiControllerDeleteSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --description: string
   --displayName: string
@@ -2715,7 +2780,7 @@ export def "delete-subscription ApiControllerDeleteSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete syncer
@@ -2731,6 +2796,7 @@ export def "delete-syncer ApiControllerDeleteSyncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --affiliationTable: string
   --avatarBaseUrl: string
   --cert: string
@@ -2766,7 +2832,7 @@ export def "delete-syncer ApiControllerDeleteSyncer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete ticket
@@ -2782,6 +2848,7 @@ export def "delete-ticket ApiControllerDeleteTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content: string
   --createdTime: string
   --displayName: string
@@ -2801,7 +2868,7 @@ export def "delete-ticket ApiControllerDeleteTicket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete token
@@ -2816,6 +2883,7 @@ export def "delete-token ApiControllerDeleteToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessToken: string
   --accessTokenHash: string
   --application: string
@@ -2842,7 +2910,7 @@ export def "delete-token ApiControllerDeleteToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete transaction
@@ -2857,6 +2925,7 @@ export def "delete-transaction ApiControllerDeleteTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # format: double
   --application: string
   --category: string@category-completer # e.g. Purchase
@@ -2882,7 +2951,7 @@ export def "delete-transaction ApiControllerDeleteTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete user
@@ -2906,6 +2975,7 @@ export def "delete-user ApiControllerDeleteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessKey: string
   --accessSecret: string
   --accessToken: string
@@ -3096,7 +3166,7 @@ export def "delete-user ApiControllerDeleteUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete webhook
@@ -3112,6 +3182,7 @@ export def "delete-webhook ApiControllerDeleteWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string
   --createdTime: string
   --events: list
@@ -3135,7 +3206,7 @@ export def "delete-webhook ApiControllerDeleteWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Endpoint for the device authorization flow
@@ -3150,13 +3221,14 @@ export def "device-auth ApiControllerDeviceAuth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<device_code: string, expires_in: int, interval: int, user_code: string, verification_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/device-auth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call Casbin Enforce API
@@ -3171,6 +3243,7 @@ export def "enforce ApiControllerEnforce" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permissionId: string # permission id
   --modelId: string # model id
   --resourceId: string # resource id
@@ -3185,7 +3258,7 @@ export def "enforce ApiControllerEnforce" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clear impersonation info for current session
@@ -3200,13 +3273,14 @@ export def "exit-impersonation-user ApiControllerExitImpersonateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/exit-impersonation-user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # FaceId Login Flow 1st stage
@@ -3221,6 +3295,7 @@ export def "faceid-signin-begin ApiControllerFaceIDSigninBegin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # owner
   --name: string # name
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -3230,7 +3305,7 @@ export def "faceid-signin-begin ApiControllerFaceIDSigninBegin" [
   let full_url = (build-url $base "/api/faceid-signin-begin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get the details of the current account
@@ -3245,13 +3320,14 @@ export def "get-account ApiControllerGetAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get adapter
@@ -3266,6 +3342,7 @@ export def "get-adapter ApiControllerGetAdapter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the adapter
 ]: nothing -> record<createdTime: string, database: string, databaseType: string, host: string, name: string, owner: string, password: string, port: int, table: string, type: string, useSameDb: bool, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3274,7 +3351,7 @@ export def "get-adapter ApiControllerGetAdapter" [
   let full_url = (build-url $base "/api/get-adapter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get adapters
@@ -3289,6 +3366,7 @@ export def "get-adapters ApiControllerGetAdapters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of adapters
 ]: nothing -> table<createdTime: string, database: string, databaseType: string, host: string, name: string, owner: string, password: string, port: int, table: string, type: string, useSameDb: bool, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3297,7 +3375,7 @@ export def "get-adapters ApiControllerGetAdapters" [
   let full_url = (build-url $base "/api/get-adapters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all actions for a user (Casbin API)
@@ -3312,6 +3390,7 @@ export def "get-all-actions ApiControllerGetAllActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # user id like built-in/admin
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3320,7 +3399,7 @@ export def "get-all-actions ApiControllerGetAllActions" [
   let full_url = (build-url $base "/api/get-all-actions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all objects for a user (Casbin API)
@@ -3335,6 +3414,7 @@ export def "get-all-objects ApiControllerGetAllObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # user id like built-in/admin
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3343,7 +3423,7 @@ export def "get-all-objects ApiControllerGetAllObjects" [
   let full_url = (build-url $base "/api/get-all-objects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all roles for a user (Casbin API)
@@ -3358,6 +3438,7 @@ export def "get-all-roles ApiControllerGetAllRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # user id like built-in/admin
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3366,7 +3447,7 @@ export def "get-all-roles ApiControllerGetAllRoles" [
   let full_url = (build-url $base "/api/get-all-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get application login
@@ -3381,6 +3462,7 @@ export def "get-app-login ApiControllerGetApplicationLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # client id
   --responseType: string # response type
   --redirectUri: string # redirect uri
@@ -3393,7 +3475,7 @@ export def "get-app-login ApiControllerGetApplicationLogin" [
   let full_url = (build-url $base "/api/get-app-login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get the detail of an application
@@ -3408,6 +3490,7 @@ export def "get-application ApiControllerGetApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the application.
 ]: nothing -> record<affiliationUrl: string, cert: string, certPublicKey: string, clientId: string, clientSecret: string, codeResendTimeout: int, cookieExpireInHours: int, createdTime: string, defaultGroup: string, description: string, disableSamlAttributes: bool, disableSignin: bool, displayName: string, enableAutoSignin: bool, enableCodeSignin: bool, enableExclusiveSignin: bool, enableLinkWithEmail: bool, enablePassword: bool, enableSamlAssertionSignature: bool, enableSamlC14n10: bool, enableSamlCompress: bool, enableSamlPostBinding: bool, enableSignUp: bool, enableSigninSession: bool, enableWebAuthn: bool, expireInHours: float, failedSigninFrozenTime: int, failedSigninLimit: int, favicon: string, footerHtml: string, forcedRedirectOrigin: string, forgetUrl: string, formBackgroundUrl: string, formBackgroundUrlMobile: string, formCss: string, formCssMobile: string, formOffset: int, formSideHtml: string, grantTypes: list<string>, headerHtml: string, homepageUrl: string, ipRestriction: string, ipWhitelist: string, isShared: bool, logo: string, name: string, order: int, orgChoiceMode: string, organization: string, organizationObj: record<accountItems: list<record>, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list<string>, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list<string>, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list<record>, mfaRememberInHours: int, name: string, navItems: list<string>, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list<string>, passwordSalt: string, passwordType: string, tags: list<string>, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, useEmailAsUsername: bool, userBalance: float, userNavItems: list<string>, userTypes: list<string>, websiteUrl: string, widgetItems: list<string>>, owner: string, providers: table<canSignIn: bool, canSignUp: bool, canUnlink: bool, countryCodes: list, name: string, owner: string, prompted: bool, provider: record, rule: string, signupGroup: string>, redirectUris: list<string>, refreshExpireInHours: float, samlAttributes: table<name: string, nameFormat: string, value: string>, samlHashAlgorithm: string, samlReplyUrl: string, signinHtml: string, signinItems: table<customCss: string, isCustom: bool, label: string, name: string, placeholder: string, rule: string, visible: bool>, signinMethods: table<displayName: string, name: string, rule: string>, signinUrl: string, signupHtml: string, signupItems: table<customCss: string, label: string, name: string, options: list, placeholder: string, prompted: bool, regex: string, required: bool, rule: string, type: string, visible: bool>, signupUrl: string, tags: list<string>, termsOfUse: string, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, title: string, tokenAttributes: table<name: string, type: string, value: string>, tokenFields: list<string>, tokenFormat: string, tokenSigningMethod: string, useEmailAsSamlNameId: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3416,7 +3499,7 @@ export def "get-application ApiControllerGetApplication" [
   let full_url = (build-url $base "/api/get-application" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get all applications
@@ -3431,6 +3514,7 @@ export def "get-applications ApiControllerGetApplications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of applications.
 ]: nothing -> table<affiliationUrl: string, cert: string, certPublicKey: string, clientId: string, clientSecret: string, codeResendTimeout: int, cookieExpireInHours: int, createdTime: string, defaultGroup: string, description: string, disableSamlAttributes: bool, disableSignin: bool, displayName: string, enableAutoSignin: bool, enableCodeSignin: bool, enableExclusiveSignin: bool, enableLinkWithEmail: bool, enablePassword: bool, enableSamlAssertionSignature: bool, enableSamlC14n10: bool, enableSamlCompress: bool, enableSamlPostBinding: bool, enableSignUp: bool, enableSigninSession: bool, enableWebAuthn: bool, expireInHours: float, failedSigninFrozenTime: int, failedSigninLimit: int, favicon: string, footerHtml: string, forcedRedirectOrigin: string, forgetUrl: string, formBackgroundUrl: string, formBackgroundUrlMobile: string, formCss: string, formCssMobile: string, formOffset: int, formSideHtml: string, grantTypes: list<string>, headerHtml: string, homepageUrl: string, ipRestriction: string, ipWhitelist: string, isShared: bool, logo: string, name: string, order: int, orgChoiceMode: string, organization: string, organizationObj: record<accountItems: list, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list, mfaRememberInHours: int, name: string, navItems: list, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list, passwordSalt: string, passwordType: string, tags: list, themeData: record, useEmailAsUsername: bool, userBalance: float, userNavItems: list, userTypes: list, websiteUrl: string, widgetItems: list>, owner: string, providers: list<record>, redirectUris: list<string>, refreshExpireInHours: float, samlAttributes: list<record>, samlHashAlgorithm: string, samlReplyUrl: string, signinHtml: string, signinItems: list<record>, signinMethods: list<record>, signinUrl: string, signupHtml: string, signupItems: list<record>, signupUrl: string, tags: list<string>, termsOfUse: string, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, title: string, tokenAttributes: list<record>, tokenFields: list<string>, tokenFormat: string, tokenSigningMethod: string, useEmailAsSamlNameId: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3439,7 +3523,7 @@ export def "get-applications ApiControllerGetApplications" [
   let full_url = (build-url $base "/api/get-applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-captcha
@@ -3453,13 +3537,14 @@ export def "get-captcha ApiControllerGetCaptcha" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-captcha")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Login Error Counts
@@ -3474,6 +3559,7 @@ export def "get-captcha-status ApiControllerGetCaptchaStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of user
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3482,7 +3568,7 @@ export def "get-captcha-status ApiControllerGetCaptchaStatus" [
   let full_url = (build-url $base "/api/get-captcha-status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get cert
@@ -3497,6 +3583,7 @@ export def "get-cert ApiControllerGetCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the cert
 ]: nothing -> record<bitSize: int, certificate: string, createdTime: string, cryptoAlgorithm: string, displayName: string, expireInYears: int, name: string, owner: string, privateKey: string, scope: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3505,7 +3592,7 @@ export def "get-cert ApiControllerGetCert" [
   let full_url = (build-url $base "/api/get-cert" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get certs
@@ -3520,6 +3607,7 @@ export def "get-certs ApiControllerGetCerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of certs
 ]: nothing -> table<bitSize: int, certificate: string, createdTime: string, cryptoAlgorithm: string, displayName: string, expireInYears: int, name: string, owner: string, privateKey: string, scope: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3528,7 +3616,7 @@ export def "get-certs ApiControllerGetCerts" [
   let full_url = (build-url $base "/api/get-certs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get information of dashboard
@@ -3543,13 +3631,14 @@ export def "get-dashboard ApiControllerGetDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-dashboard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get default application
@@ -3564,6 +3653,7 @@ export def "get-default-application ApiControllerGetDefaultApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # organization id
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3572,7 +3662,7 @@ export def "get-default-application ApiControllerGetDefaultApplication" [
   let full_url = (build-url $base "/api/get-default-application" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get email and phone by username
@@ -3587,6 +3677,7 @@ export def "get-email-and-phone ApiControllerGetEmailAndPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string # The username of the user
   organization: string # The organization of the user
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -3598,7 +3689,7 @@ export def "get-email-and-phone ApiControllerGetEmailAndPhone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # get enforcer
@@ -3613,6 +3704,7 @@ export def "get-enforcer ApiControllerGetEnforcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
 ]: nothing -> record<adapter: string, createdTime: string, description: string, displayName: string, model: string, modelCfg: any, name: string, owner: string, updatedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3621,7 +3713,7 @@ export def "get-enforcer ApiControllerGetEnforcer" [
   let full_url = (build-url $base "/api/get-enforcer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get enforcers
@@ -3636,6 +3728,7 @@ export def "get-enforcers ApiControllerGetEnforcers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of enforcers
 ]: nothing -> table<adapter: string, createdTime: string, description: string, displayName: string, model: string, modelCfg: any, name: string, owner: string, updatedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3644,7 +3737,7 @@ export def "get-enforcers ApiControllerGetEnforcers" [
   let full_url = (build-url $base "/api/get-enforcers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get filtered policies with support for multiple filters via POST body
@@ -3659,6 +3752,7 @@ export def "get-filtered-policies ApiControllerGetFilteredPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --body: record
 ]: any -> list<record> {
@@ -3670,7 +3764,7 @@ export def "get-filtered-policies ApiControllerGetFilteredPolicies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get form
@@ -3685,6 +3779,7 @@ export def "get-form ApiControllerGetForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id (owner/name) of form
 ]: nothing -> record<createdTime: string, displayName: string, formItems: table<label: string, name: string, visible: bool, width: string>, name: string, owner: string, tag: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3693,7 +3788,7 @@ export def "get-form ApiControllerGetForm" [
   let full_url = (build-url $base "/api/get-form" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get forms
@@ -3708,6 +3803,7 @@ export def "get-forms ApiControllerGetForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of form
 ]: nothing -> table<createdTime: string, displayName: string, formItems: list<record>, name: string, owner: string, tag: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3716,7 +3812,7 @@ export def "get-forms ApiControllerGetForms" [
   let full_url = (build-url $base "/api/get-forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get global certs
@@ -3731,13 +3827,14 @@ export def "get-global-certs ApiControllerGetGlobalCerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<bitSize: int, certificate: string, createdTime: string, cryptoAlgorithm: string, displayName: string, expireInYears: int, name: string, owner: string, privateKey: string, scope: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-global-certs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get global forms
@@ -3752,13 +3849,14 @@ export def "get-global-forms ApiControllerGetGlobalForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<createdTime: string, displayName: string, formItems: list<record>, name: string, owner: string, tag: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-global-forms")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get Global providers
@@ -3773,13 +3871,14 @@ export def "get-global-providers ApiControllerGetGlobalProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<appId: string, bucket: string, category: string, cert: string, clientId: string, clientId2: string, clientSecret: string, clientSecret2: string, content: string, createdTime: string, customAuthUrl: string, customLogo: string, customTokenUrl: string, customUserInfoUrl: string, disableSsl: bool, displayName: string, domain: string, emailRegex: string, enablePkce: bool, enableProxy: bool, enableSignAuthnRequest: bool, endpoint: string, host: string, httpHeaders: any, idP: string, intranetEndpoint: string, issuerUrl: string, metadata: string, method: string, name: string, owner: string, pathPrefix: string, port: int, providerUrl: string, receiver: string, regionId: string, scopes: string, signName: string, subType: string, templateCode: string, title: string, type: string, userMapping: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-global-providers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get global users
@@ -3794,13 +3893,14 @@ export def "get-global-users ApiControllerGetGlobalUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<accessKey: string, accessSecret: string, accessToken: string, address: list<string>, addresses: list<record>, adfs: string, affiliation: string, alipay: string, amazon: string, apple: string, auth0: string, avatar: string, avatarType: string, azuread: string, azureadb2c: string, baidu: string, balance: float, balanceCredit: float, balanceCurrency: string, battlenet: string, bilibili: string, bio: string, birthday: string, bitbucket: string, box: string, cart: list<record>, casdoor: string, cloudfoundry: string, countryCode: string, createdIp: string, createdTime: string, currency: string, custom: string, custom10: string, custom2: string, custom3: string, custom4: string, custom5: string, custom6: string, custom7: string, custom8: string, custom9: string, dailymotion: string, deezer: string, deletedTime: string, digitalocean: string, dingtalk: string, discord: string, displayName: string, douyin: string, dropbox: string, education: string, email: string, emailVerified: bool, eveonline: string, externalId: string, faceIds: list<record>, facebook: string, firstName: string, fitbit: string, gender: string, gitea: string, gitee: string, github: string, gitlab: string, google: string, groups: list<string>, hash: string, heroku: string, homepage: string, id: string, idCard: string, idCardType: string, influxcloud: string, infoflow: string, instagram: string, intercom: string, invitation: string, invitationCode: string, ipWhitelist: string, isAdmin: bool, isDefaultAvatar: bool, isDeleted: bool, isForbidden: bool, isOnline: bool, isVerified: bool, kakao: string, karma: int, kwai: string, language: string, lark: string, lastChangePasswordTime: string, lastName: string, lastSigninIp: string, lastSigninTime: string, lastSigninWrongTime: string, lastfm: string, ldap: string, line: string, linkedin: string, location: string, mailru: string, managedAccounts: list<record>, meetup: string, metamask: string, mfaAccounts: list<record>, mfaEmailEnabled: bool, mfaItems: list<record>, mfaPhoneEnabled: bool, mfaPushEnabled: bool, mfaPushProvider: string, mfaPushReceiver: string, mfaRadiusEnabled: bool, mfaRadiusProvider: string, mfaRadiusUsername: string, mfaRememberDeadline: string, microsoftonline: string, multiFactorAuths: list<record>, name: string, naver: string, needUpdatePassword: bool, nextcloud: string, okta: string, onedrive: string, originalRefreshToken: string, originalToken: string, oura: string, owner: string, password: string, passwordSalt: string, passwordType: string, patreon: string, paypal: string, permanentAvatar: string, permissions: list<record>, phone: string, preHash: string, preferredMfaType: string, properties: any, qq: string, ranking: int, realName: string, recoveryCodes: list<string>, region: string, registerSource: string, registerType: string, roles: list<record>, salesforce: string, score: int, shopify: string, signinWrongTimes: int, signupApplication: string, slack: string, soundcloud: string, spotify: string, steam: string, strava: string, stripe: string, tag: string, tiktok: string, title: string, totpSecret: string, tumblr: string, twitch: string, twitter: string, type: string, typetalk: string, uber: string, updatedTime: string, vk: string, web3onboard: string, webauthnCredentials: list<record>, wechat: string, wecom: string, weibo: string, wepay: string, xero: string, yahoo: string, yammer: string, yandex: string, zoom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-global-users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get group
@@ -3815,6 +3915,7 @@ export def "get-group ApiControllerGetGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the group
 ]: nothing -> record<children: list<any>, contactEmail: string, createdTime: string, displayName: string, haveChildren: bool, isEnabled: bool, isTopGroup: bool, key: string, manager: string, name: string, owner: string, parentId: string, parentName: string, title: string, type: string, updatedTime: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3823,7 +3924,7 @@ export def "get-group ApiControllerGetGroup" [
   let full_url = (build-url $base "/api/get-group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get groups
@@ -3838,6 +3939,7 @@ export def "get-groups ApiControllerGetGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of groups
 ]: nothing -> table<children: list<any>, contactEmail: string, createdTime: string, displayName: string, haveChildren: bool, isEnabled: bool, isTopGroup: bool, key: string, manager: string, name: string, owner: string, parentId: string, parentName: string, title: string, type: string, updatedTime: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3846,7 +3948,7 @@ export def "get-groups ApiControllerGetGroups" [
   let full_url = (build-url $base "/api/get-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get invitation
@@ -3861,6 +3963,7 @@ export def "get-invitation ApiControllerGetInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the invitation
 ]: nothing -> record<application: string, code: string, createdTime: string, defaultCode: string, displayName: string, email: string, isRegexp: bool, name: string, owner: string, phone: string, quota: int, signupGroup: string, state: string, updatedTime: string, usedCount: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3869,7 +3972,7 @@ export def "get-invitation ApiControllerGetInvitation" [
   let full_url = (build-url $base "/api/get-invitation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get invitation code information
@@ -3884,6 +3987,7 @@ export def "get-invitation-info ApiControllerGetInvitationCodeInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Invitation code
 ]: nothing -> record<application: string, code: string, createdTime: string, defaultCode: string, displayName: string, email: string, isRegexp: bool, name: string, owner: string, phone: string, quota: int, signupGroup: string, state: string, updatedTime: string, usedCount: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3892,7 +3996,7 @@ export def "get-invitation-info ApiControllerGetInvitationCodeInfo" [
   let full_url = (build-url $base "/api/get-invitation-info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get invitations
@@ -3907,6 +4011,7 @@ export def "get-invitations ApiControllerGetInvitations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of invitations
 ]: nothing -> table<application: string, code: string, createdTime: string, defaultCode: string, displayName: string, email: string, isRegexp: bool, name: string, owner: string, phone: string, quota: int, signupGroup: string, state: string, updatedTime: string, usedCount: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3915,7 +4020,7 @@ export def "get-invitations ApiControllerGetInvitations" [
   let full_url = (build-url $base "/api/get-invitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get ldap
@@ -3930,6 +4035,7 @@ export def "get-ldap ApiControllerGetLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # id
 ]: nothing -> record<allowSelfSignedCert: bool, autoSync: int, baseDn: string, createdTime: string, customAttributes: any, defaultGroup: string, enableSsl: bool, filter: string, filterFields: list<string>, host: string, id: string, lastSync: string, owner: string, password: string, passwordType: string, port: int, serverName: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3938,7 +4044,7 @@ export def "get-ldap ApiControllerGetLdap" [
   let full_url = (build-url $base "/api/get-ldap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get ldap users
@@ -3953,13 +4059,14 @@ export def "get-ldap-users ApiControllerGetLdapser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<existUuids: list<string>, users: table<EmailAddress: string, Mail: string, MobileTelephoneNumber: string, PostalAddress: string, RegisteredAddress: string, TelephoneNumber: string, address: string, attributes: any, cn: string, country: string, countryName: string, displayName: string, email: string, gidNumber: string, groupId: string, memberOf: string, mobile: string, uid: string, uidNumber: string, userPrincipalName: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-ldap-users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get ldaps
@@ -3974,6 +4081,7 @@ export def "get-ldaps ApiControllerGetLdaps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # owner
 ]: nothing -> table<allowSelfSignedCert: bool, autoSync: int, baseDn: string, createdTime: string, customAttributes: any, defaultGroup: string, enableSsl: bool, filter: string, filterFields: list<string>, host: string, id: string, lastSync: string, owner: string, password: string, passwordType: string, port: int, serverName: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3982,7 +4090,7 @@ export def "get-ldaps ApiControllerGetLdaps" [
   let full_url = (build-url $base "/api/get-ldaps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get model
@@ -3997,6 +4105,7 @@ export def "get-model ApiControllerGetModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the model
 ]: nothing -> record<createdTime: string, description: string, displayName: string, modelText: string, name: string, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4005,7 +4114,7 @@ export def "get-model ApiControllerGetModel" [
   let full_url = (build-url $base "/api/get-model" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get models
@@ -4020,6 +4129,7 @@ export def "get-models ApiControllerGetModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of models
 ]: nothing -> table<createdTime: string, description: string, displayName: string, modelText: string, name: string, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4028,7 +4138,7 @@ export def "get-models ApiControllerGetModels" [
   let full_url = (build-url $base "/api/get-models" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get order
@@ -4043,6 +4153,7 @@ export def "get-order ApiControllerGetOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the order
 ]: nothing -> record<createdTime: string, currency: string, displayName: string, message: string, name: string, owner: string, payment: string, price: float, productInfos: table<currency: string, detail: string, displayName: string, image: string, isRecharge: bool, name: string, owner: string, planName: string, price: float, pricingName: string, quantity: int>, products: list<string>, state: string, updateTime: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4051,7 +4162,7 @@ export def "get-order ApiControllerGetOrder" [
   let full_url = (build-url $base "/api/get-order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get orders
@@ -4066,6 +4177,7 @@ export def "get-orders ApiControllerGetOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of orders
 ]: nothing -> table<createdTime: string, currency: string, displayName: string, message: string, name: string, owner: string, payment: string, price: float, productInfos: list<record>, products: list<string>, state: string, updateTime: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4074,7 +4186,7 @@ export def "get-orders ApiControllerGetOrders" [
   let full_url = (build-url $base "/api/get-orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get organization
@@ -4089,6 +4201,7 @@ export def "get-organization ApiControllerGetOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # organization id
 ]: nothing -> record<accountItems: table<modifyRule: string, name: string, regex: string, tab: string, viewRule: string, visible: bool>, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list<string>, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list<string>, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: table<name: string, rule: string>, mfaRememberInHours: int, name: string, navItems: list<string>, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list<string>, passwordSalt: string, passwordType: string, tags: list<string>, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, useEmailAsUsername: bool, userBalance: float, userNavItems: list<string>, userTypes: list<string>, websiteUrl: string, widgetItems: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4097,7 +4210,7 @@ export def "get-organization ApiControllerGetOrganization" [
   let full_url = (build-url $base "/api/get-organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get the detail of the organization's application
@@ -4112,6 +4225,7 @@ export def "get-organization-applications ApiControllerGetOrganizationApplicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organization: string # The organization name
 ]: nothing -> table<affiliationUrl: string, cert: string, certPublicKey: string, clientId: string, clientSecret: string, codeResendTimeout: int, cookieExpireInHours: int, createdTime: string, defaultGroup: string, description: string, disableSamlAttributes: bool, disableSignin: bool, displayName: string, enableAutoSignin: bool, enableCodeSignin: bool, enableExclusiveSignin: bool, enableLinkWithEmail: bool, enablePassword: bool, enableSamlAssertionSignature: bool, enableSamlC14n10: bool, enableSamlCompress: bool, enableSamlPostBinding: bool, enableSignUp: bool, enableSigninSession: bool, enableWebAuthn: bool, expireInHours: float, failedSigninFrozenTime: int, failedSigninLimit: int, favicon: string, footerHtml: string, forcedRedirectOrigin: string, forgetUrl: string, formBackgroundUrl: string, formBackgroundUrlMobile: string, formCss: string, formCssMobile: string, formOffset: int, formSideHtml: string, grantTypes: list<string>, headerHtml: string, homepageUrl: string, ipRestriction: string, ipWhitelist: string, isShared: bool, logo: string, name: string, order: int, orgChoiceMode: string, organization: string, organizationObj: record<accountItems: list, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list, mfaRememberInHours: int, name: string, navItems: list, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list, passwordSalt: string, passwordType: string, tags: list, themeData: record, useEmailAsUsername: bool, userBalance: float, userNavItems: list, userTypes: list, websiteUrl: string, widgetItems: list>, owner: string, providers: list<record>, redirectUris: list<string>, refreshExpireInHours: float, samlAttributes: list<record>, samlHashAlgorithm: string, samlReplyUrl: string, signinHtml: string, signinItems: list<record>, signinMethods: list<record>, signinUrl: string, signupHtml: string, signupItems: list<record>, signupUrl: string, tags: list<string>, termsOfUse: string, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, title: string, tokenAttributes: list<record>, tokenFields: list<string>, tokenFormat: string, tokenSigningMethod: string, useEmailAsSamlNameId: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4120,7 +4234,7 @@ export def "get-organization-applications ApiControllerGetOrganizationApplicatio
   let full_url = (build-url $base "/api/get-organization-applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get all organization name and displayName
@@ -4135,6 +4249,7 @@ export def "get-organization-names ApiControllerGetOrganizationNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # owner
 ]: nothing -> table<accountItems: list<record>, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list<string>, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list<string>, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list<record>, mfaRememberInHours: int, name: string, navItems: list<string>, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list<string>, passwordSalt: string, passwordType: string, tags: list<string>, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, useEmailAsUsername: bool, userBalance: float, userNavItems: list<string>, userTypes: list<string>, websiteUrl: string, widgetItems: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4143,7 +4258,7 @@ export def "get-organization-names ApiControllerGetOrganizationNames" [
   let full_url = (build-url $base "/api/get-organization-names" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get organizations
@@ -4158,6 +4273,7 @@ export def "get-organizations ApiControllerGetOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # owner
 ]: nothing -> table<accountItems: list<record>, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list<string>, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list<string>, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list<record>, mfaRememberInHours: int, name: string, navItems: list<string>, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list<string>, passwordSalt: string, passwordType: string, tags: list<string>, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, useEmailAsUsername: bool, userBalance: float, userNavItems: list<string>, userTypes: list<string>, websiteUrl: string, widgetItems: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4166,7 +4282,7 @@ export def "get-organizations ApiControllerGetOrganizations" [
   let full_url = (build-url $base "/api/get-organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get payment
@@ -4181,6 +4297,7 @@ export def "get-payment ApiControllerGetVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the payment
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4189,7 +4306,7 @@ export def "get-payment ApiControllerGetVerification" [
   let full_url = (build-url $base "/api/get-payment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get payments
@@ -4204,6 +4321,7 @@ export def "get-payments ApiControllerGetVerifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of payments
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4212,7 +4330,7 @@ export def "get-payments ApiControllerGetVerifications" [
   let full_url = (build-url $base "/api/get-payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get permission
@@ -4227,6 +4345,7 @@ export def "get-permission ApiControllerGetPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the permission
 ]: nothing -> record<actions: list<string>, adapter: string, approveTime: string, approver: string, createdTime: string, description: string, displayName: string, domains: list<string>, effect: string, groups: list<string>, isEnabled: bool, model: string, name: string, owner: string, resourceType: string, resources: list<string>, roles: list<string>, state: string, submitter: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4235,7 +4354,7 @@ export def "get-permission ApiControllerGetPermission" [
   let full_url = (build-url $base "/api/get-permission" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get permissions
@@ -4250,6 +4369,7 @@ export def "get-permissions ApiControllerGetPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of permissions
 ]: nothing -> table<actions: list<string>, adapter: string, approveTime: string, approver: string, createdTime: string, description: string, displayName: string, domains: list<string>, effect: string, groups: list<string>, isEnabled: bool, model: string, name: string, owner: string, resourceType: string, resources: list<string>, roles: list<string>, state: string, submitter: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4258,7 +4378,7 @@ export def "get-permissions ApiControllerGetPermissions" [
   let full_url = (build-url $base "/api/get-permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get permissions by role
@@ -4273,6 +4393,7 @@ export def "get-permissions-by-role ApiControllerGetPermissionsByRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the role
 ]: nothing -> table<actions: list<string>, adapter: string, approveTime: string, approver: string, createdTime: string, description: string, displayName: string, domains: list<string>, effect: string, groups: list<string>, isEnabled: bool, model: string, name: string, owner: string, resourceType: string, resources: list<string>, roles: list<string>, state: string, submitter: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4281,7 +4402,7 @@ export def "get-permissions-by-role ApiControllerGetPermissionsByRole" [
   let full_url = (build-url $base "/api/get-permissions-by-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get permissions by submitter
@@ -4296,13 +4417,14 @@ export def "get-permissions-by-submitter ApiControllerGetPermissionsBySubmitter"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<actions: list<string>, adapter: string, approveTime: string, approver: string, createdTime: string, description: string, displayName: string, domains: list<string>, effect: string, groups: list<string>, isEnabled: bool, model: string, name: string, owner: string, resourceType: string, resources: list<string>, roles: list<string>, state: string, submitter: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-permissions-by-submitter")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get plan
@@ -4317,6 +4439,7 @@ export def "get-plan ApiControllerGetPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the plan
   --includeOption: oneof<nothing, bool> # Should include plan's option
 ]: nothing -> record<createdTime: string, currency: string, description: string, displayName: string, isEnabled: bool, name: string, options: list<string>, owner: string, paymentProviders: list<string>, period: string, price: float, product: string, role: string> {
@@ -4326,7 +4449,7 @@ export def "get-plan ApiControllerGetPlan" [
   let full_url = (build-url $base "/api/get-plan" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get plans
@@ -4341,6 +4464,7 @@ export def "get-plans ApiControllerGetPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of plans
 ]: nothing -> table<createdTime: string, currency: string, description: string, displayName: string, isEnabled: bool, name: string, options: list<string>, owner: string, paymentProviders: list<string>, period: string, price: float, product: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4349,7 +4473,7 @@ export def "get-plans ApiControllerGetPlans" [
   let full_url = (build-url $base "/api/get-plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get policies
@@ -4364,6 +4488,7 @@ export def "get-policies ApiControllerGetPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --adapterId: string # The adapter id
 ]: nothing -> list<record> {
@@ -4373,7 +4498,7 @@ export def "get-policies ApiControllerGetPolicies" [
   let full_url = (build-url $base "/api/get-policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get pricing
@@ -4388,6 +4513,7 @@ export def "get-pricing ApiControllerGetPricing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the pricing
 ]: nothing -> record<application: string, createdTime: string, description: string, displayName: string, isEnabled: bool, name: string, owner: string, plans: list<string>, trialDuration: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4396,7 +4522,7 @@ export def "get-pricing ApiControllerGetPricing" [
   let full_url = (build-url $base "/api/get-pricing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get pricings
@@ -4411,6 +4537,7 @@ export def "get-pricings ApiControllerGetPricings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of pricings
 ]: nothing -> table<application: string, createdTime: string, description: string, displayName: string, isEnabled: bool, name: string, owner: string, plans: list<string>, trialDuration: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4419,7 +4546,7 @@ export def "get-pricings ApiControllerGetPricings" [
   let full_url = (build-url $base "/api/get-pricings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get product
@@ -4434,6 +4561,7 @@ export def "get-product ApiControllerGetProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the product
 ]: nothing -> record<createdTime: string, currency: string, description: string, detail: string, disableCustomRecharge: bool, displayName: string, image: string, isRecharge: bool, name: string, owner: string, price: float, providerObjs: table<appId: string, bucket: string, category: string, cert: string, clientId: string, clientId2: string, clientSecret: string, clientSecret2: string, content: string, createdTime: string, customAuthUrl: string, customLogo: string, customTokenUrl: string, customUserInfoUrl: string, disableSsl: bool, displayName: string, domain: string, emailRegex: string, enablePkce: bool, enableProxy: bool, enableSignAuthnRequest: bool, endpoint: string, host: string, httpHeaders: any, idP: string, intranetEndpoint: string, issuerUrl: string, metadata: string, method: string, name: string, owner: string, pathPrefix: string, port: int, providerUrl: string, receiver: string, regionId: string, scopes: string, signName: string, subType: string, templateCode: string, title: string, type: string, userMapping: any>, providers: list<string>, quantity: int, rechargeOptions: list<float>, sold: int, state: string, successUrl: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4442,7 +4570,7 @@ export def "get-product ApiControllerGetProduct" [
   let full_url = (build-url $base "/api/get-product" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get products
@@ -4457,6 +4585,7 @@ export def "get-products ApiControllerGetProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of products
 ]: nothing -> table<createdTime: string, currency: string, description: string, detail: string, disableCustomRecharge: bool, displayName: string, image: string, isRecharge: bool, name: string, owner: string, price: float, providerObjs: list<record>, providers: list<string>, quantity: int, rechargeOptions: list<float>, sold: int, state: string, successUrl: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4465,7 +4594,7 @@ export def "get-products ApiControllerGetProducts" [
   let full_url = (build-url $base "/api/get-products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get Prometheus Info
@@ -4480,13 +4609,14 @@ export def "get-prometheus-info ApiControllerGetPrometheusInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiLatency: table<count: int, latency: string, method: string, name: string>, apiThroughput: table<method: string, name: string, throughput: float>, totalThroughput: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-prometheus-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get provider
@@ -4501,6 +4631,7 @@ export def "get-provider ApiControllerGetProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the provider
 ]: nothing -> record<appId: string, bucket: string, category: string, cert: string, clientId: string, clientId2: string, clientSecret: string, clientSecret2: string, content: string, createdTime: string, customAuthUrl: string, customLogo: string, customTokenUrl: string, customUserInfoUrl: string, disableSsl: bool, displayName: string, domain: string, emailRegex: string, enablePkce: bool, enableProxy: bool, enableSignAuthnRequest: bool, endpoint: string, host: string, httpHeaders: any, idP: string, intranetEndpoint: string, issuerUrl: string, metadata: string, method: string, name: string, owner: string, pathPrefix: string, port: int, providerUrl: string, receiver: string, regionId: string, scopes: string, signName: string, subType: string, templateCode: string, title: string, type: string, userMapping: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4509,7 +4640,7 @@ export def "get-provider ApiControllerGetProvider" [
   let full_url = (build-url $base "/api/get-provider" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get providers
@@ -4524,6 +4655,7 @@ export def "get-providers ApiControllerGetProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of providers
 ]: nothing -> table<appId: string, bucket: string, category: string, cert: string, clientId: string, clientId2: string, clientSecret: string, clientSecret2: string, content: string, createdTime: string, customAuthUrl: string, customLogo: string, customTokenUrl: string, customUserInfoUrl: string, disableSsl: bool, displayName: string, domain: string, emailRegex: string, enablePkce: bool, enableProxy: bool, enableSignAuthnRequest: bool, endpoint: string, host: string, httpHeaders: any, idP: string, intranetEndpoint: string, issuerUrl: string, metadata: string, method: string, name: string, owner: string, pathPrefix: string, port: int, providerUrl: string, receiver: string, regionId: string, scopes: string, signName: string, subType: string, templateCode: string, title: string, type: string, userMapping: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4532,7 +4664,7 @@ export def "get-providers ApiControllerGetProviders" [
   let full_url = (build-url $base "/api/get-providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-qrcode
@@ -4546,6 +4678,7 @@ export def "get-qrcode ApiControllerGetWechatQRCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of provider
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4554,7 +4687,7 @@ export def "get-qrcode ApiControllerGetWechatQRCode" [
   let full_url = (build-url $base "/api/get-qrcode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get all records
@@ -4569,6 +4702,7 @@ export def "get-records ApiControllerGetRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: string # The size of each page
   --p: string # The number of the page
 ]: nothing -> record {
@@ -4578,7 +4712,7 @@ export def "get-records ApiControllerGetRecords" [
   let full_url = (build-url $base "/api/get-records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get records by filter
@@ -4593,6 +4727,7 @@ export def "get-records-filter ApiControllerGetRecordsByFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -4602,7 +4737,7 @@ export def "get-records-filter ApiControllerGetRecordsByFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get resource
@@ -4617,6 +4752,7 @@ export def "get-resource ApiControllerGetResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of resource
 ]: nothing -> record<application: string, createdTime: string, description: string, fileFormat: string, fileName: string, fileSize: int, fileType: string, name: string, owner: string, parent: string, provider: string, tag: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4625,7 +4761,7 @@ export def "get-resource ApiControllerGetResource" [
   let full_url = (build-url $base "/api/get-resource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get resources
@@ -4640,6 +4776,7 @@ export def "get-resources ApiControllerGetResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # Owner
   --user: string # User
   --pageSize: int # Page Size
@@ -4655,7 +4792,7 @@ export def "get-resources ApiControllerGetResources" [
   let full_url = (build-url $base "/api/get-resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get role
@@ -4670,6 +4807,7 @@ export def "get-role ApiControllerGetRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the role
 ]: nothing -> record<createdTime: string, description: string, displayName: string, domains: list<string>, groups: list<string>, isEnabled: bool, name: string, owner: string, roles: list<string>, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4678,7 +4816,7 @@ export def "get-role ApiControllerGetRole" [
   let full_url = (build-url $base "/api/get-role" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get roles
@@ -4693,6 +4831,7 @@ export def "get-roles ApiControllerGetRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of roles
 ]: nothing -> table<createdTime: string, description: string, displayName: string, domains: list<string>, groups: list<string>, isEnabled: bool, name: string, owner: string, roles: list<string>, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4701,7 +4840,7 @@ export def "get-roles ApiControllerGetRoles" [
   let full_url = (build-url $base "/api/get-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get session for one user in one application.
@@ -4716,6 +4855,7 @@ export def "get-session ApiControllerGetSingleSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sessionPkId: string # The session ID in format: organization/user/application (e.g., built-in/admin/app-built-in)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4724,7 +4864,7 @@ export def "get-session ApiControllerGetSingleSession" [
   let full_url = (build-url $base "/api/get-session" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization user sessions.
@@ -4739,6 +4879,7 @@ export def "get-sessions ApiControllerGetSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The organization name
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4747,7 +4888,7 @@ export def "get-sessions ApiControllerGetSessions" [
   let full_url = (build-url $base "/api/get-sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-sorted-users
@@ -4761,6 +4902,7 @@ export def "get-sorted-users ApiControllerGetSortedUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of users
   --sorter: string # The DB column name to sort by, e.g., created_time
   --limit: string # The count of users to return, e.g., 25
@@ -4771,7 +4913,7 @@ export def "get-sorted-users ApiControllerGetSortedUsers" [
   let full_url = (build-url $base "/api/get-sorted-users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get subscription
@@ -4786,6 +4928,7 @@ export def "get-subscription ApiControllerGetSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the subscription
 ]: nothing -> record<createdTime: string, description: string, displayName: string, endTime: string, name: string, owner: string, payment: string, period: string, plan: string, pricing: string, startTime: string, state: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4794,7 +4937,7 @@ export def "get-subscription ApiControllerGetSubscription" [
   let full_url = (build-url $base "/api/get-subscription" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get subscriptions
@@ -4809,6 +4952,7 @@ export def "get-subscriptions ApiControllerGetSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of subscriptions
 ]: nothing -> table<createdTime: string, description: string, displayName: string, endTime: string, name: string, owner: string, payment: string, period: string, plan: string, pricing: string, startTime: string, state: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4817,7 +4961,7 @@ export def "get-subscriptions ApiControllerGetSubscriptions" [
   let full_url = (build-url $base "/api/get-subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get syncer
@@ -4832,6 +4976,7 @@ export def "get-syncer ApiControllerGetSyncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the syncer
 ]: nothing -> record<affiliationTable: string, avatarBaseUrl: string, cert: string, createdTime: string, database: string, databaseType: string, errorText: string, host: string, isEnabled: bool, isReadOnly: bool, name: string, organization: string, owner: string, password: string, port: int, sshHost: string, sshPassword: string, sshPort: int, sshType: string, sshUser: string, sslMode: string, syncInterval: int, table: string, tableColumns: table<casdoorName: string, isHashed: bool, isKey: bool, name: string, type: string, values: list>, type: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4840,7 +4985,7 @@ export def "get-syncer ApiControllerGetSyncer" [
   let full_url = (build-url $base "/api/get-syncer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get syncers
@@ -4855,6 +5000,7 @@ export def "get-syncers ApiControllerGetSyncers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of syncers
 ]: nothing -> table<affiliationTable: string, avatarBaseUrl: string, cert: string, createdTime: string, database: string, databaseType: string, errorText: string, host: string, isEnabled: bool, isReadOnly: bool, name: string, organization: string, owner: string, password: string, port: int, sshHost: string, sshPassword: string, sshPort: int, sshType: string, sshUser: string, sslMode: string, syncInterval: int, table: string, tableColumns: list<record>, type: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4863,7 +5009,7 @@ export def "get-syncers ApiControllerGetSyncers" [
   let full_url = (build-url $base "/api/get-syncers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get system info like CPU and memory usage
@@ -4878,13 +5024,14 @@ export def "get-system-info ApiControllerGetSystemInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cpuUsage: list<float>, memoryTotal: int, memoryUsed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-system-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get ticket
@@ -4899,6 +5046,7 @@ export def "get-ticket ApiControllerGetTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the ticket
 ]: nothing -> record<content: string, createdTime: string, displayName: string, messages: table<author: string, isAdmin: bool, text: string, timestamp: string>, name: string, owner: string, state: string, title: string, updatedTime: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4907,7 +5055,7 @@ export def "get-ticket ApiControllerGetTicket" [
   let full_url = (build-url $base "/api/get-ticket" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get tickets
@@ -4922,6 +5070,7 @@ export def "get-tickets ApiControllerGetTickets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of tickets
 ]: nothing -> table<content: string, createdTime: string, displayName: string, messages: list<record>, name: string, owner: string, state: string, title: string, updatedTime: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4930,7 +5079,7 @@ export def "get-tickets ApiControllerGetTickets" [
   let full_url = (build-url $base "/api/get-tickets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get token
@@ -4945,6 +5094,7 @@ export def "get-token ApiControllerGetToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The token ID in format: organization/token-name (e.g., built-in/token-123456)
 ]: nothing -> record<accessToken: string, accessTokenHash: string, application: string, code: string, codeChallenge: string, codeExpireIn: int, codeIsUsed: bool, createdTime: string, expiresIn: int, name: string, organization: string, owner: string, refreshToken: string, refreshTokenHash: string, scope: string, tokenType: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4953,7 +5103,7 @@ export def "get-token ApiControllerGetToken" [
   let full_url = (build-url $base "/api/get-token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get tokens
@@ -4968,6 +5118,7 @@ export def "get-tokens ApiControllerGetTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The organization name (e.g., built-in)
   --pageSize: string # The size of each page
   --p: string # The number of the page
@@ -4978,7 +5129,7 @@ export def "get-tokens ApiControllerGetTokens" [
   let full_url = (build-url $base "/api/get-tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get transaction
@@ -4993,6 +5144,7 @@ export def "get-transaction ApiControllerGetTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the transaction
 ]: nothing -> record<amount: float, application: string, category: string, createdTime: string, currency: string, displayName: string, domain: string, name: string, owner: string, payment: string, provider: string, state: string, subtype: string, tag: string, type: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5001,7 +5153,7 @@ export def "get-transaction ApiControllerGetTransaction" [
   let full_url = (build-url $base "/api/get-transaction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get transactions
@@ -5016,6 +5168,7 @@ export def "get-transactions ApiControllerGetTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of transactions
 ]: nothing -> table<amount: float, application: string, category: string, createdTime: string, currency: string, displayName: string, domain: string, name: string, owner: string, payment: string, provider: string, state: string, subtype: string, tag: string, type: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5024,7 +5177,7 @@ export def "get-transactions ApiControllerGetTransactions" [
   let full_url = (build-url $base "/api/get-transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get user
@@ -5039,6 +5192,7 @@ export def "get-user ApiControllerGetUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the user
   --owner: string # The owner of the user
   --email: string # The email of the user
@@ -5051,7 +5205,7 @@ export def "get-user ApiControllerGetUser" [
   let full_url = (build-url $base "/api/get-user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get the detail of the user's application
@@ -5066,6 +5220,7 @@ export def "get-user-application ApiControllerGetUserApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the user
 ]: nothing -> record<affiliationUrl: string, cert: string, certPublicKey: string, clientId: string, clientSecret: string, codeResendTimeout: int, cookieExpireInHours: int, createdTime: string, defaultGroup: string, description: string, disableSamlAttributes: bool, disableSignin: bool, displayName: string, enableAutoSignin: bool, enableCodeSignin: bool, enableExclusiveSignin: bool, enableLinkWithEmail: bool, enablePassword: bool, enableSamlAssertionSignature: bool, enableSamlC14n10: bool, enableSamlCompress: bool, enableSamlPostBinding: bool, enableSignUp: bool, enableSigninSession: bool, enableWebAuthn: bool, expireInHours: float, failedSigninFrozenTime: int, failedSigninLimit: int, favicon: string, footerHtml: string, forcedRedirectOrigin: string, forgetUrl: string, formBackgroundUrl: string, formBackgroundUrlMobile: string, formCss: string, formCssMobile: string, formOffset: int, formSideHtml: string, grantTypes: list<string>, headerHtml: string, homepageUrl: string, ipRestriction: string, ipWhitelist: string, isShared: bool, logo: string, name: string, order: int, orgChoiceMode: string, organization: string, organizationObj: record<accountItems: list<record>, accountMenu: string, balanceCredit: float, balanceCurrency: string, countryCodes: list<string>, createdTime: string, defaultApplication: string, defaultAvatar: string, defaultPassword: string, disableSignin: bool, displayName: string, enableSoftDeletion: bool, enableTour: bool, favicon: string, hasPrivilegeConsent: bool, initScore: int, ipRestriction: string, ipWhitelist: string, isProfilePublic: bool, languages: list<string>, logo: string, logoDark: string, masterPassword: string, masterVerificationCode: string, mfaItems: list<record>, mfaRememberInHours: int, name: string, navItems: list<string>, orgBalance: float, owner: string, passwordExpireDays: int, passwordObfuscatorKey: string, passwordObfuscatorType: string, passwordOptions: list<string>, passwordSalt: string, passwordType: string, tags: list<string>, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, useEmailAsUsername: bool, userBalance: float, userNavItems: list<string>, userTypes: list<string>, websiteUrl: string, widgetItems: list<string>>, owner: string, providers: table<canSignIn: bool, canSignUp: bool, canUnlink: bool, countryCodes: list, name: string, owner: string, prompted: bool, provider: record, rule: string, signupGroup: string>, redirectUris: list<string>, refreshExpireInHours: float, samlAttributes: table<name: string, nameFormat: string, value: string>, samlHashAlgorithm: string, samlReplyUrl: string, signinHtml: string, signinItems: table<customCss: string, isCustom: bool, label: string, name: string, placeholder: string, rule: string, visible: bool>, signinMethods: table<displayName: string, name: string, rule: string>, signinUrl: string, signupHtml: string, signupItems: table<customCss: string, label: string, name: string, options: list, placeholder: string, prompted: bool, regex: string, required: bool, rule: string, type: string, visible: bool>, signupUrl: string, tags: list<string>, termsOfUse: string, themeData: record<borderRadius: int, colorPrimary: string, isCompact: bool, isEnabled: bool, themeType: string>, title: string, tokenAttributes: table<name: string, type: string, value: string>, tokenFields: list<string>, tokenFormat: string, tokenSigningMethod: string, useEmailAsSamlNameId: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5074,7 +5229,7 @@ export def "get-user-application ApiControllerGetUserApplication" [
   let full_url = (build-url $base "/api/get-user-application" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-user-count
@@ -5088,6 +5243,7 @@ export def "get-user-count ApiControllerGetUserCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of users
   --isOnline: string # The filter for query, 1 for online, 0 for offline, empty string for all users
 ]: nothing -> any {
@@ -5097,7 +5253,7 @@ export def "get-user-count ApiControllerGetUserCount" [
   let full_url = (build-url $base "/api/get-user-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get orders for a user
@@ -5112,6 +5268,7 @@ export def "get-user-orders ApiControllerGetUserOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of orders
   --user: string # The username of the user
 ]: nothing -> table<createdTime: string, currency: string, displayName: string, message: string, name: string, owner: string, payment: string, price: float, productInfos: list<record>, products: list<string>, state: string, updateTime: string, user: string> {
@@ -5121,7 +5278,7 @@ export def "get-user-orders ApiControllerGetUserOrders" [
   let full_url = (build-url $base "/api/get-user-orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get payments for a user
@@ -5136,6 +5293,7 @@ export def "get-user-payments ApiControllerGetUserVerifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of payments
   --organization: string # The organization of the user
   --user: string # The username of the user
@@ -5146,7 +5304,7 @@ export def "get-user-payments ApiControllerGetUserVerifications" [
   let full_url = (build-url $base "/api/get-user-payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-users
@@ -5160,6 +5318,7 @@ export def "get-users ApiControllerGetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of users
 ]: nothing -> table<accessKey: string, accessSecret: string, accessToken: string, address: list<string>, addresses: list<record>, adfs: string, affiliation: string, alipay: string, amazon: string, apple: string, auth0: string, avatar: string, avatarType: string, azuread: string, azureadb2c: string, baidu: string, balance: float, balanceCredit: float, balanceCurrency: string, battlenet: string, bilibili: string, bio: string, birthday: string, bitbucket: string, box: string, cart: list<record>, casdoor: string, cloudfoundry: string, countryCode: string, createdIp: string, createdTime: string, currency: string, custom: string, custom10: string, custom2: string, custom3: string, custom4: string, custom5: string, custom6: string, custom7: string, custom8: string, custom9: string, dailymotion: string, deezer: string, deletedTime: string, digitalocean: string, dingtalk: string, discord: string, displayName: string, douyin: string, dropbox: string, education: string, email: string, emailVerified: bool, eveonline: string, externalId: string, faceIds: list<record>, facebook: string, firstName: string, fitbit: string, gender: string, gitea: string, gitee: string, github: string, gitlab: string, google: string, groups: list<string>, hash: string, heroku: string, homepage: string, id: string, idCard: string, idCardType: string, influxcloud: string, infoflow: string, instagram: string, intercom: string, invitation: string, invitationCode: string, ipWhitelist: string, isAdmin: bool, isDefaultAvatar: bool, isDeleted: bool, isForbidden: bool, isOnline: bool, isVerified: bool, kakao: string, karma: int, kwai: string, language: string, lark: string, lastChangePasswordTime: string, lastName: string, lastSigninIp: string, lastSigninTime: string, lastSigninWrongTime: string, lastfm: string, ldap: string, line: string, linkedin: string, location: string, mailru: string, managedAccounts: list<record>, meetup: string, metamask: string, mfaAccounts: list<record>, mfaEmailEnabled: bool, mfaItems: list<record>, mfaPhoneEnabled: bool, mfaPushEnabled: bool, mfaPushProvider: string, mfaPushReceiver: string, mfaRadiusEnabled: bool, mfaRadiusProvider: string, mfaRadiusUsername: string, mfaRememberDeadline: string, microsoftonline: string, multiFactorAuths: list<record>, name: string, naver: string, needUpdatePassword: bool, nextcloud: string, okta: string, onedrive: string, originalRefreshToken: string, originalToken: string, oura: string, owner: string, password: string, passwordSalt: string, passwordType: string, patreon: string, paypal: string, permanentAvatar: string, permissions: list<record>, phone: string, preHash: string, preferredMfaType: string, properties: any, qq: string, ranking: int, realName: string, recoveryCodes: list<string>, region: string, registerSource: string, registerType: string, roles: list<record>, salesforce: string, score: int, shopify: string, signinWrongTimes: int, signupApplication: string, slack: string, soundcloud: string, spotify: string, steam: string, strava: string, stripe: string, tag: string, tiktok: string, title: string, totpSecret: string, tumblr: string, twitch: string, twitter: string, type: string, typetalk: string, uber: string, updatedTime: string, vk: string, web3onboard: string, webauthnCredentials: list<record>, wechat: string, wecom: string, weibo: string, wepay: string, xero: string, yahoo: string, yammer: string, yandex: string, zoom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5168,7 +5327,7 @@ export def "get-users ApiControllerGetUsers" [
   let full_url = (build-url $base "/api/get-users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get version info like Casdoor release version and commit ID
@@ -5183,13 +5342,14 @@ export def "get-version-info ApiControllerGetVersionInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commitId: string, commitOffset: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/get-version-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get webhook
@@ -5204,6 +5364,7 @@ export def "get-webhook ApiControllerGetWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the webhook (default: built-in/admin)
 ]: nothing -> record<contentType: string, createdTime: string, events: list<string>, headers: table<name: string, value: string>, isEnabled: bool, isUserExtended: bool, method: string, name: string, objectFields: list<string>, organization: string, owner: string, singleOrgOnly: bool, tokenFields: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5212,7 +5373,7 @@ export def "get-webhook ApiControllerGetWebhook" [
   let full_url = (build-url $base "/api/get-webhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/get-webhook-event
@@ -5226,6 +5387,7 @@ export def "get-webhook-event ApiControllerGetWebhookEventType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ticket: string # The eventId of QRCode
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5234,7 +5396,7 @@ export def "get-webhook-event ApiControllerGetWebhookEventType" [
   let full_url = (build-url $base "/api/get-webhook-event" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get webhooks
@@ -5249,6 +5411,7 @@ export def "get-webhooks ApiControllerGetWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of webhooks (default: built-in/admin)
 ]: nothing -> table<contentType: string, createdTime: string, events: list<string>, headers: list<record>, isEnabled: bool, isUserExtended: bool, method: string, name: string, objectFields: list<string>, organization: string, owner: string, singleOrgOnly: bool, tokenFields: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5257,7 +5420,7 @@ export def "get-webhooks ApiControllerGetWebhooks" [
   let full_url = (build-url $base "/api/get-webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # check if the system is live
@@ -5272,13 +5435,14 @@ export def "health ApiControllerHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set impersonation user for current admin session
@@ -5293,6 +5457,7 @@ export def "impersonation-user ApiControllerImpersonateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string # The username to impersonate (owner/name)
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -5303,7 +5468,7 @@ export def "impersonation-user ApiControllerImpersonateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # invoice payment
@@ -5318,6 +5483,7 @@ export def "invoice-payment ApiControllerInvoicePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the payment
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5326,7 +5492,7 @@ export def "invoice-payment ApiControllerInvoicePayment" [
   let full_url = (build-url $base "/api/invoice-payment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if there are other different sessions for one user in one application.
@@ -5341,6 +5507,7 @@ export def "is-session-duplicated ApiControllerIsSessionDuplicated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sessionPkId: string # The session ID in format: organization/user/application (e.g., built-in/admin/app-built-in)
   --sessionId: string # The specific session ID to check
 ]: nothing -> list<string> {
@@ -5350,7 +5517,7 @@ export def "is-session-duplicated ApiControllerIsSessionDuplicated" [
   let full_url = (build-url $base "/api/is-session-duplicated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # login
@@ -5365,6 +5532,7 @@ export def "login ApiControllerLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # clientId
   --responseType: string # responseType
   --redirectUri: string # redirectUri
@@ -5383,7 +5551,7 @@ export def "login ApiControllerLogin" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get OAuth access token
@@ -5398,6 +5566,7 @@ export def "login-oauth-access-token ApiControllerGetOAuthToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --grant-type: string # OAuth grant type
   --client-id: string # OAuth client id
   --client-secret: string # OAuth client secret
@@ -5409,7 +5578,7 @@ export def "login-oauth-access-token ApiControllerGetOAuthToken" [
   let full_url = (build-url $base "/api/login/oauth/access_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The introspection endpoint is an OAuth 2.0 endpoint that takes a
@@ -5424,6 +5593,7 @@ export def "login-oauth-introspect ApiControllerIntrospectToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # access_token's value or refresh_token's value
   token_type_hint: string # the token type access_token or refresh_token
 ]: any -> record<active: bool, aud: list<string>, client_id: string, exp: int, iat: int, iss: string, jti: string, nbf: int, scope: string, sub: string, token_type: string, username: string> {
@@ -5435,7 +5605,7 @@ export def "login-oauth-introspect ApiControllerIntrospectToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # refresh OAuth access token
@@ -5450,6 +5620,7 @@ export def "login-oauth-refresh-token ApiControllerRefreshToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --grant-type: string # OAuth grant type
   --refresh-token: string # OAuth refresh token
   --scope: string # OAuth scope
@@ -5462,7 +5633,7 @@ export def "login-oauth-refresh-token ApiControllerRefreshToken" [
   let full_url = (build-url $base "/api/login/oauth/refresh_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # logout the current user
@@ -5477,6 +5648,7 @@ export def "logout ApiControllerLogout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id-token-hint: string # id_token_hint
   --post-logout-redirect-uri: string # post_logout_redirect_uri
   --state: string # state
@@ -5487,7 +5659,7 @@ export def "logout ApiControllerLogout" [
   let full_url = (build-url $base "/api/logout" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get Prometheus metrics
@@ -5502,13 +5674,14 @@ export def "metrics ApiControllerGetMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/metrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # enable totp
@@ -5523,13 +5696,14 @@ export def "mfa-setup-enable ApiControllerMfaSetupEnable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/mfa/setup/enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # setup MFA
@@ -5544,13 +5718,14 @@ export def "mfa-setup-initiate ApiControllerMfaSetupInitiate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/mfa/setup/initiate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # setup verify totp
@@ -5565,13 +5740,14 @@ export def "mfa-setup-verify ApiControllerMfaSetupVerify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/mfa/setup/verify")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # notify payment
@@ -5587,6 +5763,7 @@ export def "notify-payment ApiControllerNotifyPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdTime: string
   --currency: string
   --detail: string
@@ -5624,7 +5801,7 @@ export def "notify-payment ApiControllerNotifyPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # pay an existing order
@@ -5639,6 +5816,7 @@ export def "pay-order ApiControllerPayOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the order
   --providerName: string # The name of the provider
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -5648,7 +5826,7 @@ export def "pay-order ApiControllerPayOrder" [
   let full_url = (build-url $base "/api/pay-order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # place an order for a product
@@ -5663,6 +5841,7 @@ export def "place-order ApiControllerPlaceOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string # The id ( owner/name ) of the product
   --pricingName: string # The name of the pricing (for subscription)
   --planName: string # The name of the plan (for subscription)
@@ -5675,7 +5854,7 @@ export def "place-order ApiControllerPlaceOrder" [
   let full_url = (build-url $base "/api/place-order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh all CLI engines
@@ -5690,6 +5869,7 @@ export def "refresh-engines ApiControllerRefreshEngines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --m: string # Hash for request validation
   --t: string # Timestamp for request validation
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -5699,7 +5879,7 @@ export def "refresh-engines ApiControllerRefreshEngines" [
   let full_url = (build-url $base "/api/refresh-engines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # remove policy
@@ -5714,6 +5894,7 @@ export def "remove-policy ApiControllerRemovePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --body: record
 ]: any -> record {
@@ -5725,7 +5906,7 @@ export def "remove-policy ApiControllerRemovePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/reset-email-or-phone
@@ -5739,13 +5920,14 @@ export def "reset-email-or-phone ApiControllerResetEmailOrPhone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/reset-email-or-phone")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call Casbin CLI commands
@@ -5760,13 +5942,14 @@ export def "run-casbin-command ApiControllerRunCasbinCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/run-casbin-command")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # run syncer
@@ -5782,6 +5965,7 @@ export def "run-syncer ApiControllerRunSyncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --affiliationTable: string
   --avatarBaseUrl: string
   --cert: string
@@ -5817,7 +6001,7 @@ export def "run-syncer ApiControllerRunSyncer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # This API is not for Casdoor frontend to call, it is for Casdoor SDKs.
@@ -5833,6 +6017,7 @@ export def "send-email ApiControllerSendEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # The clientId of the application
   --clientSecret: string # The clientSecret of the application
   --content: string
@@ -5851,7 +6036,7 @@ export def "send-email ApiControllerSendEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # verify invitation
@@ -5866,6 +6051,7 @@ export def "send-invitation ApiControllerVerifyInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the invitation
   --body: record
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -5877,7 +6063,7 @@ export def "send-invitation ApiControllerVerifyInvitation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # This API is not for Casdoor frontend to call, it is for Casdoor SDKs.
@@ -5892,6 +6078,7 @@ export def "send-notification ApiControllerSendNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -5902,7 +6089,7 @@ export def "send-notification ApiControllerSendNotification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # This API is not for Casdoor frontend to call, it is for Casdoor SDKs.
@@ -5917,6 +6104,7 @@ export def "send-sms ApiControllerSendSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientId: string # The clientId of the application
   --clientSecret: string # The clientSecret of the application
   --content: string
@@ -5932,7 +6120,7 @@ export def "send-sms ApiControllerSendSms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/send-verification-code
@@ -5946,13 +6134,14 @@ export def "send-verification-code ApiControllerSendVerificationCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/send-verification-code")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set password
@@ -5967,6 +6156,7 @@ export def "set-password ApiControllerSetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userOwner: string # The owner of the user
   userName: string # The name of the user
   oldPassword: string # The old password of the user
@@ -5980,7 +6170,7 @@ export def "set-password ApiControllerSetPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # : Set specific Mfa Preferred
@@ -5995,13 +6185,14 @@ export def "set-preferred-mfa ApiControllerSetPreferredMfa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/set-preferred-mfa")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # sign up a new user
@@ -6016,6 +6207,7 @@ export def "signup ApiControllerSignup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string # The username to sign up
   password: string # The password
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -6027,7 +6219,7 @@ export def "signup ApiControllerSignup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # logout the current user from all applications or current session only
@@ -6042,6 +6234,7 @@ export def "sso-logout ApiControllerSsoLogout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logoutAll: string # Whether to logout from all sessions. Accepted values: 'true', '1', or empty (default: true). Any other value means false.
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6050,7 +6243,7 @@ export def "sso-logout ApiControllerSsoLogout" [
   let full_url = (build-url $base "/api/sso-logout" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # logout the current user from all applications or current session only
@@ -6065,6 +6258,7 @@ export def "sso-logout ApiControllerSsoLogout-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logoutAll: string # Whether to logout from all sessions. Accepted values: 'true', '1', or empty (default: true). Any other value means false.
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6073,7 +6267,7 @@ export def "sso-logout ApiControllerSsoLogout-1" [
   let full_url = (build-url $base "/api/sso-logout" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # sync ldap users
@@ -6088,6 +6282,7 @@ export def "sync-ldap-users ApiControllerSyncLdapUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # id
 ]: nothing -> record<exist: table<EmailAddress: string, Mail: string, MobileTelephoneNumber: string, PostalAddress: string, RegisteredAddress: string, TelephoneNumber: string, address: string, attributes: any, cn: string, country: string, countryName: string, displayName: string, email: string, gidNumber: string, groupId: string, memberOf: string, mobile: string, uid: string, uidNumber: string, userPrincipalName: string, uuid: string>, failed: table<EmailAddress: string, Mail: string, MobileTelephoneNumber: string, PostalAddress: string, RegisteredAddress: string, TelephoneNumber: string, address: string, attributes: any, cn: string, country: string, countryName: string, displayName: string, email: string, gidNumber: string, groupId: string, memberOf: string, mobile: string, uid: string, uidNumber: string, userPrincipalName: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6096,7 +6291,7 @@ export def "sync-ldap-users ApiControllerSyncLdapUsers" [
   let full_url = (build-url $base "/api/sync-ldap-users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/unlink
@@ -6110,13 +6305,14 @@ export def "unlink ApiControllerUnlink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/unlink")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # update adapter
@@ -6131,6 +6327,7 @@ export def "update-adapter ApiControllerUpdateAdapter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the adapter
   --createdTime: string
   --database: string
@@ -6154,7 +6351,7 @@ export def "update-adapter ApiControllerUpdateAdapter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update an application
@@ -6177,6 +6374,7 @@ export def "update-application ApiControllerUpdateApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the application
   --affiliationUrl: string
   --cert: string
@@ -6261,7 +6459,7 @@ export def "update-application ApiControllerUpdateApplication" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update cert
@@ -6276,6 +6474,7 @@ export def "update-cert ApiControllerUpdateCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the cert
   --bitSize: int # format: int64
   --certificate: string
@@ -6298,7 +6497,7 @@ export def "update-cert ApiControllerUpdateCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update enforcer
@@ -6313,6 +6512,7 @@ export def "update-enforcer ApiControllerUpdateEnforcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --body: record
 ]: any -> record<adapter: string, createdTime: string, description: string, displayName: string, model: string, modelCfg: any, name: string, owner: string, updatedTime: string> {
@@ -6324,7 +6524,7 @@ export def "update-enforcer ApiControllerUpdateEnforcer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update form
@@ -6340,6 +6540,7 @@ export def "update-form ApiControllerUpdateForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id (owner/name) of the form
   --createdTime: string
   --displayName: string
@@ -6358,7 +6559,7 @@ export def "update-form ApiControllerUpdateForm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update group
@@ -6374,6 +6575,7 @@ export def "update-group ApiControllerUpdateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the group
   --children: list # item shape: {children?: list, contactEmail?: string, createdTime?: string, displayName?: string, haveChildren?: bool, isEnabled?: bool, isTopGroup?: bool, key?: string, manager?: string, name?: string, owner?: string, parentId?: string, parentName?: string, title?: string, type?: string, updatedTime?: string, users?: list}
   --contactEmail: string
@@ -6402,7 +6604,7 @@ export def "update-group ApiControllerUpdateGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update invitation
@@ -6417,6 +6619,7 @@ export def "update-invitation ApiControllerUpdateInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the invitation
   --application: string
   --code: string
@@ -6444,7 +6647,7 @@ export def "update-invitation ApiControllerUpdateInvitation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update ldap
@@ -6459,6 +6662,7 @@ export def "update-ldap ApiControllerUpdateLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
@@ -6486,7 +6690,7 @@ export def "update-ldap ApiControllerUpdateLdap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update model
@@ -6501,6 +6705,7 @@ export def "update-model ApiControllerUpdateModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the model
   --createdTime: string
   --description: string
@@ -6518,7 +6723,7 @@ export def "update-model ApiControllerUpdateModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update order
@@ -6534,6 +6739,7 @@ export def "update-order ApiControllerUpdateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the order
   --createdTime: string
   --currency: string
@@ -6558,7 +6764,7 @@ export def "update-order ApiControllerUpdateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update organization
@@ -6576,6 +6782,7 @@ export def "update-organization ApiControllerUpdateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the organization
   --accountItems: list # item shape: {modifyRule?: string, name?: string, regex?: string, tab?: string, viewRule?: string, visible?: bool}
   --accountMenu: string
@@ -6631,7 +6838,7 @@ export def "update-organization ApiControllerUpdateOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update payment
@@ -6647,6 +6854,7 @@ export def "update-payment ApiControllerUpdatePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the payment
   --createdTime: string
   --currency: string
@@ -6686,7 +6894,7 @@ export def "update-payment ApiControllerUpdatePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update permission
@@ -6701,6 +6909,7 @@ export def "update-permission ApiControllerUpdatePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the permission
   --actions: list
   --adapter: string
@@ -6732,7 +6941,7 @@ export def "update-permission ApiControllerUpdatePermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update plan
@@ -6747,6 +6956,7 @@ export def "update-plan ApiControllerUpdatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the plan
   --createdTime: string
   --currency: string
@@ -6771,7 +6981,7 @@ export def "update-plan ApiControllerUpdatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update policy
@@ -6786,6 +6996,7 @@ export def "update-policy ApiControllerUpdatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name )  of enforcer
   --body: record
 ]: any -> record {
@@ -6797,7 +7008,7 @@ export def "update-policy ApiControllerUpdatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update pricing
@@ -6812,6 +7023,7 @@ export def "update-pricing ApiControllerUpdatePricing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the pricing
   --application: string
   --createdTime: string
@@ -6832,7 +7044,7 @@ export def "update-pricing ApiControllerUpdatePricing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update product
@@ -6848,6 +7060,7 @@ export def "update-product ApiControllerUpdateProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the product
   --createdTime: string
   --currency: string
@@ -6878,7 +7091,7 @@ export def "update-product ApiControllerUpdateProduct" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update provider
@@ -6893,6 +7106,7 @@ export def "update-provider ApiControllerUpdateProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the provider
   --appId: string
   --bucket: string
@@ -6947,7 +7161,7 @@ export def "update-provider ApiControllerUpdateProvider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get resource
@@ -6962,6 +7176,7 @@ export def "update-resource ApiControllerUpdateResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of resource
   --application: string
   --createdTime: string
@@ -6987,7 +7202,7 @@ export def "update-resource ApiControllerUpdateResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update role
@@ -7002,6 +7217,7 @@ export def "update-role ApiControllerUpdateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the role
   --createdTime: string
   --description: string
@@ -7023,7 +7239,7 @@ export def "update-role ApiControllerUpdateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update session for one user in one application.
@@ -7038,6 +7254,7 @@ export def "update-session ApiControllerUpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
@@ -7053,7 +7270,7 @@ export def "update-session ApiControllerUpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update subscription
@@ -7068,6 +7285,7 @@ export def "update-subscription ApiControllerUpdateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the subscription
   --createdTime: string
   --description: string
@@ -7092,7 +7310,7 @@ export def "update-subscription ApiControllerUpdateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update syncer
@@ -7108,6 +7326,7 @@ export def "update-syncer ApiControllerUpdateSyncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the syncer
   --affiliationTable: string
   --avatarBaseUrl: string
@@ -7145,7 +7364,7 @@ export def "update-syncer ApiControllerUpdateSyncer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update ticket
@@ -7161,6 +7380,7 @@ export def "update-ticket ApiControllerUpdateTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the ticket
   --content: string
   --createdTime: string
@@ -7182,7 +7402,7 @@ export def "update-ticket ApiControllerUpdateTicket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update token
@@ -7197,6 +7417,7 @@ export def "update-token ApiControllerUpdateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The token ID in format: organization/token-name (e.g., built-in/token-123456)
   --accessToken: string
   --accessTokenHash: string
@@ -7225,7 +7446,7 @@ export def "update-token ApiControllerUpdateToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update transaction
@@ -7240,6 +7461,7 @@ export def "update-transaction ApiControllerUpdateTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the transaction
   --amount: float # format: double
   --application: string
@@ -7267,7 +7489,7 @@ export def "update-transaction ApiControllerUpdateTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update user
@@ -7291,6 +7513,7 @@ export def "update-user ApiControllerUpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the user
   --userId: string # The userId (UUID) of the user
   --owner: string # The owner of the user (required when using userId)
@@ -7485,7 +7708,7 @@ export def "update-user ApiControllerUpdateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # update webhook
@@ -7501,6 +7724,7 @@ export def "update-webhook ApiControllerUpdateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the webhook (default: built-in/admin)
   --contentType: string
   --createdTime: string
@@ -7526,7 +7750,7 @@ export def "update-webhook ApiControllerUpdateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/upload-resource
@@ -7540,6 +7764,7 @@ export def "upload-resource ApiControllerUploadResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # Owner
   --user: string # User
   --application: string # Application
@@ -7560,7 +7785,7 @@ export def "upload-resource ApiControllerUploadResource" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # return Laravel compatible user information according to OAuth 2.0
@@ -7575,13 +7800,14 @@ export def "user ApiControllerUserInfo2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, email: string, email_verified_at: string, id: string, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # return user information according to OIDC standards
@@ -7596,13 +7822,14 @@ export def "userinfo ApiControllerUserInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/verify-captcha
@@ -7616,13 +7843,14 @@ export def "verify-captcha ApiControllerVerifyCaptcha" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/verify-captcha")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/verify-code
@@ -7636,13 +7864,14 @@ export def "verify-code ApiControllerVerifyCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string, aud: string, email: string, email_verified: bool, groups: list<string>, is_verified: bool, iss: string, name: string, permissions: list<string>, phone: string, picture: string, preferred_username: string, real_name: string, roles: list<string>, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/verify-code")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # verify user's real identity using ID Verification provider
@@ -7657,6 +7886,7 @@ export def "verify-identification ApiControllerVerifyIdentification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # The owner of the user (optional, defaults to logged-in user)
   --name: string # The name of the user (optional, defaults to logged-in user)
   --provider: string # The name of the ID Verification provider (optional, auto-selected if not provided)
@@ -7667,7 +7897,7 @@ export def "verify-identification ApiControllerVerifyIdentification" [
   let full_url = (build-url $base "/api/verify-identification" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # verify invitation
@@ -7682,6 +7912,7 @@ export def "verify-invitation ApiControllerVerifyInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id ( owner/name ) of the invitation
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7690,7 +7921,7 @@ export def "verify-invitation ApiControllerVerifyInvitation" [
   let full_url = (build-url $base "/api/verify-invitation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # WebAuthn Login Flow 1st stage
@@ -7705,6 +7936,7 @@ export def "webauthn-signin-begin ApiControllerWebAuthnSigninBegin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # owner
   --name: string # name
 ]: nothing -> record {
@@ -7714,7 +7946,7 @@ export def "webauthn-signin-begin ApiControllerWebAuthnSigninBegin" [
   let full_url = (build-url $base "/api/webauthn/signin/begin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # WebAuthn Login Flow 2nd stage
@@ -7729,6 +7961,7 @@ export def "webauthn-signin-finish ApiControllerWebAuthnSigninFinish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -7738,7 +7971,7 @@ export def "webauthn-signin-finish ApiControllerWebAuthnSigninFinish" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # WebAuthn Registration Flow 1st stage
@@ -7753,13 +7986,14 @@ export def "webauthn-signup-begin ApiControllerWebAuthnSignupBegin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/webauthn/signup/begin")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # WebAuthn Registration Flow 2nd stage
@@ -7774,6 +8008,7 @@ export def "webauthn-signup-finish ApiControllerWebAuthnSignupFinish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -7783,7 +8018,7 @@ export def "webauthn-signup-finish ApiControllerWebAuthnSignupFinish" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/webhook
@@ -7797,11 +8032,12 @@ export def "webhook ApiControllerHandleOfficialAccountEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/webhook")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

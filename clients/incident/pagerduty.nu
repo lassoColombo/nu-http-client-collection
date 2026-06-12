@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -134,7 +135,7 @@ def filter-type-completer [] { ["account" "service" "team"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "change-tags createEntityTypeByIdChangeTags" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -171,6 +172,7 @@ export def "change-tags createEntityTypeByIdChangeTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --add: list # Array of tags and/or tag references to add to the entity. For elements with type `tag_reference`, the tag with the corresponding `id` is added to the entity. For elements with type `tag`, if there is an existing tag with the given label that tag is added to the entity. If there is no existing tag with that label and the user has permission to create tags, a new tag is created with that label and assigned to the entity. — item shape: {type: "tag"|"tag_reference", label?: string}
@@ -186,7 +188,7 @@ export def "change-tags createEntityTypeByIdChangeTags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tags for entities
@@ -203,6 +205,7 @@ export def "tags get-by-entity_type-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -217,7 +220,7 @@ export def "tags get-by-entity_type-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List abilities
@@ -232,6 +235,7 @@ export def "abilities listAbilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<abilities: list<string>> {
@@ -242,7 +246,7 @@ export def "abilities listAbilities" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test an ability
@@ -258,6 +262,7 @@ export def "abilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -268,7 +273,7 @@ export def "abilities get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List installed Add-ons
@@ -283,6 +288,7 @@ export def "addons listAddon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -300,7 +306,7 @@ export def "addons listAddon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Install an Add-on
@@ -315,6 +321,7 @@ export def "addons createAddon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   addon: any
@@ -329,7 +336,7 @@ export def "addons createAddon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Add-on
@@ -345,6 +352,7 @@ export def "addons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<addon: record<type: string, name: string, src: string>> {
@@ -355,7 +363,7 @@ export def "addons get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Add-on
@@ -371,6 +379,7 @@ export def "addons delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -381,7 +390,7 @@ export def "addons delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Add-on
@@ -397,6 +406,7 @@ export def "addons updateAddon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   addon: any
@@ -411,7 +421,7 @@ export def "addons updateAddon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List alert grouping settings
@@ -426,6 +436,7 @@ export def "alert-grouping-settings listAlertGroupingSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Cursor to retrieve next page; only present if next page exists.
   --before: string # Cursor to retrieve previous page; only present if not on first page.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -442,7 +453,7 @@ export def "alert-grouping-settings listAlertGroupingSettings" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Alert Grouping Setting
@@ -458,6 +469,7 @@ export def "alert-grouping-settings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   alert_grouping_setting: record # Defines how alerts will be automatically grouped into incidents based on the configurations defined. Note that the Alert Grouping Setting features are available only on certain plans. — shape: {name?: string, description?: string, type?: "content_based"|"content_based_intelligent"|"intelligent"|"time", config?: any, services?: list}
@@ -472,7 +484,7 @@ export def "alert-grouping-settings post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Alert Grouping Setting
@@ -488,6 +500,7 @@ export def "alert-grouping-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<alert_grouping_setting: record<id: string, name: string, description: string, type: string, config: any, services: list<record>, created_at: string, updated_at: string>> {
@@ -498,7 +511,7 @@ export def "alert-grouping-settings get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Alert Grouping Setting
@@ -514,6 +527,7 @@ export def "alert-grouping-settings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -524,7 +538,7 @@ export def "alert-grouping-settings delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Alert Grouping Setting
@@ -541,6 +555,7 @@ export def "alert-grouping-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   alert_grouping_setting: record # Defines how alerts will be automatically grouped into incidents based on the configurations defined. Note that the Alert Grouping Setting features are available only on certain plans. — shape: {name?: string, description?: string, type?: "content_based"|"content_based_intelligent"|"intelligent"|"time", config?: any, services?: list}
@@ -555,7 +570,7 @@ export def "alert-grouping-settings put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated incident data
@@ -571,6 +586,7 @@ export def "analytics-metrics-incidents-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -589,7 +605,7 @@ export def "analytics-metrics-incidents-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated escalation policy data
@@ -605,6 +621,7 @@ export def "analytics-metrics-incidents-escalation-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -623,7 +640,7 @@ export def "analytics-metrics-incidents-escalation-policies post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated metrics for all escalation policies
@@ -639,6 +656,7 @@ export def "analytics-metrics-incidents-escalation-policies-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -657,7 +675,7 @@ export def "analytics-metrics-incidents-escalation-policies-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated service data
@@ -673,6 +691,7 @@ export def "analytics-metrics-incidents-services post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -691,7 +710,7 @@ export def "analytics-metrics-incidents-services post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated metrics for all services
@@ -707,6 +726,7 @@ export def "analytics-metrics-incidents-services-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -725,7 +745,7 @@ export def "analytics-metrics-incidents-services-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated team data
@@ -741,6 +761,7 @@ export def "analytics-metrics-incidents-teams post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -759,7 +780,7 @@ export def "analytics-metrics-incidents-teams post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated metrics for all teams
@@ -775,6 +796,7 @@ export def "analytics-metrics-incidents-teams-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list, pd_advance_used?: bool}
@@ -793,7 +815,7 @@ export def "analytics-metrics-incidents-teams-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated PD Advance usage data
@@ -809,6 +831,7 @@ export def "analytics-metrics-pd-advance-usage-features post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results. — shape: {created_at_start?: string, created_at_end?: string, incident_created_at_start?: string, incident_created_at_end?: string, urgency?: "high"|"low", major?: bool, min_ackowledgements?: int, min_timeout_escalations?: int, min_manual_escalations?: int, team_ids?: list, service_ids?: list, escalation_policy_ids?: list, priority_ids?: list, priority_names?: list}
@@ -824,7 +847,7 @@ export def "analytics-metrics-pd-advance-usage-features post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated metrics for all responders
@@ -840,6 +863,7 @@ export def "analytics-metrics-responders-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results — shape: {date_range_start?: string, date_range_end?: string, urgency?: "high"|"low", team_ids?: list, responder_ids?: list, priority_ids?: list, priority_names?: list}
@@ -857,7 +881,7 @@ export def "analytics-metrics-responders-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get responder data aggregated by team
@@ -873,6 +897,7 @@ export def "analytics-metrics-responders-teams post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Accepts a set of filters to apply to the Incidents before aggregating.  Any incidents that do not match the included filters will be omitted from the results — shape: {date_range_start?: string, date_range_end?: string, urgency?: "high"|"low", team_ids?: list, responder_ids?: list, priority_ids?: list, priority_names?: list}
@@ -890,7 +915,7 @@ export def "analytics-metrics-responders-teams post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get aggregated metrics for all users
@@ -906,6 +931,7 @@ export def "analytics-metrics-users-all post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # shape: {created_at_start?: string, created_at_end?: string, team_ids?: list, user_ids?: list, role_ids?: list}
@@ -927,7 +953,7 @@ export def "analytics-metrics-users-all post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get raw data - multiple incidents
@@ -943,6 +969,7 @@ export def "analytics-raw-incidents post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Filters the result, only show incidents that match the conditions passed in the filter. — shape: {created_at_start?: string, created_at_end?: string, updated_after?: string, urgency?: string, major?: bool, team_ids?: list, service_ids?: list, priority_ids?: list, priority_names?: list, incident_type_ids?: list}
@@ -963,7 +990,7 @@ export def "analytics-raw-incidents post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get raw data - single incident
@@ -979,6 +1006,7 @@ export def "analytics-raw-incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<acknowledged_user_ids: list<string>, acknowledged_user_names: list<string>, acknowledgement_count: int, active_user_count: int, assigned_user_ids: list<string>, assigned_user_names: list<string>, assignment_count: int, auto_resolved: bool, business_hour_interruptions: int, created_at: string, updated_at: string, description: string, engaged_seconds: int, engaged_user_count: int, escalation_count: int, escalation_policy_id: string, escalation_policy_name: string, id: string, incident_number: int, incident_type_id: string, incident_type_name: string, joined_user_ids: list<string>, joined_user_names: list<string>, major: bool, manual_escalation_count: int, off_hour_interruptions: int, priority_id: string, priority_name: string, priority_order: int, reassignment_count: int, resolved_at: string, resolved_by_user_id: string, resolved_by_user_name: string, seconds_to_engage: int, seconds_to_first_ack: int, seconds_to_mobilize: int, seconds_to_resolve: int, service_id: string, service_name: string, sleep_hour_interruptions: int, snoozed_seconds: int, status: string, team_id: string, team_name: string, timeout_escalation_count: int, total_interruptions: int, total_notifications: int, urgency: string, user_defined_effort_seconds: int> {
@@ -989,7 +1017,7 @@ export def "analytics-raw-incidents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get raw responses from a single incident
@@ -1005,6 +1033,7 @@ export def "analytics-raw-incidents-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --limit: int # Number of results to include in each batch. Limits between 1 to 1000 are accepted. (e.g. 20)
@@ -1022,7 +1051,7 @@ export def "analytics-raw-incidents-responses get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get raw incidents for a single responder_id
@@ -1039,6 +1068,7 @@ export def "analytics-raw-responders-incidents post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # Filters the result, only show incidents that match the conditions passed in the filter. — shape: {created_at_start?: string, created_at_end?: string, urgency?: string, major?: bool, team_ids?: list, service_ids?: list, priority_ids?: list, priority_names?: list, incident_type_ids?: list}
@@ -1059,7 +1089,7 @@ export def "analytics-raw-responders-incidents post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get raw user analytics data
@@ -1075,6 +1105,7 @@ export def "analytics-raw-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --filters: record # shape: {created_at_start?: string, created_at_end?: string, team_ids?: list, user_ids?: list, role_ids?: list}
@@ -1096,7 +1127,7 @@ export def "analytics-raw-users post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records
@@ -1111,6 +1142,7 @@ export def "audit-records listAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -1132,7 +1164,7 @@ export def "audit-records listAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Automation Action
@@ -1147,6 +1179,7 @@ export def "automation-actions-actions createAutomationAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   action: any
@@ -1161,7 +1194,7 @@ export def "automation-actions-actions createAutomationAction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Automation Actions
@@ -1176,6 +1209,7 @@ export def "automation-actions-actions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --name: string # Filters results to include the ones matching the name (case insensitive substring matching)
@@ -1195,7 +1229,7 @@ export def "automation-actions-actions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Automation Action
@@ -1211,6 +1245,7 @@ export def "automation-actions-actions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<action: any> {
@@ -1221,7 +1256,7 @@ export def "automation-actions-actions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Automation Action
@@ -1237,6 +1272,7 @@ export def "automation-actions-actions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1247,7 +1283,7 @@ export def "automation-actions-actions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Automation Action
@@ -1263,6 +1299,7 @@ export def "automation-actions-actions updateAutomationAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   action: any
@@ -1277,7 +1314,7 @@ export def "automation-actions-actions updateAutomationAction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an Invocation
@@ -1294,6 +1331,7 @@ export def "automation-actions-actions-invocations createAutomationActionInvocat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   invocation: record # shape: {metadata: record}
@@ -1308,7 +1346,7 @@ export def "automation-actions-actions-invocations createAutomationActionInvocat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all service references associated with an Automation Action
@@ -1324,6 +1362,7 @@ export def "automation-actions-actions-services list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<services: table<type: string>> {
@@ -1334,7 +1373,7 @@ export def "automation-actions-actions-services list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate an Automation Action with a service
@@ -1350,6 +1389,7 @@ export def "automation-actions-actions-services createAutomationActionServiceAss
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   service: any
@@ -1364,7 +1404,7 @@ export def "automation-actions-actions-services createAutomationActionServiceAss
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the details of an Automation Action / service relation
@@ -1381,6 +1421,7 @@ export def "automation-actions-actions-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<service: record<type: string>> {
@@ -1391,7 +1432,7 @@ export def "automation-actions-actions-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disassociate an Automation Action from a service
@@ -1408,6 +1449,7 @@ export def "automation-actions-actions-services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1418,7 +1460,7 @@ export def "automation-actions-actions-services delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate an Automation Action with a team
@@ -1434,6 +1476,7 @@ export def "automation-actions-actions-teams createAutomationActionTeamAssociati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   team: any
@@ -1448,7 +1491,7 @@ export def "automation-actions-actions-teams createAutomationActionTeamAssociati
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all team references associated with an Automation Action
@@ -1464,6 +1507,7 @@ export def "automation-actions-actions-teams list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<teams: table<type: string>> {
@@ -1474,7 +1518,7 @@ export def "automation-actions-actions-teams list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disassociate an Automation Action from a team
@@ -1491,6 +1535,7 @@ export def "automation-actions-actions-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1501,7 +1546,7 @@ export def "automation-actions-actions-teams delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details of an Automation Action / team relation
@@ -1518,6 +1563,7 @@ export def "automation-actions-actions-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<team: record<type: string>> {
@@ -1528,7 +1574,7 @@ export def "automation-actions-actions-teams get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Invocations
@@ -1543,6 +1589,7 @@ export def "automation-actions-invocations listAutomationActionInvocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --invocation-state: string@invocation-state-completer # Invocation state (e.g. sent)
   --not-invocation-state: string # Invocation state inverse filter (matches invocations NOT in the specified state)
   --incident-id: string # Incident ID (e.g. Q2LAR4ADCXC8IB)
@@ -1558,7 +1605,7 @@ export def "automation-actions-invocations listAutomationActionInvocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Invocation
@@ -1574,6 +1621,7 @@ export def "automation-actions-invocations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<invocation: record<action_snapshot: record<name: string, action_type: any, action_data_reference: any>, runner_id: string, timing: list<record>, duration: int, state: any, action_id: string, metadata: record<agent: any, incident: record>>> {
@@ -1584,7 +1632,7 @@ export def "automation-actions-invocations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Automation Action runner.
@@ -1599,6 +1647,7 @@ export def "automation-actions-runners createAutomationActionsRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   runner: any
@@ -1613,7 +1662,7 @@ export def "automation-actions-runners createAutomationActionsRunner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Automation Action runners
@@ -1628,6 +1677,7 @@ export def "automation-actions-runners list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --name: string # Filters results to include the ones matching the name (case insensitive substring matching)
@@ -1643,7 +1693,7 @@ export def "automation-actions-runners list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Automation Action runner
@@ -1659,6 +1709,7 @@ export def "automation-actions-runners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<runner: record<runner_type: string, name: string, description: string, last_seen: string, status: string, creation_time: string, runbook_base_uri: string, teams: list<record>, privileges: record<permissions: list>, associated_actions: record<actions: list, more: bool>, metadata: record>> {
@@ -1669,7 +1720,7 @@ export def "automation-actions-runners get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Automation Action runner
@@ -1685,6 +1736,7 @@ export def "automation-actions-runners updateAutomationActionsRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   runner: any
@@ -1699,7 +1751,7 @@ export def "automation-actions-runners updateAutomationActionsRunner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Automation Action runner
@@ -1715,6 +1767,7 @@ export def "automation-actions-runners delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1725,7 +1778,7 @@ export def "automation-actions-runners delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate a runner with a team
@@ -1741,6 +1794,7 @@ export def "automation-actions-runners-teams createAutomationActionsRunnerTeamAs
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   team: any
@@ -1755,7 +1809,7 @@ export def "automation-actions-runners-teams createAutomationActionsRunnerTeamAs
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all team references associated with a runner
@@ -1771,6 +1825,7 @@ export def "automation-actions-runners-teams list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<teams: table<type: string>> {
@@ -1781,7 +1836,7 @@ export def "automation-actions-runners-teams list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disassociate a runner from a team
@@ -1798,6 +1853,7 @@ export def "automation-actions-runners-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1808,7 +1864,7 @@ export def "automation-actions-runners-teams delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details of a runner / team relation
@@ -1825,6 +1881,7 @@ export def "automation-actions-runners-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<team: record<type: string>> {
@@ -1835,7 +1892,7 @@ export def "automation-actions-runners-teams get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Business Services
@@ -1850,6 +1907,7 @@ export def "business-services listBusinessServices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -1864,7 +1922,7 @@ export def "business-services listBusinessServices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Business Service
@@ -1880,6 +1938,7 @@ export def "business-services createBusinessService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --business-service: record # The Business Service to be created — shape: {name?: string, description?: string, point_of_contact?: string, team?: record}
@@ -1894,7 +1953,7 @@ export def "business-services createBusinessService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Business Service
@@ -1910,6 +1969,7 @@ export def "business-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<business_service: record<name: string, description: string, point_of_contact: string, team: record<id: string, type: string, self: string>>> {
@@ -1920,7 +1980,7 @@ export def "business-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Business Service
@@ -1936,6 +1996,7 @@ export def "business-services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -1946,7 +2007,7 @@ export def "business-services delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Business Service
@@ -1963,6 +2024,7 @@ export def "business-services updateBusinessService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --business-service: record # The Business Service to be created — shape: {name?: string, description?: string, point_of_contact?: string, team?: record}
@@ -1977,7 +2039,7 @@ export def "business-services updateBusinessService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Business Service Account Subscription
@@ -1993,6 +2055,7 @@ export def "business-services-account-subscription createBusinessServiceAccountS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<account_is_subscribed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2002,7 +2065,7 @@ export def "business-services-account-subscription createBusinessServiceAccountS
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Business Service Account Subscription
@@ -2018,6 +2081,7 @@ export def "business-services-account-subscription removeBusinessServiceAccountS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2027,7 +2091,7 @@ export def "business-services-account-subscription removeBusinessServiceAccountS
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Business Service Subscribers
@@ -2043,6 +2107,7 @@ export def "business-services-subscribers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, subscribers: table<subscriber_id: string, subscriber_type: string>, account_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2052,7 +2117,7 @@ export def "business-services-subscribers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Business Service Subscribers
@@ -2069,6 +2134,7 @@ export def "business-services-subscribers createBusinessServiceNotificationSubsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribers: list # item shape: {subscriber_id?: string, subscriber_type?: "user"|"team"}
 ]: any -> record<subscriptions: table<subscriber_id: string, subscriber_type: string, subscribable_id: string, subscribable_type: string, account_id: string, result: string>> {
@@ -2082,7 +2148,7 @@ export def "business-services-subscribers createBusinessServiceNotificationSubsc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the supporting Business Services for the given Business Service Id, sorted by impacted status.
@@ -2098,6 +2164,7 @@ export def "business-services-supporting-services-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fields: string@additional-fields-completer # Provides access to additional fields such as highest priority per business service and total impacted count
   --ids: string # The IDs of the resources.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -2110,7 +2177,7 @@ export def "business-services-supporting-services-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Business Service Subscribers
@@ -2127,6 +2194,7 @@ export def "business-services-unsubscribe removeBusinessServiceNotificationSubsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribers: list # item shape: {subscriber_id?: string, subscriber_type?: "user"|"team"}
 ]: any -> record<deleted_count: float, unauthorized_count: float, non_existent_count: float> {
@@ -2140,7 +2208,7 @@ export def "business-services-unsubscribe removeBusinessServiceNotificationSubsc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Impactors affecting Business Services
@@ -2155,6 +2223,7 @@ export def "business-services-impactors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # The IDs of the resources.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, more: bool, impactors: table<id: string, type: string>> {
@@ -2166,7 +2235,7 @@ export def "business-services-impactors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Business Services sorted by impacted status
@@ -2181,6 +2250,7 @@ export def "business-services-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fields: string@additional-fields-completer # Provides access to additional fields such as highest priority per business service and total impacted count
   --ids: string # The IDs of the resources.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -2193,7 +2263,7 @@ export def "business-services-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the global priority threshold for a Business Service to be considered impacted by an Incident
@@ -2208,6 +2278,7 @@ export def "business-services-priority-thresholds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<global_threshold: record<id: string, order: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2217,7 +2288,7 @@ export def "business-services-priority-thresholds get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the account-level priority threshold for Business Service impact
@@ -2232,6 +2303,7 @@ export def "business-services-priority-thresholds delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2241,7 +2313,7 @@ export def "business-services-priority-thresholds delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the Account-level priority threshold for Business Service impact.
@@ -2257,6 +2329,7 @@ export def "business-services-priority-thresholds put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   global_threshold: record # shape: {id: string, order: float}
 ]: any -> record<global_threshold: record<id: string, order: float>> {
@@ -2270,7 +2343,7 @@ export def "business-services-priority-thresholds put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Change Events
@@ -2285,6 +2358,7 @@ export def "change-events listChangeEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -2303,7 +2377,7 @@ export def "change-events listChangeEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Change Event
@@ -2318,6 +2392,7 @@ export def "change-events createChangeEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -2328,7 +2403,7 @@ export def "change-events createChangeEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Change Event
@@ -2344,6 +2419,7 @@ export def "change-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<change_event: record<timestamp: string, type: string, services: list<record>, integration: record, routing_key: string, summary: string, source: string, links: list<record>, images: list<record>, custom_details: record>> {
@@ -2354,7 +2430,7 @@ export def "change-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Change Event
@@ -2370,6 +2446,7 @@ export def "change-events updateChangeEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   change_event: any
@@ -2384,7 +2461,7 @@ export def "change-events updateChangeEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List escalation policies
@@ -2399,6 +2476,7 @@ export def "escalation-policies listEscalationPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -2418,7 +2496,7 @@ export def "escalation-policies listEscalationPolicies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an escalation policy
@@ -2433,6 +2511,7 @@ export def "escalation-policies createEscalationPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request. This is optional, and is only used for change tracking.
@@ -2448,7 +2527,7 @@ export def "escalation-policies createEscalationPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an escalation policy
@@ -2464,6 +2543,7 @@ export def "escalation-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-1 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -2476,7 +2556,7 @@ export def "escalation-policies get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an escalation policy
@@ -2492,6 +2572,7 @@ export def "escalation-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -2502,7 +2583,7 @@ export def "escalation-policies delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an escalation policy
@@ -2518,6 +2599,7 @@ export def "escalation-policies updateEscalationPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   escalation_policy: any
@@ -2532,7 +2614,7 @@ export def "escalation-policies updateEscalationPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records for an escalation policy
@@ -2548,6 +2630,7 @@ export def "escalation-policies-audit-records listEscalationPolicyAuditRecords" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -2563,7 +2646,7 @@ export def "escalation-policies-audit-records listEscalationPolicyAuditRecords" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Event Orchestrations
@@ -2578,6 +2661,7 @@ export def "event-orchestrations listEventOrchestrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --sort-by: string@sort-by-completer-1 # Used to specify the field you wish to sort the results on. (default: name:asc)
@@ -2592,7 +2676,7 @@ export def "event-orchestrations listEventOrchestrations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Orchestration
@@ -2608,6 +2692,7 @@ export def "event-orchestrations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   orchestration: record # shape: {name?: string, description?: string, team?: record}
@@ -2622,7 +2707,7 @@ export def "event-orchestrations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Orchestration
@@ -2638,6 +2723,7 @@ export def "event-orchestrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<orchestration: record<id: string, self: string, name: string, description: string, team: record<id: string, type: string, self: string>, integrations: list<record>, routes: int, created_at: string, created_by: record<id: string, type: string, self: string>, updated_at: string, updated_by: record<id: string, type: string, self: string>, version: string>> {
@@ -2648,7 +2734,7 @@ export def "event-orchestrations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Orchestration
@@ -2665,6 +2751,7 @@ export def "event-orchestrations updateOrchestration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   orchestration: record # shape: {name?: string, description?: string, team?: record}
@@ -2679,7 +2766,7 @@ export def "event-orchestrations updateOrchestration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Orchestration
@@ -2695,6 +2782,7 @@ export def "event-orchestrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -2705,7 +2793,7 @@ export def "event-orchestrations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Integrations for an Event Orchestration
@@ -2721,6 +2809,7 @@ export def "event-orchestrations-integrations listOrchestrationIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<integrations: table<id: string, label: string, parameters: record>, total: any> {
@@ -2731,7 +2820,7 @@ export def "event-orchestrations-integrations listOrchestrationIntegrations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Integration for an Event Orchestration
@@ -2748,6 +2837,7 @@ export def "event-orchestrations-integrations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   integration: record # shape: {label: string}
@@ -2762,7 +2852,7 @@ export def "event-orchestrations-integrations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Integration for an Event Orchestration
@@ -2779,6 +2869,7 @@ export def "event-orchestrations-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<integration: record<id: string, label: string, parameters: record<routing_key: string, type: string>>> {
@@ -2789,7 +2880,7 @@ export def "event-orchestrations-integrations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Integration for an Event Orchestration
@@ -2807,6 +2898,7 @@ export def "event-orchestrations-integrations updateOrchestrationIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   integration: record # shape: {label: string}
@@ -2821,7 +2913,7 @@ export def "event-orchestrations-integrations updateOrchestrationIntegration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Integration for an Event Orchestration
@@ -2838,6 +2930,7 @@ export def "event-orchestrations-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -2848,7 +2941,7 @@ export def "event-orchestrations-integrations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Migrate an Integration from one Event Orchestration to another
@@ -2864,6 +2957,7 @@ export def "event-orchestrations-integrations-migration migrateOrchestrationInte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   source_id: string # The ID of the Event Orchestration you'll be moving the Integration away from
@@ -2880,7 +2974,7 @@ export def "event-orchestrations-integrations-migration migrateOrchestrationInte
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Global Orchestration for an Event Orchestration
@@ -2896,6 +2990,7 @@ export def "event-orchestrations-global get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<orchestration_path: record<type: any, parent: record<id: any, type: any>, sets: list<record>, catch_all: record<actions: record>>> {
@@ -2906,7 +3001,7 @@ export def "event-orchestrations-global get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Global Orchestration for an Event Orchestration
@@ -2923,6 +3018,7 @@ export def "event-orchestrations-global updateOrchPathGlobal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   orchestration_path: any # shape: {type?: any, parent?: any, sets?: any, catch_all?: any}
@@ -2937,7 +3033,7 @@ export def "event-orchestrations-global updateOrchPathGlobal" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Router for an Event Orchestration
@@ -2953,6 +3049,7 @@ export def "event-orchestrations-router get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -2963,7 +3060,7 @@ export def "event-orchestrations-router get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Router for an Event Orchestration
@@ -2980,6 +3077,7 @@ export def "event-orchestrations-router updateOrchPathRouter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --orchestration-path: any # shape: {type?: any, parent?: any, sets?: any, catch_all?: any}
@@ -2994,7 +3092,7 @@ export def "event-orchestrations-router updateOrchPathRouter" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Unrouted Orchestration for an Event Orchestration
@@ -3010,6 +3108,7 @@ export def "event-orchestrations-unrouted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3020,7 +3119,7 @@ export def "event-orchestrations-unrouted get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Unrouted Orchestration for an Event Orchestration
@@ -3037,6 +3136,7 @@ export def "event-orchestrations-unrouted updateOrchPathUnrouted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --orchestration-path: any # shape: {type?: any, parent?: any, sets?: any, catch_all?: any}
@@ -3051,7 +3151,7 @@ export def "event-orchestrations-unrouted updateOrchPathUnrouted" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Service Orchestration for a Service
@@ -3067,6 +3167,7 @@ export def "event-orchestrations-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-2 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -3079,7 +3180,7 @@ export def "event-orchestrations-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Service Orchestration for a Service
@@ -3095,6 +3196,7 @@ export def "event-orchestrations-services updateOrchPathService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --orchestration-path: any
@@ -3109,7 +3211,7 @@ export def "event-orchestrations-services updateOrchPathService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Service Orchestration active status for a Service
@@ -3125,6 +3227,7 @@ export def "event-orchestrations-services-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3135,7 +3238,7 @@ export def "event-orchestrations-services-active get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Service Orchestration active status for a Service
@@ -3151,6 +3254,7 @@ export def "event-orchestrations-services-active updateOrchActiveStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --body: record
@@ -3164,7 +3268,7 @@ export def "event-orchestrations-services-active updateOrchActiveStatus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Cache Variables for a Global Event Orchestration
@@ -3180,6 +3284,7 @@ export def "event-orchestrations-cache-variables listCacheVarOnGlobalOrch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3190,7 +3295,7 @@ export def "event-orchestrations-cache-variables listCacheVarOnGlobalOrch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Cache Variable for a Global Event Orchestration
@@ -3206,6 +3311,7 @@ export def "event-orchestrations-cache-variables createCacheVarOnGlobalOrch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   cache_variable: any
@@ -3220,7 +3326,7 @@ export def "event-orchestrations-cache-variables createCacheVarOnGlobalOrch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Cache Variable for a Global Event Orchestration
@@ -3237,6 +3343,7 @@ export def "event-orchestrations-cache-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3247,7 +3354,7 @@ export def "event-orchestrations-cache-variables get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Cache Variable for a Global Event Orchestration
@@ -3264,6 +3371,7 @@ export def "event-orchestrations-cache-variables updateCacheVarOnGlobalOrch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   cache_variable: any
@@ -3278,7 +3386,7 @@ export def "event-orchestrations-cache-variables updateCacheVarOnGlobalOrch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Cache Variable for a Global Event Orchestration
@@ -3295,6 +3403,7 @@ export def "event-orchestrations-cache-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3305,7 +3414,7 @@ export def "event-orchestrations-cache-variables delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Data for an External Data Cache Variable on a Global Event Orchestration
@@ -3322,6 +3431,7 @@ export def "event-orchestrations-cache-variables-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3332,7 +3442,7 @@ export def "event-orchestrations-cache-variables-data get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Data for an External Data Cache Variable on a Global Event Orchestration
@@ -3349,6 +3459,7 @@ export def "event-orchestrations-cache-variables-data updateExternalDataCacheVar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --body: record
@@ -3362,7 +3473,7 @@ export def "event-orchestrations-cache-variables-data updateExternalDataCacheVar
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Data for an External Data Cache Variable on a Global Event Orchestration
@@ -3379,6 +3490,7 @@ export def "event-orchestrations-cache-variables-data delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3389,7 +3501,7 @@ export def "event-orchestrations-cache-variables-data delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Cache Variables for a Service Event Orchestration
@@ -3405,6 +3517,7 @@ export def "event-orchestrations-services-cache-variables listCacheVarOnServiceO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3415,7 +3528,7 @@ export def "event-orchestrations-services-cache-variables listCacheVarOnServiceO
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Cache Variable for a Service Event Orchestration
@@ -3431,6 +3544,7 @@ export def "event-orchestrations-services-cache-variables createCacheVarOnServic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   cache_variable: any
@@ -3445,7 +3559,7 @@ export def "event-orchestrations-services-cache-variables createCacheVarOnServic
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Cache Variable for a Service Event Orchestration
@@ -3462,6 +3576,7 @@ export def "event-orchestrations-services-cache-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3472,7 +3587,7 @@ export def "event-orchestrations-services-cache-variables get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Cache Variable for a Service Event Orchestration
@@ -3489,6 +3604,7 @@ export def "event-orchestrations-services-cache-variables updateCacheVarOnServic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   cache_variable: any
@@ -3503,7 +3619,7 @@ export def "event-orchestrations-services-cache-variables updateCacheVarOnServic
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Cache Variable for a Service Event Orchestration
@@ -3520,6 +3636,7 @@ export def "event-orchestrations-services-cache-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3530,7 +3647,7 @@ export def "event-orchestrations-services-cache-variables delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Data for an External Data Cache Variable on a Service Event Orchestration
@@ -3547,6 +3664,7 @@ export def "event-orchestrations-services-cache-variables-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3557,7 +3675,7 @@ export def "event-orchestrations-services-cache-variables-data get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Data for an External Data Cache Variable on a Service Event Orchestration
@@ -3574,6 +3692,7 @@ export def "event-orchestrations-services-cache-variables-data updateExternalDat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --body: record
@@ -3587,7 +3706,7 @@ export def "event-orchestrations-services-cache-variables-data updateExternalDat
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Data for an External Data Cache Variable on a Service Event Orchestration
@@ -3604,6 +3723,7 @@ export def "event-orchestrations-services-cache-variables-data delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3614,7 +3734,7 @@ export def "event-orchestrations-services-cache-variables-data delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Enablements for an Event Orchestration
@@ -3630,6 +3750,7 @@ export def "event-orchestrations-enablements listEventOrchestrationFeatureEnable
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<enablements: table<feature: string, enabled: bool, updated_at: string, warnings: list>> {
@@ -3640,7 +3761,7 @@ export def "event-orchestrations-enablements listEventOrchestrationFeatureEnable
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Enablement for an Event Orchestration
@@ -3658,6 +3779,7 @@ export def "event-orchestrations-enablements updateEventOrchestrationFeatureEnab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   enablement: record # shape: {enabled: bool}
@@ -3672,7 +3794,7 @@ export def "event-orchestrations-enablements updateEventOrchestrationFeatureEnab
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List extension schemas
@@ -3687,6 +3809,7 @@ export def "extension-schemas listExtensionSchemas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -3701,7 +3824,7 @@ export def "extension-schemas listExtensionSchemas" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an extension vendor
@@ -3717,6 +3840,7 @@ export def "extension-schemas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<extension_schema: record<icon_url: string, logo_url: string, label: string, key: string, description: string, guide_url: string, send_types: list<string>, url: string>> {
@@ -3727,7 +3851,7 @@ export def "extension-schemas get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List extensions
@@ -3742,6 +3866,7 @@ export def "extensions listExtensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -3760,7 +3885,7 @@ export def "extensions listExtensions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an extension
@@ -3775,6 +3900,7 @@ export def "extensions createExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   extension: any
@@ -3789,7 +3915,7 @@ export def "extensions createExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an extension
@@ -3805,6 +3931,7 @@ export def "extensions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-4 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -3817,7 +3944,7 @@ export def "extensions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an extension
@@ -3833,6 +3960,7 @@ export def "extensions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -3843,7 +3971,7 @@ export def "extensions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an extension
@@ -3859,6 +3987,7 @@ export def "extensions updateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   extension: any
@@ -3873,7 +4002,7 @@ export def "extensions updateExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Enable an extension
@@ -3889,6 +4018,7 @@ export def "extensions-enable enableExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<extension: record<name: string, type: string, endpoint_url: string, extension_objects: list<record>, extension_schema: record<type: string>, temporarily_disabled: bool, config: record>> {
@@ -3899,7 +4029,7 @@ export def "extensions-enable enableExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Incident Workflows
@@ -3914,6 +4044,7 @@ export def "incident-workflows listIncidentWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -3930,7 +4061,7 @@ export def "incident-workflows listIncidentWorkflows" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Incident Workflow
@@ -3945,6 +4076,7 @@ export def "incident-workflows post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   incident_workflow: any
@@ -3959,7 +4091,7 @@ export def "incident-workflows post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Incident Workflow
@@ -3975,6 +4107,7 @@ export def "incident-workflows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<incident_workflow: record<type: string, name: string, description: string, created_at: string, team: record<type: string, id: string>, is_enabled: bool, steps: list<record>>> {
@@ -3985,7 +4118,7 @@ export def "incident-workflows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Incident Workflow
@@ -4001,6 +4134,7 @@ export def "incident-workflows delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -4011,7 +4145,7 @@ export def "incident-workflows delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Incident Workflow
@@ -4027,6 +4161,7 @@ export def "incident-workflows put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   incident_workflow: any
@@ -4041,7 +4176,7 @@ export def "incident-workflows put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start an Incident Workflow Instance
@@ -4058,6 +4193,7 @@ export def "incident-workflows-instances createIncidentWorkflowInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   incident_workflow_instance: record # shape: {id?: string, incident?: record}
@@ -4072,7 +4208,7 @@ export def "incident-workflows-instances createIncidentWorkflowInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Actions
@@ -4087,6 +4223,7 @@ export def "incident-workflows-actions listIncidentWorkflowActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --keyword: string # If provided, only show actions tagged with the specified keyword (e.g. slack)
@@ -4101,7 +4238,7 @@ export def "incident-workflows-actions listIncidentWorkflowActions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Action
@@ -4117,6 +4254,7 @@ export def "incident-workflows-actions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<action: record<type: string, domain_name: string, package_name: string, function_name: string, version: float, name: string, description: string, action_type: string, action_tier: string, trigger_type: string, tags: list<string>, search_keywords: list<string>, metadata: string, created_at: string, created_by_user_id: string, inputs: list<record>, outputs: list<record>>> {
@@ -4127,7 +4265,7 @@ export def "incident-workflows-actions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Triggers
@@ -4143,6 +4281,7 @@ export def "incident-workflows-triggers listIncidentWorkflowTriggers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-id: string # If provided, only show triggers configured to start the given workflow. Useful for listing all services associated with the given workflow (e.g. P4RG7YW)
   --incident-id: string # If provided, only show triggers configured on the service of the given incident. Useful for finding manual triggers that are configured on the service for a specific incident. Cannot be specified if `service_id` is provided. (e.g. Q2LAR4ADCXC8IB)
   --service-id: string # If provided, only show triggers configured for incidents in the given service. Useful for listing all workflows associated with the given service. Cannot be specified if `incident_id` is provided. (e.g. P4RG7YW)
@@ -4163,7 +4302,7 @@ export def "incident-workflows-triggers listIncidentWorkflowTriggers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Trigger
@@ -4178,6 +4317,7 @@ export def "incident-workflows-triggers createIncidentWorkflowTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   trigger: any
@@ -4192,7 +4332,7 @@ export def "incident-workflows-triggers createIncidentWorkflowTrigger" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Trigger
@@ -4208,6 +4348,7 @@ export def "incident-workflows-triggers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<trigger: record<type: string, trigger_type_name: string, trigger_type: string, condition: string, trigger_url: string, incident_types: list<string>, workflow: record<id: string, type: string, name: string, self: string, html_url: string>, services: list<record>, is_subscribed_to_all_services: bool, permissions: record<restricted: bool, team_id: string>, is_disabled: bool>> {
@@ -4218,7 +4359,7 @@ export def "incident-workflows-triggers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Trigger
@@ -4234,6 +4375,7 @@ export def "incident-workflows-triggers updateIncidentWorkflowTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   trigger: any
@@ -4248,7 +4390,7 @@ export def "incident-workflows-triggers updateIncidentWorkflowTrigger" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Trigger
@@ -4264,6 +4406,7 @@ export def "incident-workflows-triggers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -4274,7 +4417,7 @@ export def "incident-workflows-triggers delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate a Trigger and Service
@@ -4291,6 +4434,7 @@ export def "incident-workflows-triggers-services associateServiceToIncidentWorkf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   service: record # shape: {id?: string}
@@ -4305,7 +4449,7 @@ export def "incident-workflows-triggers-services associateServiceToIncidentWorkf
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Dissociate a Trigger and Service
@@ -4322,6 +4466,7 @@ export def "incident-workflows-triggers-services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<trigger: record<type: string, trigger_type_name: string, trigger_type: string, condition: string, trigger_url: string, incident_types: list<string>, workflow: record<id: string, type: string, name: string, self: string, html_url: string>, services: list<record>, is_subscribed_to_all_services: bool, permissions: record<restricted: bool, team_id: string>, is_disabled: bool>> {
@@ -4332,7 +4477,7 @@ export def "incident-workflows-triggers-services delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List incidents
@@ -4347,6 +4492,7 @@ export def "incidents listIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page. Maximum of 100.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -4373,7 +4519,7 @@ export def "incidents listIncidents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage incidents
@@ -4389,6 +4535,7 @@ export def "incidents updateIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -4408,7 +4555,7 @@ export def "incidents updateIncidents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an Incident
@@ -4424,6 +4571,7 @@ export def "incidents createIncident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4439,7 +4587,7 @@ export def "incidents createIncident" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an incident
@@ -4455,6 +4603,7 @@ export def "incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-7 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -4467,7 +4616,7 @@ export def "incidents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an incident
@@ -4484,6 +4633,7 @@ export def "incidents updateIncident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4499,7 +4649,7 @@ export def "incidents updateIncident" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List alerts for an incident
@@ -4515,6 +4665,7 @@ export def "incidents-alerts listIncidentAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -4533,7 +4684,7 @@ export def "incidents-alerts listIncidentAlerts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage alerts
@@ -4550,6 +4701,7 @@ export def "incidents-alerts updateIncidentAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -4569,7 +4721,7 @@ export def "incidents-alerts updateIncidentAlerts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an alert
@@ -4586,6 +4738,7 @@ export def "incidents-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<alert: record<created_at: string, type: string, status: string, alert_key: string, service: record<type: string>, first_trigger_log_entry: record<type: string>, incident: record<type: string>, suppressed: bool, severity: string, integration: record<type: string>, body: record<type: string, contexts: list, details: record>>> {
@@ -4596,7 +4749,7 @@ export def "incidents-alerts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an alert
@@ -4614,6 +4767,7 @@ export def "incidents-alerts updateIncidentAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4629,7 +4783,7 @@ export def "incidents-alerts updateIncidentAlert" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Manually change an Incident's Impact on a Business Service.
@@ -4646,6 +4800,7 @@ export def "incidents-business-services-impacts put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   relation: string@relation-completer
 ]: any -> record<relation: string> {
@@ -4659,7 +4814,7 @@ export def "incidents-business-services-impacts put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Business Services impacted by the given Incident
@@ -4675,6 +4830,7 @@ export def "incidents-business-services-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, next_cursor: string, services: table<id: string, name: string, type: string, status: string, additional_fields: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4684,7 +4840,7 @@ export def "incidents-business-services-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Field Values
@@ -4700,13 +4856,14 @@ export def "incidents-custom-fields-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom_fields: table<id: string, name: string, type: string, display_name: string, field_type: string, data_type: string, description: string, value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/($id)/custom_fields/values")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Custom Field Values
@@ -4722,6 +4879,7 @@ export def "incidents-custom-fields-values setIncidentFieldValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_fields: list
 ]: any -> record<custom_fields: table<id: string, name: string, type: string, display_name: string, field_type: string, data_type: string, description: string, value: any>> {
   let input = $in
@@ -4732,7 +4890,7 @@ export def "incidents-custom-fields-values setIncidentFieldValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List log entries for an incident
@@ -4748,6 +4906,7 @@ export def "incidents-log-entries listIncidentLogEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -4767,7 +4926,7 @@ export def "incidents-log-entries listIncidentLogEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge incidents
@@ -4784,6 +4943,7 @@ export def "incidents-merge mergeIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4799,7 +4959,7 @@ export def "incidents-merge mergeIncidents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List notes for an incident
@@ -4815,6 +4975,7 @@ export def "incidents-notes listIncidentNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<notes: table<id: string, user: record, channel: record, content: string, created_at: string, updated_at: string>> {
@@ -4825,7 +4986,7 @@ export def "incidents-notes listIncidentNotes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a note on an incident
@@ -4842,6 +5003,7 @@ export def "incidents-notes createIncidentNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4857,7 +5019,7 @@ export def "incidents-notes createIncidentNote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a note on an incident
@@ -4875,6 +5037,7 @@ export def "incidents-notes updateIncidentNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4890,7 +5053,7 @@ export def "incidents-notes updateIncidentNote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a note on an incident
@@ -4907,6 +5070,7 @@ export def "incidents-notes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -4917,7 +5081,7 @@ export def "incidents-notes delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Outlier Incident
@@ -4933,6 +5097,7 @@ export def "incidents-outlier-incident get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --additional-details: string@additional-details-completer # Array of additional attributes to any of the returned incidents for related incidents.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -4946,7 +5111,7 @@ export def "incidents-outlier-incident get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Past Incidents
@@ -4962,6 +5127,7 @@ export def "incidents-past-incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results to be returned in the response. (default: 5)
   --total: oneof<nothing, bool> # By default the `total` field in the response body is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated with the total number of Past Incidents.  (default: false)
 ]: nothing -> record<past_incidents: table<incident: record, score: float>, total: float, limit: float> {
@@ -4971,7 +5137,7 @@ export def "incidents-past-incidents get" [
   let full_url = (build-url $base $"/incidents/($id)/past_incidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List related Change Events for an Incident
@@ -4987,6 +5153,7 @@ export def "incidents-related-change-events listIncidentRelatedChangeEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -4999,7 +5166,7 @@ export def "incidents-related-change-events listIncidentRelatedChangeEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Related Incidents
@@ -5015,6 +5182,7 @@ export def "incidents-related-incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-details: string@additional-details-completer # Array of additional attributes to any of the returned incidents for related incidents.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -5027,7 +5195,7 @@ export def "incidents-related-incidents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a responder request for an incident
@@ -5043,6 +5211,7 @@ export def "incidents-responder-requests createIncidentResponderRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   requester_id: string # The user id of the requester.
@@ -5059,7 +5228,7 @@ export def "incidents-responder-requests createIncidentResponderRequest" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel responder requests for an incident
@@ -5076,6 +5245,7 @@ export def "incidents-responder-requests-cancel cancelIncidentResponderRequest" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   requester_id: string # The user id of the requester.
@@ -5091,7 +5261,7 @@ export def "incidents-responder-requests-cancel cancelIncidentResponderRequest" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Snooze an incident
@@ -5107,6 +5277,7 @@ export def "incidents-snooze createIncidentSnooze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -5122,7 +5293,7 @@ export def "incidents-snooze createIncidentSnooze" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a status update on an incident
@@ -5138,6 +5309,7 @@ export def "incidents-status-updates createIncidentStatusUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -5155,7 +5327,7 @@ export def "incidents-status-updates createIncidentStatusUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Notification Subscribers
@@ -5171,6 +5343,7 @@ export def "incidents-status-updates-subscribers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, subscribers: table<subscriber_id: string, subscriber_type: string, has_indirect_subscription: bool, subscribed_via: list>, account_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5180,7 +5353,7 @@ export def "incidents-status-updates-subscribers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Notification Subscribers
@@ -5197,6 +5370,7 @@ export def "incidents-status-updates-subscribers createIncidentNotificationSubsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribers: list # item shape: {subscriber_id?: string, subscriber_type?: "user"|"team"}
 ]: any -> record<subscriptions: table<subscriber_id: string, subscriber_type: string, subscribable_id: string, subscribable_type: string, account_id: string, result: string>> {
@@ -5210,7 +5384,7 @@ export def "incidents-status-updates-subscribers createIncidentNotificationSubsc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Notification Subscriber
@@ -5227,6 +5401,7 @@ export def "incidents-status-updates-unsubscribe removeIncidentNotificationSubsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribers: list # item shape: {subscriber_id?: string, subscriber_type?: "user"|"team"}
 ]: any -> record<deleted_count: float, unauthorized_count: float, non_existent_count: float> {
@@ -5240,7 +5415,7 @@ export def "incidents-status-updates-unsubscribe removeIncidentNotificationSubsc
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List incident types
@@ -5255,6 +5430,7 @@ export def "incidents-types listIncidentTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer-1 # Filters the list of incident types based on their `enabled` state. (default: enabled)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -5267,7 +5443,7 @@ export def "incidents-types listIncidentTypes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Incident Type
@@ -5283,6 +5459,7 @@ export def "incidents-types createIncidentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   incident_type: record # Details of the incident type to be created. — shape: {name: string, display_name: string, parent_type: string, enabled?: bool, description?: string}
@@ -5297,7 +5474,7 @@ export def "incidents-types createIncidentType" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Incident Type
@@ -5313,6 +5490,7 @@ export def "incidents-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<incident_type: record<enabled: bool, id: string, name: string, parent: record<id: string, type: string>, type: string, description: string, created_at: string, updated_at: string, display_name: string>> {
@@ -5323,7 +5501,7 @@ export def "incidents-types get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Incident Type
@@ -5340,6 +5518,7 @@ export def "incidents-types updateIncidentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   incident_type: record # Details of the incident type to be created. — shape: {display_name?: string, enabled?: bool, description?: string}
@@ -5354,7 +5533,7 @@ export def "incidents-types updateIncidentType" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Incident Type Custom Fields
@@ -5370,6 +5549,7 @@ export def "incidents-types-custom-fields listIncidentTypeCustomFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -5382,7 +5562,7 @@ export def "incidents-types-custom-fields listIncidentTypeCustomFields" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Custom Field for an Incident Type
@@ -5399,6 +5579,7 @@ export def "incidents-types-custom-fields createIncidentTypeCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field: record # Details of the custom field to be created. — shape: {name: string, display_name: string, data_type: string, field_type: "single_value"|"single_value_fixed"|"multi_value"|"multi_value_fixed", description?: string, enabled?: bool, default_value?: string, field_options?: list}
@@ -5413,7 +5594,7 @@ export def "incidents-types-custom-fields createIncidentTypeCustomField" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Incident Type Custom Field
@@ -5430,6 +5611,7 @@ export def "incidents-types-custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -5442,7 +5624,7 @@ export def "incidents-types-custom-fields get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Custom Field for an Incident Type
@@ -5460,6 +5642,7 @@ export def "incidents-types-custom-fields updateIncidentTypeCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field: record # Details of the custom field to be updated. — shape: {display_name?: string, enabled?: bool, default_value?: string, description?: string, field_options?: list}
@@ -5474,7 +5657,7 @@ export def "incidents-types-custom-fields updateIncidentTypeCustomField" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Custom Field for an Incident Type
@@ -5491,6 +5674,7 @@ export def "incidents-types-custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -5501,7 +5685,7 @@ export def "incidents-types-custom-fields delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Field Options on a Custom Field
@@ -5518,6 +5702,7 @@ export def "incidents-types-custom-fields-field-options listIncidentTypeCustomFi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<field_options: table<data: any, id: string, type: string, updated_at: string, created_at: string>> {
@@ -5528,7 +5713,7 @@ export def "incidents-types-custom-fields-field-options listIncidentTypeCustomFi
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Field Option for a Custom Field
@@ -5546,6 +5731,7 @@ export def "incidents-types-custom-fields-field-options createIncidentTypeCustom
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field_option: record # Details of the field option to be created. — shape: {data: record}
@@ -5560,7 +5746,7 @@ export def "incidents-types-custom-fields-field-options createIncidentTypeCustom
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Field Option on a Custom Field
@@ -5578,6 +5764,7 @@ export def "incidents-types-custom-fields-field-options get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<field_option: record<data: any, id: string, type: string, updated_at: string, created_at: string>> {
@@ -5588,7 +5775,7 @@ export def "incidents-types-custom-fields-field-options get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Field Option for a Custom Field
@@ -5607,6 +5794,7 @@ export def "incidents-types-custom-fields-field-options updateIncidentTypeCustom
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field_option: record # Details of the field option on a custom field to be updated. — shape: {data: record}
@@ -5621,7 +5809,7 @@ export def "incidents-types-custom-fields-field-options updateIncidentTypeCustom
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Field Option for a Custom Field
@@ -5639,6 +5827,7 @@ export def "incidents-types-custom-fields-field-options delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -5649,7 +5838,7 @@ export def "incidents-types-custom-fields-field-options delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Field
@@ -5666,6 +5855,7 @@ export def "incidents-custom-fields createCustomFieldsField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   field: any
 ]: any -> record<field: record<created_at: string, data_type: any, default_value: any, description: any, display_name: any, field_options: list<record>, field_type: any, id: string, name: any, self: string, summary: string, type: string, updated_at: string>> {
   let input = $in
@@ -5676,7 +5866,7 @@ export def "incidents-custom-fields createCustomFieldsField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Fields
@@ -5693,6 +5883,7 @@ export def "incidents-custom-fields listCustomFieldsFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
 ]: nothing -> record<fields: table<created_at: string, data_type: any, default_value: any, description: any, display_name: any, field_options: list, field_type: any, id: string, name: any, self: string, summary: string, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5701,7 +5892,7 @@ export def "incidents-custom-fields listCustomFieldsFields" [
   let full_url = (build-url $base "/incidents/custom_fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Field
@@ -5719,6 +5910,7 @@ export def "incidents-custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
 ]: nothing -> record<field: record<created_at: string, data_type: any, default_value: any, description: any, display_name: any, field_options: list<record>, field_type: any, id: string, name: any, self: string, summary: string, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5727,7 +5919,7 @@ export def "incidents-custom-fields get" [
   let full_url = (build-url $base $"/incidents/custom_fields/($field_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Field
@@ -5746,6 +5938,7 @@ export def "incidents-custom-fields updateCustomFieldsField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   field: record # shape: {display_name?: any, description?: any, default_value?: any, enabled?: "true"|"false"}
 ]: any -> record<field: record<created_at: string, data_type: any, default_value: any, description: any, display_name: any, field_type: any, id: string, name: any, self: string, summary: string, type: string, updated_at: string>> {
   let input = $in
@@ -5756,7 +5949,7 @@ export def "incidents-custom-fields updateCustomFieldsField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Field
@@ -5774,13 +5967,14 @@ export def "incidents-custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/custom_fields/($field_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Field Option
@@ -5798,6 +5992,7 @@ export def "incidents-custom-fields-field-options createCustomFieldsFieldOption"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   field_option: any
 ]: any -> record<field_option: record<data: any, id: string, type: string, updated_at: string, created_at: string>> {
   let input = $in
@@ -5808,7 +6003,7 @@ export def "incidents-custom-fields-field-options createCustomFieldsFieldOption"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Field Options
@@ -5826,13 +6021,14 @@ export def "incidents-custom-fields-field-options listCustomFieldsFieldOptions" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<field_options: table<data: any, id: string, type: string, updated_at: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/custom_fields/($field_id)/field_options")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Field Option
@@ -5852,6 +6048,7 @@ export def "incidents-custom-fields-field-options updateCustomFieldsFieldOption"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   field_option: record # shape: {data?: any}
 ]: any -> record<field_option: record<data: any, id: string, type: string, updated_at: string, created_at: string>> {
   let input = $in
@@ -5862,7 +6059,7 @@ export def "incidents-custom-fields-field-options updateCustomFieldsFieldOption"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Field Option
@@ -5881,13 +6078,14 @@ export def "incidents-custom-fields-field-options delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/custom_fields/($field_id)/field_options/($field_option_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an IP allow list
@@ -5903,6 +6101,7 @@ export def "ip-allow-lists createIpAllowList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EARLY-ACCESS: string@X-EARLY-ACCESS-completer # This API is currently in Early Access. You __MUST__ pass in this header with the value `ip-allow-lists`, and your account must be enrolled in the IP Allow Lists Early Access program. Contact your PagerDuty account team to request access.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -5918,7 +6117,7 @@ export def "ip-allow-lists createIpAllowList" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List IP allow lists
@@ -5933,6 +6132,7 @@ export def "ip-allow-lists listIpAllowLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EARLY-ACCESS: string@X-EARLY-ACCESS-completer # This API is currently in Early Access. You __MUST__ pass in this header with the value `ip-allow-lists`, and your account must be enrolled in the IP Allow Lists Early Access program. Contact your PagerDuty account team to request access.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<ip_allow_lists: table<id: string, type: string, state: string, cidr_entries: list>> {
@@ -5943,7 +6143,7 @@ export def "ip-allow-lists listIpAllowLists" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an IP allow list
@@ -5959,6 +6159,7 @@ export def "ip-allow-lists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EARLY-ACCESS: string@X-EARLY-ACCESS-completer # This API is currently in Early Access. You __MUST__ pass in this header with the value `ip-allow-lists`, and your account must be enrolled in the IP Allow Lists Early Access program. Contact your PagerDuty account team to request access.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<ip_allow_list: record<id: string, type: string, state: string, cidr_entries: list<record>>> {
@@ -5969,7 +6170,7 @@ export def "ip-allow-lists get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an IP allow list
@@ -5986,6 +6187,7 @@ export def "ip-allow-lists updateIpAllowList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EARLY-ACCESS: string@X-EARLY-ACCESS-completer # This API is currently in Early Access. You __MUST__ pass in this header with the value `ip-allow-lists`, and your account must be enrolled in the IP Allow Lists Early Access program. Contact your PagerDuty account team to request access.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -6001,7 +6203,7 @@ export def "ip-allow-lists updateIpAllowList" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an IP allow list
@@ -6017,6 +6219,7 @@ export def "ip-allow-lists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-EARLY-ACCESS: string@X-EARLY-ACCESS-completer # This API is currently in Early Access. You __MUST__ pass in this header with the value `ip-allow-lists`, and your account must be enrolled in the IP Allow Lists Early Access program. Contact your PagerDuty account team to request access.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
@@ -6027,7 +6230,7 @@ export def "ip-allow-lists delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List audit records for an IP allow list
@@ -6043,6 +6246,7 @@ export def "ip-allow-lists-audit-records listIpAllowListAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -6059,7 +6263,7 @@ export def "ip-allow-lists-audit-records listIpAllowListAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List License Allocations
@@ -6074,6 +6278,7 @@ export def "license-allocations listLicenseAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -6087,7 +6292,7 @@ export def "license-allocations listLicenseAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Licenses
@@ -6102,6 +6307,7 @@ export def "licenses listLicenses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<licenses: table<id: string, description: string, name: string, valid_roles: list, role_group: string, type: string, self: string, html_url: string, summary: string, current_value: int, allocations_available: int>> {
@@ -6112,7 +6318,7 @@ export def "licenses listLicenses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List log entries
@@ -6127,6 +6333,7 @@ export def "log-entries listLogEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6147,7 +6354,7 @@ export def "log-entries listLogEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a log entry
@@ -6163,6 +6370,7 @@ export def "log-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --include: string@include-completer-9 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -6176,7 +6384,7 @@ export def "log-entries get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update log entry channel information.
@@ -6193,6 +6401,7 @@ export def "log-entries-channel updateLogEntryChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -6208,7 +6417,7 @@ export def "log-entries-channel updateLogEntryChannel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List maintenance windows
@@ -6223,6 +6432,7 @@ export def "maintenance-windows listMaintenanceWindows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
@@ -6242,7 +6452,7 @@ export def "maintenance-windows listMaintenanceWindows" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a maintenance window
@@ -6257,6 +6467,7 @@ export def "maintenance-windows createMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -6272,7 +6483,7 @@ export def "maintenance-windows createMaintenanceWindow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a maintenance window
@@ -6288,6 +6499,7 @@ export def "maintenance-windows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-11 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -6300,7 +6512,7 @@ export def "maintenance-windows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete or end a maintenance window
@@ -6316,6 +6528,7 @@ export def "maintenance-windows delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -6326,7 +6539,7 @@ export def "maintenance-windows delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a maintenance window
@@ -6342,6 +6555,7 @@ export def "maintenance-windows updateMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   maintenance_window: any
@@ -6356,7 +6570,7 @@ export def "maintenance-windows updateMaintenanceWindow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List notifications
@@ -6371,6 +6585,7 @@ export def "notifications listNotifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6390,7 +6605,7 @@ export def "notifications listNotifications" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all OAuth delegations
@@ -6405,6 +6620,7 @@ export def "oauth-delegations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user for whom this request is applicable.
   --type: string@type-completer # The type of OAuth delegations this request should target. Allowed values are 'mobile' (to sign users out of the mobile app) and 'web' (to sign users out of the web app). You can pass one or more types in, separated by commas (e.g., `type=web,mobile`).
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -6418,7 +6634,7 @@ export def "oauth-delegations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OAuth delegations revocation requests status
@@ -6435,6 +6651,7 @@ export def "oauth-delegations-revocation-requests-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requested-at-end: string # The end of the date range over which you want to search. If not specified, this will default to current time. (format: date-time)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -6447,7 +6664,7 @@ export def "oauth-delegations-revocation-requests-status get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all of the on-calls
@@ -6462,6 +6679,7 @@ export def "oncalls listOnCalls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
@@ -6484,7 +6702,7 @@ export def "oncalls listOnCalls" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Paused Incident Reporting on Alerts
@@ -6499,6 +6717,7 @@ export def "paused-incident-reports-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
   --service-id: string # Specifies a filter to limit the scope of reporting to a particular service (e.g. P123456)
@@ -6514,7 +6733,7 @@ export def "paused-incident-reports-alerts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Paused Incident Reporting counts
@@ -6529,6 +6748,7 @@ export def "paused-incident-reports-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
   --service-id: string # Specifies a filter to limit the scope of reporting to a particular service (e.g. P123456)
@@ -6544,7 +6764,7 @@ export def "paused-incident-reports-counts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List priorities
@@ -6559,6 +6779,7 @@ export def "priorities listPriorities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6573,7 +6794,7 @@ export def "priorities listPriorities" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Rulesets
@@ -6588,6 +6809,7 @@ export def "rulesets listRulesets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6602,7 +6824,7 @@ export def "rulesets listRulesets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Ruleset
@@ -6617,6 +6839,7 @@ export def "rulesets createRuleset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   ruleset: any
@@ -6631,7 +6854,7 @@ export def "rulesets createRuleset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Ruleset
@@ -6647,6 +6870,7 @@ export def "rulesets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<ruleset: record<id: string, self: string, type: string, name: string, routing_keys: list<string>, created_at: string, creator: record<id: string, type: string, self: string>, updated_at: string, updater: record<id: string, type: string, self: string>, team: record<id: string, type: string, self: string>>> {
@@ -6657,7 +6881,7 @@ export def "rulesets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Ruleset
@@ -6674,6 +6898,7 @@ export def "rulesets updateRuleset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   ruleset: record # e.g. {id: 0e84de00-9511-4380-9f4f-a7b568bb49a0, name: MySQL Clusters, type: global, routing_keys: [R0212P1QXGEIQE2NMTQ7L7WXD00DWHIN], self: https://api.pagerduty.com/rulesets/0e84de00-9511-4380-9f4f-a7b568bb49a0, created_at: 2019-12-24T21:18:52Z, creator: {type: user_reference, self: https://api.pagerduty.com/users/PABO808, id: PABO808}, updated_at: 2019-12-25T14:54:23Z, updater: {type: user_reference, self: https://api.pagerduty.com/users/PABO808, id: PABO808}, team: {type: team_reference, self: https://api.pagerduty.com/teams/P3ZQXDF, id: P3ZQXDF}} — shape: {name?: string, team?: record}
@@ -6688,7 +6913,7 @@ export def "rulesets updateRuleset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Ruleset
@@ -6704,6 +6929,7 @@ export def "rulesets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -6714,7 +6940,7 @@ export def "rulesets delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Event Rules
@@ -6730,6 +6956,7 @@ export def "rulesets-rules listRulesetEventRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6744,7 +6971,7 @@ export def "rulesets-rules listRulesetEventRules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Event Rule
@@ -6760,6 +6987,7 @@ export def "rulesets-rules createRulesetEventRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   rule: any
@@ -6774,7 +7002,7 @@ export def "rulesets-rules createRulesetEventRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Event Rule
@@ -6791,6 +7019,7 @@ export def "rulesets-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<rule: record<id: string, self: string, disabled: bool, conditions: record<operator: string, subconditions: list>, time_frame: record<active_between: record, scheduled_weekly: record>, variables: list<record>, position: int, catch_all: bool, actions: record<annotate: record, event_action: record, extractions: list, priority: record, severity: record, suppress: record, suspend: record, route: record>>> {
@@ -6801,7 +7030,7 @@ export def "rulesets-rules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Event Rule
@@ -6818,6 +7047,7 @@ export def "rulesets-rules updateRulesetEventRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --rule: any
@@ -6833,7 +7063,7 @@ export def "rulesets-rules updateRulesetEventRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Event Rule
@@ -6850,6 +7080,7 @@ export def "rulesets-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -6860,7 +7091,7 @@ export def "rulesets-rules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List schedules
@@ -6875,6 +7106,7 @@ export def "schedules listSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -6896,7 +7128,7 @@ export def "schedules listSchedules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a schedule
@@ -6911,6 +7143,7 @@ export def "schedules createSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -6927,7 +7160,7 @@ export def "schedules createSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a schedule
@@ -6943,6 +7176,7 @@ export def "schedules get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time-zone: string # Time zone in which results will be rendered. This will default to the schedule's time zone. (format: tzinfo)
   --since: string # The start of the date range over which you want to show schedule entries. Defaults to 2 weeks before until if an until is given. Optional parameter. When provided with include[] for schedule types, populates the rendered_schedule_entries fields in the response. (format: date-time)
   --until: string # The end of the date range over which you want to show schedule entries. Defaults to 2 weeks after since if a since is given. Optional parameter. When provided with include[] for schedule types, populates the rendered_schedule_entries fields in the response. (format: date-time)
@@ -6959,7 +7193,7 @@ export def "schedules get-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a schedule
@@ -6975,6 +7209,7 @@ export def "schedules delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -6985,7 +7220,7 @@ export def "schedules delete-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a schedule
@@ -7001,6 +7236,7 @@ export def "schedules updateSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7017,7 +7253,7 @@ export def "schedules updateSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records for a schedule
@@ -7033,6 +7269,7 @@ export def "schedules-audit-records listSchedulesAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -7048,7 +7285,7 @@ export def "schedules-audit-records listSchedulesAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List overrides
@@ -7064,6 +7301,7 @@ export def "schedules-overrides listScheduleOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time, e.g. 2026-04-01T00:00:00Z)
   --until: string # The end of the date range over which you want to search. (format: date-time, e.g. 2026-05-30T00:00:00Z)
   --editable: oneof<nothing, bool> # When this parameter is present, only editable overrides will be returned. The result will only include the id of the override if this parameter is present. Only future overrides are editable.
@@ -7079,7 +7317,7 @@ export def "schedules-overrides listScheduleOverrides" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create one or more overrides
@@ -7096,6 +7334,7 @@ export def "schedules-overrides createScheduleOverride" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --overrides: list # item shape: {start: string, end: string, user: any}
@@ -7110,7 +7349,7 @@ export def "schedules-overrides createScheduleOverride" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an override
@@ -7127,6 +7366,7 @@ export def "schedules-overrides delete-by-id-override_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -7137,7 +7377,7 @@ export def "schedules-overrides delete-by-id-override_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users on call.
@@ -7153,6 +7393,7 @@ export def "schedules-users listScheduleUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -7166,7 +7407,7 @@ export def "schedules-users listScheduleUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview a schedule
@@ -7181,6 +7422,7 @@ export def "schedules-preview createSchedulePreview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
   --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
@@ -7199,7 +7441,7 @@ export def "schedules-preview createSchedulePreview" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Associate service dependencies
@@ -7215,6 +7457,7 @@ export def "service-dependencies-associate createServiceDependency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --relationships: list # List of all service dependencies to be created. — item shape: {supporting_service?: record, dependent_service?: record}
@@ -7229,7 +7472,7 @@ export def "service-dependencies-associate createServiceDependency" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Business Service dependencies
@@ -7245,6 +7488,7 @@ export def "service-dependencies-business-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<relationships: table<supporting_service: record, dependent_service: record, id: string, type: string>> {
@@ -7255,7 +7499,7 @@ export def "service-dependencies-business-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disassociate service dependencies
@@ -7271,6 +7515,7 @@ export def "service-dependencies-disassociate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --relationships: list # List of all service dependencies to be deleted. — item shape: {supporting_service?: record, dependent_service?: record}
@@ -7285,7 +7530,7 @@ export def "service-dependencies-disassociate post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get technical service dependencies
@@ -7301,6 +7546,7 @@ export def "service-dependencies-technical-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<relationships: table<supporting_service: record, dependent_service: record, id: string, type: string>> {
@@ -7311,7 +7557,7 @@ export def "service-dependencies-technical-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List services
@@ -7326,6 +7572,7 @@ export def "services listServices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
@@ -7346,7 +7593,7 @@ export def "services listServices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service
@@ -7361,6 +7608,7 @@ export def "services createService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   service: any
@@ -7375,7 +7623,7 @@ export def "services createService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a service
@@ -7391,6 +7639,7 @@ export def "services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-15 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7403,7 +7652,7 @@ export def "services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a service
@@ -7419,6 +7668,7 @@ export def "services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -7429,7 +7679,7 @@ export def "services delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a service
@@ -7445,6 +7695,7 @@ export def "services updateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   service: any
@@ -7459,7 +7710,7 @@ export def "services updateService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records for a service
@@ -7475,6 +7726,7 @@ export def "services-audit-records listServiceAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -7490,7 +7742,7 @@ export def "services-audit-records listServiceAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Change Events for a service
@@ -7506,6 +7758,7 @@ export def "services-change-events listServiceChangeEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # The start of the date range over which you want to search, as a UTC ISO 8601 datetime string. Will return an HTTP 400 for non-UTC datetimes. (format: date-time)
   --until: string # The end of the date range over which you want to search, as a UTC ISO 8601 datetime string. Will return an HTTP 400 for non-UTC datetimes. (format: date-time)
   --limit: int # The number of results per page.
@@ -7524,7 +7777,7 @@ export def "services-change-events listServiceChangeEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new integration
@@ -7540,6 +7793,7 @@ export def "services-integrations createServiceIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   integration: any
@@ -7554,7 +7808,7 @@ export def "services-integrations createServiceIntegration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing integration
@@ -7571,6 +7825,7 @@ export def "services-integrations updateServiceIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   integration: any
@@ -7585,7 +7840,7 @@ export def "services-integrations updateServiceIntegration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View an integration
@@ -7602,6 +7857,7 @@ export def "services-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-16 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7614,7 +7870,7 @@ export def "services-integrations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Service's Event Rules
@@ -7630,6 +7886,7 @@ export def "services-rules listServiceEventRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -7645,7 +7902,7 @@ export def "services-rules listServiceEventRules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Event Rule on a Service
@@ -7661,6 +7918,7 @@ export def "services-rules createServiceEventRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   rule: any
@@ -7675,7 +7933,7 @@ export def "services-rules createServiceEventRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Convert a Service's Event Rules into Event Orchestration Rules
@@ -7691,6 +7949,7 @@ export def "services-rules-convert convertServiceEventRulesToEventOrchestration"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<convert_status: string, converted_to: string> {
@@ -7701,7 +7960,7 @@ export def "services-rules-convert convertServiceEventRulesToEventOrchestration"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Event Rule from a Service
@@ -7718,6 +7977,7 @@ export def "services-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<rule: record<position: int, actions: record<annotate: record, event_action: record, extractions: list, priority: record, severity: record, suppress: record, suspend: record>>> {
@@ -7728,7 +7988,7 @@ export def "services-rules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Event Rule on a Service
@@ -7745,6 +8005,7 @@ export def "services-rules updateServiceEventRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --rule: any
@@ -7760,7 +8021,7 @@ export def "services-rules updateServiceEventRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Event Rule from a Service
@@ -7777,6 +8038,7 @@ export def "services-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -7787,7 +8049,7 @@ export def "services-rules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Field
@@ -7803,6 +8065,7 @@ export def "services-custom-fields createServiceCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field: record # Details of the custom field to be created. — shape: {data_type: any, description?: any, display_name: any, enabled?: any, field_options?: list, field_type: any, name: any}
@@ -7817,7 +8080,7 @@ export def "services-custom-fields createServiceCustomField" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Fields
@@ -7832,6 +8095,7 @@ export def "services-custom-fields listServiceCustomFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7844,7 +8108,7 @@ export def "services-custom-fields listServiceCustomFields" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Field
@@ -7860,6 +8124,7 @@ export def "services-custom-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-10 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7872,7 +8137,7 @@ export def "services-custom-fields get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Field
@@ -7889,6 +8154,7 @@ export def "services-custom-fields updateServiceCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field: record # Details of the custom field to be updated. — shape: {description?: any, display_name?: any, enabled?: any, field_options?: list}
@@ -7903,7 +8169,7 @@ export def "services-custom-fields updateServiceCustomField" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Field
@@ -7919,6 +8185,7 @@ export def "services-custom-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -7929,7 +8196,7 @@ export def "services-custom-fields delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Field Options
@@ -7945,6 +8212,7 @@ export def "services-custom-fields-field-options listServiceCustomFieldOptions" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<field_options: table<created_at: any, data: record, id: any, type: string, updated_at: any>> {
@@ -7955,7 +8223,7 @@ export def "services-custom-fields-field-options listServiceCustomFieldOptions" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Field Option
@@ -7972,6 +8240,7 @@ export def "services-custom-fields-field-options createServiceCustomFieldOption"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field_option: record # An option for a custom field. Can only be applied to fields with a `field_type` of `single_value_fixed` or `multi_value_fixed`. — shape: {data: record}
@@ -7986,7 +8255,7 @@ export def "services-custom-fields-field-options createServiceCustomFieldOption"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Field Option
@@ -8003,6 +8272,7 @@ export def "services-custom-fields-field-options get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<field_option: record<created_at: any, data: record<data_type: string, value: string>, id: any, type: string, updated_at: any>> {
@@ -8013,7 +8283,7 @@ export def "services-custom-fields-field-options get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Field Option
@@ -8031,6 +8301,7 @@ export def "services-custom-fields-field-options updateServiceCustomFieldOption"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   field_option: record # An option for a custom field. Can only be applied to fields with a `field_type` of `single_value_fixed` or `multi_value_fixed`. — shape: {data: record}
@@ -8045,7 +8316,7 @@ export def "services-custom-fields-field-options updateServiceCustomFieldOption"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Field Option
@@ -8062,6 +8333,7 @@ export def "services-custom-fields-field-options delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -8072,7 +8344,7 @@ export def "services-custom-fields-field-options delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Field Values
@@ -8088,6 +8360,7 @@ export def "services-custom-fields-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<custom_fields: table<data_type: any, description: any, display_name: any, field_type: any, id: any, name: any, type: string, value: any>> {
@@ -8098,7 +8371,7 @@ export def "services-custom-fields-values get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Custom Field Values
@@ -8114,6 +8387,7 @@ export def "services-custom-fields-values updateServiceCustomFieldValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   custom_fields: list
@@ -8128,7 +8402,7 @@ export def "services-custom-fields-values updateServiceCustomFieldValues" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Enablements for a Service
@@ -8144,6 +8418,7 @@ export def "services-enablements listServiceFeatureEnablements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<enablements: table<feature: string, enabled: bool, updated_at: string, warnings: list>> {
@@ -8154,7 +8429,7 @@ export def "services-enablements listServiceFeatureEnablements" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Enablement for a Service
@@ -8172,6 +8447,7 @@ export def "services-enablements updateServiceFeatureEnablement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   enablement: record # shape: {enabled: bool}
@@ -8186,7 +8462,7 @@ export def "services-enablements updateServiceFeatureEnablement" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an account's session configurations
@@ -8201,6 +8477,7 @@ export def "session-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Session configuration type. If omitted, returns both mobile and web configurations.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -8213,7 +8490,7 @@ export def "session-configurations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure an account's session configurations
@@ -8229,6 +8506,7 @@ export def "session-configurations updateSessionConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Session configuration type. This can be either 'mobile' or 'web', or a comma-separated list of both.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -8245,7 +8523,7 @@ export def "session-configurations updateSessionConfigurations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an account's session configurations.
@@ -8260,6 +8538,7 @@ export def "session-configurations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Session configuration type. This can be either 'mobile' or 'web', or a comma-separated list of both.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -8272,7 +8551,7 @@ export def "session-configurations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Standards
@@ -8287,6 +8566,7 @@ export def "standards listStandards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --resource-type: string@resource-type-completer
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -8299,7 +8579,7 @@ export def "standards listStandards" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a standard
@@ -8318,6 +8598,7 @@ export def "standards updateStandard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --active: oneof<nothing, bool>
@@ -8336,7 +8617,7 @@ export def "standards updateStandard" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List resources' standards scores
@@ -8352,6 +8633,7 @@ export def "standards-scores listResourceStandardsManyServices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Ids of resources to apply the standards. Maximum of 100 items
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<resources: table<resource_id: string, resource_type: string, score: record, standards: list>> {
@@ -8363,7 +8645,7 @@ export def "standards-scores listResourceStandardsManyServices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a resource's standards scores
@@ -8380,6 +8662,7 @@ export def "standards-scores listResourceStandards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<resource_id: string, resource_type: string, score: record<passing: int, total: int>, standards: table<active: bool, description: string, id: string, name: string, type: string, pass: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8389,7 +8672,7 @@ export def "standards-scores listResourceStandards" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Dashboards
@@ -8404,6 +8687,7 @@ export def "status-dashboards listStatusDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, next_cursor: string, status_dashboards: table<id: string, url_slug: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8413,7 +8697,7 @@ export def "status-dashboards listStatusDashboards" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single Status Dashboard by `id`
@@ -8429,6 +8713,7 @@ export def "status-dashboards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<status_dashboard: record<id: string, url_slug: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8438,7 +8723,7 @@ export def "status-dashboards get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get impacted Business Services for a Status Dashboard by `id`.
@@ -8454,6 +8739,7 @@ export def "status-dashboards-service-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fields: string@additional-fields-completer # Provides access to additional fields such as highest priority per business service and total impacted count
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, more: bool, services: table<id: string, name: string, type: string, status: string, additional_fields: record>, additional_fields: record<total_impacted_count: int>> {
@@ -8465,7 +8751,7 @@ export def "status-dashboards-service-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single Status Dashboard by `url_slug`
@@ -8481,6 +8767,7 @@ export def "status-dashboards-url-slugs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<status_dashboard: record<id: string, url_slug: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8490,7 +8777,7 @@ export def "status-dashboards-url-slugs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get impacted Business Services for a  Status Dashboard by `url_slug`
@@ -8506,6 +8793,7 @@ export def "status-dashboards-url-slugs-service-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fields: string@additional-fields-completer # Provides access to additional fields such as highest priority per business service and total impacted count
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, more: bool, services: table<id: string, name: string, type: string, status: string, additional_fields: record>, additional_fields: record<total_impacted_count: int>> {
@@ -8517,7 +8805,7 @@ export def "status-dashboards-url-slugs-service-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Pages
@@ -8532,6 +8820,7 @@ export def "status-pages listStatusPages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-page-type: string@status-page-type-completer # The type of the Status Page.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, status_pages: table<id: string, name: string, published_at: string, status_page_type: string, url: string, type: string>> {
@@ -8543,7 +8832,7 @@ export def "status-pages listStatusPages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Impacts
@@ -8559,6 +8848,7 @@ export def "status-pages-impacts listStatusPageImpacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --post-type: string@post-type-completer # Filter by Post type.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, impacts: table<id: string, self: string, description: string, post_type: string, status_page: record, type: string>> {
@@ -8570,7 +8860,7 @@ export def "status-pages-impacts listStatusPageImpacts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Status Page Impact
@@ -8587,6 +8877,7 @@ export def "status-pages-impacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<impact: record<id: string, self: string, description: string, post_type: string, status_page: record<id: string, type: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8596,7 +8887,7 @@ export def "status-pages-impacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Services
@@ -8612,6 +8903,7 @@ export def "status-pages-services listStatusPageServices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, services: table<id: string, self: string, name: string, status_page: record, business_service: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8621,7 +8913,7 @@ export def "status-pages-services listStatusPageServices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Status Page Service
@@ -8638,6 +8930,7 @@ export def "status-pages-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<service: record<id: string, self: string, name: string, status_page: record<id: string, type: string>, business_service: record<id: string, type: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8647,7 +8940,7 @@ export def "status-pages-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Severities
@@ -8663,6 +8956,7 @@ export def "status-pages-severities listStatusPageSeverities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --post-type: string@post-type-completer # Filter by Post type.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, severities: table<id: string, self: string, description: string, post_type: string, status_page: record, type: string>> {
@@ -8674,7 +8968,7 @@ export def "status-pages-severities listStatusPageSeverities" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Status Page Severity
@@ -8691,6 +8985,7 @@ export def "status-pages-severities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<severity: record<id: string, self: string, description: string, post_type: string, status_page: record<id: string, type: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8700,7 +8995,7 @@ export def "status-pages-severities get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Statuses
@@ -8716,6 +9011,7 @@ export def "status-pages-statuses listStatusPageStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --post-type: string@post-type-completer # Filter by Post type.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, statuses: table<id: string, self: string, description: string, post_type: string, status_page: record, type: string>> {
@@ -8727,7 +9023,7 @@ export def "status-pages-statuses listStatusPageStatuses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Status Page Status
@@ -8744,6 +9040,7 @@ export def "status-pages-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<status: record<id: string, self: string, description: string, post_type: string, status_page: record<id: string, type: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8753,7 +9050,7 @@ export def "status-pages-statuses get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Posts
@@ -8769,6 +9066,7 @@ export def "status-pages-posts listStatusPagePosts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --post-type: string@post-type-completer # Filter by Post type.
   --reviewed-status: string@reviewed-status-completer # Filter by the reviewed status of the Post to retrieve.
   --status: list # Filter by an array of Status identifiers.
@@ -8782,7 +9080,7 @@ export def "status-pages-posts listStatusPagePosts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Status Page Post
@@ -8799,6 +9097,7 @@ export def "status-pages-posts createStatusPagePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   post: record # Request schema for creating/updating a given Status Page Post resource. — shape: {type: "status_page_post", title: string, post_type: "incident"|"maintenance", starts_at: string, ends_at: string, updates: list, status_page: record}
 ]: any -> record<post: record<id: string, self: string, type: string, post_type: string, status_page: record<id: string, type: string>, linked_resource: record<id: string, type: string>, postmortem: record<id: string, type: string>, title: string, starts_at: string, ends_at: string, updates: list<record>>> {
@@ -8812,7 +9111,7 @@ export def "status-pages-posts createStatusPagePost" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Status Page Post
@@ -8829,6 +9128,7 @@ export def "status-pages-posts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<post: record<id: string, self: string, type: string, post_type: string, status_page: record<id: string, type: string>, linked_resource: record<id: string, type: string>, postmortem: record<id: string, type: string>, title: string, starts_at: string, ends_at: string, updates: list<record>>> {
@@ -8840,7 +9140,7 @@ export def "status-pages-posts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Status Page Post
@@ -8858,6 +9158,7 @@ export def "status-pages-posts updateStatusPagePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   post: record # Request schema for creating a given Status Page Post resource. — shape: {type: "status_page_post", title: string, post_type: "incident"|"maintenance", starts_at: string, ends_at: string, status_page: record}
 ]: any -> record<post: record<id: string, self: string, type: string, post_type: string, status_page: record<id: string, type: string>, linked_resource: record<id: string, type: string>, postmortem: record<id: string, type: string>, title: string, starts_at: string, ends_at: string, updates: list<record>>> {
@@ -8871,7 +9172,7 @@ export def "status-pages-posts updateStatusPagePost" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Status Page Post
@@ -8888,6 +9189,7 @@ export def "status-pages-posts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8897,7 +9199,7 @@ export def "status-pages-posts delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Post Updates
@@ -8914,6 +9216,7 @@ export def "status-pages-posts-post-updates listStatusPagePostUpdates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reviewed-status: string@reviewed-status-completer # Filter by the reviewed status of the Post Update to retrieve.
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, post_updates: table<id: string, self: string, post: record, message: string, reviewed_status: string, status: record, severity: record, impacted_services: list, update_frequency_ms: int, notify_subscribers: bool, reported_at: string, type: string>> {
@@ -8925,7 +9228,7 @@ export def "status-pages-posts-post-updates listStatusPagePostUpdates" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Status Page Post Update
@@ -8943,6 +9246,7 @@ export def "status-pages-posts-post-updates createStatusPagePostUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   post_update: record # Attributes for Post Update creation/update — shape: {post: record, message: string, status: record, severity: record, impacted_services: list, update_frequency_ms: int, notify_subscribers: bool, reported_at?: string, type: string}
 ]: any -> record<post_update: record<id: string, self: string, post: record<id: string, type: string>, message: string, reviewed_status: string, status: record<id: string, type: string>, severity: record<id: string, type: string>, impacted_services: list<record>, update_frequency_ms: int, notify_subscribers: bool, reported_at: string, type: string>> {
@@ -8956,7 +9260,7 @@ export def "status-pages-posts-post-updates createStatusPagePostUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Status Page Post Update
@@ -8974,6 +9278,7 @@ export def "status-pages-posts-post-updates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<post_update: record<id: string, self: string, post: record<id: string, type: string>, message: string, reviewed_status: string, status: record<id: string, type: string>, severity: record<id: string, type: string>, impacted_services: list<record>, update_frequency_ms: int, notify_subscribers: bool, reported_at: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8983,7 +9288,7 @@ export def "status-pages-posts-post-updates get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Status Page Post Update
@@ -9002,6 +9307,7 @@ export def "status-pages-posts-post-updates updateStatusPagePostUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   post_update: record # Attributes for Post Update creation/update — shape: {post: record, message: string, status: record, severity: record, impacted_services: list, update_frequency_ms: int, notify_subscribers: bool, reported_at?: string, type: string}
 ]: any -> record<post_update: record<id: string, self: string, post: record<id: string, type: string>, message: string, reviewed_status: string, status: record<id: string, type: string>, severity: record<id: string, type: string>, impacted_services: list<record>, update_frequency_ms: int, notify_subscribers: bool, reported_at: string, type: string>> {
@@ -9015,7 +9321,7 @@ export def "status-pages-posts-post-updates updateStatusPagePostUpdate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Status Page Post Update
@@ -9033,6 +9339,7 @@ export def "status-pages-posts-post-updates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9042,7 +9349,7 @@ export def "status-pages-posts-post-updates delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Post Postmortem
@@ -9059,6 +9366,7 @@ export def "status-pages-posts-postmortem get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<postmortem: record<id: string, self: string, post: record<id: string, type: string>, message: string, notify_subscribers: bool, reported_at: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9068,7 +9376,7 @@ export def "status-pages-posts-postmortem get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or Update a Post Postmortem
@@ -9086,6 +9394,7 @@ export def "status-pages-posts-postmortem createOrUpdateStatusPagePostmortem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   postmortem: record # Request to create/update a given Postmortem resource. — shape: {post: record, message: string, notify_subscribers: bool}
 ]: any -> record<postmortem: record<id: string, self: string, post: record<id: string, type: string>, message: string, notify_subscribers: bool, reported_at: string, type: string>> {
@@ -9099,7 +9408,7 @@ export def "status-pages-posts-postmortem createOrUpdateStatusPagePostmortem" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Post Postmortem
@@ -9116,6 +9425,7 @@ export def "status-pages-posts-postmortem delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9125,7 +9435,7 @@ export def "status-pages-posts-postmortem delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Status Page Subscriptions
@@ -9141,6 +9451,7 @@ export def "status-pages-subscriptions listStatusPageSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter by Subscription status.
   --channel: string@channel-completer # Filter by Subscription channel.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -9153,7 +9464,7 @@ export def "status-pages-subscriptions listStatusPageSubscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Status Page Subscription
@@ -9170,6 +9481,7 @@ export def "status-pages-subscriptions createStatusPageSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscription: record # Request schema for creating a StatusPageSubscription. — shape: {channel: "webhook"|"email", contact: string, status_page: record, subscribable_object: record, type: string}
 ]: any -> record<subscription: record<channel: string, contact: string, id: string, self: string, status: string, status_page: record<id: string, type: string>, subscribable_object: record<id: string, type: string>, type: string>> {
@@ -9183,7 +9495,7 @@ export def "status-pages-subscriptions createStatusPageSubscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Status Page Subscription
@@ -9200,6 +9512,7 @@ export def "status-pages-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<subscription: record<channel: string, contact: string, id: string, self: string, status: string, status_page: record<id: string, type: string>, subscribable_object: record<id: string, type: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9209,7 +9522,7 @@ export def "status-pages-subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Status Page Subscription
@@ -9226,6 +9539,7 @@ export def "status-pages-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9235,7 +9549,7 @@ export def "status-pages-subscriptions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List SRE Agent memories
@@ -9250,6 +9564,7 @@ export def "sre-agent-memories listSreMemories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results to return per page. (default: 20 - incident_summary)
   --service-id: string # Filter memories by service ID
   --incident-id: string # Filter memories by incident ID
@@ -9265,7 +9580,7 @@ export def "sre-agent-memories listSreMemories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an SRE Agent memory
@@ -9282,6 +9597,7 @@ export def "sre-agent-memories updateSreMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   memory: record # shape: {content: string}
@@ -9296,7 +9612,7 @@ export def "sre-agent-memories updateSreMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an SRE Agent memory
@@ -9312,6 +9628,7 @@ export def "sre-agent-memories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -9322,7 +9639,7 @@ export def "sre-agent-memories delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tags
@@ -9337,6 +9654,7 @@ export def "tags listTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -9352,7 +9670,7 @@ export def "tags listTags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tag
@@ -9367,6 +9685,7 @@ export def "tags createTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   tag: any
@@ -9381,7 +9700,7 @@ export def "tags createTags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a tag
@@ -9397,6 +9716,7 @@ export def "tags get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<tag: record<id: string, summary: string, type: string, self: string, html_url: string, label: string>> {
@@ -9407,7 +9727,7 @@ export def "tags get-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag
@@ -9423,6 +9743,7 @@ export def "tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -9433,7 +9754,7 @@ export def "tags delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get connected entities
@@ -9450,6 +9771,7 @@ export def "tags get-by-id-entity_type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -9464,7 +9786,7 @@ export def "tags get-by-id-entity_type" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a team
@@ -9479,6 +9801,7 @@ export def "teams createTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   team: any
@@ -9493,7 +9816,7 @@ export def "teams createTeam" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List teams
@@ -9508,6 +9831,7 @@ export def "teams listTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -9523,7 +9847,7 @@ export def "teams listTeams" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team
@@ -9539,6 +9863,7 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-17 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -9551,7 +9876,7 @@ export def "teams get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a team
@@ -9567,6 +9892,7 @@ export def "teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reassignment-team: string # Team to reassign unresolved incident to. If an unresolved incident exists on both the reassignment team and the team being deleted, a duplicate will not be made. If not supplied, unresolved incidents will be made account-level.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -9579,7 +9905,7 @@ export def "teams delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a team
@@ -9595,6 +9921,7 @@ export def "teams updateTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   team: any
@@ -9609,7 +9936,7 @@ export def "teams updateTeam" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records for a team
@@ -9625,6 +9952,7 @@ export def "teams-audit-records listTeamsAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -9640,7 +9968,7 @@ export def "teams-audit-records listTeamsAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an escalation policy from a team
@@ -9657,6 +9985,7 @@ export def "teams-escalation-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -9667,7 +9996,7 @@ export def "teams-escalation-policies delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an escalation policy to a team
@@ -9684,6 +10013,7 @@ export def "teams-escalation-policies updateTeamEscalationPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -9694,7 +10024,7 @@ export def "teams-escalation-policies updateTeamEscalationPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List members of a team
@@ -9710,6 +10040,7 @@ export def "teams-members listTeamUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -9725,7 +10056,7 @@ export def "teams-members listTeamUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Team Notification Subscriptions
@@ -9741,6 +10072,7 @@ export def "teams-notification-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, subscriptions: table<subscription: record, subscribable_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9750,7 +10082,7 @@ export def "teams-notification-subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Team Notification Subscriptions
@@ -9767,6 +10099,7 @@ export def "teams-notification-subscriptions createTeamNotificationSubscriptions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribables: list # item shape: {subscribable_id?: string, subscribable_type?: "incident"|"business_service"}
 ]: any -> record<subscriptions: table<subscriber_id: string, subscriber_type: string, subscribable_id: string, subscribable_type: string, account_id: string, result: string>> {
@@ -9780,7 +10113,7 @@ export def "teams-notification-subscriptions createTeamNotificationSubscriptions
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsubscribe the given Team from Notifications on the matching Subscribable entities.  Scoped OAuth requires: `subscribers.write`
@@ -9797,6 +10130,7 @@ export def "teams-notification-subscriptions-unsubscribe removeTeamNotificationS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribables: list # item shape: {subscribable_id?: string, subscribable_type?: "incident"|"business_service"}
 ]: any -> record<deleted_count: float, unauthorized_count: float, non_existent_count: float> {
@@ -9810,7 +10144,7 @@ export def "teams-notification-subscriptions-unsubscribe removeTeamNotificationS
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a user from a team
@@ -9827,6 +10161,7 @@ export def "teams-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -9837,7 +10172,7 @@ export def "teams-users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a user to a team
@@ -9854,6 +10189,7 @@ export def "teams-users updateTeamUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --role: string@role-completer # The role of the user on the team.
@@ -9868,7 +10204,7 @@ export def "teams-users updateTeamUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List templates
@@ -9883,6 +10219,7 @@ export def "templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -9896,7 +10233,7 @@ export def "templates list" [
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a template
@@ -9912,6 +10249,7 @@ export def "templates createTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template: record # shape: {template_type?: "status_update", name?: string, description?: string, templated_fields?: record}
 ]: any -> record<template: record<template_type: string, name: string, description: string, templated_fields: record<email_subject: string, email_body: string, message: string>, id: string, summary: string, self: string, html_url: string, type: string, created_by: any, updated_by: any>> {
   let input = $in
@@ -9922,7 +10260,7 @@ export def "templates createTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a template
@@ -9938,13 +10276,14 @@ export def "templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<template: record<template_type: string, name: string, description: string, templated_fields: record<email_subject: string, email_body: string, message: string>, id: string, summary: string, self: string, html_url: string, type: string, created_by: any, updated_by: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a template
@@ -9961,6 +10300,7 @@ export def "templates updateTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template: record # shape: {template_type?: "status_update", name?: string, description?: string, templated_fields?: record}
 ]: any -> record<template: record<template_type: string, name: string, description: string, templated_fields: record<email_subject: string, email_body: string, message: string>, id: string, summary: string, self: string, html_url: string, type: string, created_by: any, updated_by: any>> {
   let input = $in
@@ -9971,7 +10311,7 @@ export def "templates updateTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a template
@@ -9987,13 +10327,14 @@ export def "templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Render a template
@@ -10010,6 +10351,7 @@ export def "templates-render renderTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-id: string # The incident id to render the template for
   --status-update: record # shape: {message?: string}
   --external: any # An optional object collection that can be referenced in the template.
@@ -10022,7 +10364,7 @@ export def "templates-render renderTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List template fields
@@ -10037,6 +10379,7 @@ export def "templates-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<fields: table<data_type: string, default_value: string, description: string, domain_name: record, example: string, keyword: string, summary: string, type: string>> {
@@ -10047,7 +10390,7 @@ export def "templates-fields get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users
@@ -10062,6 +10405,7 @@ export def "users listUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --limit: int # The number of results per page.
@@ -10079,7 +10423,7 @@ export def "users listUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user
@@ -10094,6 +10438,7 @@ export def "users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -10109,7 +10454,7 @@ export def "users createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user
@@ -10125,6 +10470,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-18 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -10137,7 +10483,7 @@ export def "users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user
@@ -10153,6 +10499,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10163,7 +10510,7 @@ export def "users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -10179,6 +10526,7 @@ export def "users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   user: any
@@ -10193,7 +10541,7 @@ export def "users updateUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit records for a user
@@ -10209,6 +10557,7 @@ export def "users-audit-records listUsersAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -10224,7 +10573,7 @@ export def "users-audit-records listUsersAuditRecords" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a user's contact methods
@@ -10240,6 +10589,7 @@ export def "users-contact-methods list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<contact_methods: list<any>> {
@@ -10250,7 +10600,7 @@ export def "users-contact-methods list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user contact method
@@ -10266,6 +10616,7 @@ export def "users-contact-methods createUserContactMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   contact_method: any
@@ -10280,7 +10631,7 @@ export def "users-contact-methods createUserContactMethod" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's contact method
@@ -10297,6 +10648,7 @@ export def "users-contact-methods get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<contact_method: any> {
@@ -10307,7 +10659,7 @@ export def "users-contact-methods get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user's contact method
@@ -10324,6 +10676,7 @@ export def "users-contact-methods delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10334,7 +10687,7 @@ export def "users-contact-methods delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's contact method
@@ -10351,6 +10704,7 @@ export def "users-contact-methods updateUserContactMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   contact_method: any
@@ -10365,7 +10719,7 @@ export def "users-contact-methods updateUserContactMethod" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a user's delegations
@@ -10381,6 +10735,7 @@ export def "users-oauth-delegations listUserDelegations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delegation-type: string@delegation-type-completer # The type of OAuth delegations to filter on. Allowed values are 'mobile', 'web', and 'integration'. You can pass one or more types in, separated by commas (e.g., `type=web,mobile`).
   --status: string@status-completer-1 # The status of the delegations to return. Allowed values are 'issued' and 'revoked'. You can pass one or more statuses in, separated by commas (e.g., `status=issued,revoked`).
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
@@ -10396,7 +10751,7 @@ export def "users-oauth-delegations listUserDelegations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's delegation
@@ -10413,6 +10768,7 @@ export def "users-oauth-delegations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<id: string, status: string, client_id: string, delegation_type: string, scope: string, created_at: string, expires_at: string, self: string> {
@@ -10423,7 +10779,7 @@ export def "users-oauth-delegations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the License allocated to a User
@@ -10439,6 +10795,7 @@ export def "users-license get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<license: any> {
@@ -10449,7 +10806,7 @@ export def "users-license get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a user's notification rules
@@ -10465,6 +10822,7 @@ export def "users-notification-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-19 # Array of additional details to include.
   --urgency: string@urgency-completer # The incident urgency for which the notification rules are applied. If not specified, defaults to `high`.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -10478,7 +10836,7 @@ export def "users-notification-rules list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user notification rule
@@ -10494,6 +10852,7 @@ export def "users-notification-rules createUserNotificationRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   notification_rule: any
@@ -10508,7 +10867,7 @@ export def "users-notification-rules createUserNotificationRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's notification rule
@@ -10525,6 +10884,7 @@ export def "users-notification-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-19 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -10537,7 +10897,7 @@ export def "users-notification-rules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user's notification rule
@@ -10554,6 +10914,7 @@ export def "users-notification-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10564,7 +10925,7 @@ export def "users-notification-rules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's notification rule
@@ -10581,6 +10942,7 @@ export def "users-notification-rules updateUserNotificationRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   notification_rule: any
@@ -10595,7 +10957,7 @@ export def "users-notification-rules updateUserNotificationRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Notification Subscriptions
@@ -10611,6 +10973,7 @@ export def "users-notification-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, subscriptions: table<subscription: record, subscribable_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10620,7 +10983,7 @@ export def "users-notification-subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Notification Subcriptions
@@ -10637,6 +11000,7 @@ export def "users-notification-subscriptions createUserNotificationSubscriptions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribables: list # item shape: {subscribable_id?: string, subscribable_type?: "incident"|"business_service"}
 ]: any -> record<subscriptions: table<subscriber_id: string, subscriber_type: string, subscribable_id: string, subscribable_type: string, account_id: string, result: string>> {
@@ -10650,7 +11014,7 @@ export def "users-notification-subscriptions createUserNotificationSubscriptions
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Notification Subscriptions
@@ -10667,6 +11031,7 @@ export def "users-notification-subscriptions-unsubscribe unsubscribeUserNotifica
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   subscribables: list # item shape: {subscribable_id?: string, subscribable_type?: "incident"|"business_service"}
 ]: any -> record<deleted_count: float, unauthorized_count: float, non_existent_count: float> {
@@ -10680,7 +11045,7 @@ export def "users-notification-subscriptions-unsubscribe unsubscribeUserNotifica
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a User's Handoff Notification Rules
@@ -10696,6 +11061,7 @@ export def "users-oncall-handoff-notification-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<oncall_handoff_notification_rules: table<id: string, notify_advance_in_minutes: int, handoff_type: string, contact_method: record>> {
@@ -10706,7 +11072,7 @@ export def "users-oncall-handoff-notification-rules list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a User Handoff Notification Rule
@@ -10723,6 +11089,7 @@ export def "users-oncall-handoff-notification-rules createUserHandoffNotificatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   oncall_handoff_notification_rule: record # A rule for contacting the user for Handoff Notifications. (e.g. {id: PXPGF42, notify_advance_in_minutes: 180, handoff_type: both, contact_method: {id: PXPGF42, type: email_contact_method_reference}}) — shape: {notify_advance_in_minutes?: int, handoff_type: "both"|"oncall"|"offcall", contact_method: any}
@@ -10737,7 +11104,7 @@ export def "users-oncall-handoff-notification-rules createUserHandoffNotificatio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's handoff notification rule
@@ -10754,6 +11121,7 @@ export def "users-oncall-handoff-notification-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<oncall_handoff_notification_rule: record<id: string, notify_advance_in_minutes: int, handoff_type: string, contact_method: record<type: string>>> {
@@ -10764,7 +11132,7 @@ export def "users-oncall-handoff-notification-rules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a User's Handoff Notification rule
@@ -10781,6 +11149,7 @@ export def "users-oncall-handoff-notification-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10791,7 +11160,7 @@ export def "users-oncall-handoff-notification-rules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a User's Handoff Notification Rule
@@ -10809,6 +11178,7 @@ export def "users-oncall-handoff-notification-rules updateUserHandoffNotificatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   oncall_handoff_notification_rule: record # A rule for contacting the user for Handoff Notifications. (e.g. {id: PXPGF42, notify_advance_in_minutes: 180, handoff_type: both, contact_method: {id: PXPGF42, type: email_contact_method_reference}}) — shape: {notify_advance_in_minutes?: int, handoff_type: "both"|"oncall"|"offcall", contact_method: any}
@@ -10823,7 +11193,7 @@ export def "users-oncall-handoff-notification-rules updateUserHandoffNotificatio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a user's active sessions
@@ -10841,6 +11211,7 @@ export def "users-sessions get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<user_sessions: table<id: string, user_id: string, created_at: string, type: string, summary: string>> {
@@ -10851,7 +11222,7 @@ export def "users-sessions get-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all user sessions
@@ -10869,6 +11240,7 @@ export def "users-sessions delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10879,7 +11251,7 @@ export def "users-sessions delete-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's session
@@ -10899,6 +11271,7 @@ export def "users-sessions get-by-id-type-session_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<user_session: record<id: string, user_id: string, created_at: string, type: string, summary: string>> {
@@ -10909,7 +11282,7 @@ export def "users-sessions get-by-id-type-session_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user's session
@@ -10929,6 +11302,7 @@ export def "users-sessions delete-by-id-type-session_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -10939,7 +11313,7 @@ export def "users-sessions delete-by-id-type-session_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a user's status update notification rules
@@ -10955,6 +11329,7 @@ export def "users-status-update-notification-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-19 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -10967,7 +11342,7 @@ export def "users-status-update-notification-rules list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user status update notification rule
@@ -10984,6 +11359,7 @@ export def "users-status-update-notification-rules createUserStatusUpdateNotific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   status_update_notification_rule: record # A rule for contacting the user for Incident Status Updates. (e.g. {contact_method: {id: PXPGF42, type: email_contact_method_reference}}) — shape: {contact_method: any}
@@ -10998,7 +11374,7 @@ export def "users-status-update-notification-rules createUserStatusUpdateNotific
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's status update notification rule
@@ -11015,6 +11391,7 @@ export def "users-status-update-notification-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-19 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -11027,7 +11404,7 @@ export def "users-status-update-notification-rules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user's status update notification rule
@@ -11044,6 +11421,7 @@ export def "users-status-update-notification-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -11054,7 +11432,7 @@ export def "users-status-update-notification-rules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's status update notification rule
@@ -11072,6 +11450,7 @@ export def "users-status-update-notification-rules updateUserStatusUpdateNotific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   status_update_notification_rule: record # A rule for contacting the user for Incident Status Updates. (e.g. {contact_method: {id: PXPGF42, type: email_contact_method_reference}}) — shape: {contact_method: any}
@@ -11086,7 +11465,7 @@ export def "users-status-update-notification-rules updateUserStatusUpdateNotific
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the current user
@@ -11101,6 +11480,7 @@ export def "users-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-18 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -11113,7 +11493,7 @@ export def "users-me get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List vendors
@@ -11128,6 +11508,7 @@ export def "vendors listVendors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -11142,7 +11523,7 @@ export def "vendors listVendors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List schedules
@@ -11157,6 +11538,7 @@ export def "schedules listSchedulesV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of schedules to return (default: 100)
   --offset: int # default: 0
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
@@ -11169,7 +11551,7 @@ export def "schedules listSchedulesV3" [
   let full_url = (build-url $base "/v3/schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a schedule
@@ -11185,6 +11567,7 @@ export def "schedules createScheduleV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   schedule: record # shape: {name: string, time_zone: string, description?: string, teams?: list}
 ]: any -> record<schedule: record<id: string, type: string, name: string, time_zone: string, description: string, teams: list<record>, escalation_policies: list<record>, users: list<record>, rotations: list<record>, final_schedule: record<type: string, rendered_coverage_percentage: float, computed_shift_assignments: list>, http_cal_url: string, web_cal_url: string, self: string, html_url: string>> {
   let input = $in
@@ -11195,7 +11578,7 @@ export def "schedules createScheduleV3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a schedule
@@ -11211,6 +11594,7 @@ export def "schedules get-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2025-01-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2025-01-31T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
@@ -11223,7 +11607,7 @@ export def "schedules get-by-id-1" [
   let full_url = (build-url $base $"/v3/schedules/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a schedule
@@ -11240,6 +11624,7 @@ export def "schedules updateScheduleV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   schedule: record # shape: {name?: string, time_zone?: string, description?: string}
 ]: any -> record<schedule: record<id: string, type: string, name: string, time_zone: string, description: string, teams: list<record>, escalation_policies: list<record>, users: list<record>, rotations: list<record>, final_schedule: record<type: string, rendered_coverage_percentage: float, computed_shift_assignments: list>, http_cal_url: string, web_cal_url: string, self: string, html_url: string>> {
   let input = $in
@@ -11250,7 +11635,7 @@ export def "schedules updateScheduleV3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a schedule
@@ -11266,13 +11651,14 @@ export def "schedules delete-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List audit records for a schedule
@@ -11288,6 +11674,7 @@ export def "schedules-audit-records listSchedulesAuditRecordsV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --since: string # The start of the date range over which you want to search. If not specified, defaults to `now() - 24 hours` (past 24 hours) (format: date-time)
@@ -11303,7 +11690,7 @@ export def "schedules-audit-records listSchedulesAuditRecordsV3" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List custom shifts
@@ -11319,6 +11706,7 @@ export def "schedules-custom-shifts listCustomShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2026-06-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2026-06-28T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
@@ -11332,7 +11720,7 @@ export def "schedules-custom-shifts listCustomShifts" [
   let full_url = (build-url $base $"/v3/schedules/($id)/custom_shifts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create custom shifts
@@ -11349,6 +11737,7 @@ export def "schedules-custom-shifts createCustomShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_shifts: list # item shape: {type: "custom_shift", start_time: string, end_time: string, assignments: list}
 ]: any -> record<custom_shifts: table<id: string, type: string, start_time: string, end_time: string, assignments: list, self: string, html_url: string>> {
   let input = $in
@@ -11359,7 +11748,7 @@ export def "schedules-custom-shifts createCustomShifts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a custom shift
@@ -11376,13 +11765,14 @@ export def "schedules-custom-shifts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom_shift: record<id: string, type: string, start_time: string, end_time: string, assignments: list<record>, self: string, html_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/custom_shifts/($custom_shift_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a custom shift
@@ -11400,6 +11790,7 @@ export def "schedules-custom-shifts updateCustomShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_shift: record # If the shift has already started, only `end_time` can be modified. — shape: {start_time?: string, end_time?: string, assignments?: list}
 ]: any -> record<custom_shift: record<id: string, type: string, start_time: string, end_time: string, assignments: list<record>, self: string, html_url: string>> {
   let input = $in
@@ -11410,7 +11801,7 @@ export def "schedules-custom-shifts updateCustomShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom shift
@@ -11427,13 +11818,14 @@ export def "schedules-custom-shifts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/custom_shifts/($custom_shift_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List overrides
@@ -11449,6 +11841,7 @@ export def "schedules-overrides listOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2026-06-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2026-06-28T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
@@ -11462,7 +11855,7 @@ export def "schedules-overrides listOverrides" [
   let full_url = (build-url $base $"/v3/schedules/($id)/overrides" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create overrides
@@ -11479,6 +11872,7 @@ export def "schedules-overrides createOverrides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   overrides: list # item shape: {type: "override_shift", rotation_id?: string, custom_shift_id?: string, start_time: string, end_time: string, overridden_member: record, overriding_member: record}
 ]: any -> record<overrides: table<id: string, type: string, rotation_id: string, custom_shift_id: string, start_time: string, end_time: string, overridden_member: record, overriding_member: record, self: string, html_url: string>> {
   let input = $in
@@ -11489,7 +11883,7 @@ export def "schedules-overrides createOverrides" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an override
@@ -11506,13 +11900,14 @@ export def "schedules-overrides get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<override: record<id: string, type: string, rotation_id: string, custom_shift_id: string, start_time: string, end_time: string, overridden_member: record<type: string, user_id: string>, overriding_member: record<type: string, user_id: string>, self: string, html_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/overrides/($override_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an override
@@ -11530,6 +11925,7 @@ export def "schedules-overrides updateOverride" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   override: record # shape: {start_time?: string, end_time?: string, overriding_member?: record}
 ]: any -> record<override: record<id: string, type: string, rotation_id: string, custom_shift_id: string, start_time: string, end_time: string, overridden_member: record<type: string, user_id: string>, overriding_member: record<type: string, user_id: string>, self: string, html_url: string>> {
   let input = $in
@@ -11540,7 +11936,7 @@ export def "schedules-overrides updateOverride" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an override
@@ -11557,13 +11953,14 @@ export def "schedules-overrides delete-by-id-override_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/overrides/($override_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List rotations
@@ -11579,6 +11976,7 @@ export def "schedules-rotations listRotations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 25
   --offset: int # default: 0
 ]: nothing -> record<rotations: table<id: string, type: string, events: list, self: string, html_url: string>, limit: int, offset: int, more: bool> {
@@ -11588,7 +11986,7 @@ export def "schedules-rotations listRotations" [
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a rotation
@@ -11604,6 +12002,7 @@ export def "schedules-rotations createRotation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<rotation: record<id: string, type: string, events: list<record>, self: string, html_url: string>> {
   let input = $in
@@ -11613,7 +12012,7 @@ export def "schedules-rotations createRotation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a rotation
@@ -11630,6 +12029,7 @@ export def "schedules-rotations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2025-01-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2025-01-31T23:59:59Z)
 ]: nothing -> record<rotation: record<id: string, type: string, events: list<record>, self: string, html_url: string>> {
@@ -11639,7 +12039,7 @@ export def "schedules-rotations get" [
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations/($rotation_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a rotation
@@ -11656,13 +12056,14 @@ export def "schedules-rotations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations/($rotation_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events
@@ -11679,6 +12080,7 @@ export def "schedules-rotations-events listEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 25
   --offset: int # default: 0
 ]: nothing -> record<events: table<id: string, type: string, name: string, start_time: record, end_time: record, effective_since: string, effective_until: string, recurrence: list, assignment_strategy: record, self: string, html_url: string>, limit: int, offset: int, more: bool> {
@@ -11688,7 +12090,7 @@ export def "schedules-rotations-events listEvents" [
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations/($rotation_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an event
@@ -11706,6 +12108,7 @@ export def "schedules-rotations-events createEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {name: string, start_time: record, end_time: record, effective_since: string, effective_until?: string, recurrence: list, assignment_strategy: record}
 ]: any -> record<event: record<id: string, type: string, name: string, start_time: record<date_time: string, time_zone: string>, end_time: record<date_time: string, time_zone: string>, effective_since: string, effective_until: string, recurrence: list<string>, assignment_strategy: record<type: string, shifts_per_member: int, members: list>, self: string, html_url: string>> {
   let input = $in
@@ -11716,7 +12119,7 @@ export def "schedules-rotations-events createEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an event
@@ -11734,6 +12137,7 @@ export def "schedules-rotations-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2025-01-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2025-01-31T23:59:59Z)
 ]: nothing -> record<event: record<id: string, type: string, name: string, start_time: record<date_time: string, time_zone: string>, end_time: record<date_time: string, time_zone: string>, effective_since: string, effective_until: string, recurrence: list<string>, assignment_strategy: record<type: string, shifts_per_member: int, members: list>, self: string, html_url: string>> {
@@ -11743,7 +12147,7 @@ export def "schedules-rotations-events get" [
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations/($rotation_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an event
@@ -11762,6 +12166,7 @@ export def "schedules-rotations-events updateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {name?: string, start_time?: record, end_time?: record, effective_since?: string, effective_until?: string, recurrence?: list, assignment_strategy?: record}
 ]: any -> record<event: record<id: string, type: string, name: string, start_time: record<date_time: string, time_zone: string>, end_time: record<date_time: string, time_zone: string>, effective_since: string, effective_until: string, recurrence: list<string>, assignment_strategy: record<type: string, shifts_per_member: int, members: list>, self: string, html_url: string>> {
   let input = $in
@@ -11772,7 +12177,7 @@ export def "schedules-rotations-events updateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an event
@@ -11790,13 +12195,14 @@ export def "schedules-rotations-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/schedules/($id)/rotations/($rotation_id)/events/($event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a vendor
@@ -11812,6 +12218,7 @@ export def "vendors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<vendor: table<name: string, website_url: string, logo_url: string, thumbnail_url: string, description: string, integration_guide_url: string>> {
@@ -11822,7 +12229,7 @@ export def "vendors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webhook subscriptions
@@ -11837,6 +12244,7 @@ export def "webhook-subscriptions listWebhookSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
   --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
@@ -11852,7 +12260,7 @@ export def "webhook-subscriptions listWebhookSubscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook subscription
@@ -11868,6 +12276,7 @@ export def "webhook-subscriptions createWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   webhook_subscription: record # shape: {type: "webhook_subscription", active?: bool, delivery_method: record, description?: string, events: list, filter: record}
@@ -11882,7 +12291,7 @@ export def "webhook-subscriptions createWebhookSubscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook subscription
@@ -11898,6 +12307,7 @@ export def "webhook-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<webhook_subscription: record<id: string, type: string, active: bool, delivery_method: record<id: string, secret: string, temporarily_disabled: bool, type: string, url: string, custom_headers: list>, description: string, events: list<string>, filter: record<id: string, type: string>, oauth_client: record<id: string, type: string, summary: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11907,7 +12317,7 @@ export def "webhook-subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook subscription
@@ -11924,6 +12334,7 @@ export def "webhook-subscriptions updateWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --webhook-subscription: record # shape: {description?: string, events?: list, filter?: record, active?: bool, oauth_client_id?: string}
@@ -11938,7 +12349,7 @@ export def "webhook-subscriptions updateWebhookSubscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook subscription
@@ -11954,6 +12365,7 @@ export def "webhook-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11963,7 +12375,7 @@ export def "webhook-subscriptions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable a webhook subscription
@@ -11979,6 +12391,7 @@ export def "webhook-subscriptions-enable enableWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<webhook_subscription: record<id: string, type: string, active: bool, delivery_method: record<id: string, secret: string, temporarily_disabled: bool, type: string, url: string, custom_headers: list>, description: string, events: list<string>, filter: record<id: string, type: string>, oauth_client: record<id: string, type: string, summary: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11988,7 +12401,7 @@ export def "webhook-subscriptions-enable enableWebhookSubscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test a webhook subscription
@@ -12004,6 +12417,7 @@ export def "webhook-subscriptions-ping testWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12013,7 +12427,7 @@ export def "webhook-subscriptions-ping testWebhookSubscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List OAuth clients
@@ -12028,6 +12442,7 @@ export def "webhook-subscriptions-oauth-clients listOauthClients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<oauth_clients: table<id: string, type: string, name: string, client_id: string, scope: string, token_url: string, grant_type: string, status: string>> {
@@ -12038,7 +12453,7 @@ export def "webhook-subscriptions-oauth-clients listOauthClients" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an OAuth client
@@ -12054,6 +12469,7 @@ export def "webhook-subscriptions-oauth-clients createOauthClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   oauth_client: record # shape: {name: string, client_id: string, client_secret: string, scope?: string, token_url: string, grant_type: "client_credentials"}
@@ -12068,7 +12484,7 @@ export def "webhook-subscriptions-oauth-clients createOauthClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an OAuth client
@@ -12084,6 +12500,7 @@ export def "webhook-subscriptions-oauth-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<oauth_client: record<id: string, type: string, name: string, client_id: string, scope: string, token_url: string, grant_type: string, status: string>> {
@@ -12094,7 +12511,7 @@ export def "webhook-subscriptions-oauth-clients get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an OAuth client
@@ -12111,6 +12528,7 @@ export def "webhook-subscriptions-oauth-clients updateOauthClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   oauth_client: record # shape: {name?: string, client_id?: string, client_secret?: string, scope?: string, token_url?: string, grant_type?: "client_credentials"}
@@ -12125,7 +12543,7 @@ export def "webhook-subscriptions-oauth-clients updateOauthClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an OAuth client
@@ -12141,6 +12559,7 @@ export def "webhook-subscriptions-oauth-clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -12151,7 +12570,7 @@ export def "webhook-subscriptions-oauth-clients delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Workflow Integrations
@@ -12166,6 +12585,7 @@ export def "workflows-integrations listWorkflowIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --include-deprecated: oneof<nothing, bool> # Whether to include deprecated Integrations in the response. (default: false)
@@ -12179,7 +12599,7 @@ export def "workflows-integrations listWorkflowIntegrations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Workflow Integration
@@ -12195,6 +12615,7 @@ export def "workflows-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<id: string, type: string, domain_name: string, package_name: string, name: string, description: string, icon_svg: string, tags: list<string>, search_keywords: list<string>, is_deprecated: bool, entitled: bool, application: string, configuration_schema: record, secrets_schema: record, created_at: string, created_by: record<type: string, id: string, summary: string, html_url: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12204,7 +12625,7 @@ export def "workflows-integrations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all Workflow Integration Connections
@@ -12219,6 +12640,7 @@ export def "workflows-integrations-connections listWorkflowIntegrationConnection
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --name: string # Filter Integrations by partial name. (e.g. PagerDuty)
@@ -12232,7 +12654,7 @@ export def "workflows-integrations-connections listWorkflowIntegrationConnection
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Workflow Integration Connections
@@ -12248,6 +12670,7 @@ export def "workflows-integrations-connections listWorkflowIntegrationConnection
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
   --name: string # Filter Integrations by partial name. (e.g. PagerDuty)
@@ -12261,7 +12684,7 @@ export def "workflows-integrations-connections listWorkflowIntegrationConnection
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Workflow Integration Connection
@@ -12279,6 +12702,7 @@ export def "workflows-integrations-connections createWorkflowIntegrationConnecti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   name: string # The name given to the connection
@@ -12302,7 +12726,7 @@ export def "workflows-integrations-connections createWorkflowIntegrationConnecti
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Workflow Integration Connection
@@ -12319,6 +12743,7 @@ export def "workflows-integrations-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<id: string, type: string, integration_id: string, name: string, service_url: string, external_id: string, external_id_label: string, scopes: list<string>, is_default: bool, health: record<is_healthy: bool, health_message: string, last_checked_at: string>, configuration: record, secrets: record, teams: table<team_id: string, type: string>, apps: table<app_id: string, type: string>, created_at: string, created_by: record<type: string, id: string, summary: string, html_url: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12328,7 +12753,7 @@ export def "workflows-integrations-connections get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Workflow Integration Connection
@@ -12347,6 +12772,7 @@ export def "workflows-integrations-connections updateWorkflowIntegrationConnecti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   name: string # The name given to the connection
@@ -12370,7 +12796,7 @@ export def "workflows-integrations-connections updateWorkflowIntegrationConnecti
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Workflow Integration Connection
@@ -12387,6 +12813,7 @@ export def "workflows-integrations-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12396,7 +12823,7 @@ export def "workflows-integrations-connections delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recommended rules
@@ -12411,6 +12838,7 @@ export def "recommendations-event-orchestrations-rules listRecommendedRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --service-id: string # Filter recommended rules for a single service. Cannot be combined with `service_ids[]`.
   --service-ids: list # Filter recommended rules for multiple services. Cannot be combined with `service_id`.
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
@@ -12428,7 +12856,7 @@ export def "recommendations-event-orchestrations-rules listRecommendedRules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dismiss a recommended rule
@@ -12446,6 +12874,7 @@ export def "recommendations-event-orchestrations-services-rules-dismiss dismissR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   decision: record # shape: {feedback: "positive"|"negative"}
@@ -12460,7 +12889,7 @@ export def "recommendations-event-orchestrations-services-rules-dismiss dismissR
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Accept a recommended rule
@@ -12477,6 +12906,7 @@ export def "recommendations-event-orchestrations-services-rules-accept acceptRec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -12487,7 +12917,7 @@ export def "recommendations-event-orchestrations-services-rules-accept acceptRec
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an accepted rule
@@ -12504,6 +12934,7 @@ export def "recommendations-event-orchestrations-services-accepted-rules delete"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> any {
@@ -12514,5 +12945,5 @@ export def "recommendations-event-orchestrations-services-accepted-rules delete"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

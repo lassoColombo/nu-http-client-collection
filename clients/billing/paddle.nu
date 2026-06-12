@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def proration-billing-mode-completer [] { ["do_not_bill" "full_immediately" "ful
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers-addresses list-addresses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,6 +113,7 @@ export def "customers-addresses list-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -125,7 +127,7 @@ export def "customers-addresses list-addresses" [
   let full_url = (build-url $base $"/customers/($customer_id)/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an address for a customer
@@ -142,6 +144,7 @@ export def "customers-addresses create-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: any # Memorable description for this address.
   --first-line: any # First line of this address.
   --second-line: any # Second line of this address.
@@ -160,7 +163,7 @@ export def "customers-addresses create-address" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an address for a customer
@@ -178,13 +181,14 @@ export def "customers-addresses get-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, customer_id: record, description: any, first_line: any, second_line: any, city: any, postal_code: any, region: any, country_code: record, custom_data: any, status: record, created_at: record, updated_at: record, import_meta: any>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)/addresses/($address_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an address for a customer
@@ -202,6 +206,7 @@ export def "customers-addresses update-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: any # Memorable description for this address.
   --first-line: any # First line of this address.
   --second-line: any # Second line of this address.
@@ -220,7 +225,7 @@ export def "customers-addresses update-address" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List adjustments
@@ -236,6 +241,7 @@ export def "adjustments list-adjustments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --action: string@action-completer # Return entities for the specified action.
@@ -252,7 +258,7 @@ export def "adjustments list-adjustments" [
   let full_url = (build-url $base "/adjustments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an adjustment
@@ -268,6 +274,7 @@ export def "adjustments create-adjustment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer # How this adjustment impacts the related transaction.
   --type: any # default: partial
   --tax-mode: any # default: internal
@@ -283,7 +290,7 @@ export def "adjustments create-adjustment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a PDF credit note for an adjustment
@@ -300,6 +307,7 @@ export def "adjustments-credit-note get-adjustment-credit-note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disposition: string@disposition-completer # Determine whether the generated URL should download the PDF as an attachment saved locally, or open it inline in the browser.  Default: `attachment`.
 ]: nothing -> record<data: record<url: string>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -308,7 +316,7 @@ export def "adjustments-credit-note get-adjustment-credit-note" [
   let full_url = (build-url $base $"/adjustments/($adjustment_id)/credit-note" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List businesses for a customer
@@ -325,6 +333,7 @@ export def "customers-businesses list-businesses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -338,7 +347,7 @@ export def "customers-businesses list-businesses" [
   let full_url = (build-url $base $"/customers/($customer_id)/businesses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a business for a customer
@@ -355,6 +364,7 @@ export def "customers-businesses create-business" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: any # Name of this business.
   --company-number: any # Company number for this business.
   --tax-identifier: any # Tax or VAT Number for this business.
@@ -370,7 +380,7 @@ export def "customers-businesses create-business" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a business for a customer
@@ -388,13 +398,14 @@ export def "customers-businesses get-business" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, customer_id: record, name: record, company_number: any, tax_identifier: any, status: record, contacts: list<record>, created_at: record, updated_at: record, custom_data: any, import_meta: any>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)/businesses/($business_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a business for a customer
@@ -412,6 +423,7 @@ export def "customers-businesses update-business" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: any # Name of this business.
   --company-number: any # Company number for this business.
   --tax-identifier: any # Tax or VAT Number for this business.
@@ -427,7 +439,7 @@ export def "customers-businesses update-business" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List client-side tokens
@@ -443,6 +455,7 @@ export def "client-tokens list-client-tokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id`. (default: id[DESC])
@@ -454,7 +467,7 @@ export def "client-tokens list-client-tokens" [
   let full_url = (build-url $base "/client-tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a client-side token
@@ -470,6 +483,7 @@ export def "client-tokens create-client-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Short name of this client-side token. Typically unique and human-identifiable.
   --description: any
 ]: any -> record<data: record<id: record, token: record, name: string, description: any, status: record, revoked_at: any, created_at: record, updated_at: record>, meta: record<request_id: string>> {
@@ -481,7 +495,7 @@ export def "client-tokens create-client-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a client-side token
@@ -498,13 +512,14 @@ export def "client-tokens get-client-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, token: record, name: string, description: any, status: record, revoked_at: any, created_at: record, updated_at: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/client-tokens/($client_token_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a client-side token
@@ -521,6 +536,7 @@ export def "client-tokens update-client-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: any # default: active
 ]: any -> record<data: record<id: record, token: record, name: string, description: any, status: record, revoked_at: any, created_at: record, updated_at: record>, meta: record<request_id: string>> {
   let input = $in
@@ -531,7 +547,7 @@ export def "client-tokens update-client-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List customers
@@ -547,6 +563,7 @@ export def "customers list-customers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -561,7 +578,7 @@ export def "customers list-customers" [
   let full_url = (build-url $base "/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a customer
@@ -577,6 +594,7 @@ export def "customers create-customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: any # Full name of this customer. Required when creating transactions where `collection_mode` is `manual` (invoices).
   email: any # Email address for this customer.
   --marketing-consent: oneof<nothing, bool> # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
@@ -592,7 +610,7 @@ export def "customers create-customer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a customer
@@ -609,13 +627,14 @@ export def "customers get-customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, name: any, email: record, marketing_consent: bool, status: record, custom_data: any, locale: string, created_at: record, updated_at: record, import_meta: any>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a customer
@@ -632,6 +651,7 @@ export def "customers update-customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: any # Full name of this customer. Required when creating transactions where `collection_mode` is `manual` (invoices).
   --email: any # Email address for this customer.
   --marketing-consent: oneof<nothing, bool> # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
@@ -648,7 +668,7 @@ export def "customers update-customer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List credit balances for a customer
@@ -665,6 +685,7 @@ export def "customers-credit-balances list-credit-balances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency-code: list # Return entities that match the currency code. Use a comma-separated list to specify multiple currency codes.
 ]: nothing -> record<data: table<customer_id: record, currency_code: record, balance: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -673,7 +694,7 @@ export def "customers-credit-balances list-credit-balances" [
   let full_url = (build-url $base $"/customers/($customer_id)/credit-balances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate an authentication token for a customer
@@ -690,13 +711,14 @@ export def "customers-auth-token generate-customer-authentication-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<customer_auth_token: string, expires_at: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)/auth-token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a customer portal session
@@ -713,6 +735,7 @@ export def "customers-portal-sessions create-customer-portal-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-ids: list # List of subscriptions to create authenticated customer portal deep links for.
 ]: any -> record<data: record<id: record, customer_id: record, urls: record<general: record, subscriptions: list>, created_at: record>, meta: record<request_id: string>> {
   let input = $in
@@ -723,7 +746,7 @@ export def "customers-portal-sessions create-customer-portal-session" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List discount groups
@@ -739,6 +762,7 @@ export def "discount-groups list-discount-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -750,7 +774,7 @@ export def "discount-groups list-discount-groups" [
   let full_url = (build-url $base "/discount-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a discount group
@@ -766,6 +790,7 @@ export def "discount-groups create-discount-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of this discount group, typically something short and memorable for categorization. Not shown to customers.
 ]: any -> record<data: record<id: record, name: string, status: string, created_at: record, updated_at: record, import_meta: any>, meta: record<request_id: string>> {
   let input = $in
@@ -776,7 +801,7 @@ export def "discount-groups create-discount-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a discount group
@@ -793,13 +818,14 @@ export def "discount-groups get-discount-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, name: string, status: string, created_at: record, updated_at: record, import_meta: any>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/discount-groups/($discount_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a discount group
@@ -816,6 +842,7 @@ export def "discount-groups update-discount-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Whether this entity can be used in Paddle.
   --name: string # Name of this discount group, typically something short and memorable for categorization. Not shown to customers.
 ]: any -> record<data: record<id: record, name: string, status: string, created_at: record, updated_at: record, import_meta: any>, meta: record<request_id: string>> {
@@ -827,7 +854,7 @@ export def "discount-groups update-discount-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List discounts
@@ -843,6 +870,7 @@ export def "discounts list-discounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -859,7 +887,7 @@ export def "discounts list-discounts" [
   let full_url = (build-url $base "/discounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a discount
@@ -875,6 +903,7 @@ export def "discounts create-discount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Short description for this discount for your reference. Not shown to customers.
   --enabled-for-checkout: oneof<nothing, bool> # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
   --code: any # Unique code that customers can use to redeem this discount at checkout. Use letters and numbers only, up to 32 characters. Not case-sensitive.  If omitted and `enabled_for_checkout` is `true`, Paddle generates a random 10-character code.
@@ -899,7 +928,7 @@ export def "discounts create-discount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a discount
@@ -916,6 +945,7 @@ export def "discounts get-discount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
 ]: nothing -> record<data: record<id: record, status: record, description: string, enabled_for_checkout: bool, code: any, type: string, mode: record, amount: string, currency_code: any, recur: bool, maximum_recurring_intervals: any, usage_limit: any, restrict_to: any, expires_at: any, custom_data: any, times_used: int, discount_group_id: any, created_at: record, updated_at: record, import_meta: any, discount_group: record<id: record, name: string, status: string, created_at: record, updated_at: record, import_meta: any>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -924,7 +954,7 @@ export def "discounts get-discount" [
   let full_url = (build-url $base $"/discounts/($discount_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a discount
@@ -941,6 +971,7 @@ export def "discounts update-discount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Whether this entity can be used in Paddle.
   --description: string # Short description for this discount for your reference. Not shown to customers.
   --enabled-for-checkout: oneof<nothing, bool> # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
@@ -966,7 +997,7 @@ export def "discounts update-discount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List events types
@@ -982,13 +1013,14 @@ export def "event-types list-event-types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: record, description: string, group: string, available_versions: list>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events
@@ -1004,6 +1036,7 @@ export def "events list-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id` (for `event_id`). (default: id[DESC])
@@ -1015,7 +1048,7 @@ export def "events list-events" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Paddle IP addresses
@@ -1030,13 +1063,14 @@ export def "ips get-ip-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<ipv4_cidrs: list<string>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List notification settings
@@ -1052,6 +1086,7 @@ export def "notification-settings list-notification-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `200`; Maximum: `200`. (default: 200)
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id`. (default: id[DESC])
@@ -1064,7 +1099,7 @@ export def "notification-settings list-notification-settings" [
   let full_url = (build-url $base "/notification-settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a notification setting
@@ -1080,6 +1115,7 @@ export def "notification-settings create-notification-setting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Short description for this notification destination. Shown in the Paddle Dashboard.
   type: any # Where notifications should be sent for this destination.
   destination: string # Webhook endpoint URL or email address.
@@ -1096,7 +1132,7 @@ export def "notification-settings create-notification-setting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a notification setting
@@ -1113,13 +1149,14 @@ export def "notification-settings get-notification-setting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, description: string, type: record, destination: string, active: bool, api_version: int, include_sensitive_fields: bool, subscribed_events: list<record>, endpoint_secret_key: string, traffic_source: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notification-settings/($notification_setting_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a notification setting
@@ -1136,6 +1173,7 @@ export def "notification-settings update-notification-setting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Short description for this notification destination. Shown in the Paddle Dashboard.
   --destination: string # Webhook endpoint URL or email address.
   --active: oneof<nothing, bool> # Whether Paddle should try to deliver events to this notification destination. (default: true)
@@ -1152,7 +1190,7 @@ export def "notification-settings update-notification-setting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a notification setting
@@ -1169,13 +1207,14 @@ export def "notification-settings delete-notification-setting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<type: record, code: string, detail: string, documentation_url: string, errors: list<record>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notification-settings/($notification_setting_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List notifications
@@ -1191,6 +1230,7 @@ export def "notifications list-notifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --notification-setting-id: list # Return entities related to the specified notification destination. Use a comma-separated list to specify multiple notification destination IDs.
@@ -1207,7 +1247,7 @@ export def "notifications list-notifications" [
   let full_url = (build-url $base "/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a notification
@@ -1224,13 +1264,14 @@ export def "notifications get-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, type: record, status: record, payload: record<event_id: record, event_type: record, occurred_at: record, data: record, notification_id: string>, occurred_at: record, delivered_at: any, replayed_at: any, origin: record, last_attempt_at: any, retry_at: any, times_attempted: int, notification_setting_id: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/($notification_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List logs for a notification
@@ -1247,6 +1288,7 @@ export def "notifications-logs list-notification-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
 ]: nothing -> record<data: table<id: record, response_code: int, response_content_type: any, response_body: string, attempted_at: record>, meta: record<request_id: string, pagination: record<per_page: int, next: string, has_more: bool, estimated_total: int>>> {
@@ -1256,7 +1298,7 @@ export def "notifications-logs list-notification-logs" [
   let full_url = (build-url $base $"/notifications/($notification_id)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replay a notification
@@ -1273,13 +1315,14 @@ export def "notifications-replay replay-notification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<notification_id: string>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/($notification_id)/replay")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List payment methods for a customer
@@ -1296,6 +1339,7 @@ export def "customers-payment-methods list-customer-payment-methods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --address-id: list # Return entities related to the specified address. Use a comma-separated list to specify multiple address IDs.
@@ -1308,7 +1352,7 @@ export def "customers-payment-methods list-customer-payment-methods" [
   let full_url = (build-url $base $"/customers/($customer_id)/payment-methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a payment method for a customer
@@ -1326,13 +1370,14 @@ export def "customers-payment-methods get-customer-payment-method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, customer_id: record, address_id: record, type: record, card: any, paypal: any, underlying_details: any, south_korea_local_card: any, origin: record, saved_at: record, updated_at: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)/payment-methods/($payment_method_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a payment method for a customer
@@ -1350,13 +1395,14 @@ export def "customers-payment-methods delete-customer-payment-method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<type: record, code: string, detail: string, documentation_url: string, errors: list<record>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($customer_id)/payment-methods/($payment_method_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List prices
@@ -1372,6 +1418,7 @@ export def "prices list-prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -1388,7 +1435,7 @@ export def "prices list-prices" [
   let full_url = (build-url $base "/prices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a price
@@ -1405,6 +1452,7 @@ export def "prices create-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: any
   description: string # Internal description for this price, not shown to customers. Typically notes for your team.
   --type: any # Type of item. Standard items are considered part of your catalog and are shown in the Paddle dashboard. If omitted, defaults to `standard`. (default: standard)
@@ -1427,7 +1475,7 @@ export def "prices create-price" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a price
@@ -1444,6 +1492,7 @@ export def "prices get-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response.
 ]: nothing -> record<data: record<id: record, product_id: record, description: string, type: record, name: any, billing_cycle: any, trial_period: any, tax_mode: record, unit_price: record<amount: string, currency_code: string>, unit_price_overrides: list<record>, quantity: record<minimum: int, maximum: int>, status: record, custom_data: any, import_meta: any, created_at: record, updated_at: record, product: record<id: record, name: string, description: any, type: record, tax_category: string, image_url: any, custom_data: any, status: record, import_meta: any, created_at: record, updated_at: record>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1452,7 +1501,7 @@ export def "prices get-price" [
   let full_url = (build-url $base $"/prices/($price_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a price
@@ -1470,6 +1519,7 @@ export def "prices update-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Internal description for this price, not shown to customers. Typically notes for your team.
   --type: any # default: standard
   --name: any
@@ -1490,7 +1540,7 @@ export def "prices update-price" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview prices
@@ -1507,6 +1557,7 @@ export def "pricing-preview preview-prices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: any # Paddle ID of the customer that this preview is for, prefixed with `ctm_`.
   --address-id: any # Paddle ID of the address that this preview is for, prefixed with `add_`. Send one of `address_id`, `customer_ip_address`, or the `address` object when previewing.
   --business-id: any # Paddle ID of the business that this preview is for, prefixed with `biz_`.
@@ -1524,7 +1575,7 @@ export def "pricing-preview preview-prices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List products
@@ -1540,6 +1591,7 @@ export def "products list-products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -1555,7 +1607,7 @@ export def "products list-products" [
   let full_url = (build-url $base "/products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a product
@@ -1571,6 +1623,7 @@ export def "products create-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: any
   name: string # Name of this product.
   --description: any # Short description for this product.
@@ -1588,7 +1641,7 @@ export def "products create-product" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a product
@@ -1605,6 +1658,7 @@ export def "products get-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
 ]: nothing -> record<data: record<id: record, name: string, description: any, type: record, tax_category: string, image_url: any, custom_data: any, status: record, import_meta: any, created_at: record, updated_at: record, prices: list<record>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1613,7 +1667,7 @@ export def "products get-product" [
   let full_url = (build-url $base $"/products/($product_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a product
@@ -1630,6 +1684,7 @@ export def "products update-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of this product.
   --description: any # Short description for this product.
   --type: any # default: standard
@@ -1646,7 +1701,7 @@ export def "products update-product" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List reports
@@ -1662,6 +1717,7 @@ export def "reports list-reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id`. (default: id[DESC])
@@ -1673,7 +1729,7 @@ export def "reports list-reports" [
   let full_url = (build-url $base "/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a report
@@ -1690,6 +1746,7 @@ export def "reports create-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: any # Type of report to create.
   --filters: list # Filter criteria for this report. If omitted, reports are filtered to include data updated in the last 30 days. This means `updated_at` is greater than or equal to (`gte`) the date 30 days ago from the time the report was generated. — item shape: {name?: any, operator?: any, value?: any}
 ]: any -> record<data: any, meta: record<request_id: string>> {
@@ -1701,7 +1758,7 @@ export def "reports create-report" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a report
@@ -1718,13 +1775,14 @@ export def "reports get-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/reports/($report_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a CSV file for a report
@@ -1741,13 +1799,14 @@ export def "reports-download-url get-report-csv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<meta: record<request_id: string>, data: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/reports/($report_id)/download-url")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List simulation types
@@ -1763,13 +1822,14 @@ export def "simulation-types list-simulation-types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: string, label: string, description: string, group: string, type: record, events: list>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulation-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List simulations
@@ -1785,6 +1845,7 @@ export def "simulations list-simulations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -1798,7 +1859,7 @@ export def "simulations list-simulations" [
   let full_url = (build-url $base "/simulations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a simulation
@@ -1814,6 +1875,7 @@ export def "simulations create-simulation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of this simulation.
   --type: any # Single event sent for this simulation, in the format `entity.event_type`.
   --payload: any # Simulation payload. Pass a JSON object that matches the schema for an event type to simulate a custom payload. If omitted, Paddle populates with a demo example.
@@ -1827,7 +1889,7 @@ export def "simulations create-simulation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a simulation
@@ -1844,13 +1906,14 @@ export def "simulations get-simulation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/simulations/($simulation_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a simulation
@@ -1867,6 +1930,7 @@ export def "simulations update-simulation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of this simulation.
   --status: string@status-completer # Whether this entity can be used in Paddle.
   --type: any # Single event sent for this simulation, in the format `entity.event_type`.
@@ -1881,7 +1945,7 @@ export def "simulations update-simulation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List runs for a simulation
@@ -1898,6 +1962,7 @@ export def "simulations-runs list-simulation-runs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -1910,7 +1975,7 @@ export def "simulations-runs list-simulation-runs" [
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a run for a simulation
@@ -1927,13 +1992,14 @@ export def "simulations-runs create-simulation-run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: any, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a run for a simulation
@@ -1951,6 +2017,7 @@ export def "simulations-runs get-simulation-run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response.
 ]: nothing -> record<data: any, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1959,7 +2026,7 @@ export def "simulations-runs get-simulation-run" [
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs/($simulation_run_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events for a simulation run
@@ -1977,6 +2044,7 @@ export def "simulations-runs-events list-simulations-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -1988,7 +2056,7 @@ export def "simulations-runs-events list-simulations-events" [
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs/($simulation_run_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an event for a simulation run
@@ -2007,13 +2075,14 @@ export def "simulations-runs-events get-simulation-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, status: record, event_type: record, payload: record, request: any, response: any, created_at: record, updated_at: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs/($simulation_run_id)/events/($simulation_event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replay an event for a simulation run
@@ -2032,13 +2101,14 @@ export def "simulations-runs-events-replay replay-simulation-run-event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, status: record, event_type: record, payload: record, request: any, response: any, created_at: record, updated_at: record>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/simulations/($simulation_id)/runs/($simulation_run_id)/events/($simulation_event_id)/replay")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subscriptions
@@ -2054,6 +2124,7 @@ export def "subscriptions list-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
@@ -2071,7 +2142,7 @@ export def "subscriptions list-subscriptions" [
   let full_url = (build-url $base "/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a subscription
@@ -2088,6 +2159,7 @@ export def "subscriptions get-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
 ]: nothing -> record<data: record<id: record, status: record, customer_id: record, address_id: record, business_id: any, currency_code: record, created_at: record, updated_at: record, started_at: any, first_billed_at: any, next_billed_at: any, paused_at: any, canceled_at: any, discount: any, collection_mode: record, billing_details: any, current_billing_period: any, billing_cycle: record<interval: record, frequency: int>, scheduled_change: any, management_urls: record<update_payment_method: any, cancel: string>, items: list<record>, custom_data: any, import_meta: any, next_transaction: any, recurring_transaction_details: record<tax_rates_used: list, totals: record, line_items: list>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2096,7 +2168,7 @@ export def "subscriptions get-subscription" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription
@@ -2113,6 +2185,7 @@ export def "subscriptions update-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: any # Paddle ID of the customer that this subscription is for, prefixed with `ctm_`. Include to change the customer for a subscription.
   --address-id: any # Paddle ID of the address that this subscription is for, prefixed with `add_`. Include to change the address for a subscription.
   --business-id: any # Paddle ID of the business that this subscription is for, prefixed with `biz_`. Include to change the business for a subscription.
@@ -2135,7 +2208,7 @@ export def "subscriptions update-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a subscription
@@ -2152,6 +2225,7 @@ export def "subscriptions-cancel cancel-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --effective-from: any # default: next_billing_period
 ]: any -> record<data: record<id: record, status: record, customer_id: record, address_id: record, business_id: any, currency_code: record, created_at: record, updated_at: record, started_at: any, first_billed_at: any, next_billed_at: any, paused_at: any, canceled_at: any, discount: any, collection_mode: record, billing_details: any, current_billing_period: any, billing_cycle: record<interval: record, frequency: int>, scheduled_change: any, management_urls: record<update_payment_method: any, cancel: string>, items: list<record>, custom_data: any, import_meta: any>, meta: record<request_id: string>> {
   let input = $in
@@ -2162,7 +2236,7 @@ export def "subscriptions-cancel cancel-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pause a subscription
@@ -2179,6 +2253,7 @@ export def "subscriptions-pause pause-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --effective-from: any # default: next_billing_period
   --resume-at: any # RFC 3339 datetime string of when the paused subscription should resume. Omit to pause indefinitely until resumed.
   --on-resume: any # default: start_new_billing_period
@@ -2191,7 +2266,7 @@ export def "subscriptions-pause pause-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resume a paused subscription
@@ -2208,6 +2283,7 @@ export def "subscriptions-resume resume-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --effective-from: any # When this scheduled change should take effect from. RFC 3339 datetime string of when the subscription should resume.  Valid where subscriptions are `active` with a scheduled change to pause, or where they have the status of `paused`.
   --on-resume: any # default: start_new_billing_period
 ]: any -> record<data: record<id: record, status: record, customer_id: record, address_id: record, business_id: any, currency_code: record, created_at: record, updated_at: record, started_at: any, first_billed_at: any, next_billed_at: any, paused_at: any, canceled_at: any, discount: any, collection_mode: record, billing_details: any, current_billing_period: any, billing_cycle: record<interval: record, frequency: int>, scheduled_change: any, management_urls: record<update_payment_method: any, cancel: string>, items: list<record>, custom_data: any, import_meta: any>, meta: record<request_id: string>> {
@@ -2219,7 +2295,7 @@ export def "subscriptions-resume resume-subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Activate a trialing subscription
@@ -2236,13 +2312,14 @@ export def "subscriptions-activate activate-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, status: record, customer_id: record, address_id: record, business_id: any, currency_code: record, created_at: record, updated_at: record, started_at: any, first_billed_at: any, next_billed_at: any, paused_at: any, canceled_at: any, discount: any, collection_mode: record, billing_details: any, current_billing_period: any, billing_cycle: record<interval: record, frequency: int>, scheduled_change: any, management_urls: record<update_payment_method: any, cancel: string>, items: list<record>, custom_data: any, import_meta: any>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a transaction to update payment method
@@ -2259,13 +2336,14 @@ export def "subscriptions-update-payment-method-transaction get-subscription-upd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: record, status: string, customer_id: any, address_id: any, business_id: any, custom_data: any, currency_code: record, origin: record, subscription_id: any, invoice_id: any, invoice_number: any, collection_mode: record, discount_id: any, billing_details: any, billing_period: any, items: list<record>, details: record<tax_rates_used: list, totals: record, adjusted_totals: record, payout_totals: any, adjusted_payout_totals: any, line_items: list>, payments: list<record>, checkout: any, created_at: record, updated_at: record, billed_at: any, revised_at: any, customer: record<id: record, name: any, email: record, marketing_consent: bool, status: record, custom_data: any, locale: string, created_at: record, updated_at: record, import_meta: any>, address: record<id: record, customer_id: record, description: any, first_line: any, second_line: any, city: any, postal_code: any, region: any, country_code: record, custom_data: any, status: record, created_at: record, updated_at: record, import_meta: any>, business: record<id: record, customer_id: record, name: record, company_number: any, tax_identifier: any, status: record, contacts: list, created_at: record, updated_at: record, custom_data: any, import_meta: any>, discount: record<id: record, status: record, description: string, enabled_for_checkout: bool, code: any, type: string, mode: record, amount: string, currency_code: any, recur: bool, maximum_recurring_intervals: any, usage_limit: any, restrict_to: any, expires_at: any, custom_data: any, times_used: int, discount_group_id: any, created_at: record, updated_at: record, import_meta: any>, adjustments: list<record>, adjustments_totals: record<subtotal: string, tax: string, total: string, fee: string, retained_fee: string, earnings: string, breakdown: record, currency_code: record>, available_payment_methods: list<string>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/update-payment-method-transaction")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview an update to a subscription
@@ -2282,6 +2360,7 @@ export def "subscriptions-preview preview-subscription-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: any # Paddle ID of the customer that this subscription is for, prefixed with `ctm_`. Include to change the customer for a subscription.
   --address-id: any # Paddle ID of the address that this subscription is for, prefixed with `add_`. Include to change the address for a subscription.
   --business-id: any # Paddle ID of the business that this subscription is for, prefixed with `biz_`. Include to change the business for a subscription.
@@ -2304,7 +2383,7 @@ export def "subscriptions-preview preview-subscription-update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a one-time charge for a subscription
@@ -2321,6 +2400,7 @@ export def "subscriptions-charge create-subscription-charge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   effective_from: any # When one-time charges should be billed.
   items: list # List of one-time charges to bill for. Only prices where the `billing_cycle` is `null` may be added.  You can charge for items that you've added to your catalog by passing the Paddle ID of an existing price entity, or you can charge for non-catalog items by passing a price object.  Non-catalog items can be for existing products, or you can pass a product object as part of your price to charge for a non-catalog product.
   --on-payment-failure: any # default: prevent_change
@@ -2333,7 +2413,7 @@ export def "subscriptions-charge create-subscription-charge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview a one-time charge for a subscription
@@ -2350,6 +2430,7 @@ export def "subscriptions-charge-preview preview-subscription-charge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   effective_from: any # When one-time charges should be billed.
   items: list # List of one-time charges to bill for. Only prices where the `billing_cycle` is `null` may be added.  You can charge for items that you've added to your catalog by passing the Paddle ID of an existing price entity, or you can charge for non-catalog items by passing a price object.  Non-catalog items can be for existing products, or you can pass a product object as part of your price to charge for a non-catalog product.
   --on-payment-failure: any # default: prevent_change
@@ -2362,7 +2443,7 @@ export def "subscriptions-charge-preview preview-subscription-charge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List transactions
@@ -2378,6 +2459,7 @@ export def "transactions list-transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
   --id: list # Return only the IDs specified. Use a comma-separated list to get multiple entities.
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
@@ -2399,7 +2481,7 @@ export def "transactions list-transactions" [
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a transaction
@@ -2416,6 +2498,7 @@ export def "transactions create-transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
   --status: any # Status of this transaction. You may set a transaction to `billed` when creating, or omit to let Paddle set the status. Transactions are created as `ready` if they have an `address_id`, `customer_id`, and `items`, otherwise they are created as `draft`.  Marking as `billed` when creating is typically used when working with manually-collected transactions as part of an invoicing workflow. Billed transactions cannot be updated, only canceled.
   --customer-id: any # Paddle ID of the customer that this transaction is for, prefixed with `ctm_`. If omitted, transaction status is `draft`.
@@ -2441,7 +2524,7 @@ export def "transactions create-transaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a transaction
@@ -2458,6 +2541,7 @@ export def "transactions get-transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
 ]: nothing -> record<data: record<id: record, status: string, customer_id: any, address_id: any, business_id: any, custom_data: any, currency_code: record, origin: record, subscription_id: any, invoice_id: any, invoice_number: any, collection_mode: record, discount_id: any, billing_details: any, billing_period: any, items: list<record>, details: record<tax_rates_used: list, totals: record, adjusted_totals: record, payout_totals: any, adjusted_payout_totals: any, line_items: list>, payments: list<record>, checkout: any, created_at: record, updated_at: record, billed_at: any, revised_at: any, address: record<id: record, customer_id: record, description: any, first_line: any, second_line: any, city: any, postal_code: any, region: any, country_code: record, custom_data: any, status: record, created_at: record, updated_at: record, import_meta: any>, adjustments: list<record>, adjustments_totals: record<subtotal: string, tax: string, total: string, fee: string, retained_fee: string, earnings: string, breakdown: record, currency_code: record>, business: record<id: record, customer_id: record, name: record, company_number: any, tax_identifier: any, status: record, contacts: list, created_at: record, updated_at: record, custom_data: any, import_meta: any>, customer: record<id: record, name: any, email: record, marketing_consent: bool, status: record, custom_data: any, locale: string, created_at: record, updated_at: record, import_meta: any>, discount: record<id: record, status: record, description: string, enabled_for_checkout: bool, code: any, type: string, mode: record, amount: string, currency_code: any, recur: bool, maximum_recurring_intervals: any, usage_limit: any, restrict_to: any, expires_at: any, custom_data: any, times_used: int, discount_group_id: any, created_at: record, updated_at: record, import_meta: any>, available_payment_methods: list<string>>, meta: record<request_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2466,7 +2550,7 @@ export def "transactions get-transaction" [
   let full_url = (build-url $base $"/transactions/($transaction_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a transaction
@@ -2484,6 +2568,7 @@ export def "transactions update-transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Include related entities in the response. Use a comma-separated list to specify multiple entities.
   --status: any # Status of this transaction. You may set a transaction to `billed` or `canceled`. Billed transactions cannot be changed.  For manually-collected transactions, marking as `billed` is essentially issuing an invoice.
   --customer-id: any # Paddle ID of the customer that this transaction is for, prefixed with `ctm_`.
@@ -2509,7 +2594,7 @@ export def "transactions update-transaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview a transaction
@@ -2525,6 +2610,7 @@ export def "transactions-preview preview-transaction-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: any # Paddle ID of the customer that this transaction preview is for, prefixed with `ctm_`.
   --currency-code: any # Supported three-letter ISO 4217 currency code.
   --discount-id: any # Paddle ID of the discount to apply to this transaction preview, prefixed with `dsc_`.
@@ -2543,7 +2629,7 @@ export def "transactions-preview preview-transaction-create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revise customer information on a billed or completed transaction
@@ -2560,6 +2646,7 @@ export def "transactions-revise revise-transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customer: any # Revised customer information for this transaction.
   --business: any # Revised business information for this transaction.
   --address: any # Revised address information for this transaction.
@@ -2572,7 +2659,7 @@ export def "transactions-revise revise-transaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a PDF invoice for a transaction
@@ -2589,6 +2676,7 @@ export def "transactions-invoice get-transaction-invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disposition: string@disposition-completer # Determine whether the generated URL should download the PDF as an attachment saved locally, or open it inline in the browser.  Default: `attachment`.
 ]: nothing -> record<meta: record<request_id: string>, data: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2597,5 +2685,5 @@ export def "transactions-invoice get-transaction-invoice" [
   let full_url = (build-url $base $"/transactions/($transaction_id)/invoice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

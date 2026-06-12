@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -80,7 +81,7 @@ def depth-completer [] { ["detailed" "skim" "standard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "events search-events-v2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +116,7 @@ export def "events search-events-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
   --date-end: string # Inclusive end date in YYYY-MM-DD, matched against the event or story date. Alias `end_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-17)
   --country: string # Documented input is a plain English country name. ISO-3 and legacy FIPS aliases are accepted; output normalizes to the country name. (e.g. Lebanon)
@@ -155,7 +157,7 @@ export def "events search-events-v2" [
   let full_url = (build-url $base "/api/v2/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Event
@@ -171,13 +173,14 @@ export def "events get-event-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, data: record<id: string, url: string, primary_story_url: string, family: string, title: string, summary: string, image_url: string, event_date: string, category: string, subcategory: string, domain: string, event_code: string, geo: record<country: string, region: string, continent: string, admin1: string, location: string, latitude: float, longitude: float>, geo_context: record<location_country: string, actor_origin_countries: list>, actors: list<record>, metrics: record<significance: float, goldstein_scale: float, magnitude: float, systemic_importance: float, propagation_potential: float, market_sensitivity: float, confidence: float, article_count: int>, has_fatalities: bool, fatalities: int, story_refs: list<record>, entity_refs: list<record>, top_articles: list<record>, civilian_targeting: bool, civilian_targeting_label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/events/($event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize Events
@@ -194,6 +197,7 @@ export def "events-summary summarize-events-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group-by: string@group-by-completer # Summary grouping dimension. For Events, category is Conflict event type or CAMEO+ domain and subcategory is Conflict sub-event type or CAMEO+ event description/code. For Stories, category/subcategory grouping uses linked Event taxonomy; use story_category only as a Story-cluster filter. (e.g. date)
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
   --date-end: string # Inclusive end date in YYYY-MM-DD, matched against the event or story date. Alias `end_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-17)
@@ -232,7 +236,7 @@ export def "events-summary summarize-events-v2" [
   let full_url = (build-url $base "/api/v2/events/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Stories
@@ -249,6 +253,7 @@ export def "stories search-stories-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
   --date-end: string # Inclusive end date in YYYY-MM-DD, matched against the event or story date. Alias `end_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-17)
   --country: string # Documented input is a plain English country name. ISO-3 and legacy FIPS aliases are accepted; output normalizes to the country name. (e.g. Lebanon)
@@ -277,7 +282,7 @@ export def "stories search-stories-v2" [
   let full_url = (build-url $base "/api/v2/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Story
@@ -293,13 +298,14 @@ export def "stories get-story-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, data: record<id: string, url: string, title: string, image_url: string, story_date: string, category: string, subcategory: string, geo: record<country: string, region: string, continent: string, admin1: string, location: string, latitude: float, longitude: float>, geo_context: record<location_country: string, actor_origin_countries: list>, metrics: record<significance: float, article_count: int, linked_event_count: int, max_linked_event_significance: float, civilian_targeting_event_count: int>, has_events: bool, has_fatalities: bool, fatalities: int, linked_events: list<record>, entity_refs: list<record>, top_articles: list<record>, has_civilian_targeting: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/stories/($story_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Story Articles
@@ -315,6 +321,7 @@ export def "stories-articles get-story-articles-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of records to return. (default: 25, e.g. 25)
   --cursor: string # Pagination cursor from `pagination.next_cursor`.
 ]: nothing -> record<success: bool, pagination: record<limit: int, cursor: string, next_cursor: string>, data: table<id: string, url: string, title: string, domain: string, domain_avatar_url: string, image_url: string, article_date: string, rank: int, role: string>> {
@@ -324,7 +331,7 @@ export def "stories-articles get-story-articles-v2" [
   let full_url = (build-url $base $"/api/v2/stories/($story_id)/articles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize Stories
@@ -341,6 +348,7 @@ export def "stories-summary summarize-stories-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group-by: string@group-by-completer # Summary grouping dimension. For Events, category is Conflict event type or CAMEO+ domain and subcategory is Conflict sub-event type or CAMEO+ event description/code. For Stories, category/subcategory grouping uses linked Event taxonomy; use story_category only as a Story-cluster filter. (e.g. date)
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
   --date-end: string # Inclusive end date in YYYY-MM-DD, matched against the event or story date. Alias `end_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-17)
@@ -367,7 +375,7 @@ export def "stories-summary summarize-stories-v2" [
   let full_url = (build-url $base "/api/v2/stories/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Entities
@@ -384,6 +392,7 @@ export def "entities search-entities-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Entity name or phrase to search for.
   --type: string@type-completer # Optional entity type filter.
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
@@ -404,7 +413,7 @@ export def "entities search-entities-v2" [
   let full_url = (build-url $base "/api/v2/entities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Entity
@@ -420,6 +429,7 @@ export def "entities get-entity-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-start: string # Inclusive start date in YYYY-MM-DD, matched against the event or story date. Alias `start_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-11)
   --date-end: string # Inclusive end date in YYYY-MM-DD, matched against the event or story date. Alias `end_date` is accepted for compatibility. Omit dates for the default recent window; explicit windows may not exceed 30 days. (format: date, e.g. 2026-04-17)
   --limit: int # Number of linked records to return. (default: 10, e.g. 10)
@@ -430,7 +440,7 @@ export def "entities get-entity-v2" [
   let full_url = (build-url $base $"/api/v2/entities/($entity_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Admin1 Values
@@ -445,6 +455,7 @@ export def "geo-admin1 list-admin1-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Plain English country name, for example `France` or `United States`. ISO-3 and legacy FIPS aliases are accepted. (e.g. France)
 ]: nothing -> record<success: bool, country: string, admin1: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -453,7 +464,7 @@ export def "geo-admin1 list-admin1-v2" [
   let full_url = (build-url $base "/api/v2/geo/admin1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Energy Assets
@@ -468,6 +479,7 @@ export def "energy-assets search-energy-assets-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tracker: string # Comma-separated GEM trackers. Valid values: coal_plants, coal_mines, coal_terminals, oil_gas_plants, oil_gas_extraction, lng_terminals, nuclear, geothermal, bioenergy, hydropower, solar, wind, gas_pipelines, oil_pipelines, lng_carriers. Omit for all trackers. (e.g. coal_plants,solar)
   --country: string # Plain English country name, ISO-3, or legacy FIPS alias. Filters primary or secondary country for cross-border assets. (e.g. United States)
   --region: string # Plain English region. Expands to the same ISO-3 country list used by V2 Events. (e.g. Middle East)
@@ -498,7 +510,7 @@ export def "energy-assets search-energy-assets-v2" [
   let full_url = (build-url $base "/api/v2/energy/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize Energy Assets
@@ -513,6 +525,7 @@ export def "energy-assets-summary summarize-energy-assets-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group-by: string@group-by-completer-1 # Summary aggregation dimension. (default: tracker, e.g. tracker)
   --tracker: string # Comma-separated GEM trackers. Valid values: coal_plants, coal_mines, coal_terminals, oil_gas_plants, oil_gas_extraction, lng_terminals, nuclear, geothermal, bioenergy, hydropower, solar, wind, gas_pipelines, oil_pipelines, lng_carriers. Omit for all trackers. (e.g. coal_plants,solar)
   --country: string # Plain English country name, ISO-3, or legacy FIPS alias. Filters primary or secondary country for cross-border assets. (e.g. United States)
@@ -541,7 +554,7 @@ export def "energy-assets-summary summarize-energy-assets-v2" [
   let full_url = (build-url $base "/api/v2/energy/assets/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Map Energy Assets
@@ -556,6 +569,7 @@ export def "energy-assets-map map-energy-assets-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tracker: string # Comma-separated GEM trackers. Valid values: coal_plants, coal_mines, coal_terminals, oil_gas_plants, oil_gas_extraction, lng_terminals, nuclear, geothermal, bioenergy, hydropower, solar, wind, gas_pipelines, oil_pipelines, lng_carriers. Omit for all trackers. (e.g. coal_plants,solar)
   --country: string # Plain English country name, ISO-3, or legacy FIPS alias. Filters primary or secondary country for cross-border assets. (e.g. United States)
   --region: string # Plain English region. Expands to the same ISO-3 country list used by V2 Events. (e.g. Middle East)
@@ -585,7 +599,7 @@ export def "energy-assets-map map-energy-assets-v2" [
   let full_url = (build-url $base "/api/v2/energy/assets/map" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Energy Asset
@@ -602,13 +616,14 @@ export def "energy-assets get-energy-asset-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool, data: record<id: string, gem_id: string, tracker: string, tier: string, asset_class: string, name: string, name_local: string, name_other: string, status: string, status_detail: string, start_year: int, retired_year: int, fuel: string, capacity: record<value: float, unit: string, mw: float, mw_secondary: float>, geo: record<country: string, country_iso3: string, secondary_country_iso3: string, region: string, subregion: string, continent: string, state_province: string, city: string, lat: float, lon: float, location_accuracy: string>, owners_raw: string, owners: list<record>, operators_raw: string, operators: list<record>, parents_raw: string, parents: list<record>, wiki_url: string, last_updated: string, detail_url: string, api_url: string>, raw: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/energy/assets/($tracker)/($gem_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Brief
@@ -623,6 +638,7 @@ export def "briefs create-brief-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope_text: string # One or two plain sentences: the situation, where it is, who/what is affected, and the decision it informs. (e.g. Monitor Red Sea maritime disruption risk to shipping across Yemen, the Red Sea, and the Gulf of Aden.)
   --time-window: string@time-window-completer # Recent window the Brief analyses. (default: 24h)
   --baseline-window: string@baseline-window-completer # Earlier comparison window for change detection.
@@ -648,7 +664,7 @@ export def "briefs create-brief-v2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Briefs
@@ -663,13 +679,14 @@ export def "briefs list-briefs-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<briefs: table<id: string, title: string, brief_type: string, status: string, created_at: string, updated_at: string, error_message: string, public_url: string, web_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/briefs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch Brief
@@ -685,11 +702,12 @@ export def "briefs get-brief-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, title: string, brief_type: string, status: string, created_at: string, updated_at: string, error_message: string, input: record, document: record, citations: list<record>, appendix: record, public_url: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v2/briefs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

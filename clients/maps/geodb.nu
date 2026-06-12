@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["x-rapidapi-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "geo-admin-divisions findAdminDivisionsUsingGET" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "geo-admin-divisions findAdminDivisionsUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # Only places near this location. Latitude/longitude in ISO-6709 format: ±DD.DDDD±DDD.DDDD
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
@@ -124,7 +126,7 @@ export def "geo-admin-divisions findAdminDivisionsUsingGET" [
   let full_url = (build-url $base "/geo/adminDivisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get administrative division details
@@ -140,6 +142,7 @@ export def "geo-admin-divisions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
@@ -149,7 +152,7 @@ export def "geo-admin-divisions get" [
   let full_url = (build-url $base $"/geo/adminDivisions/($divisionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find cities near division
@@ -165,6 +168,7 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
   --countryIds: string # Only places in these countries (comma-delimited country codes or WikiData ids)
@@ -189,7 +193,7 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
   let full_url = (build-url $base $"/geo/adminDivisions/($divisionId)/nearbyCities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find divisions near division
@@ -205,6 +209,7 @@ export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
   --countryIds: string # Only places in these countries (comma-delimited country codes or WikiData ids)
@@ -228,7 +233,7 @@ export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionU
   let full_url = (build-url $base $"/geo/adminDivisions/($divisionId)/nearbyDivisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find cities
@@ -243,6 +248,7 @@ export def "geo-cities findCitiesUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # Only places near this location. Latitude/longitude in ISO-6709 format: ±DD.DDDD±DDD.DDDD
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
@@ -268,7 +274,7 @@ export def "geo-cities findCitiesUsingGET" [
   let full_url = (build-url $base "/geo/cities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get city details
@@ -284,6 +290,7 @@ export def "geo-cities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
@@ -293,7 +300,7 @@ export def "geo-cities get" [
   let full_url = (build-url $base $"/geo/cities/($cityId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get city date-time
@@ -309,13 +316,14 @@ export def "geo-cities-date-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/geo/cities/($cityId)/dateTime")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get city distance
@@ -331,6 +339,7 @@ export def "geo-cities-distance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --toCityId: string # Distance to this city
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
 ]: nothing -> any {
@@ -340,7 +349,7 @@ export def "geo-cities-distance get" [
   let full_url = (build-url $base $"/geo/cities/($cityId)/distance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get city admin region
@@ -356,6 +365,7 @@ export def "geo-cities-located-in get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
@@ -365,7 +375,7 @@ export def "geo-cities-located-in get" [
   let full_url = (build-url $base $"/geo/cities/($cityId)/locatedIn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find cities near city
@@ -381,6 +391,7 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
   --countryIds: string # Only places in these countries (comma-delimited country codes or WikiData ids)
@@ -405,7 +416,7 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
   let full_url = (build-url $base $"/geo/cities/($cityId)/nearbyCities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get city time
@@ -421,13 +432,14 @@ export def "geo-cities-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/geo/cities/($cityId)/time")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find countries
@@ -442,6 +454,7 @@ export def "geo-countries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currencyCode: string # Only countries supporting this currency
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
   --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
@@ -458,7 +471,7 @@ export def "geo-countries list" [
   let full_url = (build-url $base "/geo/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get country details
@@ -474,6 +487,7 @@ export def "geo-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
@@ -483,7 +497,7 @@ export def "geo-countries get" [
   let full_url = (build-url $base $"/geo/countries/($countryId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find country regions
@@ -499,6 +513,7 @@ export def "geo-countries-regions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
   --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -514,7 +529,7 @@ export def "geo-countries-regions list" [
   let full_url = (build-url $base $"/geo/countries/($countryId)/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get region details
@@ -531,6 +546,7 @@ export def "geo-countries-regions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
@@ -540,7 +556,7 @@ export def "geo-countries-regions get" [
   let full_url = (build-url $base $"/geo/countries/($countryId)/regions/($regionCode)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find country region administrative divisions
@@ -557,6 +573,7 @@ export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
@@ -576,7 +593,7 @@ export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
   let full_url = (build-url $base $"/geo/countries/($countryId)/regions/($regionCode)/adminDivisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find country region cities
@@ -593,6 +610,7 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
@@ -613,7 +631,7 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
   let full_url = (build-url $base $"/geo/countries/($countryId)/regions/($regionCode)/cities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find cities near location
@@ -629,6 +647,7 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
   --countryIds: string # Only places in these countries (comma-delimited country codes or WikiData ids)
@@ -653,7 +672,7 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
   let full_url = (build-url $base $"/geo/locations/($locationId)/nearbyCities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find divisions near location
@@ -669,6 +688,7 @@ export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --radius: int # The location radius within which to find places (format: int32)
   --distanceUnit: string # The unit of distance: MI | KM (default: MI)
   --countryIds: string # Only places in these countries (comma-delimited country codes or WikiData ids)
@@ -692,7 +712,7 @@ export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
   let full_url = (build-url $base $"/geo/locations/($locationId)/nearbyDivisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find currencies
@@ -707,6 +727,7 @@ export def "locale-currencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryId: string # Currencies for this country id
   --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
@@ -718,7 +739,7 @@ export def "locale-currencies get" [
   let full_url = (build-url $base "/locale/currencies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get languages
@@ -733,6 +754,7 @@ export def "locale-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -743,7 +765,7 @@ export def "locale-languages get" [
   let full_url = (build-url $base "/locale/languages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get locales
@@ -758,6 +780,7 @@ export def "locale-locales get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -768,7 +791,7 @@ export def "locale-locales get" [
   let full_url = (build-url $base "/locale/locales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time-zones
@@ -783,6 +806,7 @@ export def "locale-timezones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -793,7 +817,7 @@ export def "locale-timezones list" [
   let full_url = (build-url $base "/locale/timezones" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time-zone
@@ -809,13 +833,14 @@ export def "locale-timezones get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/locale/timezones/($zoneId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time-zone date-time
@@ -831,13 +856,14 @@ export def "locale-timezones-date-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/locale/timezones/($zoneId)/dateTime")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time-zone time
@@ -853,11 +879,12 @@ export def "locale-timezones-time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/locale/timezones/($zoneId)/time")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

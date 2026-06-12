@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def direction-completer-1 [] { ["Average" "From" "To"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accident-stats Get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -111,6 +112,7 @@ export def "accident-stats Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: int, lat: float, lon: float, location: string, date: string, severity: string, borough: string, casualties: list<record>, vehicles: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -118,7 +120,7 @@ export def "accident-stats Get" [
   let full_url = (build-url $base $"/AccidentStats/($year)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets air quality data feed
@@ -133,6 +135,7 @@ export def "air-quality Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -140,7 +143,7 @@ export def "air-quality Get" [
   let full_url = (build-url $base "/AirQuality")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all bike point locations. The Place object has an addtionalProperties array which contains the nbBikes, nbDocks and nbSpaces             numbers which give the status of the BikePoint. A mismatch in these numbers i.e. nbDocks - (nbBikes + nbSpaces) != 0 indicates broken docks.
@@ -155,6 +158,7 @@ export def "bike-point GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -162,7 +166,7 @@ export def "bike-point GetAll" [
   let full_url = (build-url $base "/BikePoint")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the bike point with the given id.
@@ -178,6 +182,7 @@ export def "bike-point Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: table<category: string, key: string, sourceSystemKey: string, value: string, modified: string>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -185,7 +190,7 @@ export def "bike-point Get" [
   let full_url = (build-url $base $"/BikePoint/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for bike stations by their name, a bike point's name often contains information about the name of the street             or nearby landmarks, for example. Note that the search result does not contain the PlaceProperties i.e. the status             or occupancy of the BikePoint, to get that information you should retrieve the BikePoint by its id on /BikePoint/id.
@@ -200,6 +205,7 @@ export def "bike-point-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # The search term e.g. "St. James"
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -209,7 +215,7 @@ export def "bike-point-search Search" [
   let full_url = (build-url $base "/BikePoint/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets taxis and minicabs contact information
@@ -224,6 +230,7 @@ export def "cabwise-search Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lat: float # Latitude (format: double)
   --lon: float # Longitude (format: double)
@@ -242,7 +249,7 @@ export def "cabwise-search Get" [
   let full_url = (build-url $base "/Cabwise/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all of the available journey planner modes
@@ -257,6 +264,7 @@ export def "journey-meta-modes Meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<isTflService: bool, isFarePaying: bool, isScheduledService: bool, modeName: string, motType: string, network: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -264,7 +272,7 @@ export def "journey-meta-modes Meta" [
   let full_url = (build-url $base "/Journey/Meta/Modes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform a Journey Planner search from the parameters specified in simple types
@@ -281,6 +289,7 @@ export def "journey-journey-results-to JourneyResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --via: string # Travel through point on the journey. Can be WGS84 coordinates expressed as "lat,long", a UK postcode, a Naptan (StopPoint) id, an ICS StopId, or a free-text string (will cause disambiguation unless it exactly matches a point of interest name).
   --nationalSearch: oneof<nothing, bool> # Does the journey cover stops outside London? eg. "nationalSearch=true"
@@ -318,7 +327,7 @@ export def "journey-journey-results-to JourneyResults" [
   let full_url = (build-url $base $"/Journey/JourneyResults/($from)/to/($to)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid modes
@@ -333,6 +342,7 @@ export def "line-meta-modes MetaModes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<isTflService: bool, isFarePaying: bool, isScheduledService: bool, modeName: string, motType: string, network: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -340,7 +350,7 @@ export def "line-meta-modes MetaModes" [
   let full_url = (build-url $base "/Line/Meta/Modes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid severity codes
@@ -355,6 +365,7 @@ export def "line-meta-severity MetaSeverity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<modeName: string, severityLevel: int, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -362,7 +373,7 @@ export def "line-meta-severity MetaSeverity" [
   let full_url = (build-url $base "/Line/Meta/Severity")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid disruption categories
@@ -377,6 +388,7 @@ export def "line-meta-disruption-categories MetaDisruptionCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -384,7 +396,7 @@ export def "line-meta-disruption-categories MetaDisruptionCategories" [
   let full_url = (build-url $base "/Line/Meta/DisruptionCategories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid ServiceTypes to filter on
@@ -399,6 +411,7 @@ export def "line-meta-service-types MetaServiceTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -406,7 +419,7 @@ export def "line-meta-service-types MetaServiceTypes" [
   let full_url = (build-url $base "/Line/Meta/ServiceTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets lines that match the specified line ids.
@@ -422,6 +435,7 @@ export def "line Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -429,7 +443,7 @@ export def "line Get" [
   let full_url = (build-url $base $"/Line/($ids)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets lines that serve the given modes.
@@ -445,6 +459,7 @@ export def "line-mode GetByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -452,7 +467,7 @@ export def "line-mode GetByMode" [
   let full_url = (build-url $base $"/Line/Mode/($modes)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all valid routes for all lines, including the name and id of the originating and terminating stops for each route.
@@ -467,6 +482,7 @@ export def "line-route Route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
@@ -476,7 +492,7 @@ export def "line-route Route" [
   let full_url = (build-url $base "/Line/Route" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all valid routes for given line ids, including the name and id of the originating and terminating stops for each route.
@@ -492,6 +508,7 @@ export def "line-route LineRoutesByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
@@ -501,7 +518,7 @@ export def "line-route LineRoutesByIds" [
   let full_url = (build-url $base $"/Line/($ids)/Route" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all lines and their valid routes for given modes, including the name and id of the originating and terminating stops for each route
@@ -517,6 +534,7 @@ export def "line-mode-route RouteByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
@@ -526,7 +544,7 @@ export def "line-mode-route RouteByMode" [
   let full_url = (build-url $base $"/Line/Mode/($modes)/Route" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all valid routes for given line id, including the sequence of stops on each route.
@@ -543,6 +561,7 @@ export def "line-route-sequence RouteSequence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
   --excludeCrowding: oneof<nothing, bool> # That excludes crowding from line disruptions. Can be true or false.
@@ -553,7 +572,7 @@ export def "line-route-sequence RouteSequence" [
   let full_url = (build-url $base $"/Line/($id)/Route/Sequence/($direction)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the line status for given line ids during the provided dates e.g Minor Delays
@@ -571,6 +590,7 @@ export def "line-status-to Status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
   --startDate: string
@@ -584,7 +604,7 @@ export def "line-status-to Status" [
   let full_url = (build-url $base $"/Line/($ids)/Status/($StartDate)/to/($EndDate)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the line status of for given line ids e.g Minor Delays
@@ -600,6 +620,7 @@ export def "line-status StatusByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
@@ -609,7 +630,7 @@ export def "line-status StatusByIds" [
   let full_url = (build-url $base $"/Line/($ids)/Status" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for lines or routes matching the query string
@@ -625,6 +646,7 @@ export def "line-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --modes: list # Optionally filter by the specified modes
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
@@ -635,7 +657,7 @@ export def "line-search Search" [
   let full_url = (build-url $base $"/Line/Search/($query)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the line status for all lines with a given severity             A list of valid severity codes can be obtained from a call to Line/Meta/Severity
@@ -651,6 +673,7 @@ export def "line-status StatusBySeverity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -658,7 +681,7 @@ export def "line-status StatusBySeverity" [
   let full_url = (build-url $base $"/Line/Status/($severity)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the line status of for all lines for the given modes
@@ -674,6 +697,7 @@ export def "line-mode-status StatusByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
   --severityLevel: string # If specified, ensures that only those line status(es) are returned within the lines that have disruptions with the matching severity level.
@@ -684,7 +708,7 @@ export def "line-mode-status StatusByMode" [
   let full_url = (build-url $base $"/Line/Mode/($modes)/Status" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of the stations that serve the given line id
@@ -700,6 +724,7 @@ export def "line-stop-points StopPoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tflOperatedNationalRailStationsOnly: oneof<nothing, bool> # If the national-rail line is requested, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -709,7 +734,7 @@ export def "line-stop-points StopPoints" [
   let full_url = (build-url $base $"/Line/($id)/StopPoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the timetable for a specified station on the give line
@@ -726,6 +751,7 @@ export def "line-timetable Timetable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<lineId: string, lineName: string, direction: string, pdfUrl: string, stations: table<routeId: int, parentId: string, stationId: string, icsId: string, topMostParentId: string, direction: string, towards: string, modes: list, stopType: string, stopLetter: string, zone: string, accessibilitySummary: string, hasDisruption: bool, lines: list, status: bool, id: string, url: string, name: string, lat: float, lon: float>, stops: table<routeId: int, parentId: string, stationId: string, icsId: string, topMostParentId: string, direction: string, towards: string, modes: list, stopType: string, stopLetter: string, zone: string, accessibilitySummary: string, hasDisruption: bool, lines: list, status: bool, id: string, url: string, name: string, lat: float, lon: float>, timetable: record<departureStopId: string, routes: list<record>>, disambiguation: record<disambiguationOptions: list<record>>, statusErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -733,7 +759,7 @@ export def "line-timetable Timetable" [
   let full_url = (build-url $base $"/Line/($id)/Timetable/($fromStopPointId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the timetable for a specified station on the give line with specified destination
@@ -751,6 +777,7 @@ export def "line-timetable-to TimetableTo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<lineId: string, lineName: string, direction: string, pdfUrl: string, stations: table<routeId: int, parentId: string, stationId: string, icsId: string, topMostParentId: string, direction: string, towards: string, modes: list, stopType: string, stopLetter: string, zone: string, accessibilitySummary: string, hasDisruption: bool, lines: list, status: bool, id: string, url: string, name: string, lat: float, lon: float>, stops: table<routeId: int, parentId: string, stationId: string, icsId: string, topMostParentId: string, direction: string, towards: string, modes: list, stopType: string, stopLetter: string, zone: string, accessibilitySummary: string, hasDisruption: bool, lines: list, status: bool, id: string, url: string, name: string, lat: float, lon: float>, timetable: record<departureStopId: string, routes: list<record>>, disambiguation: record<disambiguationOptions: list<record>>, statusErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -758,7 +785,7 @@ export def "line-timetable-to TimetableTo" [
   let full_url = (build-url $base $"/Line/($id)/Timetable/($fromStopPointId)/to/($toStopPointId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get disruptions for the given line ids
@@ -774,6 +801,7 @@ export def "line-disruption Disruption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<category: string, type: string, categoryDescription: string, description: string, summary: string, additionalInfo: string, created: string, lastUpdate: string, affectedRoutes: list<record>, affectedStops: list<record>, closureText: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -781,7 +809,7 @@ export def "line-disruption Disruption" [
   let full_url = (build-url $base $"/Line/($ids)/Disruption")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get disruptions for all lines of the given modes.
@@ -797,6 +825,7 @@ export def "line-mode-disruption DisruptionByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<category: string, type: string, categoryDescription: string, description: string, summary: string, additionalInfo: string, created: string, lastUpdate: string, affectedRoutes: list<record>, affectedStops: list<record>, closureText: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -804,7 +833,7 @@ export def "line-mode-disruption DisruptionByMode" [
   let full_url = (build-url $base $"/Line/Mode/($modes)/Disruption")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of arrival predictions for given line ids based at the given stop
@@ -821,6 +850,7 @@ export def "line-arrivals Arrivals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # Optional. The direction of travel. Can be inbound or outbound or all. If left blank, and destinationStopId is set, will default to all
   --destinationStationId: string # Optional. Id of destination stop
@@ -831,7 +861,7 @@ export def "line-arrivals Arrivals" [
   let full_url = (build-url $base $"/Line/($ids)/Arrivals/($stopPointId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the service type active for a mode.             Currently only supports tube
@@ -846,6 +876,7 @@ export def "mode-active-service-types GetActiveServiceTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<mode: string, serviceType: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -853,7 +884,7 @@ export def "mode-active-service-types GetActiveServiceTypes" [
   let full_url = (build-url $base "/Mode/ActiveServiceTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the next arrival predictions for all stops of a given mode
@@ -869,6 +900,7 @@ export def "mode-arrivals Arrivals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # A number of arrivals to return for each stop, -1 to return all available. (format: int32)
 ]: nothing -> table<id: string, operationType: int, vehicleId: string, naptanId: string, stationName: string, lineId: string, lineName: string, platformName: string, direction: string, bearing: string, tripId: string, baseVersion: string, destinationNaptanId: string, destinationName: string, timestamp: string, timeToStation: int, currentLocation: string, towards: string, expectedArrival: string, timeToLive: string, modeName: string, timing: record<countdownServerAdjustment: string, source: string, insert: string, read: string, sent: string, received: string>> {
@@ -878,7 +910,7 @@ export def "mode-arrivals Arrivals" [
   let full_url = (build-url $base $"/Mode/($mode)/Arrivals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the occupancy for a car park with a given id
@@ -894,6 +926,7 @@ export def "occupancy-car-park Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, bays: table<bayType: string, bayCount: int, free: int, occupied: int>, name: string, carParkDetailsUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -901,7 +934,7 @@ export def "occupancy-car-park Get" [
   let full_url = (build-url $base $"/Occupancy/CarPark/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the occupancy for all car parks that have occupancy data
@@ -916,6 +949,7 @@ export def "occupancy-car-park list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, bays: list<record>, name: string, carParkDetailsUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -923,7 +957,7 @@ export def "occupancy-car-park list" [
   let full_url = (build-url $base "/Occupancy/CarPark")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the occupancy for a charge connectors with a given id (sourceSystemPlaceId)
@@ -939,6 +973,7 @@ export def "occupancy-charge-connector GetChargeConnectorStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: int, sourceSystemPlaceId: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -946,7 +981,7 @@ export def "occupancy-charge-connector GetChargeConnectorStatus" [
   let full_url = (build-url $base $"/Occupancy/ChargeConnector/($ids)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the occupancy for all charge connectors
@@ -961,6 +996,7 @@ export def "occupancy-charge-connector GetAllChargeConnectorStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: int, sourceSystemPlaceId: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -968,7 +1004,7 @@ export def "occupancy-charge-connector GetAllChargeConnectorStatus" [
   let full_url = (build-url $base "/Occupancy/ChargeConnector")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the occupancy for bike points.
@@ -984,6 +1020,7 @@ export def "occupancy-bike-points GetBikePointsOccupancies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, name: string, bikesCount: int, emptyDocks: int, totalDocks: int, standardBikesCount: int, eBikesCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -991,7 +1028,7 @@ export def "occupancy-bike-points GetBikePointsOccupancies" [
   let full_url = (build-url $base $"/Occupancy/BikePoints/($ids)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all of the available place property categories and keys.
@@ -1006,6 +1043,7 @@ export def "place-meta-categories MetaCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<category: string, availableKeys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1013,7 +1051,7 @@ export def "place-meta-categories MetaCategories" [
   let full_url = (build-url $base "/Place/Meta/Categories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of the available types of Place.
@@ -1028,6 +1066,7 @@ export def "place-meta-place-types MetaPlaceTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<category: string, availableKeys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1035,7 +1074,7 @@ export def "place-meta-place-types MetaPlaceTypes" [
   let full_url = (build-url $base "/Place/Meta/PlaceTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the set of streets associated with a post code.
@@ -1051,6 +1090,7 @@ export def "place-address-streets GetStreetsByPostCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --postcode: string
   --postcodeInputpostcode: string
@@ -1061,7 +1101,7 @@ export def "place-address-streets GetStreetsByPostCode" [
   let full_url = (build-url $base $"/Place/Address/Streets/($Postcode)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all places of a given type
@@ -1077,6 +1117,7 @@ export def "place-type GetByType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --activeOnly: oneof<nothing, bool> # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1086,7 +1127,7 @@ export def "place-type GetByType" [
   let full_url = (build-url $base $"/Place/Type/($types)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the place with the given id.
@@ -1102,6 +1143,7 @@ export def "place Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeChildren: oneof<nothing, bool> # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1111,7 +1153,7 @@ export def "place Get" [
   let full_url = (build-url $base $"/Place/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the places that lie within a geographic region. The geographic region of interest can either be specified             by using a lat/lon geo-point and a radius in metres to return places within the locus defined by the lat/lon of             its centre or alternatively, by the use of a bounding box defined by the lat/lon of its north-west and south-east corners.             Optionally filters on type and can strip properties for a smaller payload.
@@ -1126,6 +1168,7 @@ export def "place GetByGeo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --radius: float # The radius of the bounding circle in metres when only lat/lon are specified. (format: double)
   --categories: list # An optional list of comma separated property categories to return in the Place's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /Place/Meta/categories endpoint)
@@ -1146,7 +1189,7 @@ export def "place GetByGeo" [
   let full_url = (build-url $base "/Place" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets any places of the given type whose geography intersects the given latitude and longitude. In practice this means the Place             must be polygonal e.g. a BoroughBoundary.
@@ -1164,6 +1207,7 @@ export def "place-at GetAt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lat: string
   --lon: string
@@ -1176,7 +1220,7 @@ export def "place-at GetAt" [
   let full_url = (build-url $base $"/Place/($type)/At/($Lat)/($Lon)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the place overlay for a given set of co-ordinates and a given width/height.
@@ -1197,6 +1241,7 @@ export def "place-overlay GetOverlay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lat: string
   --lon: string
@@ -1209,7 +1254,7 @@ export def "place-overlay GetOverlay" [
   let full_url = (build-url $base $"/Place/($type)/overlay/($z)/($Lat)/($Lon)/($width)/($height)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all places that matches the given query
@@ -1224,6 +1269,7 @@ export def "place-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the place, you can use the /Place/Types/{types} endpoint to get a list of places for a given type including their names.
   --types: list # A comma-separated list of the types to return. Max. approx 12 types.
@@ -1234,7 +1280,7 @@ export def "place-search Search" [
   let full_url = (build-url $base "/Place/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all roads managed by TfL
@@ -1249,6 +1295,7 @@ export def "road list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, displayName: string, group: string, statusSeverity: string, statusSeverityDescription: string, bounds: string, envelope: string, statusAggregationStartDate: string, statusAggregationEndDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1256,7 +1303,7 @@ export def "road list" [
   let full_url = (build-url $base "/Road")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the road with the specified id (e.g. A1)
@@ -1272,6 +1319,7 @@ export def "road Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, displayName: string, group: string, statusSeverity: string, statusSeverityDescription: string, bounds: string, envelope: string, statusAggregationStartDate: string, statusAggregationEndDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1279,7 +1327,7 @@ export def "road Get" [
   let full_url = (build-url $base $"/Road/($ids)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified roads with the status aggregated over the date range specified, or now until the end of today if no dates are passed.
@@ -1295,6 +1343,7 @@ export def "road-status Status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --dateRangeNullablestartDate: string # format: date-time
   --dateRangeNullableendDate: string # format: date-time
@@ -1305,7 +1354,7 @@ export def "road-status Status" [
   let full_url = (build-url $base $"/Road/($ids)/Status" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get active disruptions, filtered by road ids
@@ -1321,6 +1370,7 @@ export def "road-disruption Disruption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --stripContent: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location, comments and streets
   --severities: list # an optional list of Severity names to filter on (a valid list of severities can be obtained from the /Road/Meta/severities endpoint)
@@ -1333,7 +1383,7 @@ export def "road-disruption Disruption" [
   let full_url = (build-url $base $"/Road/($ids)/Disruption" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of disrupted streets. If no date filters are provided, current disruptions are returned.
@@ -1348,6 +1398,7 @@ export def "road-all-street-disruption DisruptedStreets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startDate: string # Optional, the start time to filter on. (format: date-time)
   --endDate: string # Optional, The end time to filter on. (format: date-time)
@@ -1358,7 +1409,7 @@ export def "road-all-street-disruption DisruptedStreets" [
   let full_url = (build-url $base "/Road/all/Street/Disruption" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of active disruptions filtered by disruption Ids.
@@ -1374,6 +1425,7 @@ export def "road-all-disruption DisruptionById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --stripContent: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location and comments.
 ]: nothing -> record<id: string, url: string, point: string, severity: string, ordinal: int, category: string, subCategory: string, comments: string, currentUpdate: string, currentUpdateDateTime: string, corridorIds: list<string>, startDateTime: string, endDateTime: string, lastModifiedTime: string, levelOfInterest: string, location: string, status: string, geography: record<geography: record<coordinateSystemId: int, wellKnownText: string, wellKnownBinary: string>>, geometry: record<geography: record<coordinateSystemId: int, wellKnownText: string, wellKnownBinary: string>>, streets: table<name: string, closure: string, directions: string, segments: list, sourceSystemId: int, sourceSystemKey: string>, isProvisional: bool, hasClosures: bool, linkText: string, linkUrl: string, roadProject: record<projectId: string, schemeName: string, projectName: string, projectDescription: string, projectPageUrl: string, consultationPageUrl: string, consultationStartDate: string, consultationEndDate: string, constructionStartDate: string, constructionEndDate: string, boroughsBenefited: list<string>, cycleSuperhighwayId: string, phase: string, contactName: string, contactEmail: string, externalPageUrl: string, projectSummaryPageUrl: string>, publishStartDate: string, publishEndDate: string, timeFrame: string, roadDisruptionLines: table<id: int, roadDisruptionId: string, isDiversion: bool, multiLineString: record, startDate: string, endDate: string, startTime: string, endTime: string>, roadDisruptionImpactAreas: table<id: int, roadDisruptionId: string, polygon: record, startDate: string, endDate: string, startTime: string, endTime: string>, recurringSchedules: table<startTime: string, endTime: string>> {
@@ -1383,7 +1435,7 @@ export def "road-all-disruption DisruptionById" [
   let full_url = (build-url $base $"/Road/all/Disruption/($disruptionIds)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid RoadDisruption categories
@@ -1398,6 +1450,7 @@ export def "road-meta-categories MetaCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1405,7 +1458,7 @@ export def "road-meta-categories MetaCategories" [
   let full_url = (build-url $base "/Road/Meta/Categories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of valid RoadDisruption severity codes
@@ -1420,6 +1473,7 @@ export def "road-meta-severities MetaSeverities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<modeName: string, severityLevel: int, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1427,7 +1481,7 @@ export def "road-meta-severities MetaSeverities" [
   let full_url = (build-url $base "/Road/Meta/Severities")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search the site for occurrences of the query string. The maximum number of results returned is equal to the maximum page size             of 100. To return subsequent pages, use the paginated overload.
@@ -1442,6 +1496,7 @@ export def "search Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # The search query
 ]: nothing -> record<query: string, from: int, page: int, pageSize: int, provider: string, total: int, matches: table<id: string, url: string, name: string, lat: float, lon: float>, maxScore: float> {
@@ -1451,7 +1506,7 @@ export def "search Get" [
   let full_url = (build-url $base "/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches the bus schedules folder on S3 for a given bus number.
@@ -1466,6 +1521,7 @@ export def "search-bus-schedules BusSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # The search query
 ]: nothing -> record<query: string, from: int, page: int, pageSize: int, provider: string, total: int, matches: table<id: string, url: string, name: string, lat: float, lon: float>, maxScore: float> {
@@ -1475,7 +1531,7 @@ export def "search-bus-schedules BusSchedules" [
   let full_url = (build-url $base "/Search/BusSchedules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the available searchProvider names.
@@ -1490,6 +1546,7 @@ export def "search-meta-search-providers MetaSearchProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1497,7 +1554,7 @@ export def "search-meta-search-providers MetaSearchProviders" [
   let full_url = (build-url $base "/Search/Meta/SearchProviders")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the available search categories.
@@ -1512,6 +1569,7 @@ export def "search-meta-categories MetaCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1519,7 +1577,7 @@ export def "search-meta-categories MetaCategories" [
   let full_url = (build-url $base "/Search/Meta/Categories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the available sorting options.
@@ -1534,6 +1592,7 @@ export def "search-meta-sorts MetaSorts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1541,7 +1600,7 @@ export def "search-meta-sorts MetaSorts" [
   let full_url = (build-url $base "/Search/Meta/Sorts")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of available StopPoint additional information categories
@@ -1556,6 +1615,7 @@ export def "stop-point-meta-categories MetaCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<category: string, availableKeys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1563,7 +1623,7 @@ export def "stop-point-meta-categories MetaCategories" [
   let full_url = (build-url $base "/StopPoint/Meta/Categories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of available StopPoint types
@@ -1578,6 +1638,7 @@ export def "stop-point-meta-stop-types MetaStopTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1585,7 +1646,7 @@ export def "stop-point-meta-stop-types MetaStopTypes" [
   let full_url = (build-url $base "/StopPoint/Meta/StopTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of available StopPoint modes
@@ -1600,6 +1661,7 @@ export def "stop-point-meta-modes MetaModes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<isTflService: bool, isFarePaying: bool, isScheduledService: bool, modeName: string, motType: string, network: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1607,7 +1669,7 @@ export def "stop-point-meta-modes MetaModes" [
   let full_url = (build-url $base "/StopPoint/Meta/Modes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of StopPoints corresponding to the given list of stop ids.
@@ -1623,6 +1685,7 @@ export def "stop-point Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeCrowdingData: oneof<nothing, bool> # Include the crowding data (static). To Filter further use: /StopPoint/{ids}/Crowding/{line}
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1632,7 +1695,7 @@ export def "stop-point Get" [
   let full_url = (build-url $base $"/StopPoint/($ids)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of places corresponding to a given id and place types.
@@ -1648,6 +1711,7 @@ export def "stop-point-place-types Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --placeTypes: list # A comcomma-separated value representing the place types.
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1657,7 +1721,7 @@ export def "stop-point-place-types Get" [
   let full_url = (build-url $base $"/StopPoint/($id)/placeTypes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the Crowding data (static) for the StopPointId, plus crowding data for a given line and optionally a particular direction.
@@ -1674,6 +1738,7 @@ export def "stop-point-crowding Crowding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # The direction of travel. Can be inbound or outbound.
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1683,7 +1748,7 @@ export def "stop-point-crowding Crowding" [
   let full_url = (build-url $base $"/StopPoint/($id)/Crowding/($line)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all stop points of a given type
@@ -1699,6 +1764,7 @@ export def "stop-point-type GetByType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1706,7 +1772,7 @@ export def "stop-point-type GetByType" [
   let full_url = (build-url $base $"/StopPoint/Type/($types)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the stop points of given type(s) with a page number
@@ -1723,6 +1789,7 @@ export def "stop-point-type-page GetByTypeWithPagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1730,7 +1797,7 @@ export def "stop-point-type-page GetByTypeWithPagination" [
   let full_url = (build-url $base $"/StopPoint/Type/($types)/page/($page)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the service types for a given stoppoint
@@ -1745,6 +1812,7 @@ export def "stop-point-service-types GetServiceTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # The Naptan id of the stop
   --lineIds: list # The lines which contain the given Naptan id (all lines relevant to the given stoppoint if empty)
@@ -1756,7 +1824,7 @@ export def "stop-point-service-types GetServiceTypes" [
   let full_url = (build-url $base "/StopPoint/ServiceTypes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of arrival predictions for the given stop point id
@@ -1772,6 +1840,7 @@ export def "stop-point-arrivals Arrivals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, operationType: int, vehicleId: string, naptanId: string, stationName: string, lineId: string, lineName: string, platformName: string, direction: string, bearing: string, tripId: string, baseVersion: string, destinationNaptanId: string, destinationName: string, timestamp: string, timeToStation: int, currentLocation: string, towards: string, expectedArrival: string, timeToLive: string, modeName: string, timing: record<countdownServerAdjustment: string, source: string, insert: string, read: string, sent: string, received: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -1779,7 +1848,7 @@ export def "stop-point-arrivals Arrivals" [
   let full_url = (build-url $base $"/StopPoint/($id)/Arrivals")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the list of arrival and departure predictions for the given stop point id (overground, Elizabeth line and thameslink only)
@@ -1795,6 +1864,7 @@ export def "stop-point-arrival-departures ArrivalDepartures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lineIds: list # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink
 ]: nothing -> table<platformName: string, destinationNaptanId: string, destinationName: string, naptanId: string, stationName: string, estimatedTimeOfArrival: string, scheduledTimeOfArrival: string, estimatedTimeOfDeparture: string, scheduledTimeOfDeparture: string, minutesAndSecondsToArrival: string, minutesAndSecondsToDeparture: string, cause: string, departureStatus: string, timing: record<countdownServerAdjustment: string, source: string, insert: string, read: string, sent: string, received: string>> {
@@ -1804,7 +1874,7 @@ export def "stop-point-arrival-departures ArrivalDepartures" [
   let full_url = (build-url $base $"/StopPoint/($id)/ArrivalDepartures" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets Stopoints that are reachable from a station/line combination.
@@ -1821,6 +1891,7 @@ export def "stop-point-can-reach-on-line ReachableFrom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
@@ -1830,7 +1901,7 @@ export def "stop-point-can-reach-on-line ReachableFrom" [
   let full_url = (build-url $base $"/StopPoint/($id)/CanReachOnLine/($lineId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the route sections for all the lines that service the given stop point ids
@@ -1846,6 +1917,7 @@ export def "stop-point-route Route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<naptanId: string, lineId: string, mode: string, validFrom: string, validTo: string, direction: string, routeSectionName: string, lineString: string, isActive: bool, serviceType: string, vehicleDestinationText: string, destinationName: string> {
@@ -1855,7 +1927,7 @@ export def "stop-point-route Route" [
   let full_url = (build-url $base $"/StopPoint/($id)/Route" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a distinct list of disrupted stop points for the given modes
@@ -1871,6 +1943,7 @@ export def "stop-point-mode-disruption DisruptionByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeRouteBlockedStops: oneof<nothing, bool>
 ]: nothing -> table<atcoCode: string, fromDate: string, toDate: string, description: string, commonName: string, type: string, mode: string, stationAtcoCode: string, appearance: string, additionalInformation: string, closureText: string, concernedLines: list<record>> {
@@ -1880,7 +1953,7 @@ export def "stop-point-mode-disruption DisruptionByMode" [
   let full_url = (build-url $base $"/StopPoint/Mode/($modes)/Disruption" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all disruptions for the specified StopPointId, plus disruptions for any child Naptan records it may have.
@@ -1896,6 +1969,7 @@ export def "stop-point-disruption Disruption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --getFamily: oneof<nothing, bool> # Specify true to return disruptions for entire family, or false to return disruptions for just this stop point. Defaults to false.
   --includeRouteBlockedStops: oneof<nothing, bool>
@@ -1907,7 +1981,7 @@ export def "stop-point-disruption Disruption" [
   let full_url = (build-url $base $"/StopPoint/($ids)/Disruption" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the canonical direction, "inbound" or "outbound", for a given pair of stop point Ids in the direction from -&gt; to.
@@ -1924,6 +1998,7 @@ export def "stop-point-direction-to Direction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lineId: string # Optional line id filter e.g. victoria
 ]: nothing -> string {
@@ -1933,7 +2008,7 @@ export def "stop-point-direction-to Direction" [
   let full_url = (build-url $base $"/StopPoint/($id)/DirectionTo/($toStopPointId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of StopPoints within {radius} by the specified criteria
@@ -1948,6 +2023,7 @@ export def "stop-point GetByGeoPoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --stopTypes: list # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint)
   --radius: int # the radius of the bounding circle in metres (default : 200) (format: int32)
@@ -1964,7 +2040,7 @@ export def "stop-point GetByGeoPoint" [
   let full_url = (build-url $base "/StopPoint" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of StopPoints filtered by the modes available at that StopPoint.
@@ -1980,6 +2056,7 @@ export def "stop-point-mode GetByMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The data set page to return. Page 1 equates to the first 1000 stop points, page 2 equates to 1001-2000 etc. Must be entered for bus mode as data set is too large. (format: int32)
 ]: nothing -> record<centrePoint: list<float>, stopPoints: table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list, lineGroup: list, lineModeGroups: list, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list, children: list, childrenUrls: list, lat: float, lon: float>, pageSize: int, total: int, page: int> {
@@ -1989,7 +2066,7 @@ export def "stop-point-mode GetByMode" [
   let full_url = (build-url $base $"/StopPoint/Mode/($modes)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search StopPoints by their common name, or their 5-digit Countdown Bus Stop Code.
@@ -2005,6 +2082,7 @@ export def "stop-point-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --modes: list # An optional, parameter separated list of the modes to filter by
   --faresOnly: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
@@ -2019,7 +2097,7 @@ export def "stop-point-search Search" [
   let full_url = (build-url $base $"/StopPoint/Search/($query)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search StopPoints by their common name, or their 5-digit Countdown Bus Stop Code.
@@ -2034,6 +2112,7 @@ export def "stop-point-search list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
   --modes: list # An optional, parameter separated list of the modes to filter by
@@ -2049,7 +2128,7 @@ export def "stop-point-search list" [
   let full_url = (build-url $base "/StopPoint/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a StopPoint for a given sms code.
@@ -2065,6 +2144,7 @@ export def "stop-point-sms GetBySms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # If set to "web", a 302 redirect to relevant website bus stop page is returned. Valid values are : web. All other values are ignored.
 ]: nothing -> record {
@@ -2074,7 +2154,7 @@ export def "stop-point-sms GetBySms" [
   let full_url = (build-url $base $"/StopPoint/Sms/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of taxi ranks corresponding to the given stop point id.
@@ -2090,6 +2170,7 @@ export def "stop-point-taxi-ranks GetTaxiRanksByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -2097,7 +2178,7 @@ export def "stop-point-taxi-ranks GetTaxiRanksByIds" [
   let full_url = (build-url $base $"/StopPoint/($stopPointId)/TaxiRanks")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get car parks corresponding to the given stop point id.
@@ -2113,6 +2194,7 @@ export def "stop-point-car-parks GetCarParksById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -2120,7 +2202,7 @@ export def "stop-point-car-parks GetCarParksById" [
   let full_url = (build-url $base $"/StopPoint/($stopPointId)/CarParks")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the TravelTime overlay.
@@ -2142,6 +2224,7 @@ export def "travel-times-overlay-mapcenter-pinlocation-dimensions GetOverlay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --scenarioTitle: string # The title of the scenario.
   --timeOfDayId: string # The id for the time of day (AM/INTER/PM)
@@ -2155,7 +2238,7 @@ export def "travel-times-overlay-mapcenter-pinlocation-dimensions GetOverlay" [
   let full_url = (build-url $base $"/TravelTimes/overlay/($z)/mapcenter/($mapCenterLat)/($mapCenterLon)/pinlocation/($pinLat)/($pinLon)/dimensions/($width)/($height)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the TravelTime overlay.
@@ -2177,6 +2260,7 @@ export def "travel-times-compare-overlay-mapcenter-pinlocation-dimensions GetCom
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --scenarioTitle: string # The title of the scenario.
   --timeOfDayId: string # The id for the time of day (AM/INTER/PM)
@@ -2192,7 +2276,7 @@ export def "travel-times-compare-overlay-mapcenter-pinlocation-dimensions GetCom
   let full_url = (build-url $base $"/TravelTimes/compareOverlay/($z)/mapcenter/($mapCenterLat)/($mapCenterLon)/pinlocation/($pinLat)/($pinLon)/dimensions/($width)/($height)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the predictions for a given list of vehicle Id's.
@@ -2208,6 +2292,7 @@ export def "vehicle-arrivals Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<id: string, operationType: int, vehicleId: string, naptanId: string, stationName: string, lineId: string, lineName: string, platformName: string, direction: string, bearing: string, tripId: string, baseVersion: string, destinationNaptanId: string, destinationName: string, timestamp: string, timeToStation: int, currentLocation: string, towards: string, expectedArrival: string, timeToLive: string, modeName: string, timing: record<countdownServerAdjustment: string, source: string, insert: string, read: string, sent: string, received: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -2215,5 +2300,5 @@ export def "vehicle-arrivals Get" [
   let full_url = (build-url $base $"/Vehicle/($ids)/Arrivals")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

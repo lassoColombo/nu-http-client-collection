@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-email emailValidation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,13 +102,14 @@ export def "json-email emailValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<associated_names: record<names: list<string>, status: string>, associated_phone_numbers: record<phone_numbers: list<string>, status: string>, catch_all: bool, common: bool, deliverability: string, disposable: bool, dns_valid: bool, domain_age: record<human: string, iso: string, timestamp: float>, domain_velocity: string, first_name: string, first_seen: record<human: string, iso: string, timestamp: float>, fraud_score: float, frequent_complainer: bool, generic: bool, honeypot: bool, leaked: bool, message: string, overall_score: float, recent_abuse: bool, request_id: string, sanitized_email: string, smtp_score: float, spam_trap_score: string, success: bool, suggested_domain: string, suspect: bool, timed_out: bool, user_activity: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/json/email/($YOUR_API_KEY_HERE)/($USER_EMAIL_HERE)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Phone Validation
@@ -124,6 +126,7 @@ export def "json-phone phoneValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # country (e.g. UK)
 ]: nothing -> record<VOIP: bool, active: bool, active_status: string, associated_email_addresses: record<emails: list<string>, status: string>, carrier: string, city: string, country: string, dialing_code: float, do_not_call: bool, formatted: string, fraud_score: float, leaked: bool, line_type: string, local_format: string, mcc: string, message: string, mnc: string, name: string, prepaid: string, recent_abuse: bool, region: string, request_id: string, risky: bool, sms_domain: string, sms_email: string, spammer: bool, success: bool, timezone: string, user_activity: string, valid: bool, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -132,7 +135,7 @@ export def "json-phone phoneValidation" [
   let full_url = (build-url $base $"/json/phone/($YOUR_API_KEY_HERE)/($USER_PHONE_HERE)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Malicious URL Scanner
@@ -149,11 +152,12 @@ export def "json-url maliciousUrlScanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<adult: bool, category: string, content_type: string, dns_valid: bool, domain: string, domain_age: record<human: string, iso: string, timestamp: float>, domain_rank: float, ip_address: string, malware: bool, message: string, page_size: float, parking: bool, phishing: bool, request_id: string, risk_score: float, server: string, spamming: bool, status_code: float, success: bool, suspicious: bool, unsafe: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/json/url/($YOUR_API_KEY_HERE)/($URL_HERE)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

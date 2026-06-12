@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -85,7 +86,7 @@ def typeStatus-completer [] { ["ALLOLECTOTYPE" "ALLONEOTYPE" "ALLOTYPE" "COTYPE"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "occurrence-search searchOccurrence" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -118,6 +119,7 @@ export def "occurrence-search searchOccurrence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --acceptedTaxonKey: list # A taxon key from the GBIF backbone or the specified checklist (see checklistKey parameter). Only synonym taxa are included in the search, so a search for Aves with acceptedTaxonKey=212 (i.e. [/occurrence/search?taxonKey=212](https://api.gbif.org/v1/occurrence/search?acceptedTaxonKey=212)) will match occurrences identified as birds, but not any known family, genus or species of bird.*Parameter may be repeated.* (e.g. 2476674)
   --associatedSequences: list # Identifier (publication, global unique identifier, URI) of genetic sequence information associated with the material entity.  *Parameter may be repeated.* (e.g. http://www.ncbi.nlm.nih.gov/nuccore/U34853.1)
@@ -275,7 +277,7 @@ export def "occurrence-search searchOccurrence" [
   let full_url = (build-url $base "/occurrence/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Requests the creation of a download file.
@@ -290,6 +292,7 @@ export def "occurrence-download-request requestDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --predicate: any # A predicate defining the filters to apply to the download.
   --creator: string # The GBIF username of the initiator of the download request.
@@ -311,7 +314,7 @@ export def "occurrence-download-request requestDownload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the resulting download file
@@ -327,13 +330,14 @@ export def "occurrence-download-request retrieveDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/occurrence/download/request/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a running download
@@ -349,13 +353,14 @@ export def "occurrence-download-request cancelDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/occurrence/download/request/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental** Validates the SQL contained in an SQL download request.
@@ -370,6 +375,7 @@ export def "occurrence-download-request-validate validateDownloadRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sql: string # An SQL query defining the filter and output for the download.
   --creator: string # The GBIF username of the initiator of the download request.
   --notificationAddresses: list
@@ -387,7 +393,7 @@ export def "occurrence-download-request-validate validateDownloadRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Converts a plain search query into a download predicate.
@@ -402,6 +408,7 @@ export def "occurrence-download-request-predicate searchToPredicate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --notification-address: string # Email notification address.
   --format: string # Download format.
@@ -417,7 +424,7 @@ export def "occurrence-download-request-predicate searchToPredicate" [
   let full_url = (build-url $base "/occurrence/download/request/predicate" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Converts a plain search query into an SQL download predicate.
@@ -432,6 +439,7 @@ export def "occurrence-download-request-sql searchToSql" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --notification-address: string
   --description: string
@@ -444,7 +452,7 @@ export def "occurrence-download-request-sql searchToSql" [
   let full_url = (build-url $base "/occurrence/download/request/sql" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Converts a predicate download request into an SQL download request.
@@ -459,6 +467,7 @@ export def "occurrence-download-request-sql searchToSql-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --predicate: any # A predicate defining the filters to apply to the download.
   --creator: string # The GBIF username of the initiator of the download request.
   --notificationAddresses: list
@@ -478,7 +487,7 @@ export def "occurrence-download-request-sql searchToSql-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Occurrence by id
@@ -494,6 +503,7 @@ export def "occurrence list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list<string>, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, basisOfRecord: string, individualCount: int, occurrenceStatus: string, sex: string, lifeStage: string, establishmentMeans: string, degreeOfEstablishment: string, pathway: string, classifications: record, taxonKey: int, kingdomKey: int, phylumKey: int, classKey: int, orderKey: int, familyKey: int, genusKey: int, subgenusKey: int, speciesKey: int, acceptedTaxonKey: int, scientificName: string, scientificNameAuthorship: string, acceptedScientificName: string, kingdom: string, phylum: string, order: string, family: string, genus: string, subgenus: string, species: string, genericName: string, specificEpithet: string, infraspecificEpithet: string, taxonRank: string, taxonomicStatus: string, iucnRedListCategory: string, dateIdentified: string, decimalLatitude: float, decimalLongitude: float, coordinatePrecision: float, coordinateUncertaintyInMeters: float, coordinateAccuracy: float, elevation: float, elevationAccuracy: float, depth: float, depthAccuracy: float, continent: string, stateProvince: string, gadm: record<level0: record<gid: string, name: string>, level1: record<gid: string, name: string>, level2: record<gid: string, name: string>, level3: record<gid: string, name: string>>, waterBody: string, distanceFromCentroidInMeters: float, higherGeography: string, georeferencedBy: string, year: int, month: int, day: int, eventDate: record<from: any, to: any>, startDayOfYear: int, endDayOfYear: int, typeStatus: string, typifiedName: string, issues: list<string>, modified: string, lastInterpreted: string, references: string, license: string, organismQuantity: float, organismQuantityType: string, sampleSizeUnit: string, sampleSizeValue: float, relativeOrganismQuantity: float, isSequenced: bool, associatedSequences: string, identifiers: table<identifier: string, title: string, type: string, identifierLink: string>, media: table<type: string, format: string, references: string, title: string, description: string, source: string, audience: string, created: string, creator: string, contributor: string, publisher: string, license: string, rightsHolder: string, identifier: string>, facts: table<id: string, type: string, value: string, unit: string, accuracy: string, method: string, determinedBy: string, determinedDate: string, remarks: string>, relations: table<id: string, occurrenceId: int, relatedOccurrenceId: int, type: string, accordingTo: string, establishedDate: string, remarks: string>, institutionKey: string, collectionKey: string, isInCluster: bool, datasetID: string, datasetName: string, otherCatalogNumbers: string, earliestEonOrLowestEonothem: string, latestEonOrHighestEonothem: string, earliestEraOrLowestErathem: string, latestEraOrHighestErathem: string, earliestPeriodOrLowestSystem: string, latestPeriodOrHighestSystem: string, earliestEpochOrLowestSeries: string, latestEpochOrHighestSeries: string, earliestAgeOrLowestStage: string, latestAgeOrHighestStage: string, lowestBiostratigraphicZone: string, highestBiostratigraphicZone: string, group: string, formation: string, member: string, bed: string, recordedBy: string, identifiedBy: string, preparations: string, samplingProtocol: string, dnaSequenceID: list<string>, nucleotideSequence: table<nucleotideSequenceID: string, targetGene: string, sequence: string, sequenceLength: int, gcContent: float, nonIupacFraction: float, nonACGTNFraction: float, getnFraction: float, getnRunsCapped: int, naturalLanguageDetected: bool, endsTrimmed: bool, gapsOrWhitespaceRemoved: bool, invalid: bool>, verbatimScientificName: string, geodeticDatum: string, class: string, countryCode: string, recordedByIDs: table<type: string, value: string>, identifiedByIDs: table<type: string, value: string>, gbifRegion: string, country: string, publishedByGbifRegion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -501,7 +511,7 @@ export def "occurrence list" [
   let full_url = (build-url $base $"/occurrence/($gbifId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence search using predicates
@@ -516,6 +526,7 @@ export def "occurrence-search-predicate predicateSearchOccurrence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --predicate: any
 ]: any -> record<endOfRecords: bool, count: int, results: table<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, basisOfRecord: string, individualCount: int, occurrenceStatus: string, sex: string, lifeStage: string, establishmentMeans: string, degreeOfEstablishment: string, pathway: string, classifications: record, taxonKey: int, kingdomKey: int, phylumKey: int, classKey: int, orderKey: int, familyKey: int, genusKey: int, subgenusKey: int, speciesKey: int, acceptedTaxonKey: int, scientificName: string, scientificNameAuthorship: string, acceptedScientificName: string, kingdom: string, phylum: string, order: string, family: string, genus: string, subgenus: string, species: string, genericName: string, specificEpithet: string, infraspecificEpithet: string, taxonRank: string, taxonomicStatus: string, iucnRedListCategory: string, dateIdentified: string, decimalLatitude: float, decimalLongitude: float, coordinatePrecision: float, coordinateUncertaintyInMeters: float, coordinateAccuracy: float, elevation: float, elevationAccuracy: float, depth: float, depthAccuracy: float, continent: string, stateProvince: string, gadm: record, waterBody: string, distanceFromCentroidInMeters: float, higherGeography: string, georeferencedBy: string, year: int, month: int, day: int, eventDate: record, startDayOfYear: int, endDayOfYear: int, typeStatus: string, typifiedName: string, issues: list, modified: string, lastInterpreted: string, references: string, license: string, organismQuantity: float, organismQuantityType: string, sampleSizeUnit: string, sampleSizeValue: float, relativeOrganismQuantity: float, isSequenced: bool, associatedSequences: string, identifiers: list, media: list, facts: list, relations: list, institutionKey: string, collectionKey: string, isInCluster: bool, datasetID: string, datasetName: string, otherCatalogNumbers: string, earliestEonOrLowestEonothem: string, latestEonOrHighestEonothem: string, earliestEraOrLowestErathem: string, latestEraOrHighestErathem: string, earliestPeriodOrLowestSystem: string, latestPeriodOrHighestSystem: string, earliestEpochOrLowestSeries: string, latestEpochOrHighestSeries: string, earliestAgeOrLowestStage: string, latestAgeOrHighestStage: string, lowestBiostratigraphicZone: string, highestBiostratigraphicZone: string, group: string, formation: string, member: string, bed: string, recordedBy: string, identifiedBy: string, preparations: string, samplingProtocol: string, dnaSequenceID: list, nucleotideSequence: list, verbatimScientificName: string, geodeticDatum: string, class: string, countryCode: string, recordedByIDs: list, identifiedByIDs: list, gbifRegion: string, country: string, publishedByGbifRegion: string>, facets: table<field: string, counts: list>> {
@@ -527,7 +538,7 @@ export def "occurrence-search-predicate predicateSearchOccurrence" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Occurrence by dataset key and occurrence id
@@ -544,6 +555,7 @@ export def "occurrence get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list<string>, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, basisOfRecord: string, individualCount: int, occurrenceStatus: string, sex: string, lifeStage: string, establishmentMeans: string, degreeOfEstablishment: string, pathway: string, classifications: record, taxonKey: int, kingdomKey: int, phylumKey: int, classKey: int, orderKey: int, familyKey: int, genusKey: int, subgenusKey: int, speciesKey: int, acceptedTaxonKey: int, scientificName: string, scientificNameAuthorship: string, acceptedScientificName: string, kingdom: string, phylum: string, order: string, family: string, genus: string, subgenus: string, species: string, genericName: string, specificEpithet: string, infraspecificEpithet: string, taxonRank: string, taxonomicStatus: string, iucnRedListCategory: string, dateIdentified: string, decimalLatitude: float, decimalLongitude: float, coordinatePrecision: float, coordinateUncertaintyInMeters: float, coordinateAccuracy: float, elevation: float, elevationAccuracy: float, depth: float, depthAccuracy: float, continent: string, stateProvince: string, gadm: record<level0: record<gid: string, name: string>, level1: record<gid: string, name: string>, level2: record<gid: string, name: string>, level3: record<gid: string, name: string>>, waterBody: string, distanceFromCentroidInMeters: float, higherGeography: string, georeferencedBy: string, year: int, month: int, day: int, eventDate: record<from: any, to: any>, startDayOfYear: int, endDayOfYear: int, typeStatus: string, typifiedName: string, issues: list<string>, modified: string, lastInterpreted: string, references: string, license: string, organismQuantity: float, organismQuantityType: string, sampleSizeUnit: string, sampleSizeValue: float, relativeOrganismQuantity: float, isSequenced: bool, associatedSequences: string, identifiers: table<identifier: string, title: string, type: string, identifierLink: string>, media: table<type: string, format: string, references: string, title: string, description: string, source: string, audience: string, created: string, creator: string, contributor: string, publisher: string, license: string, rightsHolder: string, identifier: string>, facts: table<id: string, type: string, value: string, unit: string, accuracy: string, method: string, determinedBy: string, determinedDate: string, remarks: string>, relations: table<id: string, occurrenceId: int, relatedOccurrenceId: int, type: string, accordingTo: string, establishedDate: string, remarks: string>, institutionKey: string, collectionKey: string, isInCluster: bool, datasetID: string, datasetName: string, otherCatalogNumbers: string, earliestEonOrLowestEonothem: string, latestEonOrHighestEonothem: string, earliestEraOrLowestErathem: string, latestEraOrHighestErathem: string, earliestPeriodOrLowestSystem: string, latestPeriodOrHighestSystem: string, earliestEpochOrLowestSeries: string, latestEpochOrHighestSeries: string, earliestAgeOrLowestStage: string, latestAgeOrHighestStage: string, lowestBiostratigraphicZone: string, highestBiostratigraphicZone: string, group: string, formation: string, member: string, bed: string, recordedBy: string, identifiedBy: string, preparations: string, samplingProtocol: string, dnaSequenceID: list<string>, nucleotideSequence: table<nucleotideSequenceID: string, targetGene: string, sequence: string, sequenceLength: int, gcContent: float, nonIupacFraction: float, nonACGTNFraction: float, getnFraction: float, getnRunsCapped: int, naturalLanguageDetected: bool, endsTrimmed: bool, gapsOrWhitespaceRemoved: bool, invalid: bool>, verbatimScientificName: string, geodeticDatum: string, class: string, countryCode: string, recordedByIDs: table<type: string, value: string>, identifiedByIDs: table<type: string, value: string>, gbifRegion: string, country: string, publishedByGbifRegion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -551,7 +563,7 @@ export def "occurrence get" [
   let full_url = (build-url $base $"/occurrence/($datasetKey)/($occurrenceId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence fragment by id
@@ -567,6 +579,7 @@ export def "occurrence-fragment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -574,7 +587,7 @@ export def "occurrence-fragment list" [
   let full_url = (build-url $base $"/occurrence/($gbifId)/fragment")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence fragment by dataset key and occurrence id
@@ -591,6 +604,7 @@ export def "occurrence-fragment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -598,7 +612,7 @@ export def "occurrence-fragment get" [
   let full_url = (build-url $base $"/occurrence/($datasetKey)/($occurrenceId)/fragment")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verbatim occurrence by id
@@ -614,6 +628,7 @@ export def "occurrence-verbatim list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list<string>, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, publishedByGbifRegion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -621,7 +636,7 @@ export def "occurrence-verbatim list" [
   let full_url = (build-url $base $"/occurrence/($gbifId)/verbatim")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verbatim occurrence by dataset key and occurrence id
@@ -638,6 +653,7 @@ export def "occurrence-verbatim get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list<string>, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, publishedByGbifRegion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -645,7 +661,7 @@ export def "occurrence-verbatim get" [
   let full_url = (build-url $base $"/occurrence/($datasetKey)/($occurrenceId)/verbatim")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Related occurrences by gbifId
@@ -661,6 +677,7 @@ export def "occurrence-experimental-related experimentalGetRelatedOccurrences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -668,7 +685,7 @@ export def "occurrence-experimental-related experimentalGetRelatedOccurrences" [
   let full_url = (build-url $base $"/occurrence/($gbifId)/experimental/related")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest catalogue numbers
@@ -683,6 +700,7 @@ export def "occurrence-search-catalog-number suggestCatalogNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -693,7 +711,7 @@ export def "occurrence-search-catalog-number suggestCatalogNumbers" [
   let full_url = (build-url $base "/occurrence/search/catalogNumber" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest collection codes
@@ -708,6 +726,7 @@ export def "occurrence-search-collection-code suggestCollectionCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -718,7 +737,7 @@ export def "occurrence-search-collection-code suggestCollectionCodes" [
   let full_url = (build-url $base "/occurrence/search/collectionCode" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest dataset names
@@ -733,6 +752,7 @@ export def "occurrence-search-dataset-name suggestDatasetNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -743,7 +763,7 @@ export def "occurrence-search-dataset-name suggestDatasetNames" [
   let full_url = (build-url $base "/occurrence/search/datasetName" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest event ids
@@ -758,6 +778,7 @@ export def "occurrence-search-event-id suggestEventIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -768,7 +789,7 @@ export def "occurrence-search-event-id suggestEventIds" [
   let full_url = (build-url $base "/occurrence/search/eventId" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest identified by values
@@ -783,6 +804,7 @@ export def "occurrence-search-identified-by suggestIdentifiedBy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -793,7 +815,7 @@ export def "occurrence-search-identified-by suggestIdentifiedBy" [
   let full_url = (build-url $base "/occurrence/search/identifiedBy" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest institution codes
@@ -808,6 +830,7 @@ export def "occurrence-search-institution-code suggestInstitutionCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # format: int32
@@ -818,7 +841,7 @@ export def "occurrence-search-institution-code suggestInstitutionCodes" [
   let full_url = (build-url $base "/occurrence/search/institutionCode" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest locality strings
@@ -833,6 +856,7 @@ export def "occurrence-search-locality suggestLocalities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -843,7 +867,7 @@ export def "occurrence-search-locality suggestLocalities" [
   let full_url = (build-url $base "/occurrence/search/locality" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest occurrence ids
@@ -858,6 +882,7 @@ export def "occurrence-search-occurrence-id suggestOccurrenceIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -868,7 +893,7 @@ export def "occurrence-search-occurrence-id suggestOccurrenceIds" [
   let full_url = (build-url $base "/occurrence/search/occurrenceId" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest organism ids
@@ -883,6 +908,7 @@ export def "occurrence-search-organism-id suggestOrganismIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -893,7 +919,7 @@ export def "occurrence-search-organism-id suggestOrganismIds" [
   let full_url = (build-url $base "/occurrence/search/organismId" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest other catalogue numbers
@@ -908,6 +934,7 @@ export def "occurrence-search-other-catalog-numbers suggestOtherCatalogNumbers" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -918,7 +945,7 @@ export def "occurrence-search-other-catalog-numbers suggestOtherCatalogNumbers" 
   let full_url = (build-url $base "/occurrence/search/otherCatalogNumbers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest parent event ids
@@ -933,6 +960,7 @@ export def "occurrence-search-parent-event-id suggestParentEventIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -943,7 +971,7 @@ export def "occurrence-search-parent-event-id suggestParentEventIds" [
   let full_url = (build-url $base "/occurrence/search/parentEventId" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest record numbers
@@ -958,6 +986,7 @@ export def "occurrence-search-record-number suggestRecordNumbers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -968,7 +997,7 @@ export def "occurrence-search-record-number suggestRecordNumbers" [
   let full_url = (build-url $base "/occurrence/search/recordNumber" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest recorded by values
@@ -983,6 +1012,7 @@ export def "occurrence-search-recorded-by suggestRecordedBy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -993,7 +1023,7 @@ export def "occurrence-search-recorded-by suggestRecordedBy" [
   let full_url = (build-url $base "/occurrence/search/recordedBy" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest sampling protocols
@@ -1008,6 +1038,7 @@ export def "occurrence-search-sampling-protocol suggestSamplingProtocols" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -1018,7 +1049,7 @@ export def "occurrence-search-sampling-protocol suggestSamplingProtocols" [
   let full_url = (build-url $base "/occurrence/search/samplingProtocol" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest states/provinces
@@ -1033,6 +1064,7 @@ export def "occurrence-search-state-province suggestStateProvinces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -1043,7 +1075,7 @@ export def "occurrence-search-state-province suggestStateProvinces" [
   let full_url = (build-url $base "/occurrence/search/stateProvince" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest water bodies
@@ -1058,6 +1090,7 @@ export def "occurrence-search-water-body suggestWaterBodies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Simple search suggestion parameter. Wildcards are not supported. (e.g. A)
   --limit: int # Controls the number of suggestions. (format: int32, e.g. 5)
@@ -1068,7 +1101,7 @@ export def "occurrence-search-water-body suggestWaterBodies" [
   let full_url = (build-url $base "/occurrence/search/waterBody" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest values for supported terms
@@ -1084,6 +1117,7 @@ export def "occurrence-search-experimental-term suggestTerm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --term: string@term-completer # A supported term (e.g. Continent)
   --q: string
@@ -1095,7 +1129,7 @@ export def "occurrence-search-experimental-term suggestTerm" [
   let full_url = (build-url $base $"/occurrence/search/experimental/term/($term)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental.** Describes the fields present in a Darwin Core Archive format download
@@ -1110,13 +1144,14 @@ export def "occurrence-download-describe-dwca describeDwcaDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<verbatim: record<fields: list<record>>, multimedia: record<fields: list<record>>, interpreted: record<fields: list<record>>, verbatimExtensions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/dwca")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental.** Describes the fields present in a Simple Avro format download
@@ -1131,13 +1166,14 @@ export def "occurrence-download-describe-simple-avro describeSimpleAvroDownload"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<name: string, type: string, typeFormat: string, delimiter: string, term: record, nullable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/simpleAvro")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental.** Describes the fields present in a Simple CSV format download
@@ -1152,13 +1188,14 @@ export def "occurrence-download-describe-simple-csv describeSimpleCsvDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<name: string, type: string, typeFormat: string, delimiter: string, term: record, nullable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/simpleCsv")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental.** Describes the fields present in a Simple Parquet format download
@@ -1173,13 +1210,14 @@ export def "occurrence-download-describe-simple-parquet describeSimpleParquetDow
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<name: string, type: string, typeFormat: string, delimiter: string, term: record, nullable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/simpleParquet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Experimental.** Describes the fields present in a Species List format download
@@ -1194,13 +1232,14 @@ export def "occurrence-download-describe-species-list describeSpeciesListDownloa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<name: string, type: string, typeFormat: string, delimiter: string, term: record, nullable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/speciesList")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Very experimental.** Describes the fields available for searching or download when using an SQL query.
@@ -1215,13 +1254,14 @@ export def "occurrence-download-describe-sql describeSqlDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<name: string, type: string, typeFormat: string, delimiter: string, term: record, nullable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/download/describe/sql")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /
@@ -1235,13 +1275,14 @@ export def "home-resource index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /occurrence/experimental/multimedia/species/{taxonKey}
@@ -1256,6 +1297,7 @@ export def "occurrence-experimental-multimedia-species listMultimediaBySpecies" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --mediaType: string
   --limit: int # format: int32
@@ -1267,7 +1309,7 @@ export def "occurrence-experimental-multimedia-species listMultimediaBySpecies" 
   let full_url = (build-url $base $"/occurrence/experimental/multimedia/species/($taxonKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /occurrence/experimental/multimedia/species/{checklistKey}/{taxonKey}
@@ -1283,6 +1325,7 @@ export def "occurrence-experimental-multimedia-species listMultimediaBySpecies-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --mediaType: string
   --limit: int # format: int32
@@ -1294,7 +1337,7 @@ export def "occurrence-experimental-multimedia-species listMultimediaBySpecies-b
   let full_url = (build-url $base $"/occurrence/experimental/multimedia/species/($checklistKey)/($taxonKey)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence terms
@@ -1309,13 +1352,14 @@ export def "occurrence-term occurrenceTerms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<simpleName: string, qualifiedName: string, group: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/term")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Information about an occurrence download
@@ -1331,6 +1375,7 @@ export def "occurrence-download list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statistics: oneof<nothing, bool> # If true it also shows number of organizations and countries.
 ]: nothing -> record<key: string, doi: string, license: string, request: record<creator: string, notificationAddresses: list<string>, sendNotification: bool, format: string, description: string, machineDescription: any, checklistKey: string>, created: string, modified: string, eraseAfter: string, erasureNotification: string, status: string, downloadLink: string, size: int, totalRecords: int, numberDatasets: int, numberOrganizations: int, numberPublishingCountries: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1339,7 +1384,7 @@ export def "occurrence-download list" [
   let full_url = (build-url $base $"/occurrence/download/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Information about an occurrence download
@@ -1356,13 +1401,14 @@ export def "occurrence-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, doi: string, license: string, request: record<creator: string, notificationAddresses: list<string>, sendNotification: bool, format: string, description: string, machineDescription: any, checklistKey: string>, created: string, modified: string, eraseAfter: string, erasureNotification: string, status: string, downloadLink: string, size: int, totalRecords: int, numberDatasets: int, numberOrganizations: int, numberPublishingCountries: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/occurrence/download/($prefix)/($suffix)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all occurrence downloads from a user
@@ -1378,6 +1424,7 @@ export def "occurrence-download-user listOccurrenceDownloadsByUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: record
   --status: list
   --qp-from: string # format: date-time
@@ -1389,7 +1436,7 @@ export def "occurrence-download-user listOccurrenceDownloadsByUser" [
   let full_url = (build-url $base $"/occurrence/download/user/($user)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Counts all downloads from a user
@@ -1405,6 +1452,7 @@ export def "occurrence-download-user-count countOccurrenceDownloadsByUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list
   --qp-from: string # format: date-time
 ]: nothing -> int {
@@ -1414,7 +1462,7 @@ export def "occurrence-download-user-count countOccurrenceDownloadsByUser" [
   let full_url = (build-url $base $"/occurrence/download/user/($user)/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists datasets present in an occurrence download
@@ -1431,6 +1479,7 @@ export def "occurrence-download-datasets listDatasetUsagesByOccurrenceDownloadDO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<downloadKey: string, datasetKey: string, datasetTitle: string, datasetDOI: string, datasetCitation: string, numberRecords: int, download: record, publishingCountryCode: string>> {
@@ -1440,7 +1489,7 @@ export def "occurrence-download-datasets listDatasetUsagesByOccurrenceDownloadDO
   let full_url = (build-url $base $"/occurrence/download/($prefix)/($suffix)/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists countries present in an occurrence download
@@ -1456,6 +1505,7 @@ export def "occurrence-download-countries listCountryUsagesByOccurrenceDownloadK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sortBy: string@sortBy-completer
   --sortOrder: string@sortOrder-completer
   --page: record
@@ -1466,7 +1516,7 @@ export def "occurrence-download-countries listCountryUsagesByOccurrenceDownloadK
   let full_url = (build-url $base $"/occurrence/download/($key)/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists datasets present in an occurrence download
@@ -1482,6 +1532,7 @@ export def "occurrence-download-datasets listDatasetUsagesByOccurrenceDownloadKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --datasetTitle: string
   --sortBy: string@sortBy-completer-1
   --sortOrder: string@sortOrder-completer
@@ -1493,7 +1544,7 @@ export def "occurrence-download-datasets listDatasetUsagesByOccurrenceDownloadKe
   let full_url = (build-url $base $"/occurrence/download/($key)/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists organizations present in an occurrence download
@@ -1509,6 +1560,7 @@ export def "occurrence-download-organizations listOrganizationUsagesByOccurrence
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organizationTitle: string
   --sortBy: string@sortBy-completer-2
   --sortOrder: string@sortOrder-completer
@@ -1520,7 +1572,7 @@ export def "occurrence-download-organizations listOrganizationUsagesByOccurrence
   let full_url = (build-url $base $"/occurrence/download/($key)/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exports datasets present in an occurrence download in TSV or CSV format
@@ -1536,6 +1588,7 @@ export def "occurrence-download-datasets-export exportDatasetUsagesByOccurrenceD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1 # The export format.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1544,7 +1597,7 @@ export def "occurrence-download-datasets-export exportDatasetUsagesByOccurrenceD
   let full_url = (build-url $base $"/occurrence/download/($key)/datasets/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows the citation for an occurrence download
@@ -1560,13 +1613,14 @@ export def "occurrence-download-citation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/occurrence/download/($key)/citation")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows the citation for an occurrence download
@@ -1583,13 +1637,14 @@ export def "occurrence-download-citation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/occurrence/download/($prefix)/($suffix)/citation")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides summarized download statistics
@@ -1604,6 +1659,7 @@ export def "occurrence-download-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # format: date-time
   --toDate: string # format: date-time
   --publishingCountry: string@publishingCountry-completer
@@ -1618,7 +1674,7 @@ export def "occurrence-download-statistics get" [
   let full_url = (build-url $base "/occurrence/download/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export summary of occurrence downloads
@@ -1633,6 +1689,7 @@ export def "occurrence-download-statistics-export exportOccurrenceDownloadedStat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1 # default: TSV
   --fromDate: string # format: date-time
   --toDate: string # format: date-time
@@ -1646,7 +1703,7 @@ export def "occurrence-download-statistics-export exportOccurrenceDownloadedStat
   let full_url = (build-url $base "/occurrence/download/statistics/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarizes downloads by month, grouped by the user's country, territory or island
@@ -1661,6 +1718,7 @@ export def "occurrence-download-statistics-downloads-by-user-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # The year and month (YYYY-MM) to start from. (format: date-time)
   --toDate: string # The year and month (YYYY-MM) to end at. (format: date-time)
   --userCountry: string@userCountry-completer # The ISO 3166-2 code for the user's country, territory or island.
@@ -1671,7 +1729,7 @@ export def "occurrence-download-statistics-downloads-by-user-country get" [
   let full_url = (build-url $base "/occurrence/download/statistics/downloadsByUserCountry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize downloaded records by dataset
@@ -1686,6 +1744,7 @@ export def "occurrence-download-statistics-downloaded-records-by-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # format: date-time
   --toDate: string # format: date-time
   --publishingCountry: string@publishingCountry-completer
@@ -1698,7 +1757,7 @@ export def "occurrence-download-statistics-downloaded-records-by-dataset get" [
   let full_url = (build-url $base "/occurrence/download/statistics/downloadedRecordsByDataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize downloads by dataset
@@ -1713,6 +1772,7 @@ export def "occurrence-download-statistics-downloads-by-dataset get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # format: date-time
   --toDate: string # format: date-time
   --publishingCountry: string@publishingCountry-completer
@@ -1725,7 +1785,7 @@ export def "occurrence-download-statistics-downloads-by-dataset get-by-" [
   let full_url = (build-url $base "/occurrence/download/statistics/downloadsByDataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summarize downloaded record totals by source
@@ -1740,6 +1800,7 @@ export def "occurrence-download-statistics-downloads-by-source get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # The year and month (YYYY-MM) to start from. (format: date-time)
   --toDate: string # The year and month (YYYY-MM) to end at. (format: date-time)
   --qp-source: string # Restrict to a particular source
@@ -1750,7 +1811,7 @@ export def "occurrence-download-statistics-downloads-by-source get" [
   let full_url = (build-url $base "/occurrence/download/statistics/downloadsBySource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the downloads activity of a dataset.
@@ -1766,6 +1827,7 @@ export def "occurrence-download-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --showDownloadDetails: oneof<nothing, bool> # Flag to indicate if we want the download details in the response. It defaults to true to keep backwards compatibility. (default: true)
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
@@ -1776,7 +1838,7 @@ export def "occurrence-download-dataset get" [
   let full_url = (build-url $base $"/occurrence/download/dataset/($datasetKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subdivisions of a GADM region
@@ -1792,6 +1854,7 @@ export def "geocode-gadm-subdivisions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
 ]: nothing -> table<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1800,7 +1863,7 @@ export def "geocode-gadm-subdivisions get" [
   let full_url = (build-url $base $"/geocode/gadm/($gid)/subdivisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details for a GADM region
@@ -1816,13 +1879,14 @@ export def "geocode-gadm get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/geocode/gadm/($gid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for GADM regions.
@@ -1837,6 +1901,7 @@ export def "geocode-gadm-search gadmRegionSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
   --gadmLevel: string # Limit to subdivisions at this level. (e.g. 2)
   --gadmGid: string # Limit to subdivisions of this GADM region. (e.g. SLV.4_1)
@@ -1848,7 +1913,7 @@ export def "geocode-gadm-search gadmRegionSearch" [
   let full_url = (build-url $base "/geocode/gadm/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Third-level subdivisions of a GADM region
@@ -1866,6 +1931,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
 ]: nothing -> table<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1874,7 +1940,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel3" [
   let full_url = (build-url $base $"/geocode/gadm/browse/($level0)/($level1)/($level2)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Second-level subdivisions of a GADM region
@@ -1891,6 +1957,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
 ]: nothing -> table<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1899,7 +1966,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel2" [
   let full_url = (build-url $base $"/geocode/gadm/browse/($level0)/($level1)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # First-level subdivisions of a GADM region
@@ -1915,6 +1982,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
 ]: nothing -> table<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1923,7 +1991,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel1" [
   let full_url = (build-url $base $"/geocode/gadm/browse/($level0)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all top-level GADM regions
@@ -1938,6 +2006,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query for (sub)divisions matching a wildcard.
 ]: nothing -> table<id: string, name: string, gadmLevel: int, variantName: list<string>, nonLatinName: list<string>, type: list<string>, englishType: list<string>, higherRegions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1946,7 +2015,7 @@ export def "geocode-gadm-browse gadmRegionBrowseLevel0" [
   let full_url = (build-url $base "/geocode/gadm/browse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence counts
@@ -1961,6 +2030,7 @@ export def "occurrence-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arg0: string
   --basisOfRecord: string@basisOfRecord-completer # Count records with a particular basisOfRecord.
   --country: string@country-completer # Count records in the given country.
@@ -1980,7 +2050,7 @@ export def "occurrence-count get" [
   let full_url = (build-url $base "/occurrence/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Supported occurrence count metrics
@@ -1995,13 +2065,14 @@ export def "occurrence-count-schema get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<dimensions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/count/schema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence inventory by basis of record
@@ -2016,13 +2087,14 @@ export def "occurrence-counts-basis-of-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/occurrence/counts/basisOfRecord")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence inventory by year
@@ -2037,6 +2109,7 @@ export def "occurrence-counts-year get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --year: string # Limit to occurrences from a particular year or range of years. (e.g. 1981,1991)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2045,7 +2118,7 @@ export def "occurrence-counts-year get" [
   let full_url = (build-url $base "/occurrence/counts/year" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence inventory by dataset
@@ -2060,6 +2133,7 @@ export def "occurrence-counts-datasets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Limit to occurrences in an ISO 3166 country or area.
   --nubKey: int # format: int32
   --taxonKey: string # Limit to occurrences of a particular taxon.
@@ -2071,7 +2145,7 @@ export def "occurrence-counts-datasets get" [
   let full_url = (build-url $base "/occurrence/counts/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence inventory by country
@@ -2086,6 +2160,7 @@ export def "occurrence-counts-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --publishingCountry: string # Limit to data published by a particular country.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2094,7 +2169,7 @@ export def "occurrence-counts-countries get" [
   let full_url = (build-url $base "/occurrence/counts/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Occurrence inventory by publishing country
@@ -2109,6 +2184,7 @@ export def "occurrence-counts-publishing-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Count only occurrences from a country or area.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2117,5 +2193,5 @@ export def "occurrence-counts-publishing-countries get" [
   let full_url = (build-url $base "/occurrence/counts/publishingCountries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

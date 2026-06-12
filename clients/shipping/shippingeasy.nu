@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def status-completer [] { ["awaiting_payment" "awaiting_shipment" "cancelled" "o
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "stores listStores" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,13 +105,14 @@ export def "stores listStores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stores: table<id: int, name: string, platform: string, api_key: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stores")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find Orders
@@ -125,6 +127,7 @@ export def "orders findOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Optional order status filter.
 ]: nothing -> record<orders: table<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list>, meta: record<page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -133,7 +136,7 @@ export def "orders findOrders" [
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find Order by ID
@@ -149,13 +152,14 @@ export def "orders findOrderById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order: record<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find Orders by Store
@@ -171,13 +175,14 @@ export def "stores-orders findOrdersByStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<orders: table<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list>, meta: record<page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($store_api_key)/orders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Order
@@ -194,6 +199,7 @@ export def "stores-orders createOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: record # shape: {external_order_identifier?: string, ordered_at?: string, order_status?: "awaiting_payment"|"awaiting_shipment"|"ready_for_shipment"|"shipped"|"on_hold"|"cancelled", billing_company?: string, billing_first_name?: string, billing_last_name?: string, billing_address?: string, billing_address2?: string, billing_city?: string, billing_state?: string, billing_postal_code?: string, billing_country?: string, billing_phone_number?: string, billing_email?: string, recipients?: list}
 ]: any -> record<order: record<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list<record>>> {
   let input = $in
@@ -204,7 +210,7 @@ export def "stores-orders createOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find Order by External Order Number
@@ -221,13 +227,14 @@ export def "stores-orders findOrderByExternalOrderNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order: record<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($store_api_key)/orders/($external_order_identifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Order Status
@@ -245,6 +252,7 @@ export def "stores-orders-status updateOrderStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   order: record # shape: {order_status: "awaiting_payment"|"awaiting_shipment"|"ready_for_shipment"|"shipped"|"on_hold"|"cancelled"}
 ]: any -> record<order: record<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list<record>>> {
   let input = $in
@@ -255,7 +263,7 @@ export def "stores-orders-status updateOrderStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Order
@@ -272,11 +280,12 @@ export def "stores-orders-cancellations cancelOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order: record<external_order_identifier: string, ordered_at: string, order_status: string, billing_company: string, billing_first_name: string, billing_last_name: string, billing_address: string, billing_address2: string, billing_city: string, billing_state: string, billing_postal_code: string, billing_country: string, billing_phone_number: string, billing_email: string, recipients: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($store_api_key)/orders/($order_number)/cancellations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

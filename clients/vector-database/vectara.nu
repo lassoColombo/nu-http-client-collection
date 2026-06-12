@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -101,7 +102,7 @@ def tool-error-type-completer [] { ["dependency_failed" "execution_error" "inval
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "corpora createCorpus" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -137,6 +138,7 @@ export def "corpora createCorpus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   key: string # A user-provided key for a corpus. (e.g. my-corpus)
@@ -160,7 +162,7 @@ export def "corpora createCorpus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List corpora
@@ -175,6 +177,7 @@ export def "corpora listCorpora" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of corpora to return at one time. (format: int32, default: 10)
   --filter: string # A regular expression to filter the corpora by their name or summary. (e.g. Vectara Content)
   --corpus-id: list # Filter corpora to only include corpora with these IDs. (e.g. [crp_12345])
@@ -190,7 +193,7 @@ export def "corpora listCorpora" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve metadata about a corpus
@@ -206,6 +209,7 @@ export def "corpora get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, key: string, name: string, description: string, enabled: bool, chat_history_corpus: bool, queries_are_answers: bool, documents_are_questions: bool, encoder_id: string, encoder_name: string, save_history: bool, filter_attributes: table<name: string, level: string, description: string, indexed: bool, type: string>, custom_dimensions: table<name: string, description: string, indexing_default: float, querying_default: float>, limits: record<used_docs: int, used_parts: int, used_bytes: int, used_characters: int, max_bytes: int, max_metadata_bytes: int, index_rate: int>, created_at: string> {
@@ -216,7 +220,7 @@ export def "corpora get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a corpus and all its data
@@ -232,6 +236,7 @@ export def "corpora delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -242,7 +247,7 @@ export def "corpora delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a corpus
@@ -258,6 +263,7 @@ export def "corpora updateCorpus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --enabled: oneof<nothing, bool> # Set whether or not the corpus is enabled. If unset then the corpus will remain in the same state. (e.g. false)
@@ -275,7 +281,7 @@ export def "corpora updateCorpus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove all documents and data in a corpus
@@ -291,6 +297,7 @@ export def "corpora-reset resetCorpus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -301,7 +308,7 @@ export def "corpora-reset resetCorpus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace the filter attributes of a corpus
@@ -318,6 +325,7 @@ export def "corpora-replace-filter-attributes replaceFilterAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   filter_attributes: list # The new filter attributes. — item shape: {name: string, level: "document"|"part", description?: string, indexed?: bool, type: "integer"|"real_number"|"text"|"boolean"|"list[integer]"|"list[real_number]"|"list[text]"}
@@ -332,7 +340,7 @@ export def "corpora-replace-filter-attributes replaceFilterAttributes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Compute the current size of a corpus
@@ -348,6 +356,7 @@ export def "corpora-compute-size computeCorpusSize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<used_docs: int, used_parts: int, used_characters: int, used_metadata_characters: int> {
@@ -358,7 +367,7 @@ export def "corpora-compute-size computeCorpusSize" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get filter attribute statistics for corpus metadata
@@ -374,6 +383,7 @@ export def "corpora-filter-attribute-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Comma-separated list of qualified field names to retrieve statistics for (e.g., 'doc.category,part.status'). If omitted, returns statistics for all filter attributes in the corpus. Field names must match the qualified format 'level.fieldname' where level is either 'doc' or 'part'. (e.g. doc.category,doc.year,part.status)
   --metadata-filter: string # Optional metadata filter expression to pre-filter documents or parts before computing statistics. Uses the same SQL-style filter syntax as query operations. When provided, statistics reflect only the filtered subset of the corpus. (e.g. doc.year >= 2020 AND doc.category = 'financial')
   --max-values: int # Maximum number of distinct values to return per field in the 'values' array, ordered by occurrence count (descending). (format: int32, default: 100, e.g. 50)
@@ -388,7 +398,7 @@ export def "corpora-filter-attribute-stats get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a file to the corpus
@@ -406,6 +416,7 @@ export def "corpora-upload-file uploadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --metadata: record # Arbitrary object that will be attached as document metadata to the extracted document. (e.g. {department: engineering, doc_type": architecture_diagram})
@@ -424,7 +435,7 @@ export def "corpora-upload-file uploadFile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Add a document to a corpus
@@ -446,6 +457,7 @@ export def "corpora-documents createCorpusDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wait-for: string@wait-for-completer # Controls how long the request waits before returning a response. - `searchable` (default): Waits until the document is fully indexed and immediately searchable. Use this when you need to query the document immediately after indexing. - `indexed`: Waits until the document is durably stored and will be included in future search results. This is faster but the document may not appear in search results for a brief period after the response.  Both modes return a successful response once the specified condition is met.  (default: searchable)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -472,7 +484,7 @@ export def "corpora-documents createCorpusDocument" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the documents in the corpus
@@ -488,6 +500,7 @@ export def "corpora-documents listCorpusDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of documents to return at one time. (format: int32, default: 10)
   --metadata-filter: string # Filter documents by metadata. Uses the same expression as a query metadata filter, but only allows filtering on document metadata.
   --page-key: string # Used to retrieve the next page of documents after the limit has been reached.
@@ -502,7 +515,7 @@ export def "corpora-documents listCorpusDocuments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk delete documents from a corpus
@@ -519,6 +532,7 @@ export def "corpora-documents bulkDeleteCorpusDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-filter: string # Filter documents by metadata. Uses the same expression as a query metadata filter. Example: `doc.status = 'archived' AND doc.year < 2020`
   --document-ids: string # Comma-separated list of document IDs to delete. Maximum 10,000 IDs per request.
   --async: oneof<nothing, bool> # Whether to perform the deletion asynchronously. - `true` (default): Returns immediately with job_id to track progress (HTTP 202) - `false`: Waits for completion and returns deletion results (HTTP 200)  When `async=false`, the operation will wait for the deletion to complete up to the timeout specified in the `Request-Timeout` or `Request-Timeout-Millis` header. If no timeout header is provided, defaults to 7 days. If the operation times out, returns HTTP 504 with job_id to track via Jobs API.  The workflow continues running in the background even if the API wait times out.  (default: true)
@@ -533,7 +547,7 @@ export def "corpora-documents bulkDeleteCorpusDocuments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a document
@@ -550,6 +564,7 @@ export def "corpora-documents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -560,7 +575,7 @@ export def "corpora-documents delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a document
@@ -577,6 +592,7 @@ export def "corpora-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, metadata: record, tables: table<id: string, title: string, data: record, description: string>, images: table<id: string, title: string, caption: string, description: string, mime_type: string>, parts: table<text: string, metadata: record, table_id: string, image_id: string, context: string, custom_dimensions: record>, storage_usage: record<bytes_used: int, metadata_bytes_used: int>, extraction_usage: record<table_extraction_used: int>> {
@@ -587,7 +603,7 @@ export def "corpora-documents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update document, merging the metadata.
@@ -604,6 +620,7 @@ export def "corpora-documents updateCorpusDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --metadata: record # The metadata for a document as an arbitrary object. Properties of this object can be used by document level filter attributes. (e.g. {title: 2024 ESG Annual Report – EuroBank, region: EU, industry: banking, year: 2024})
@@ -618,7 +635,7 @@ export def "corpora-documents updateCorpusDocument" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace the document metadata.
@@ -635,6 +652,7 @@ export def "corpora-documents-metadata replaceCorpusDocumentMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --metadata: record # The metadata for a document as an arbitrary object. Properties of this object can be used by document level filter attributes. (e.g. {title: 2024 ESG Annual Report – EuroBank, region: EU, industry: banking, year: 2024})
@@ -649,7 +667,7 @@ export def "corpora-documents-metadata replaceCorpusDocumentMetadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Summarize a document
@@ -666,6 +684,7 @@ export def "corpora-documents-summarize summarizeCorpusDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -684,7 +703,7 @@ export def "corpora-documents-summarize summarizeCorpusDocument" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an image from a document
@@ -702,6 +721,7 @@ export def "corpora-documents-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, title: string, caption: string, image_data: record<data: string, mime_type: string>, description: string> {
@@ -712,7 +732,7 @@ export def "corpora-documents-images get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query across metadata fields in a corpus
@@ -729,6 +749,7 @@ export def "corpora-metadata-query queryMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --level: string@level-completer # Whether to search document-level or part-level metadata. Document-level returns unique documents, part-level can return multiple parts from the same document. (default: document)
@@ -747,7 +768,7 @@ export def "corpora-metadata-query queryMetadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simple Single Corpus Query
@@ -763,6 +784,7 @@ export def "corpora-query searchCorpus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query string for the corpus, which is the question the user is asking.
   --limit: int # The maximum number of top retrieval results to rerank and return. (default: 10)
   --offset: int # The position from which to start in the result set. (default: 0)
@@ -779,7 +801,7 @@ export def "corpora-query searchCorpus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Advanced Single Corpus Query
@@ -796,6 +818,7 @@ export def "corpora-query queryCorpus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -816,7 +839,7 @@ export def "corpora-query queryCorpus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Multiple Corpora Query
@@ -832,6 +855,7 @@ export def "query query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -852,7 +876,7 @@ export def "query query" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a query history
@@ -868,6 +892,7 @@ export def "queries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, query: record<query: string, search: record<corpora: list, offset: int, limit: int, context_configuration: record, reranker: record, max_by: string>, generation: record<enabled: bool, generation_preset_name: string, prompt_name: string, max_used_search_results: int, prompt_template: string, prompt_text: string, max_response_characters: int, response_language: string, model_parameters: record, citations: record, enable_factual_consistency_score: bool>, stream_response: bool, save_history: bool, intelligent_query_rewriting: bool>, chat_id: string, latency_millis: int, started_at: string, agent_key: string, session_key: string, spans: list<record>> {
@@ -878,7 +903,7 @@ export def "queries get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the history of previous queries
@@ -893,6 +918,7 @@ export def "queries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --corpus-key: string # Specifies the `corpus_key` used in the query. (e.g. my_corpus_key)
   --started-after: string # Queries that started after a particular ISO date-time. (format: date-time)
   --started-before: string # Queries that started before a particular ISO date-time. (format: date-time)
@@ -911,7 +937,7 @@ export def "queries list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start a chat
@@ -930,6 +956,7 @@ export def "chats createChat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -951,7 +978,7 @@ export def "chats createChat" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List chats
@@ -968,6 +995,7 @@ export def "chats listChats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in the list. (format: int32, default: 1000)
   --page-key: string # Used to retrieve the next page of chats after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -981,7 +1009,7 @@ export def "chats listChats" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a chat
@@ -999,6 +1027,7 @@ export def "chats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, first_query: string, first_answer: string, enabled: bool, created_at: string> {
@@ -1009,7 +1038,7 @@ export def "chats get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a chat
@@ -1027,6 +1056,7 @@ export def "chats delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -1037,7 +1067,7 @@ export def "chats delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new turn in the chat
@@ -1057,6 +1087,7 @@ export def "chats-turns createChatTurn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -1078,7 +1109,7 @@ export def "chats-turns createChatTurn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List turns in a chat
@@ -1096,6 +1127,7 @@ export def "chats-turns listChatTurns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<turns: table<id: string, chat_id: string, query: string, answer: string, enabled: bool, created_at: string>> {
@@ -1106,7 +1138,7 @@ export def "chats-turns listChatTurns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a turn
@@ -1125,6 +1157,7 @@ export def "chats-turns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, chat_id: string, query: string, answer: string, enabled: bool, created_at: string> {
@@ -1135,7 +1168,7 @@ export def "chats-turns get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a turn
@@ -1154,6 +1187,7 @@ export def "chats-turns delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -1164,7 +1198,7 @@ export def "chats-turns delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a turn
@@ -1183,6 +1217,7 @@ export def "chats-turns updateChatTurn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --enabled: oneof<nothing, bool> # Indicates whether to disable a turn. It will disable this turn and all subsequent turns. Enabling a turn is not implemented. (e.g. false)
@@ -1197,7 +1232,7 @@ export def "chats-turns updateChatTurn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an LLM
@@ -1215,6 +1250,7 @@ export def "llms createLLM" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-1 # Must be "vertex-ai" for Google Cloud Vertex AI Gemini models (default: vertex-ai)
@@ -1238,7 +1274,7 @@ export def "llms createLLM" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List LLMs
@@ -1253,6 +1289,7 @@ export def "llms listLLMs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression to match names and descriptions of the LLMs.
   --limit: int # The maximum number of results to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of LLMs after the limit has been reached. This parameter is not needed for the first page of results.
@@ -1267,7 +1304,7 @@ export def "llms listLLMs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an LLM
@@ -1283,6 +1320,7 @@ export def "llms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, name: string, description: string, enabled: bool, default: bool, capabilities: record<image_support: bool, context_limit: int, tool_calling: bool, structured_outputs: bool, requires_role_alternation: bool>, ownership: string, type: string, model: string, uri: string, headers: record, idle_timeout_seconds: int, auth: record, prompts: list<record<id: string, name: string, description: string, enabled: bool, default: bool>>> {
@@ -1293,7 +1331,7 @@ export def "llms get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an LLM
@@ -1309,6 +1347,7 @@ export def "llms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -1319,7 +1358,7 @@ export def "llms delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an LLM
@@ -1338,6 +1377,7 @@ export def "llms updateLLM" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-1 # Must be "vertex-ai" for Google Cloud Vertex AI Gemini models (default: vertex-ai)
@@ -1361,7 +1401,7 @@ export def "llms updateLLM" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a model response for the given chat conversation
@@ -1378,6 +1418,7 @@ export def "llms-chat-completions createChatCompletion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -1396,7 +1437,7 @@ export def "llms-chat-completions createChatCompletion" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List generation presets
@@ -1411,6 +1452,7 @@ export def "generation-presets listGenerationPresets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --llm-name: string # Filter presets by the LLM name. (e.g. mockingbird-2.0)
   --filter: string # A regular expression to match names and descriptions of the generation presets. (e.g. mockingbird.*)
   --limit: int # The maximum number of results to return in the list. (format: int32, default: 10, e.g. 50)
@@ -1426,7 +1468,7 @@ export def "generation-presets listGenerationPresets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a generation preset
@@ -1441,6 +1483,7 @@ export def "generation-presets createGenerationPreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --id: string # The ID of the generation preset. (e.g. gnp_123)
@@ -1468,7 +1511,7 @@ export def "generation-presets createGenerationPreset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace a generation preset
@@ -1484,6 +1527,7 @@ export def "generation-presets replaceGenerationPreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --id: string # The ID of the generation preset. (e.g. gnp_123)
@@ -1511,7 +1555,7 @@ export def "generation-presets replaceGenerationPreset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a generation preset
@@ -1527,6 +1571,7 @@ export def "generation-presets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -1537,7 +1582,7 @@ export def "generation-presets delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Evaluate factual consistency
@@ -1553,6 +1598,7 @@ export def "evaluate-factual-consistency evaluateFactualConsistency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --model-parameters: record # The model parameters for the evaluation. — shape: {model_name?: string}
@@ -1569,7 +1615,7 @@ export def "evaluate-factual-consistency evaluateFactualConsistency" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an encoder
@@ -1586,6 +1632,7 @@ export def "encoders createEncoder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-2 # Must be "openai-compatible" for OpenAI and OpenAI-compatible text-embedding APIs. (default: openai-compatible)
@@ -1607,7 +1654,7 @@ export def "encoders createEncoder" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List encoders
@@ -1622,6 +1669,7 @@ export def "encoders listEncoders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against encoder names and descriptions. (e.g. vectara.*)
   --limit: int # The maximum number of results to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of encoders after the limit has been reached.
@@ -1636,7 +1684,7 @@ export def "encoders listEncoders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List rerankers
@@ -1651,6 +1699,7 @@ export def "rerankers listRerankers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against reranker names and descriptions. (e.g. vectara.*)
   --limit: int # The maximum number of rerankers to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of rerankers after the limit has been reached.
@@ -1665,7 +1714,7 @@ export def "rerankers listRerankers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List supported table extractors
@@ -1680,6 +1729,7 @@ export def "table-extractors listTableExtractors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<table_extractors: table<name: string, is_default: bool, description: string, generation: record>> {
@@ -1690,7 +1740,7 @@ export def "table-extractors listTableExtractors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List hallucination correctors
@@ -1705,6 +1755,7 @@ export def "hallucination-correctors listHallucinationCorrectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression applied to the name and description fields. Use this to return only hallucination correctors that match specific keywords or naming conventions.
   --limit: int # The maximum number of hallucination correctors to return in the list. Defaults to 10. Range is between 1 and 100. (format: int32, default: 10)
   --page-key: string # Retrieves the next page of hallucination correctors after reaching the limit.
@@ -1719,7 +1770,7 @@ export def "hallucination-correctors listHallucinationCorrectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Corrects hallucinations in generated text based on source documents
@@ -1735,6 +1786,7 @@ export def "hallucination-correctors-correct-hallucinations correctHallucination
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   generated_text: string # The generated text to be evaluated. The hallucination corrector reviews this text and applies corrections based on the provided source documents.
@@ -1752,7 +1804,7 @@ export def "hallucination-correctors-correct-hallucinations correctHallucination
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List jobs
@@ -1767,6 +1819,7 @@ export def "jobs listJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --corpus-key: list # The unique key identifying the corpus with the job.
   --after: string # Filter by jobs created after a particular date-time. (format: date-time)
   --state: list # Filter by jobs in particular states.
@@ -1783,7 +1836,7 @@ export def "jobs listJobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a job by ID
@@ -1799,6 +1852,7 @@ export def "jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, type: string, corpus_keys: list<string>, state: string, created_at: string, started_at: string, completed_at: string, created_by_username: string> {
@@ -1809,7 +1863,7 @@ export def "jobs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user in the current customer account
@@ -1826,6 +1880,7 @@ export def "users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   email: string # The email address for the user. (format: email)
@@ -1845,7 +1900,7 @@ export def "users createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List users in the account
@@ -1860,6 +1915,7 @@ export def "users listUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of users to return at one time. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of users after the limit has been reached.
   --corpus-key: string # Filter users by access to this corpus. (e.g. my-corpus)
@@ -1874,7 +1930,7 @@ export def "users listUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -1890,6 +1946,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, email: string, username: string, enabled: bool, description: string, created_at: string, updated_at: string, api_roles: list<string>, corpus_roles: table<corpus_key: string, role: string>, agent_roles: table<agent_key: string, role: string>, api_policy: record<name: string, allowed_operations: record>> {
@@ -1900,7 +1957,7 @@ export def "users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -1918,6 +1975,7 @@ export def "users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --enabled: oneof<nothing, bool> # Indicates whether to enable or disable the user.
@@ -1936,7 +1994,7 @@ export def "users updateUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user
@@ -1952,6 +2010,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -1962,7 +2021,7 @@ export def "users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset the password for a user
@@ -1978,6 +2037,7 @@ export def "users-reset-password resetUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<one_time_code: string, one_time_code_link: string> {
@@ -1988,7 +2048,7 @@ export def "users-reset-password resetUserPassword" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API key
@@ -2006,6 +2066,7 @@ export def "api-keys createApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   name: string # The human-readable name of the API key.
@@ -2025,7 +2086,7 @@ export def "api-keys createApiKey" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List API keys
@@ -2040,6 +2101,7 @@ export def "api-keys listApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max number of API keys to return at one time. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of API keys after the limit has been reached.
   --corpus-key: string # Filters the API keys to only those with permissions on the specified corpus key. (e.g. my-corpus)
@@ -2055,7 +2117,7 @@ export def "api-keys listApiKeys" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an API key
@@ -2071,6 +2133,7 @@ export def "api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, name: string, secret_key: string, enabled: bool, api_roles: list<string>, api_key_role: string, corpus_roles: table<corpus_key: string, role: string>, agent_roles: table<agent_key: string, role: string>, api_policy: record<name: string, allowed_operations: record>> {
@@ -2081,7 +2144,7 @@ export def "api-keys get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an API key
@@ -2097,6 +2160,7 @@ export def "api-keys updateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --enabled: oneof<nothing, bool> # Indicates whether to disable or enable an API key.
@@ -2111,7 +2175,7 @@ export def "api-keys updateApiKey" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an API key
@@ -2127,6 +2191,7 @@ export def "api-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2137,7 +2202,7 @@ export def "api-keys delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an App Client
@@ -2155,6 +2220,7 @@ export def "app-clients createAppClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # Name of the client credentials.
@@ -2174,7 +2240,7 @@ export def "app-clients createAppClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List App Clients
@@ -2189,6 +2255,7 @@ export def "app-clients listAppClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of App Clients to return at one time. (format: int32, default: 10)
   --filter: string # Regular expression to filter the names of the App Clients.
   --page-key: string # Used to retrieve the next page of App Clients after the limit has been reached.
@@ -2203,7 +2270,7 @@ export def "app-clients listAppClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an App Client
@@ -2219,6 +2286,7 @@ export def "app-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, name: string, description: string, client_id: string, client_secret: string, api_roles: list<string>, corpus_roles: table<corpus_key: string, role: string>, agent_roles: table<agent_key: string, role: string>, api_policy: record<name: string, allowed_operations: record>> {
@@ -2229,7 +2297,7 @@ export def "app-clients get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an App Client
@@ -2247,6 +2315,7 @@ export def "app-clients updateAppClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --description: string # The new App Client description.
@@ -2264,7 +2333,7 @@ export def "app-clients updateAppClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an App Client
@@ -2280,6 +2349,7 @@ export def "app-clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2290,7 +2360,7 @@ export def "app-clients delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request an access token
@@ -2305,6 +2375,7 @@ export def "oauth-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The client ID of the application
   client_secret: string # The client secret of the application
   grant_type: any
@@ -2317,7 +2388,7 @@ export def "oauth-token post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List tool servers
@@ -2332,6 +2403,7 @@ export def "tool-servers listToolServers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against tool server names and descriptions to filter the results. (e.g. rag.*)
   --type: string@type-completer-4 # Filter tool servers by type. (e.g. mcp)
   --enabled: oneof<nothing, bool> # Filter tool servers by enabled status. (e.g. true)
@@ -2348,7 +2420,7 @@ export def "tool-servers listToolServers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tool server
@@ -2364,6 +2436,7 @@ export def "tool-servers createToolServer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   name: string # The human-readable name of a tool server. (e.g. RAG Search Server)
@@ -2386,7 +2459,7 @@ export def "tool-servers createToolServer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tool Server
@@ -2402,6 +2475,7 @@ export def "tool-servers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, name: string, type: string, description: string, uri: string, headers: record, transport: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
@@ -2412,7 +2486,7 @@ export def "tool-servers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update tool server
@@ -2429,6 +2503,7 @@ export def "tool-servers updateToolServer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # The human-readable name of a tool server. (e.g. RAG Search Server)
@@ -2450,7 +2525,7 @@ export def "tool-servers updateToolServer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete tool server
@@ -2466,6 +2541,7 @@ export def "tool-servers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2476,7 +2552,7 @@ export def "tool-servers delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Synchronize tool server
@@ -2492,6 +2568,7 @@ export def "tool-servers-sync syncToolServer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2502,7 +2579,7 @@ export def "tool-servers-sync syncToolServer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tool
@@ -2519,6 +2596,7 @@ export def "tools createTool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-5 # This should always be `lambda`. (default: lambda, e.g. lambda)
@@ -2541,7 +2619,7 @@ export def "tools createTool" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List tools
@@ -2556,6 +2634,7 @@ export def "tools listTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against tool names and descriptions to filter the results. (e.g. rag.*)
   --type: string@type-completer-6 # Filter tools by type. (e.g. mcp)
   --enabled: oneof<nothing, bool> # Filter tools by enabled status. (e.g. true)
@@ -2574,7 +2653,7 @@ export def "tools listTools" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test Lambda tool without creation
@@ -2590,6 +2669,7 @@ export def "tools-test testLambdaToolWithoutCreation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --language: string@language-completer # The programming language. Currently only 'python' (Python 3.12) is supported. (default: python, e.g. python)
@@ -2608,7 +2688,7 @@ export def "tools-test testLambdaToolWithoutCreation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tool
@@ -2625,6 +2705,7 @@ export def "tools get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2635,7 +2716,7 @@ export def "tools get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update tool
@@ -2653,6 +2734,7 @@ export def "tools updateTool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-6 # This should always be `mcp`. (default: mcp, e.g. mcp)
@@ -2674,7 +2756,7 @@ export def "tools updateTool" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete tool
@@ -2690,6 +2772,7 @@ export def "tools delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2700,7 +2783,7 @@ export def "tools delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test Lambda tool
@@ -2717,6 +2800,7 @@ export def "tools-test testTool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   input: record # The input parameters to pass to the function. Must match the tool's input schema. (e.g. {number: 42, text: Hello, world!})
@@ -2732,7 +2816,7 @@ export def "tools-test testTool" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create instruction
@@ -2748,6 +2832,7 @@ export def "instructions createInstruction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --body: record
@@ -2761,7 +2846,7 @@ export def "instructions createInstruction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List instructions
@@ -2776,6 +2861,7 @@ export def "instructions listInstructions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against instruction names and descriptions to filter the results. (e.g. support.*)
   --type: string@type-completer-7 # Filter instructions by type. (e.g. initial)
   --enabled: oneof<nothing, bool> # Filter instructions by enabled status. (e.g. true)
@@ -2792,7 +2878,7 @@ export def "instructions listInstructions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instruction
@@ -2809,6 +2895,7 @@ export def "instructions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The specific version of the instruction to retrieve. If not specified, the latest version will be returned. (e.g. 1)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -2821,7 +2908,7 @@ export def "instructions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update instruction
@@ -2838,6 +2925,7 @@ export def "instructions updateInstruction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-7 # The type of instruction to update. (default: initial, e.g. initial)
@@ -2858,7 +2946,7 @@ export def "instructions updateInstruction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete instruction
@@ -2874,6 +2962,7 @@ export def "instructions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2884,7 +2973,7 @@ export def "instructions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test instruction
@@ -2900,6 +2989,7 @@ export def "instructions-test testInstruction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The specific version of the instruction to test. If not specified, the latest version will be used. (e.g. 1)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -2917,7 +3007,7 @@ export def "instructions-test testInstruction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete instruction version
@@ -2934,6 +3024,7 @@ export def "instructions-versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -2944,7 +3035,7 @@ export def "instructions-versions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create agent
@@ -2963,6 +3054,7 @@ export def "agents createAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A unique key that identifies an agent. (e.g. customer_support)
@@ -2989,7 +3081,7 @@ export def "agents createAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List agents
@@ -3004,6 +3096,7 @@ export def "agents listAgents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against agent names and descriptions to filter the results. (e.g. support.*)
   --enabled: oneof<nothing, bool> # Filter agents by enabled status. (e.g. true)
   --limit: int # The maximum number of agents to return in the list. (format: int32, default: 10)
@@ -3019,7 +3112,7 @@ export def "agents listAgents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent
@@ -3035,6 +3128,7 @@ export def "agents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, name: string, description: string, tool_configurations: record, skills: record, model: record<name: string, parameters: record, retry_configuration: record<enabled: bool, max_retries: int, initial_backoff_ms: int, max_backoff_ms: int, backoff_factor: float>>, first_step: record<name: string, type: string, instructions: list<any>, output_parser: record, reminders: list<any>, next_steps: list<record>, allowed_tools: list<string>, allowed_skills: list<string>, reentry_step: string>, first_step_name: string, steps: record, metadata: record, enabled: bool, compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, tool_output_offloading: record<enabled: bool, mode: string, context_percentage: float, max_threshold_bytes: int, min_threshold_bytes: int, headroom_percentage: float>, created_at: string, updated_at: string> {
@@ -3045,7 +3139,7 @@ export def "agents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent
@@ -3065,6 +3159,7 @@ export def "agents updateAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # The human-readable name of an agent. (e.g. Customer Support Agent)
@@ -3090,7 +3185,7 @@ export def "agents updateAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace agent
@@ -3110,6 +3205,7 @@ export def "agents replaceAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A unique key that identifies an agent. (e.g. customer_support)
@@ -3136,7 +3232,7 @@ export def "agents replaceAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete agent
@@ -3152,6 +3248,7 @@ export def "agents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -3162,7 +3259,7 @@ export def "agents delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create agent session
@@ -3179,6 +3276,7 @@ export def "agents-sessions createAgentSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A unique key that identifies an agent session. (e.g. customer_support_chat)
@@ -3200,7 +3298,7 @@ export def "agents-sessions createAgentSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List agent sessions
@@ -3216,6 +3314,7 @@ export def "agents-sessions listAgentSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A regular expression against session names and descriptions to filter the results. (e.g. support.*)
   --metadata-filter: string # A filter expression to narrow the list to sessions whose metadata matches. Field names refer to keys on the session's `metadata` object. Syntax is similar to a SQL WHERE clause, the same as the `metadata_filter` used in query requests. See [metadata filters documentation](https://docs.vectara.com/docs/learn/metadata-search-filtering/filter-overview) for more information.  Examples: - `user_role = 'premium'` - `tier >= 2 AND region = 'us'` - `user LIKE '%@example.com'` - `tier IN ('premium', 'enterprise')` - `tier IS NULL` - `"profile.country" = 'US'` (nested fields use a quoted dotted path) - `1 IN user_ids` (value present in an array)  (e.g. user_role = 'premium' AND tier >= 2)
   --limit: int # The maximum number of sessions to return in the list. (format: int32, default: 10)
@@ -3231,7 +3330,7 @@ export def "agents-sessions listAgentSessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent session
@@ -3248,6 +3347,7 @@ export def "agents-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, agent_key: string, name: string, description: string, metadata: record, current_step_name: string, enabled: bool, status: string, tti_minutes: int, created_at: string, session_context_usage: record<input_tokens: record<count: int>, output_tokens: record<count: int, reasoning_tokens: int>, total_tokens: int, model_context_window: int>, effective_compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, alias_key: string, secrets: record> {
@@ -3258,7 +3358,7 @@ export def "agents-sessions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent session
@@ -3275,6 +3375,7 @@ export def "agents-sessions updateAgentSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # Human-readable name for the session. (e.g. Updated Session Name)
@@ -3294,7 +3395,7 @@ export def "agents-sessions updateAgentSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete agent session
@@ -3311,6 +3412,7 @@ export def "agents-sessions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -3321,7 +3423,7 @@ export def "agents-sessions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Interact with an agent
@@ -3339,6 +3441,7 @@ export def "agents-sessions-events createAgentInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -3354,7 +3457,7 @@ export def "agents-sessions-events createAgentInput" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List events in agent session
@@ -3371,6 +3474,7 @@ export def "agents-sessions-events listAgentEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of events to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of events after the limit has been reached.
   --include-hidden: oneof<nothing, bool> # Include hidden events (compacted or manually hidden) in the response. Defaults to false. (default: false)
@@ -3385,7 +3489,7 @@ export def "agents-sessions-events listAgentEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List outstanding client tool calls for an agent session
@@ -3402,6 +3506,7 @@ export def "agents-sessions-outstanding-client-tool-calls listOutstandingClientT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<client_tool_calls: table<event_id: string, tool_configuration_name: string, tool_name: string, arguments: record>> {
@@ -3412,7 +3517,7 @@ export def "agents-sessions-outstanding-client-tool-calls listOutstandingClientT
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get event in agent session
@@ -3431,6 +3536,7 @@ export def "agents-sessions-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -3441,7 +3547,7 @@ export def "agents-sessions-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete event
@@ -3459,6 +3565,7 @@ export def "agents-sessions-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -3469,7 +3576,7 @@ export def "agents-sessions-events delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hide event
@@ -3488,6 +3595,7 @@ export def "agents-sessions-events-hide hideAgentEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -3498,7 +3606,7 @@ export def "agents-sessions-events-hide hideAgentEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unhide event
@@ -3517,6 +3625,7 @@ export def "agents-sessions-events-unhide unhideAgentEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -3527,7 +3636,7 @@ export def "agents-sessions-events-unhide unhideAgentEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List session artifacts
@@ -3544,6 +3653,7 @@ export def "agents-sessions-artifacts listSessionArtifacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of artifacts to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of artifacts after the limit has been reached.
   --sort-by: string@sort-by-completer # The field to sort results by. (default: created_at)
@@ -3559,7 +3669,7 @@ export def "agents-sessions-artifacts listSessionArtifacts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get session artifact
@@ -3577,6 +3687,7 @@ export def "agents-sessions-artifacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<artifact_id: string, filename: string, mime_type: string, size_bytes: int, checksum_sha256: string, metadata: record, description: string, ttl_days: int, created_at: string, updated_at: string, data: string> {
@@ -3587,7 +3698,7 @@ export def "agents-sessions-artifacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create agent schedule
@@ -3603,6 +3714,7 @@ export def "agents-schedules createAgentSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A unique key that identifies an agent schedule. Uses "key" terminology (instead of "id") for consistency with other Vectara API resources (AgentKey, SessionKey, CorpusKey, etc.).  (e.g. daily-report)
@@ -3625,7 +3737,7 @@ export def "agents-schedules createAgentSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List agent schedules
@@ -3641,6 +3753,7 @@ export def "agents-schedules listAgentSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of schedules to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of schedules after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -3654,7 +3767,7 @@ export def "agents-schedules listAgentSchedules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent schedule
@@ -3671,6 +3784,7 @@ export def "agents-schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, agent_key: string, name: string, description: string, message: list<any>, schedule: any, enabled: bool, session_metadata: record, max_executions_to_keep: int, stall_timeout_seconds: int, last_execution_at: string, created_at: string> {
@@ -3681,7 +3795,7 @@ export def "agents-schedules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent schedule
@@ -3698,6 +3812,7 @@ export def "agents-schedules updateAgentSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # The human-readable name of an agent schedule. (e.g. Daily Summary Report)
@@ -3719,7 +3834,7 @@ export def "agents-schedules updateAgentSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete agent schedule
@@ -3736,6 +3851,7 @@ export def "agents-schedules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -3746,7 +3862,7 @@ export def "agents-schedules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List agent schedule executions
@@ -3763,6 +3879,7 @@ export def "agents-schedules-executions listAgentScheduleExecutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --page-key: string
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -3776,7 +3893,7 @@ export def "agents-schedules-executions listAgentScheduleExecutions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent identity
@@ -3792,6 +3909,7 @@ export def "agents-identity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<mode: string, client_id: string, api_roles: list<string>, corpus_roles: table<corpus_key: string, role: string>, agent_roles: table<agent_key: string, role: string>> {
@@ -3802,7 +3920,7 @@ export def "agents-identity get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent identity
@@ -3820,6 +3938,7 @@ export def "agents-identity updateAgentIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --mode: string@mode-completer # The role management mode of the agent's identity. - `auto`: The platform keeps roles in sync with the agent's tool configuration. When tools change, roles are automatically recomputed. - `manual`: Roles are user-managed. The platform will not modify roles when the agent is updated.  (e.g. auto)
@@ -3837,7 +3956,7 @@ export def "agents-identity updateAgentIdentity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get agent secrets
@@ -3853,6 +3972,7 @@ export def "agents-secrets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<secrets: record> {
@@ -3863,7 +3983,7 @@ export def "agents-secrets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace agent secrets
@@ -3879,6 +3999,7 @@ export def "agents-secrets replaceAgentSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   secrets: record # Map of secret name to plaintext value. (e.g. {jira_api_token: ATATT3xFf...})
@@ -3893,7 +4014,7 @@ export def "agents-secrets replaceAgentSecrets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update agent secrets
@@ -3909,6 +4030,7 @@ export def "agents-secrets updateAgentSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   secrets: record # Map of secret name to plaintext value (or `null` to remove). Names not in the map are not touched.  (e.g. {jira_api_token: ATATT3xFf..., old_token_to_remove: })
@@ -3923,7 +4045,7 @@ export def "agents-secrets updateAgentSecrets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get agent memory
@@ -3939,6 +4061,7 @@ export def "agents-memory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<skill: record<description: string, content: string>, metadata: record<memory_version: int, memory_last_updated: string, memory_last_updated_by: string>> {
@@ -3949,7 +4072,7 @@ export def "agents-memory get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent memory
@@ -3965,6 +4088,7 @@ export def "agents-memory updateAgentMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   content: string # The full memory content to store. Replaces the previous content entirely. (e.g. - Customer prefers email contact - Time zone: PST)
@@ -3981,7 +4105,7 @@ export def "agents-memory updateAgentMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get agent memory history
@@ -3997,6 +4121,7 @@ export def "agents-memory-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<skill_name: string, versions: table<version: int, content: string, timestamp: string, updated_by: string>> {
@@ -4007,7 +4132,7 @@ export def "agents-memory-history get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create agent connector
@@ -4023,6 +4148,7 @@ export def "agents-connectors createAgentConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   name: string # The human-readable name of the connector. (e.g. Customer Support Slack Channel)
@@ -4041,7 +4167,7 @@ export def "agents-connectors createAgentConnector" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List agent connectors
@@ -4057,6 +4183,7 @@ export def "agents-connectors listAgentConnectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-9 # Filter connectors by type. (e.g. slack)
   --enabled: oneof<nothing, bool> # Filter connectors by enabled status. (e.g. true)
   --limit: int # The maximum number of connectors to return in the list. (format: int32, default: 10)
@@ -4072,7 +4199,7 @@ export def "agents-connectors listAgentConnectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent connector
@@ -4089,6 +4216,7 @@ export def "agents-connectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, agent_key: string, name: string, description: string, type: string, status: string, status_message: string, metadata: record, enabled: bool, configuration: any, created_at: string, updated_at: string, last_webhook_at: string, last_webhook_status: string> {
@@ -4099,7 +4227,7 @@ export def "agents-connectors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update agent connector
@@ -4116,6 +4244,7 @@ export def "agents-connectors updateAgentConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # The human-readable name of the connector. (e.g. Updated Customer Support Slack Channel)
@@ -4134,7 +4263,7 @@ export def "agents-connectors updateAgentConnector" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete agent connector
@@ -4151,6 +4280,7 @@ export def "agents-connectors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -4161,7 +4291,7 @@ export def "agents-connectors delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an alias
@@ -4176,6 +4306,7 @@ export def "agent-aliases createAgentAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   key: string # The unique key identifying an alias. Alias keys are independent of agent keys — the same string may exist as both an alias and an agent in a customer; calls to `/v2/agent_aliases/{key}/...` target the alias and calls to `/v2/agents/{key}/...` target the agent.  (e.g. support)
@@ -4195,7 +4326,7 @@ export def "agent-aliases createAgentAlias" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List aliases
@@ -4210,6 +4341,7 @@ export def "agent-aliases listAgentAliases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max number of aliases to return. (format: int32, default: 10)
   --page-key: string # Pagination cursor.
   --filter: string # A regular expression matched against alias names and descriptions to filter results. (e.g. support.*)
@@ -4225,7 +4357,7 @@ export def "agent-aliases listAgentAliases" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an alias
@@ -4241,6 +4373,7 @@ export def "agent-aliases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, name: string, description: string, policy: any, enabled: bool, metadata: record, created_at: string, updated_at: string> {
@@ -4251,7 +4384,7 @@ export def "agent-aliases get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an alias's metadata
@@ -4267,6 +4400,7 @@ export def "agent-aliases updateAgentAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string
@@ -4284,7 +4418,7 @@ export def "agent-aliases updateAgentAlias" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an alias
@@ -4300,6 +4434,7 @@ export def "agent-aliases delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -4310,7 +4445,7 @@ export def "agent-aliases delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace an alias's routing policy
@@ -4326,6 +4461,7 @@ export def "agent-aliases-policy replaceAgentAliasPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   policy: any # A routing policy. The `type` discriminator determines which fields apply:  * `routed` — evaluate ordered rules; the first rule whose `match` expression evaluates to true is selected. The selected rule's `targets` are then used (one agent for `single`, hashed by `partition_by` for `weighted`). A rule with omitted `match` is a catch-all that always matches; it must be the last rule, and any rule placed after it is rejected as unreachable.  Most use cases (direct, weighted/canary, conditional, conditional+canary) collapse into `routed`.
@@ -4340,7 +4476,7 @@ export def "agent-aliases-policy replaceAgentAliasPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create session via alias
@@ -4357,6 +4493,7 @@ export def "agent-aliases-sessions createAliasRoutedSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A unique key that identifies an agent session. (e.g. customer_support_chat)
@@ -4378,7 +4515,7 @@ export def "agent-aliases-sessions createAliasRoutedSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List sessions routed via this alias
@@ -4394,6 +4531,7 @@ export def "agent-aliases-sessions listAliasRoutedSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string
   --limit: int # format: int32, default: 10
   --page-key: string
@@ -4408,7 +4546,7 @@ export def "agent-aliases-sessions listAliasRoutedSessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get alias-routed session
@@ -4425,6 +4563,7 @@ export def "agent-aliases-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, agent_key: string, name: string, description: string, metadata: record, current_step_name: string, enabled: bool, status: string, tti_minutes: int, created_at: string, session_context_usage: record<input_tokens: record<count: int>, output_tokens: record<count: int, reasoning_tokens: int>, total_tokens: int, model_context_window: int>, effective_compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, alias_key: string, secrets: record> {
@@ -4435,7 +4574,7 @@ export def "agent-aliases-sessions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update alias-routed session
@@ -4452,6 +4591,7 @@ export def "agent-aliases-sessions updateAliasRoutedSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # Human-readable name for the session. (e.g. Updated Session Name)
@@ -4471,7 +4611,7 @@ export def "agent-aliases-sessions updateAliasRoutedSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete alias-routed session
@@ -4488,6 +4628,7 @@ export def "agent-aliases-sessions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -4498,7 +4639,7 @@ export def "agent-aliases-sessions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit input to alias-routed session
@@ -4516,6 +4657,7 @@ export def "agent-aliases-sessions-events createAliasRoutedInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -4531,7 +4673,7 @@ export def "agent-aliases-sessions-events createAliasRoutedInput" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List events on alias-routed session
@@ -4548,6 +4690,7 @@ export def "agent-aliases-sessions-events listAliasRoutedEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --page-key: string
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -4561,7 +4704,7 @@ export def "agent-aliases-sessions-events listAliasRoutedEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List outstanding client tool calls on alias-routed session
@@ -4578,6 +4721,7 @@ export def "agent-aliases-sessions-outstanding-client-tool-calls listAliasRouted
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<client_tool_calls: table<event_id: string, tool_configuration_name: string, tool_name: string, arguments: record>> {
@@ -4588,7 +4732,7 @@ export def "agent-aliases-sessions-outstanding-client-tool-calls listAliasRouted
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get event on alias-routed session
@@ -4607,6 +4751,7 @@ export def "agent-aliases-sessions-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -4617,7 +4762,7 @@ export def "agent-aliases-sessions-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete event on alias-routed session
@@ -4635,6 +4780,7 @@ export def "agent-aliases-sessions-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -4645,7 +4791,7 @@ export def "agent-aliases-sessions-events delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hide event on alias-routed session
@@ -4664,6 +4810,7 @@ export def "agent-aliases-sessions-events-hide hideAliasRoutedEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -4674,7 +4821,7 @@ export def "agent-aliases-sessions-events-hide hideAliasRoutedEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unhide event on alias-routed session
@@ -4693,6 +4840,7 @@ export def "agent-aliases-sessions-events-unhide unhideAliasRoutedEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record {
@@ -4703,7 +4851,7 @@ export def "agent-aliases-sessions-events-unhide unhideAliasRoutedEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List artifacts on alias-routed session
@@ -4720,6 +4868,7 @@ export def "agent-aliases-sessions-artifacts listAliasRoutedSessionArtifacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --page-key: string
   --sort-by: string@sort-by-completer # default: created_at
@@ -4735,7 +4884,7 @@ export def "agent-aliases-sessions-artifacts listAliasRoutedSessionArtifacts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artifact on alias-routed session
@@ -4753,6 +4902,7 @@ export def "agent-aliases-sessions-artifacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<artifact_id: string, filename: string, mime_type: string, size_bytes: int, checksum_sha256: string, metadata: record, description: string, ttl_days: int, created_at: string, updated_at: string, data: string> {
@@ -4763,7 +4913,7 @@ export def "agent-aliases-sessions-artifacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create pipeline
@@ -4779,6 +4929,7 @@ export def "pipelines createPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: any # A user-provided key for the pipeline. If omitted, one is auto-generated.
@@ -4801,7 +4952,7 @@ export def "pipelines createPipeline" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List pipelines
@@ -4816,6 +4967,7 @@ export def "pipelines listPipelines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-type: string@source-type-completer # Filter pipelines by source type.
   --status: string@status-completer # Filter pipelines by status.
   --enabled: oneof<nothing, bool> # Filter pipelines by enabled state.
@@ -4833,7 +4985,7 @@ export def "pipelines listPipelines" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pipeline
@@ -4849,6 +5001,7 @@ export def "pipelines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, name: string, description: string, source: any, trigger: any, transform: record<type: string>, sync_mode: string, watermark: record<value: string, updated_at: string>, status: string, status_message: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
@@ -4859,7 +5012,7 @@ export def "pipelines get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace pipeline
@@ -4876,6 +5029,7 @@ export def "pipelines replacePipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: any # A user-provided key for the pipeline. If omitted, one is auto-generated.
@@ -4898,7 +5052,7 @@ export def "pipelines replacePipeline" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update pipeline
@@ -4915,6 +5069,7 @@ export def "pipelines updatePipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # The human-readable name of the pipeline. (e.g. SharePoint Legal Docs Ingest)
@@ -4936,7 +5091,7 @@ export def "pipelines updatePipeline" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete pipeline
@@ -4952,6 +5107,7 @@ export def "pipelines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -4962,7 +5118,7 @@ export def "pipelines delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger pipeline
@@ -4978,6 +5134,7 @@ export def "pipelines-trigger triggerPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, pipeline_key: string, agent_key: string, status: string, trigger_type: string, records_fetched: int, records_processed: int, records_failed: int, error: string, started_at: string, completed_at: string, created_at: string> {
@@ -4988,7 +5145,7 @@ export def "pipelines-trigger triggerPipeline" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List dead letters
@@ -5004,6 +5161,7 @@ export def "pipelines-dead-letters listPipelineDeadLetterEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Filter dead letters by status.
   --last-run-id: string # Filter dead letters to those from a specific run. (e.g. run_pip_abc_manual_550e8400)
   --origin: string@origin-completer # Filter dead letters by origin.
@@ -5021,7 +5179,7 @@ export def "pipelines-dead-letters listPipelineDeadLetterEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create dead letter
@@ -5037,6 +5195,7 @@ export def "pipelines-dead-letters createPipelineDeadLetterEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   source_record_id: string # The identifier for the source record to add. Format depends on connector type: - S3: the object key (e.g. `legal/contracts/doc.pdf`) - SharePoint: the drive item ID - Google Drive: the file ID - Web: the canonicalized URL (e.g. `https://docs.example.com/page`)
@@ -5052,7 +5211,7 @@ export def "pipelines-dead-letters createPipelineDeadLetterEntry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dead letter
@@ -5069,6 +5228,7 @@ export def "pipelines-dead-letters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, source_record_id: string, status: string, error_message: string, last_run_id: record, attempt_count: int, origin: string, created_at: string, updated_at: string> {
@@ -5079,7 +5239,7 @@ export def "pipelines-dead-letters get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete dead letter
@@ -5096,6 +5256,7 @@ export def "pipelines-dead-letters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -5106,7 +5267,7 @@ export def "pipelines-dead-letters delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Process dead letters
@@ -5122,6 +5283,7 @@ export def "pipelines-dead-letters-process processPipelineDeadLetterEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --source-record-ids: list # Specific source record IDs to process. If omitted, processes all matching dead letters.
@@ -5138,7 +5300,7 @@ export def "pipelines-dead-letters-process processPipelineDeadLetterEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List pipeline runs
@@ -5154,6 +5316,7 @@ export def "pipelines-runs listPipelineRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # Filter runs by status.
   --after: string # Only return runs created after this timestamp. (format: date-time)
   --limit: int # The maximum number of runs to return. (format: int32, default: 10)
@@ -5169,7 +5332,7 @@ export def "pipelines-runs listPipelineRuns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pipeline run
@@ -5186,6 +5349,7 @@ export def "pipelines-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<id: string, pipeline_key: string, agent_key: string, status: string, trigger_type: string, records_fetched: int, records_processed: int, records_failed: int, error: string, started_at: string, completed_at: string, created_at: string> {
@@ -5196,7 +5360,7 @@ export def "pipelines-runs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel pipeline run
@@ -5213,6 +5377,7 @@ export def "pipelines-runs-cancel cancelPipelineRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -5223,7 +5388,7 @@ export def "pipelines-runs-cancel cancelPipelineRun" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pipeline run events
@@ -5240,6 +5405,7 @@ export def "pipelines-runs-events listPipelineRunEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Filter to one or more event types. Repeat the parameter to pass multiple values.
   --source-record-id: string # Filter to events for a specific source record.
   --order: string@order-completer # Order events by timestamp. Defaults to newest-first.
@@ -5256,7 +5422,7 @@ export def "pipelines-runs-events listPipelineRunEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available metrics
@@ -5271,6 +5437,7 @@ export def "metrics listMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --category: list # Restrict the returned catalog to metrics in these categories. When omitted, all categories are returned.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -5283,7 +5450,7 @@ export def "metrics listMetrics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query a metric time series
@@ -5300,6 +5467,7 @@ export def "metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # Label filters keyed by label name. The set of valid label names for each metric is published in its descriptor at `/v2/metrics`.
   --start: string # Inclusive start of the query window (ISO 8601). Must be no more than 30 days before now. (format: date-time)
   --end: string # Exclusive end of the query window (ISO 8601). Must be after `start`. (format: date-time)
@@ -5315,7 +5483,7 @@ export def "metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List agent traces
@@ -5330,6 +5498,7 @@ export def "agent-analytics-traces listTraces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-key: string # Filter traces by agent key.
   --session-key: string # Filter traces by session key.
   --status: string@status-completer-3 # Filter traces by status.
@@ -5354,7 +5523,7 @@ export def "agent-analytics-traces listTraces" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get agent trace
@@ -5370,6 +5539,7 @@ export def "agent-analytics-traces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<trace_id: string, agent_key: string, session_key: string, started_at: string, duration_ms: int, status: string, input_tokens: int, output_tokens: int> {
@@ -5380,7 +5550,7 @@ export def "agent-analytics-traces get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List spans in a trace
@@ -5396,6 +5566,7 @@ export def "agent-analytics-traces-spans listTraceSpans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-content: oneof<nothing, bool> # When true, include decrypted span content such as input/output messages and tool arguments. (default: false)
   --operation: string@operation-completer # Restrict to spans with this operation.
   --parent-span-id: string # Filter spans to only direct children of this span ID.
@@ -5413,7 +5584,7 @@ export def "agent-analytics-traces-spans listTraceSpans" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get span in a trace
@@ -5431,6 +5602,7 @@ export def "agent-analytics-traces-spans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-content: oneof<nothing, bool> # When true, include decrypted span content. (default: false)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
@@ -5443,7 +5615,7 @@ export def "agent-analytics-traces-spans get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create glossary
@@ -5458,6 +5630,7 @@ export def "glossaries createGlossary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --key: string # A user-provided key that uniquely identifies a glossary. (e.g. eng-acronyms)
@@ -5474,7 +5647,7 @@ export def "glossaries createGlossary" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List glossaries
@@ -5489,6 +5662,7 @@ export def "glossaries listGlossaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A case-insensitive substring to filter glossary names and descriptions. (e.g. engineering)
   --limit: int # The maximum number of glossaries to return. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of glossaries.
@@ -5503,7 +5677,7 @@ export def "glossaries listGlossaries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get glossary
@@ -5519,6 +5693,7 @@ export def "glossaries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<key: string, name: string, description: string, num_entries: int, created_at: string, updated_at: string> {
@@ -5529,7 +5704,7 @@ export def "glossaries get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update glossary
@@ -5545,6 +5720,7 @@ export def "glossaries updateGlossary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string # Updated name for the glossary. (e.g. Platform Acronyms)
@@ -5560,7 +5736,7 @@ export def "glossaries updateGlossary" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete glossary
@@ -5576,6 +5752,7 @@ export def "glossaries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -5586,7 +5763,7 @@ export def "glossaries delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert glossary entries
@@ -5602,6 +5779,7 @@ export def "glossaries-entries upsertGlossaryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   entries: record # A map of terms to their expanded forms. Keys are terms (1–200 characters); values are expansions (1–1000 characters).  (e.g. {k8s: Kubernetes, tf: Terraform})
@@ -5616,7 +5794,7 @@ export def "glossaries-entries upsertGlossaryEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List glossary entries
@@ -5632,6 +5810,7 @@ export def "glossaries-entries listGlossaryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of entries to return. (format: int32, default: 100)
   --page-key: string # Used to retrieve the next page of entries.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -5645,7 +5824,7 @@ export def "glossaries-entries listGlossaryEntries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete glossary entries
@@ -5661,6 +5840,7 @@ export def "glossaries-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   terms: list # The terms to remove from the glossary.
@@ -5675,5 +5855,5 @@ export def "glossaries-entries delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

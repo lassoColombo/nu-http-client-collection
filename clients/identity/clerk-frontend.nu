@@ -48,10 +48,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -95,7 +96,7 @@ def include-invalid-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-assetlinksjson get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -128,13 +129,14 @@ export def "well-known-assetlinksjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/assetlinks.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # JWKS
@@ -149,13 +151,14 @@ export def "well-known-jwksjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/jwks.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apple App Site Association
@@ -170,13 +173,14 @@ export def "well-known-apple-app-site-association get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/apple-app-site-association")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Basic OpenID Configuration Payload
@@ -191,13 +195,14 @@ export def "well-known-openid-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth 2.0 Authorization Server Metadata
@@ -212,13 +217,14 @@ export def "well-known-oauth-authorization-server get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/oauth-authorization-server")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request OAuth2 authorization
@@ -233,6 +239,7 @@ export def "oauth-authorize requestOAuthAuthorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --response-type: string@response-type-completer # The authorization flow type. Must be `code` for authorization code flow.
   --client-id: string # The OAuth2 client ID of the OAuth application.
   --redirect-uri: string # The URI to redirect to after authorization. Must be registered for the OAuth application. (format: uri)
@@ -250,7 +257,7 @@ export def "oauth-authorize requestOAuthAuthorize" [
   let full_url = (build-url $base "/oauth/authorize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request OAuth2 authorization
@@ -265,6 +272,7 @@ export def "oauth-authorize requestOAuthAuthorizePOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   response_type: string@response-type-completer # The authorization flow type. Must be `code` for authorization code flow.
   client_id: string # The OAuth2 client ID of the OAuth application.
   --redirect-uri: string # The URI to redirect to after authorization. Must be registered for the OAuth application. (nullable, format: uri)
@@ -284,7 +292,7 @@ export def "oauth-authorize requestOAuthAuthorizePOST" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Register OAuth 2.0 Client
@@ -299,6 +307,7 @@ export def "oauth-register registerOAuthClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   redirect_uris: list # Array of redirection URI strings for use in redirect-based flows such as the authorization code flow. As required by Section 2 of RFC 6749, clients using flows with redirection must register their redirection URI values.
   --token-endpoint-auth-method: string@token-endpoint-auth-method-completer # Indicator of the requested authentication method for the token endpoint. - `client_secret_basic`: HTTP Basic authentication scheme - `client_secret_post`: Client credentials in the request body - `none`: Public client (no authentication)  **Note:** In the current implementation, `client_secret_basic` and `client_secret_post` are treated equivalently. Both methods can be used interchangeably at the token endpoint regardless of which one was specified during registration. (default: client_secret_basic)
   --client-name: string # Human-readable string name of the client to be presented to the end-user during authorization. (nullable)
@@ -314,7 +323,7 @@ export def "oauth-register registerOAuthClient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get OAuth2 token
@@ -329,6 +338,7 @@ export def "oauth-token post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   grant_type: string@grant-type-completer # The grant type being used. - `authorization_code`: Exchange an authorization code for tokens - `refresh_token`: Refresh an access token
   --code: string # The authorization code received from the authorization endpoint. **Required when `grant_type=authorization_code`**. (nullable)
   --redirect-uri: string # The redirect URI used in the authorization request. Must match exactly. **Required when `grant_type=authorization_code`**. (nullable)
@@ -346,7 +356,7 @@ export def "oauth-token post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get user info after OAuth2 flow
@@ -361,13 +371,14 @@ export def "oauth-userinfo get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user info after OAuth2 flow
@@ -382,13 +393,14 @@ export def "oauth-userinfo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information for an access or refresh token
@@ -403,6 +415,7 @@ export def "oauth-token-info post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The value of the access or the refresh token
   --token-type-hint: string # A hint about the type of the token submitted for introspection. Can be one of the following `access_token` and `refresh_token` (nullable)
   --scope: string # The granted scopes for the token to check against (nullable)
@@ -415,7 +428,7 @@ export def "oauth-token-info post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Revoke OAuth2 token
@@ -430,6 +443,7 @@ export def "oauth-token-revoke revokeOAuthToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token to revoke.
   --token-type-hint: string@token-type-hint-completer # A hint about the type of the token to be revoked. (nullable)
 ]: any -> any {
@@ -441,7 +455,7 @@ export def "oauth-token-revoke revokeOAuthToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get consent information
@@ -457,6 +471,7 @@ export def "me-oauth-consent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string # Optional space-separated list of scopes to restrict the response to only those requested.
   --redirect-uri: string # Optional redirect URI from the original OAuth authorize request. When provided and registered for the OAuth application, the response will include a `redirect_domain` field containing the PSL-resolved root domain for display on the consent screen. Unregistered or malformed URIs are silently ignored and `redirect_domain` will be null.  (format: uri)
 ]: nothing -> any {
@@ -466,7 +481,7 @@ export def "me-oauth-consent get" [
   let full_url = (build-url $base $"/v1/me/oauth/consent/($client_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit OAuth2 consent decision
@@ -482,6 +497,7 @@ export def "me-oauth-consent submitOAuthConsent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consented: oneof<nothing, bool> # The user's consent decision. `true` grants the requested scopes and continues the authorization flow; any other value is treated as a denial and returns an `access_denied` error in the redirect.
   --organization-id: string # Optional. The organization to scope the issued token to. The authenticated user must be a member of this organization. If omitted, the user's currently active organization is used.  (nullable)
 ]: any -> any {
@@ -493,7 +509,7 @@ export def "me-oauth-consent submitOAuthConsent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get organization creation defaults
@@ -508,13 +524,14 @@ export def "me-organization-creation-defaults get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response: record<form: record<name: string, logo: string>, advisory: record<type: string, message: string>>, client: record<object: string, id: string, sessions: list<record>, sign_in: record, sign_up: record, last_active_session_id: string, last_authentication_strategy: string, cookie_expires_at: int, captcha_bypass: bool, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/organization_creation_defaults")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account portal
@@ -529,13 +546,14 @@ export def "account-portal get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account_portal")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get environment
@@ -550,13 +568,14 @@ export def "environment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/environment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update environment
@@ -571,6 +590,7 @@ export def "environment updateEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # Origin of the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -580,7 +600,7 @@ export def "environment updateEnvironment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SAML Metadata
@@ -596,13 +616,14 @@ export def "saml-metadata samlMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/saml/metadata/($saml_connection_id).xml")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SAML ACS
@@ -618,13 +639,14 @@ export def "saml-acs acs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/saml/acs/($saml_connection_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Health
@@ -639,13 +661,14 @@ export def "health get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Proxy Health
@@ -660,6 +683,7 @@ export def "proxy-health get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain-id: string # The ID of the domain
   --Clerk-Proxy-Url: string # The URL of the proxy
   --Clerk-Secret-Key: string # The secret key of the proxy
@@ -673,7 +697,7 @@ export def "proxy-health get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Current Client
@@ -688,13 +712,14 @@ export def "client get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/client")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create New Client
@@ -709,13 +734,14 @@ export def "client put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/client")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create New Client
@@ -730,13 +756,14 @@ export def "client post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/client")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Client's Sessions
@@ -751,13 +778,14 @@ export def "client delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/client")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Sign In or replace the current one.
@@ -772,6 +800,7 @@ export def "client-sign-ins createSignIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --strategy: string # Strategy used to sign in. Can be one of `phone_code`, `email_code`, `ticket`, `web3_[provider]_signature` `reset_password_code`, `reset_password_phone_code`, `email_link`, `oauth_[provider]`, `oauth_token_[provider]`, `saml`, `password`, `passkey`, `google_one_tap` (nullable)
   --identifier: string # The unique identifier of the user. This changes depending on the strategy. (nullable)
@@ -795,7 +824,7 @@ export def "client-sign-ins createSignIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve sign-in
@@ -811,13 +840,14 @@ export def "client-sign-ins get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sign_ins/($sign_in_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset password on sign-in
@@ -833,6 +863,7 @@ export def "client-sign-ins-reset-password resetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --sign-out-of-other-sessions: oneof<nothing, bool> # nullable
 ]: any -> any {
@@ -844,7 +875,7 @@ export def "client-sign-ins-reset-password resetPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare First Factor Verification
@@ -860,6 +891,7 @@ export def "client-sign-ins-prepare-first-factor prepareSignInFactorOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   strategy: string # The strategy to be prepared for first factor authentication.  Can be one of the following `email_code`, `email_link`, `phone_code`, `web3_metamask_signature`, `web3_base_signature`, `web3_coinbase_wallet_signature`, `web3_okx_wallet_signature`, `reset_password_phone_code`, `reset_password_email_code`, `oauth_[provider]`, `saml`, `passkey`, `enterprise_sso`
   --email-address-id: string # Used with the `email_code`, `reset_password_email_code` and `email_link` strategies. (nullable)
@@ -881,7 +913,7 @@ export def "client-sign-ins-prepare-first-factor prepareSignInFactorOne" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt First Factor Verification
@@ -898,6 +930,7 @@ export def "client-sign-ins-attempt-first-factor attemptSignInFactorOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   strategy: string # The strategy to be used for first factor authentication.  Can be one of the following `email_code`, `email_link`, `password`, `phone_code`, `web3_metamask_signature`, `web3_base_signature`, `web3_coinbase_wallet_signature`, `web3_okx_wallet_signature`, `reset_password_phone_code`, `reset_password_email_code`, `passkey`, `google_one_tap`
   --code: string # The code that was sent to the email. Used with the `email_code`, `phone_code`, and `email_link` strategies. (nullable)
@@ -917,7 +950,7 @@ export def "client-sign-ins-attempt-first-factor attemptSignInFactorOne" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare Second Factor Verification
@@ -933,6 +966,7 @@ export def "client-sign-ins-prepare-second-factor prepareSignInFactorTwo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: string@strategy-completer # The strategy to be prepared for second factor authentication. (nullable)
   --phone-number-id: string # Used with the `phone_code` strategy. (nullable)
   --email-address-id: string # Used with the `email_code` and `email_link` strategies. (nullable)
@@ -946,7 +980,7 @@ export def "client-sign-ins-prepare-second-factor prepareSignInFactorTwo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Second Factor Verification
@@ -962,6 +996,7 @@ export def "client-sign-ins-attempt-second-factor attemptSignInFactorTwo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: string@strategy-completer-1 # The strategy to be attempted for second factor authentication.
   --code: string # Used with the `phone_code`, `totp` and `backup_code` strategies.
 ]: any -> any {
@@ -973,7 +1008,7 @@ export def "client-sign-ins-attempt-second-factor attemptSignInFactorTwo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Sign-up
@@ -988,6 +1023,7 @@ export def "client-sign-ups createSignUps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --transfer: oneof<nothing, bool> # nullable
   --password: string # nullable
@@ -1022,7 +1058,7 @@ export def "client-sign-ups createSignUps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Sign-up
@@ -1038,13 +1074,14 @@ export def "client-sign-ups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sign_ups/($sign_up_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Sign-up
@@ -1060,6 +1097,7 @@ export def "client-sign-ups updateSignUps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --password: string # nullable
   --first-name: string # nullable
@@ -1090,7 +1128,7 @@ export def "client-sign-ups updateSignUps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare Sign-up Identification Verification
@@ -1106,6 +1144,7 @@ export def "client-sign-ups-prepare-verification prepareSignUpsVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --strategy: string # The verification strategy  - email_code - email_link - phone_code - web3_metamask_signature - web3_base_signature - web3_coinbase_wallet_signature - web3_okx_wallet_signature - saml - oauth
   --redirect-url: string # nullable
@@ -1123,7 +1162,7 @@ export def "client-sign-ups-prepare-verification prepareSignUpsVerification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Sign-up Identification Verification
@@ -1139,6 +1178,7 @@ export def "client-sign-ups-attempt-verification attemptSignUpsVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --strategy: string@strategy-completer-2 # The verification strategy
   --code: string # The verification code (nullable)
@@ -1155,7 +1195,7 @@ export def "client-sign-ups-attempt-verification attemptSignUpsVerification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sync clients across multiple domains
@@ -1170,6 +1210,7 @@ export def "client-sync syncClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --link-domain: string # The satellite domain which should be synced with its primary.
   --redirect-url: string # The URL to redirect to after the syncing process has been completed.
 ]: nothing -> any {
@@ -1179,7 +1220,7 @@ export def "client-sync syncClient" [
   let full_url = (build-url $base "/v1/client/sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link clients across multiple domains
@@ -1194,6 +1235,7 @@ export def "client-link linkClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-token: string # The token generated from a sync request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1202,7 +1244,7 @@ export def "client-link linkClient" [
   let full_url = (build-url $base "/v1/client/link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate and return a new session token for a given client.
@@ -1217,6 +1259,7 @@ export def "client-handshake handshakeClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redirect-url: string # The URL to redirect back to after the handshake
   --format: string@format-completer # The supported format of the handshake payload. (default: token)
   --organization-id: string # The organization ID or slug to attempt to set as active for the session. If this param is present but has no value, the personal account will be set as active. If the organization cannot be set as active (because it does not exist, or the user is not a member), the active organization for the session will not change.  (allows empty value)
@@ -1232,7 +1275,7 @@ export def "client-handshake handshakeClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create session from agent task
@@ -1247,6 +1290,7 @@ export def "agents-tasks createAgentTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ticket: string # The agent task ticket value obtained from the Backend API.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1255,7 +1299,7 @@ export def "agents-tasks createAgentTask" [
   let full_url = (build-url $base "/v1/agents/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Dev Browser token
@@ -1270,13 +1314,14 @@ export def "dev-browser createDevBrowser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/dev_browser")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post Dev Browser init set cookie
@@ -1291,13 +1336,14 @@ export def "dev-browser-set-first-party-cookie post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/dev_browser/set_first_party_cookie")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initialize dev browser for development and staging instances
@@ -1312,6 +1358,7 @@ export def "dev-browser-init get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --origin: string # The origin of the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1320,7 +1367,7 @@ export def "dev-browser-init get" [
   let full_url = (build-url $base "/v1/dev_browser/init" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth Callback
@@ -1335,6 +1382,7 @@ export def "oauth-callback get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string # returned scopes from OAuth provider.
   --code: string # returned exchange code from OAuth provider.
   --state: string # returned state from OAuth provider.
@@ -1346,7 +1394,7 @@ export def "oauth-callback get" [
   let full_url = (build-url $base "/v1/oauth_callback" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth Post Callback
@@ -1361,6 +1409,7 @@ export def "oauth-callback post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # returned exchange code from OAuth provider.
   --scope: string # returned scopes from OAuth provider. (nullable)
   --state: string # returned state from OAuth provider.
@@ -1374,7 +1423,7 @@ export def "oauth-callback post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set the Clear-Site-Data header
@@ -1389,13 +1438,14 @@ export def "clear-site-data clearSiteData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/clear-site-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove client's sessions
@@ -1410,13 +1460,14 @@ export def "client-sessions removeClientSessionsAndRetainCookie" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/client/sessions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session
@@ -1432,13 +1483,14 @@ export def "client-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sessions/($session_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Touch session
@@ -1454,6 +1506,7 @@ export def "client-sessions-touch touchSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-organization-id: string # The ID or slug of the organization to activate.  When force organization selection is enabled and this value is sent as null or empty string, the session will keep the previous active organization and will not attempt to switch to a personal account. (nullable)
   --intent: string@intent-completer # Indicates why the touch request was triggered. (nullable)
 ]: any -> any {
@@ -1465,7 +1518,7 @@ export def "client-sessions-touch touchSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # End Session
@@ -1481,13 +1534,14 @@ export def "client-sessions-end endSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sessions/($session_id)/end")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Session
@@ -1503,13 +1557,14 @@ export def "client-sessions-remove removeSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sessions/($session_id)/remove")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Active Sessions
@@ -1524,6 +1579,7 @@ export def "me-sessions-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1532,7 +1588,7 @@ export def "me-sessions-active get" [
   let full_url = (build-url $base "/v1/me/sessions/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke given session
@@ -1548,6 +1604,7 @@ export def "me-sessions-revoke revokeSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1556,7 +1613,7 @@ export def "me-sessions-revoke revokeSession" [
   let full_url = (build-url $base $"/v1/me/sessions/($session_id)/revoke" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Session Token
@@ -1572,6 +1629,7 @@ export def "client-sessions-tokens createSessionToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # The organization ID to associate with the token. The user must be a member of the organization. If present but empty, the personal account will be set as active. If absent, the previous active organization for the session will be used.  When force organization selection is enabled and this value is sent as null or empty string, the token will be created with the previous active organization and will not attempt to switch to a personal account. (nullable)
 ]: any -> record<jwt: string> {
   let input = $in
@@ -1582,7 +1640,7 @@ export def "client-sessions-tokens createSessionToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Session Token With JWT Template
@@ -1599,13 +1657,14 @@ export def "client-sessions-tokens createSessionTokenWithTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<jwt: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/client/sessions/($session_id)/tokens/($template_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start a new session reverification
@@ -1621,6 +1680,7 @@ export def "client-sessions-verify startSessionReverification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   level: string@level-completer # The level of authentication that the user needs to go through
 ]: any -> any {
   let input = $in
@@ -1631,7 +1691,7 @@ export def "client-sessions-verify startSessionReverification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare session reverification first factor
@@ -1647,6 +1707,7 @@ export def "client-sessions-verify-prepare-first-factor prepareSessionReverifica
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   --strategy: string@strategy-completer-3 # The strategy to be prepared for first factor authentication.
   --email-address-id: string # Used with the `email_code` strategy. (nullable)
@@ -1662,7 +1723,7 @@ export def "client-sessions-verify-prepare-first-factor prepareSessionReverifica
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt session reverification first factor
@@ -1678,6 +1739,7 @@ export def "client-sessions-verify-attempt-first-factor attemptSessionReverifica
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request
   strategy: string@strategy-completer-4 # The strategy to be used for first factor authentication.
   --code: string # The code that was sent to the email. Used with the `email_code` and `phone_code` strategies. (nullable)
@@ -1694,7 +1756,7 @@ export def "client-sessions-verify-attempt-first-factor attemptSessionReverifica
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare session reverification second factor
@@ -1710,6 +1772,7 @@ export def "client-sessions-verify-prepare-second-factor prepareSessionReverific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: string@strategy-completer-5 # The strategy to be prepared for second factor authentication. (nullable)
   --phone-number-id: string # Used with the `phone_code` strategy. (nullable)
 ]: any -> any {
@@ -1721,7 +1784,7 @@ export def "client-sessions-verify-prepare-second-factor prepareSessionReverific
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt session reverification second factor
@@ -1737,6 +1800,7 @@ export def "client-sessions-verify-attempt-second-factor attemptSessionReverific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: string@strategy-completer-6 # The strategy to be attempted for second factor authentication.
   --code: string # Used with the `phone_code`, `totp` and `backup_code` strategies.
 ]: any -> any {
@@ -1748,7 +1812,7 @@ export def "client-sessions-verify-attempt-second-factor attemptSessionReverific
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Sessions
@@ -1763,6 +1827,7 @@ export def "me-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1771,7 +1836,7 @@ export def "me-sessions get" [
   let full_url = (build-url $base "/v1/me/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Email Addresses
@@ -1786,6 +1851,7 @@ export def "me-email-addresses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1794,7 +1860,7 @@ export def "me-email-addresses list" [
   let full_url = (build-url $base "/v1/me/email_addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Email Address
@@ -1809,6 +1875,7 @@ export def "me-email-addresses createEmailAddresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   email_address: string # The email address to be added to the user.
 ]: any -> any {
@@ -1821,7 +1888,7 @@ export def "me-email-addresses createEmailAddresses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Email Address Verification
@@ -1837,6 +1904,7 @@ export def "me-email-addresses-attempt-verification verifyEmailAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   code: string # The code that was previously sent to the email address.
 ]: any -> any {
@@ -1849,7 +1917,7 @@ export def "me-email-addresses-attempt-verification verifyEmailAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare Email Address Verification
@@ -1865,6 +1933,7 @@ export def "me-email-addresses-prepare-verification sendVerificationEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   strategy: string@strategy-completer-7 # The strategy to be prepared for email verification.
   --redirect-url: string # Used with the `email_link` strategy. (nullable)
@@ -1879,7 +1948,7 @@ export def "me-email-addresses-prepare-verification sendVerificationEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Email Address
@@ -1895,6 +1964,7 @@ export def "me-email-addresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1903,7 +1973,7 @@ export def "me-email-addresses get" [
   let full_url = (build-url $base $"/v1/me/email_addresses/($email_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete email address
@@ -1919,6 +1989,7 @@ export def "me-email-addresses DeleteEmailAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1927,7 +1998,7 @@ export def "me-email-addresses DeleteEmailAddress" [
   let full_url = (build-url $base $"/v1/me/email_addresses/($email_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Phone Numbers
@@ -1942,6 +2013,7 @@ export def "me-phone-numbers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -1950,7 +2022,7 @@ export def "me-phone-numbers get" [
   let full_url = (build-url $base "/v1/me/phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Phone Number
@@ -1965,6 +2037,7 @@ export def "me-phone-numbers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   phone_number: string # The phone number to be added to the user.
   --reserved-for-second-factor: oneof<nothing, bool> # Whether the phone number is reserved for multi-factor authentication. (nullable)
@@ -1978,7 +2051,7 @@ export def "me-phone-numbers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Phone Number Verification
@@ -1994,6 +2067,7 @@ export def "me-phone-numbers-attempt-verification verifyPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   code: string # Strategy used to verify the phone number.
 ]: any -> any {
@@ -2006,7 +2080,7 @@ export def "me-phone-numbers-attempt-verification verifyPhoneNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare Phone Number Verification
@@ -2022,6 +2096,7 @@ export def "me-phone-numbers-prepare-verification sendVerificationSMS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   strategy: string@strategy-completer-5 # Strategy used to verify the phone number.
 ]: any -> any {
@@ -2034,7 +2109,7 @@ export def "me-phone-numbers-prepare-verification sendVerificationSMS" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve Phone Number
@@ -2050,6 +2125,7 @@ export def "me-phone-numbers ReadPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2058,7 +2134,7 @@ export def "me-phone-numbers ReadPhoneNumber" [
   let full_url = (build-url $base $"/v1/me/phone_numbers/($phone_number_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Phone Number
@@ -2074,6 +2150,7 @@ export def "me-phone-numbers UpdatePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   --reserved-for-second-factor: oneof<nothing, bool> # Whether the phone number is reserved for multi-factor authentication. (nullable)
   --default-second-factor: oneof<nothing, bool> # Marks the phone number as the default that will be used in multi-factor authentication. (nullable)
@@ -2087,7 +2164,7 @@ export def "me-phone-numbers UpdatePhoneNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete Phone Number
@@ -2103,6 +2180,7 @@ export def "me-phone-numbers DeletePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2111,7 +2189,7 @@ export def "me-phone-numbers DeletePhoneNumber" [
   let full_url = (build-url $base $"/v1/me/phone_numbers/($phone_number_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Web3 Wallets
@@ -2126,6 +2204,7 @@ export def "me-web3-wallets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2134,7 +2213,7 @@ export def "me-web3-wallets get" [
   let full_url = (build-url $base "/v1/me/web3_wallets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Web3 Wallet
@@ -2149,6 +2228,7 @@ export def "me-web3-wallets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   web3_wallet: string # The web3 wallet to be added to the user.
 ]: any -> any {
@@ -2161,7 +2241,7 @@ export def "me-web3-wallets post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Web3 Wallet
@@ -2177,13 +2257,14 @@ export def "me-web3-wallets readWeb3Wallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/web3_wallets/($web3_wallet_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Web3 Wallet
@@ -2199,13 +2280,14 @@ export def "me-web3-wallets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/web3_wallets/($web3_wallet_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prepare Web3 Wallet Verification
@@ -2221,6 +2303,7 @@ export def "me-web3-wallets-prepare-verification prepareWeb3WalletVerification" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request.
   strategy: string # The strategy used to verify the web3 wallet.
   --redirect-url: string # The redirect URL to redirect the user to after verification. (nullable)
@@ -2235,7 +2318,7 @@ export def "me-web3-wallets-prepare-verification prepareWeb3WalletVerification" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Web3 Wallet Verification
@@ -2251,6 +2334,7 @@ export def "me-web3-wallets-attempt-verification attemptWeb3WalletVerification" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request.
   signature: string # The signature that was generated from your Web3 Wallet to sign the message
 ]: any -> any {
@@ -2264,7 +2348,7 @@ export def "me-web3-wallets-attempt-verification attemptWeb3WalletVerification" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Passkey
@@ -2279,6 +2363,7 @@ export def "me-passkeys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   --Origin: string # The origin of the request.
   --X-Original-Host: string # The original host of the request.
@@ -2291,7 +2376,7 @@ export def "me-passkeys post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Passkey
@@ -2307,13 +2392,14 @@ export def "me-passkeys readPasskey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/passkeys/($passkey_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Passkey
@@ -2329,6 +2415,7 @@ export def "me-passkeys patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the passkey. (nullable)
 ]: any -> any {
   let input = $in
@@ -2339,7 +2426,7 @@ export def "me-passkeys patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete Passkey
@@ -2355,13 +2442,14 @@ export def "me-passkeys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/passkeys/($passkey_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attempt Passkey Verification
@@ -2377,6 +2465,7 @@ export def "me-passkeys-attempt-verification attemptPasskeyVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request.
   --strategy: string@strategy-completer-8 # The strategy used to connect the external account. (nullable)
   --public-key-credential: string # The public key credential of the passkey. (nullable)
@@ -2391,7 +2480,7 @@ export def "me-passkeys-attempt-verification attemptPasskeyVerification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Connect OAuth Accounts
@@ -2406,6 +2495,7 @@ export def "me-external-accounts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Origin: string # The origin of the request.
   --strategy: string # The OAuth strategy that the external account provider supports. Optional when `enterprise_connection_id` is provided. Can be one of `oauth_[provider]` or `oauth_token_[provider]`. The `oauth_[provider]` strategy can be used for regular OAuth flows with redirects and a `redirect_url` parameter is also required. The `oauth_token_[provider]` strategy can be used for native flows, along with a `token` or `code` parameter.
   --enterprise-connection-id: string # The ID of an enterprise connection to link. When provided, strategy is not required. (nullable)
@@ -2427,7 +2517,7 @@ export def "me-external-accounts post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reauthorize External Account
@@ -2443,6 +2533,7 @@ export def "me-external-accounts-reauthorize reauthorizeExternalAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-scope: list # nullable
   redirect_url: string
   --action-complete-redirect-url: string # nullable
@@ -2457,7 +2548,7 @@ export def "me-external-accounts-reauthorize reauthorizeExternalAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete External Account
@@ -2473,13 +2564,14 @@ export def "me-external-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/external_accounts/($external_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke OAuth tokens
@@ -2495,13 +2587,14 @@ export def "me-external-accounts-tokens revokeExternalAccountTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/external_accounts/($external_account_id)/tokens")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create TOTP
@@ -2516,13 +2609,14 @@ export def "me-totp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/totp")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete TOTP
@@ -2537,13 +2631,14 @@ export def "me-totp delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/totp")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attempt TOTP Verification
@@ -2558,6 +2653,7 @@ export def "me-totp-attempt-verification verifyTOTP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
 ]: any -> any {
   let input = $in
@@ -2568,7 +2664,7 @@ export def "me-totp-attempt-verification verifyTOTP" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Backup Codes
@@ -2583,13 +2679,14 @@ export def "me-backup-codes createBackupCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/backup_codes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User
@@ -2604,13 +2701,14 @@ export def "me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User
@@ -2625,6 +2723,7 @@ export def "me patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # nullable
   --first-name: string # nullable
   --last-name: string # nullable
@@ -2640,7 +2739,7 @@ export def "me patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete User
@@ -2655,13 +2754,14 @@ export def "me delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge and update the current user's metadata
@@ -2676,6 +2776,7 @@ export def "me-metadata patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   unsafe_metadata: string # A stringified JSON object containing the unsafe metadata patch to merge into the current user's `unsafe_metadata`. Existing keys are deep-merged; keys at any level with `null` values are removed.
 ]: any -> any {
   let input = $in
@@ -2686,7 +2787,7 @@ export def "me-metadata patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a JWT for the requested user.
@@ -2701,6 +2802,7 @@ export def "me-tokens createServiceToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clerk-session-id: string # The session_id associated with the requesting user.
   service: string
 ]: any -> any {
@@ -2713,7 +2815,7 @@ export def "me-tokens createServiceToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update Profile Image
@@ -2728,6 +2830,7 @@ export def "me-profile-image updateProfileImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -2738,7 +2841,7 @@ export def "me-profile-image updateProfileImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete Profile Image
@@ -2753,13 +2856,14 @@ export def "me-profile-image delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/profile_image")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Password
@@ -2774,6 +2878,7 @@ export def "me-change-password changePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --current-password: string # nullable
   --new-password: string
   --sign-out-of-other-sessions: oneof<nothing, bool> # nullable
@@ -2786,7 +2891,7 @@ export def "me-change-password changePassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete Password
@@ -2801,6 +2906,7 @@ export def "me-remove-password removePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --current-password: string
 ]: any -> any {
   let input = $in
@@ -2811,7 +2917,7 @@ export def "me-remove-password removePassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get user's main billing subscription
@@ -2826,13 +2932,14 @@ export def "me-billing-subscription GetUserMainBillingSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/billing/subscription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user's subscription items
@@ -2847,6 +2954,7 @@ export def "me-billing-subscription-items GetUserBillingSubscriptionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -2857,7 +2965,7 @@ export def "me-billing-subscription-items GetUserBillingSubscriptionItems" [
   let full_url = (build-url $base "/v1/me/billing/subscription_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel user's subscription item
@@ -2873,13 +2981,14 @@ export def "me-billing-subscription-items DeleteUserBillingSubscriptionItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/billing/subscription_items/($subscriptionItemID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user payment methods
@@ -2894,6 +3003,7 @@ export def "me-billing-payment-methods GetUserPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -2904,7 +3014,7 @@ export def "me-billing-payment-methods GetUserPaymentMethods" [
   let full_url = (build-url $base "/v1/me/billing/payment_methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user payment method
@@ -2919,6 +3029,7 @@ export def "me-billing-payment-methods CreateUserPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gateway: string # Payment gateway to use
   --payment-token: string # Payment token for the method (nullable)
   --org-id: string # Organization ID (optional) (nullable)
@@ -2931,7 +3042,7 @@ export def "me-billing-payment-methods CreateUserPaymentMethod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Initialize user payment method
@@ -2946,13 +3057,14 @@ export def "me-billing-payment-methods-initialize InitializeUserPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/billing/payment_methods/initialize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user payment method
@@ -2968,13 +3080,14 @@ export def "me-billing-payment-methods DeleteUserPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/billing/payment_methods/($paymentMethodID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create billing checkout
@@ -2989,6 +3102,7 @@ export def "me-billing-checkouts CreateUserBillingCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan_id: string # The ID of the plan to checkout
   plan_period: string@plan-period-completer # The billing period for the plan (default: month)
   --org-id: string # Organization ID (if creating org checkout) (nullable)
@@ -3002,7 +3116,7 @@ export def "me-billing-checkouts CreateUserBillingCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get billing checkout
@@ -3018,13 +3132,14 @@ export def "me-billing-checkouts GetUserBillingCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/billing/checkouts/($checkoutID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirm billing checkout
@@ -3040,6 +3155,7 @@ export def "me-billing-checkouts-confirm ConfirmUserBillingCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method-id: string # The ID of the payment method to use for this checkout (nullable)
   --gateway: string # The payment gateway to use (e.g., stripe) (nullable)
   --payment-token: string # A payment token for processing the payment (nullable)
@@ -3053,7 +3169,7 @@ export def "me-billing-checkouts-confirm ConfirmUserBillingCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List user payment attempts
@@ -3068,6 +3184,7 @@ export def "me-billing-payment-attempts GetUserPaymentAttempts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -3078,7 +3195,7 @@ export def "me-billing-payment-attempts GetUserPaymentAttempts" [
   let full_url = (build-url $base "/v1/me/billing/payment_attempts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user payment attempt
@@ -3094,13 +3211,14 @@ export def "me-billing-payment-attempts GetUserPaymentAttempt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/billing/payment_attempts/($paymentAttemptID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set user default payment method
@@ -3115,13 +3233,14 @@ export def "me-billing-payers-default-payment-method SetUserDefaultPaymentMethod
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/billing/payers/default_payment_method")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user statements
@@ -3136,6 +3255,7 @@ export def "me-billing-statements GetUserStatements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -3146,7 +3266,7 @@ export def "me-billing-statements GetUserStatements" [
   let full_url = (build-url $base "/v1/me/billing/statements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user statement
@@ -3162,13 +3282,14 @@ export def "me-billing-statements GetUserStatement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/billing/statements/($statementID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create organization billing checkout
@@ -3184,6 +3305,7 @@ export def "organizations-billing-checkouts CreateOrganizationBillingCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan_id: string # The ID of the plan to checkout
   plan_period: string@plan-period-completer # The billing period for the plan (default: month)
   --payment-method-id: string # Payment method ID to use (nullable)
@@ -3196,7 +3318,7 @@ export def "organizations-billing-checkouts CreateOrganizationBillingCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get organization billing checkout
@@ -3213,13 +3335,14 @@ export def "organizations-billing-checkouts GetOrganizationBillingCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/checkouts/($checkoutID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirm organization billing checkout
@@ -3236,6 +3359,7 @@ export def "organizations-billing-checkouts-confirm ConfirmOrganizationBillingCh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method-id: string # The ID of the payment method to use for this checkout (nullable)
   --gateway: string # The payment gateway to use (e.g., stripe) (nullable)
   --payment-token: string # A payment token for processing the payment (nullable)
@@ -3249,7 +3373,7 @@ export def "organizations-billing-checkouts-confirm ConfirmOrganizationBillingCh
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List organization payment methods
@@ -3265,13 +3389,14 @@ export def "organizations-billing-payment-methods GetOrganizationPaymentMethods"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/payment_methods")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create organization payment method
@@ -3287,6 +3412,7 @@ export def "organizations-billing-payment-methods CreateOrganizationPaymentMetho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment_token: string # The payment token for the payment method
   gateway: string@gateway-completer # The payment gateway to use
 ]: any -> any {
@@ -3298,7 +3424,7 @@ export def "organizations-billing-payment-methods CreateOrganizationPaymentMetho
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initialize organization payment method
@@ -3314,13 +3440,14 @@ export def "organizations-billing-payment-methods-initialize InitializeOrganizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/payment_methods/initialize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete organization payment method
@@ -3337,13 +3464,14 @@ export def "organizations-billing-payment-methods DeleteOrganizationPaymentMetho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/payment_methods/($paymentMethodID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization statements
@@ -3359,13 +3487,14 @@ export def "organizations-billing-statements GetOrganizationStatements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/statements")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization statement
@@ -3382,13 +3511,14 @@ export def "organizations-billing-statements GetOrganizationStatement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/statements/($statementID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set organization default payment method
@@ -3404,6 +3534,7 @@ export def "organizations-billing-payers-default-payment-method SetOrganizationD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment_method_id: string # The ID of the payment method to set as default
 ]: any -> any {
   let input = $in
@@ -3414,7 +3545,7 @@ export def "organizations-billing-payers-default-payment-method SetOrganizationD
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get organization's billing subscription
@@ -3430,13 +3561,14 @@ export def "organizations-billing-subscription GetOrganizationBillingSubscriptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/subscription")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization's subscription items
@@ -3452,13 +3584,14 @@ export def "organizations-billing-subscription-items GetOrganizationBillingSubsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/subscription_items")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel organization's subscription item
@@ -3475,13 +3608,14 @@ export def "organizations-billing-subscription-items DeleteOrganizationBillingSu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organizationID)/billing/subscription_items/($subscriptionItemID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List billing plans
@@ -3496,6 +3630,7 @@ export def "billing-plans GetBillingPlanList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payer-type: string@payer-type-completer # Filter plans by payer type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -3504,7 +3639,7 @@ export def "billing-plans GetBillingPlanList" [
   let full_url = (build-url $base "/v1/billing/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a billing plan
@@ -3520,13 +3655,14 @@ export def "billing-plans GetBillingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/billing/plans/($planIdOrSlug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Organization Memberships
@@ -3541,6 +3677,7 @@ export def "me-organization-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -3551,7 +3688,7 @@ export def "me-organization-memberships get" [
   let full_url = (build-url $base "/v1/me/organization_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Organization Membership
@@ -3567,13 +3704,14 @@ export def "me-organization-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/organization_memberships/($organization_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Current User's Organization Invitations
@@ -3588,6 +3726,7 @@ export def "me-organization-invitations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --status: string # The status of the organization invitations to filter by
@@ -3598,7 +3737,7 @@ export def "me-organization-invitations get" [
   let full_url = (build-url $base "/v1/me/organization_invitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept Organization invitation
@@ -3614,13 +3753,14 @@ export def "me-organization-invitations-accept acceptOrganizationInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/organization_invitations/($invitation_id)/accept")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Organization Suggestions
@@ -3635,6 +3775,7 @@ export def "me-organization-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --status: string
@@ -3645,7 +3786,7 @@ export def "me-organization-suggestions get" [
   let full_url = (build-url $base "/v1/me/organization_suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept Organization Suggestion
@@ -3661,13 +3802,14 @@ export def "me-organization-suggestions-accept acceptOrganizationSuggestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/me/organization_suggestions/($suggestion_id)/accept")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Organization
@@ -3682,6 +3824,7 @@ export def "organizations createOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The organization name. May not contain URLs or HTML.
   --slug: string # The organization slug (nullable)
 ]: any -> any {
@@ -3693,7 +3836,7 @@ export def "organizations createOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Organization
@@ -3709,13 +3852,14 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Organization
@@ -3731,6 +3875,7 @@ export def "organizations updateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The organization name. May not contain URLs or HTML. (nullable)
   --slug: string # The organization slug (nullable)
 ]: any -> any {
@@ -3742,7 +3887,7 @@ export def "organizations updateOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete Organization
@@ -3758,13 +3903,14 @@ export def "organizations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Organization Logo
@@ -3780,6 +3926,7 @@ export def "organizations-logo updateOrganizationLogo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -3790,7 +3937,7 @@ export def "organizations-logo updateOrganizationLogo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete Organization Logo
@@ -3806,13 +3953,14 @@ export def "organizations-logo delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/logo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Organization Invitation
@@ -3828,6 +3976,7 @@ export def "organizations-invitations createOrganizationInvitations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address the invitation will be sent to.
   role: string # The role that will be assigned to the user after joining. This can be one of the predefined roles (`org:admin`, `org:basic_member`) or a custom role.
 ]: any -> any {
@@ -3839,7 +3988,7 @@ export def "organizations-invitations createOrganizationInvitations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get All Organization Invitations
@@ -3855,6 +4004,7 @@ export def "organizations-invitations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --status: string@status-completer
@@ -3865,7 +4015,7 @@ export def "organizations-invitations get" [
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/invitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Organization Invitations
@@ -3881,6 +4031,7 @@ export def "organizations-invitations-bulk bulkCreateOrganizationInvitations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: list # An array of email addresses the invitations will be sent to.
   role: string # The role that will be assigned to each of the users after joining. This can be one of the predefined roles (`org:admin`, `org:basic_member`) or a custom role.
 ]: any -> any {
@@ -3892,7 +4043,7 @@ export def "organizations-invitations-bulk bulkCreateOrganizationInvitations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get All Pending Organization Invitations
@@ -3910,13 +4061,14 @@ export def "organizations-invitations-pending get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/invitations/pending")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke Pending Organization Invitation
@@ -3933,13 +4085,14 @@ export def "organizations-invitations-revoke revokePendingOrganizationInvitation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/invitations/($invitation_id)/revoke")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Organization Membership
@@ -3955,6 +4108,7 @@ export def "organizations-memberships CreateOrganizationMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user to be added as a member. (nullable)
   --role: string # The role that will be assigned to the user after joining. This can be one of the predefined roles (`org:admin`, `org:basic_member`) or a custom role defined. (nullable)
 ]: any -> any {
@@ -3966,7 +4120,7 @@ export def "organizations-memberships CreateOrganizationMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get All Organization Members
@@ -3982,6 +4136,7 @@ export def "organizations-memberships ListOrganizationMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
@@ -3994,7 +4149,7 @@ export def "organizations-memberships ListOrganizationMemberships" [
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Organization Membership
@@ -4011,6 +4166,7 @@ export def "organizations-memberships UpdateOrganizationMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string # The new role that will be assigned to the member. This can be one of the predefined roles (`org:admin`, `org:basic_member`) or a custom role defined.
 ]: any -> any {
   let input = $in
@@ -4021,7 +4177,7 @@ export def "organizations-memberships UpdateOrganizationMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove Organization Member
@@ -4038,13 +4194,14 @@ export def "organizations-memberships removeOrganizationMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/memberships/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Organization Domain
@@ -4060,6 +4217,7 @@ export def "organizations-domains CreateOrganizationDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new domain
 ]: any -> any {
   let input = $in
@@ -4070,7 +4228,7 @@ export def "organizations-domains CreateOrganizationDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get All Organization Domains
@@ -4086,6 +4244,7 @@ export def "organizations-domains ListOrganizationDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --verified: oneof<nothing, bool> # Filter by whether a domain is verified
@@ -4097,7 +4256,7 @@ export def "organizations-domains ListOrganizationDomains" [
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Organization Domain
@@ -4114,13 +4273,14 @@ export def "organizations-domains GetOrganizationDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/domains/($domain_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Organization Domain
@@ -4137,13 +4297,14 @@ export def "organizations-domains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/domains/($domain_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Organization Enrollment Mode
@@ -4160,6 +4321,7 @@ export def "organizations-domains-update-enrollment-mode UpdateOrganizationDomai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   enrollment_mode: string
   --delete-pending: oneof<nothing, bool> # nullable
 ]: any -> any {
@@ -4171,7 +4333,7 @@ export def "organizations-domains-update-enrollment-mode UpdateOrganizationDomai
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Prepare Organization Domain Affiliation Verification
@@ -4188,6 +4350,7 @@ export def "organizations-domains-prepare-affiliation-verification prepareOrgani
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   affiliation_email_address: string
 ]: any -> any {
   let input = $in
@@ -4198,7 +4361,7 @@ export def "organizations-domains-prepare-affiliation-verification prepareOrgani
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Attempt Organization Domain Affiliation Verification
@@ -4215,6 +4378,7 @@ export def "organizations-domains-attempt-affiliation-verification attemptOrgani
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # The code that was sent to the email address.
 ]: any -> any {
   let input = $in
@@ -4225,7 +4389,7 @@ export def "organizations-domains-attempt-affiliation-verification attemptOrgani
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get Organization Membership Requests
@@ -4241,6 +4405,7 @@ export def "organizations-membership-requests listOrganizationMembershipRequests
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --status: string
@@ -4251,7 +4416,7 @@ export def "organizations-membership-requests listOrganizationMembershipRequests
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/membership_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept Organization Membership Request
@@ -4268,13 +4433,14 @@ export def "organizations-membership-requests-accept acceptOrganizationMembershi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/membership_requests/($request_id)/accept")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject Organization Membership Request
@@ -4291,13 +4457,14 @@ export def "organizations-membership-requests-reject rejectOrganizationMembershi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/membership_requests/($request_id)/reject")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Organization Roles
@@ -4313,6 +4480,7 @@ export def "organizations-roles ListOrganizationRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -4322,7 +4490,7 @@ export def "organizations-roles ListOrganizationRoles" [
   let full_url = (build-url $base $"/v1/organizations/($organization_id)/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redirect to a validated URL
@@ -4337,6 +4505,7 @@ export def "redirect redirectToUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redirect-url: string # The URL to redirect to (optional). If empty or not provided, redirects to the default URL. (allows empty value)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -4345,7 +4514,7 @@ export def "redirect redirectToUrl" [
   let full_url = (build-url $base "/v1/redirect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept ticket
@@ -4360,6 +4529,7 @@ export def "tickets-accept acceptTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ticket: string # The JWT with verification information
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -4368,7 +4538,7 @@ export def "tickets-accept acceptTicket" [
   let full_url = (build-url $base "/v1/tickets/accept" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attempt Email Link Verification
@@ -4383,6 +4553,7 @@ export def "verify verify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The JWT with verification information
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -4391,7 +4562,7 @@ export def "verify verify" [
   let full_url = (build-url $base "/v1/verify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Join Waitlist
@@ -4406,6 +4577,7 @@ export def "waitlist joinWaitlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string
 ]: any -> any {
   let input = $in
@@ -4416,7 +4588,7 @@ export def "waitlist joinWaitlist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get API Keys
@@ -4431,6 +4603,7 @@ export def "api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # default: api_key
   --subject: string
   --include-invalid: string@include-invalid-completer # default: false
@@ -4444,7 +4617,7 @@ export def "api-keys get" [
   let full_url = (build-url $base "/api_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API Key
@@ -4459,6 +4632,7 @@ export def "api-keys createApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # default: api_key
   name: string
   --description: string # nullable
@@ -4473,7 +4647,7 @@ export def "api-keys createApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an API Key
@@ -4489,6 +4663,7 @@ export def "api-keys updateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # nullable
 ]: any -> record<object: string, id: string, type: string, subject: string, name: string, description: string, claims: any, scopes: list<string>, revoked: bool, revocation_reason: string, expired: bool, expiration: float, created_by: string, last_used_at: float, created_at: float, updated_at: float> {
   let input = $in
@@ -4499,7 +4674,7 @@ export def "api-keys updateApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke an API Key
@@ -4515,6 +4690,7 @@ export def "api-keys-revoke revokeApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revocation-reason: string # nullable
 ]: any -> record<object: string, id: string, type: string, subject: string, name: string, description: string, claims: any, scopes: list<string>, revoked: bool, revocation_reason: string, expired: bool, expiration: float, created_by: string, last_used_at: float, created_at: float, updated_at: float> {
   let input = $in
@@ -4525,5 +4701,5 @@ export def "api-keys-revoke revokeApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

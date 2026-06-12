@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def Accept-completer [] { ["application/vnd.hmrc.3.0+json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "obligations-details-income-and-expenditure get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "obligations-details-income-and-expenditure get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --typeOfBusiness: string@typeOfBusiness-completer # The type of business whose obligations are to be returned. If the type is not specified the default is to return obligations for all businesses. The type must be provided if "businessId" is provided.  (e.g. self-employment)
   --businessId: string # The unique identifier for the business whose obligations are to be returned.  (e.g. XAIS12345678901)
   --fromDate: string # The start date of the range to filter obligations in the format YYYY-MM-DD. Mandatory if the “to” query parameter is supplied. If the “from” and “to” date parameters are not supplied, the date range will default to a year from today unless the status parameter is set to "open". The toDate & fromDate can be a maximum of 366 days apart.  (e.g. 2018-04-06)
@@ -120,7 +122,7 @@ export def "obligations-details-income-and-expenditure get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Income Tax (Self Assessment) Final Declaration Obligations
@@ -135,6 +137,7 @@ export def "obligations-details-crystallisation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taxYear: string # The tax year the data applies to.  If a tax year is not specified, returns all obligations starting from 4 years before the current tax year.  For example, if current tax year is 2023-24 and no tax year is specified, all obligations from 2019-20 to 2023-24 are returned.  The earliest allowable tax year is 2017-18.  (e.g. 2022-23)
   --status: string # Status of the obligations to return.  Accepted values are ‘open’ and ‘fulfilled’. If no status is supplied, both open and fulfilled obligations are returned.  (e.g. open)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
@@ -149,5 +152,5 @@ export def "obligations-details-crystallisation get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

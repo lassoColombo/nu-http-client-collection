@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "exports-activityjson post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -98,6 +99,7 @@ export def "exports-activityjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-keys: list
   --date-from: string
   --date-to: string
@@ -115,7 +117,7 @@ export def "exports-activityjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about an export job. If the export job's state is 'complete', the returned data will include a URL you can use to fetch the results. Every export job produces a zip archive, but the format of the archive is distinct for each job type. The api calls that initiate exports include more details about the output format for that job type.
@@ -129,6 +131,7 @@ export def "exports-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string> {
@@ -140,7 +143,7 @@ export def "exports-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of your exports.
@@ -154,6 +157,7 @@ export def "exports-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string> {
   let input = $in
@@ -164,7 +168,7 @@ export def "exports-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Begins an export of your rejection blacklist. The blacklist will be exported to a zip archive containing a single file named rejects.csv that includes the following fields: email, reason, detail, created_at, expires_at, last_event_at, expires_at.
@@ -178,6 +182,7 @@ export def "exports-rejectsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --notify-email: string
 ]: any -> record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string> {
@@ -189,7 +194,7 @@ export def "exports-rejectsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Begins an export of your rejection whitelist. The whitelist will be exported to a zip archive containing a single file named whitelist.csv that includes the following fields: email, detail, created_at.
@@ -203,6 +208,7 @@ export def "exports-whitelistjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --notify-email: string
 ]: any -> record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string> {
@@ -214,7 +220,7 @@ export def "exports-whitelistjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add an inbound domain to your account
@@ -228,6 +234,7 @@ export def "inbound-add-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<created_at: string, domain: string, valid_mx: bool> {
@@ -239,7 +246,7 @@ export def "inbound-add-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new mailbox route to an inbound domain
@@ -253,6 +260,7 @@ export def "inbound-add-routejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
   --pattern: string
@@ -266,7 +274,7 @@ export def "inbound-add-routejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check the MX settings for an inbound domain. The domain must have already been added with the add-domain call
@@ -280,6 +288,7 @@ export def "inbound-check-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<created_at: string, domain: string, valid_mx: bool> {
@@ -291,7 +300,7 @@ export def "inbound-check-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an inbound domain from the account. All mail will stop routing for this domain immediately.
@@ -305,6 +314,7 @@ export def "inbound-delete-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<created_at: string, domain: string, valid_mx: bool> {
@@ -316,7 +326,7 @@ export def "inbound-delete-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing inbound mailbox route
@@ -330,6 +340,7 @@ export def "inbound-delete-routejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<id: string, pattern: string, url: string> {
@@ -341,7 +352,7 @@ export def "inbound-delete-routejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the domains that have been configured for inbound delivery
@@ -355,6 +366,7 @@ export def "inbound-domainsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<created_at: string, domain: string, valid_mx: bool> {
   let input = $in
@@ -365,7 +377,7 @@ export def "inbound-domainsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the mailbox routes defined for an inbound domain
@@ -379,6 +391,7 @@ export def "inbound-routesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> table<id: string, pattern: string, url: string> {
@@ -390,7 +403,7 @@ export def "inbound-routesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Take a raw MIME document destined for a domain with inbound domains set up, and send it to the inbound hook exactly as if it had been sent over SMTP
@@ -404,6 +417,7 @@ export def "inbound-send-rawjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-address: string
   --helo: string
   --key: string
@@ -419,7 +433,7 @@ export def "inbound-send-rawjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the pattern or webhook of an existing inbound mailbox route. If null is provided for any fields, the values will remain unchanged.
@@ -433,6 +447,7 @@ export def "inbound-update-routejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
   --pattern: string
@@ -446,7 +461,7 @@ export def "inbound-update-routejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancels the warmup process for a dedicated IP.
@@ -460,6 +475,7 @@ export def "ips-cancel-warmupjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
 ]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
@@ -471,7 +487,7 @@ export def "ips-cancel-warmupjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Tests whether a domain name is valid for use as the custom reverse DNS for a dedicated IP.
@@ -485,6 +501,7 @@ export def "ips-check-custom-dnsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --ip: string
   --key: string
@@ -497,7 +514,7 @@ export def "ips-check-custom-dnsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a pool and returns it. If a pool already exists with this name, no action will be performed.
@@ -511,6 +528,7 @@ export def "ips-create-pooljson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
 ]: any -> record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string> {
@@ -522,7 +540,7 @@ export def "ips-create-pooljson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a pool. A pool must be empty before you can delete it, and you cannot delete your default pool.
@@ -536,6 +554,7 @@ export def "ips-delete-pooljson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
 ]: any -> record<deleted: bool, pool: string> {
@@ -547,7 +566,7 @@ export def "ips-delete-pooljson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a dedicated IP. This is permanent and cannot be undone.
@@ -561,6 +580,7 @@ export def "ips-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
 ]: any -> record<deleted: bool, ip: string> {
@@ -572,7 +592,7 @@ export def "ips-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves information about a single dedicated ip.
@@ -586,6 +606,7 @@ export def "ips-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
 ]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
@@ -597,7 +618,7 @@ export def "ips-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists your dedicated IP pools.
@@ -611,6 +632,7 @@ export def "ips-list-poolsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<created_at: string, ips: list<record>, name: string> {
   let input = $in
@@ -621,7 +643,7 @@ export def "ips-list-poolsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists your dedicated IPs.
@@ -635,6 +657,7 @@ export def "ips-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
   let input = $in
@@ -645,7 +668,7 @@ export def "ips-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describes a single dedicated IP pool.
@@ -659,6 +682,7 @@ export def "ips-pool-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
 ]: any -> record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string> {
@@ -670,7 +694,7 @@ export def "ips-pool-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Requests an additional dedicated IP for your account. Accounts may have one outstanding request at any time, and provisioning requests are processed within 24 hours.
@@ -684,6 +708,7 @@ export def "ips-provisionjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
   --warmup: oneof<nothing, bool>
@@ -696,7 +721,7 @@ export def "ips-provisionjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Configures the custom DNS name for a dedicated IP.
@@ -710,6 +735,7 @@ export def "ips-set-custom-dnsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --ip: string
   --key: string
@@ -722,7 +748,7 @@ export def "ips-set-custom-dnsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Moves a dedicated IP to a different pool.
@@ -736,6 +762,7 @@ export def "ips-set-pooljson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --create-pool: oneof<nothing, bool>
   --ip: string
   --key: string
@@ -749,7 +776,7 @@ export def "ips-set-pooljson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Begins the warmup process for a dedicated IP. During the warmup process, Mandrill will gradually increase the percentage of your mail that is sent over the warming-up IP, over a period of roughly 30 days. The rest of your mail will be sent over shared IPs or other dedicated IPs in the same pool.
@@ -763,6 +790,7 @@ export def "ips-start-warmupjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
 ]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
@@ -774,7 +802,7 @@ export def "ips-start-warmupjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancels a scheduled email.
@@ -788,6 +816,7 @@ export def "messages-cancel-scheduledjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: any
   --key: string
 ]: any -> record<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
@@ -799,7 +828,7 @@ export def "messages-cancel-scheduledjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the full content of a recently sent message
@@ -813,6 +842,7 @@ export def "messages-contentjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<_id: string, attachments: table<content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, subject: string, tags: list<string>, text: string, to: record<email: string, name: string>, ts: int> {
@@ -824,7 +854,7 @@ export def "messages-contentjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the information for a single recently sent message
@@ -838,6 +868,7 @@ export def "messages-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<_id: string, clicks: int, clicks_detail: table<ip: string, location: string, ts: int, ua: string, url: string>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: table<ip: string, location: string, ts: int, ua: string>, sender: string, smtp_events: table<diag: string, ts: int, type: string>, state: string, subject: string, tags: list<string>, template: string, ts: int> {
@@ -849,7 +880,7 @@ export def "messages-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Queries your scheduled emails by sender or recipient, or both.
@@ -863,6 +894,7 @@ export def "messages-list-scheduledjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --body-to: string
 ]: any -> table<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
@@ -874,7 +906,7 @@ export def "messages-list-scheduledjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Parse the full MIME document for an email message, returning the content of the message broken into its constituent pieces
@@ -888,6 +920,7 @@ export def "messages-parsejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --raw-message: string
 ]: any -> record<attachments: table<binary: bool, content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, images: table<content: string, name: string, type: string>, subject: string, text: string, to: table<email: string, name: string>> {
@@ -899,7 +932,7 @@ export def "messages-parsejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reschedules a scheduled email.
@@ -913,6 +946,7 @@ export def "messages-reschedulejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
   --send-at: string
@@ -925,7 +959,7 @@ export def "messages-reschedulejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search the content of recently sent messages and return the aggregated hourly stats for matching messages
@@ -939,6 +973,7 @@ export def "messages-search-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-from: string
   --date-to: string
   --key: string
@@ -954,7 +989,7 @@ export def "messages-search-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search the content of recently sent messages and optionally narrow by date range, tags and senders. This method may be called up to 20 times per minute. If you need the data more often, you can use /messages/info.json to get the information for a single message, or webhooks to push activity to your own application for querying.
@@ -968,6 +1003,7 @@ export def "messages-searchjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-keys: list
   --date-from: string
   --date-to: string
@@ -985,7 +1021,7 @@ export def "messages-searchjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Take a raw MIME document for a message, and send it exactly as if it were sent through Mandrill's SMTP servers
@@ -999,6 +1035,7 @@ export def "messages-send-rawjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --from-email: string
   --from-name: string
@@ -1017,7 +1054,7 @@ export def "messages-send-rawjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a new transactional message through Mandrill using a template
@@ -1033,6 +1070,7 @@ export def "messages-send-templatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --ip-pool: string
   --key: string
@@ -1049,7 +1087,7 @@ export def "messages-send-templatejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a new transactional message through Mandrill
@@ -1064,6 +1102,7 @@ export def "messages-sendjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --ip-pool: string
   --key: string
@@ -1078,7 +1117,7 @@ export def "messages-sendjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new custom metadata field to be indexed for the account.
@@ -1092,6 +1131,7 @@ export def "metadata-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
   --view-template: string
@@ -1104,7 +1144,7 @@ export def "metadata-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing custom metadata field. Deletion isn't instataneous, and /metadata/list will continue to return the field until the asynchronous deletion process is complete.
@@ -1118,6 +1158,7 @@ export def "metadata-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
 ]: any -> record<name: string, state: string, view_template: string> {
@@ -1129,7 +1170,7 @@ export def "metadata-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of custom metadata fields indexed for the account.
@@ -1143,6 +1184,7 @@ export def "metadata-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<name: string, state: string, view_template: string> {
   let input = $in
@@ -1153,7 +1195,7 @@ export def "metadata-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing custom metadata field.
@@ -1167,6 +1209,7 @@ export def "metadata-updatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
   --view-template: string
@@ -1179,7 +1222,7 @@ export def "metadata-updatejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds an email to your email rejection blacklist. Addresses that you add manually will never expire and there is no reputation penalty for removing them from your blacklist. Attempting to blacklist an address that has been whitelisted will have no effect.
@@ -1193,6 +1236,7 @@ export def "rejects-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --comment: string
   --email: string
   --key: string
@@ -1206,7 +1250,7 @@ export def "rejects-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an email rejection. There is no limit to how many rejections you can remove from your blacklist, but keep in mind that each deletion has an affect on your reputation.
@@ -1220,6 +1264,7 @@ export def "rejects-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
   --subaccount: string
@@ -1232,7 +1277,7 @@ export def "rejects-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves your email rejection blacklist. You can provide an email address to limit the results. Returns up to 1000 results. By default, entries that have expired are excluded from the results; set include_expired to true to include them.
@@ -1246,6 +1291,7 @@ export def "rejects-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --include-expired: oneof<nothing, bool>
   --key: string
@@ -1259,7 +1305,7 @@ export def "rejects-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a sender domain to your account. Sender domains are added automatically as you send, but you can use this call to add them ahead of time.
@@ -1273,6 +1319,7 @@ export def "senders-add-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
@@ -1284,7 +1331,7 @@ export def "senders-add-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Checks the SPF and DKIM settings for a domain. If you haven't already added this domain to your account, it will be added automatically.
@@ -1298,6 +1345,7 @@ export def "senders-check-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
@@ -1309,7 +1357,7 @@ export def "senders-check-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the sender domains that have been added to this account.
@@ -1323,6 +1371,7 @@ export def "senders-domainsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
   let input = $in
@@ -1333,7 +1382,7 @@ export def "senders-domainsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return more detailed information about a single sender, including aggregates of recent stats
@@ -1347,6 +1396,7 @@ export def "senders-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string
   --key: string
 ]: any -> record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, unsubs: int> {
@@ -1358,7 +1408,7 @@ export def "senders-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the senders that have tried to use this account.
@@ -1372,6 +1422,7 @@ export def "senders-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int> {
   let input = $in
@@ -1382,7 +1433,7 @@ export def "senders-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the recent history (hourly stats for the last 30 days) for a sender
@@ -1396,6 +1447,7 @@ export def "senders-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string
   --key: string
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int> {
@@ -1407,7 +1459,7 @@ export def "senders-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sends a verification email in order to verify ownership of a domain. Domain verification is an optional step to confirm ownership of a domain. Once a domain has been verified in a Mandrill account, other accounts may not have their messages signed by that domain unless they also verify the domain. This prevents other Mandrill accounts from sending mail signed by your domain.
@@ -1421,6 +1473,7 @@ export def "senders-verify-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
   --mailbox: string
@@ -1433,7 +1486,7 @@ export def "senders-verify-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new subaccount
@@ -1447,6 +1500,7 @@ export def "subaccounts-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-quota: int
   --id: string
   --key: string
@@ -1461,7 +1515,7 @@ export def "subaccounts-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing subaccount. Any email related to the subaccount will be saved, but stats will be removed and any future sending calls to this subaccount will fail.
@@ -1475,6 +1529,7 @@ export def "subaccounts-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
@@ -1486,7 +1541,7 @@ export def "subaccounts-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Given the ID of an existing subaccount, return the data about it
@@ -1500,6 +1555,7 @@ export def "subaccounts-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, hourly_quota: int, id: string, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, name: string, notes: string, reputation: int, sent_hourly: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
@@ -1511,7 +1567,7 @@ export def "subaccounts-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of subaccounts defined for the account, optionally filtered by a prefix
@@ -1525,6 +1581,7 @@ export def "subaccounts-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --q: string
 ]: any -> table<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
@@ -1536,7 +1593,7 @@ export def "subaccounts-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pause a subaccount's sending. Any future emails delivered to this subaccount will be queued for a maximum of 3 days until the subaccount is resumed.
@@ -1550,6 +1607,7 @@ export def "subaccounts-pausejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
@@ -1561,7 +1619,7 @@ export def "subaccounts-pausejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resume a paused subaccount's sending
@@ -1575,6 +1633,7 @@ export def "subaccounts-resumejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
 ]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
@@ -1586,7 +1645,7 @@ export def "subaccounts-resumejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing subaccount
@@ -1600,6 +1659,7 @@ export def "subaccounts-updatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --custom-quota: int
   --id: string
   --key: string
@@ -1614,7 +1674,7 @@ export def "subaccounts-updatejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the recent history (hourly stats for the last 30 days) for all tags
@@ -1628,6 +1688,7 @@ export def "tags-all-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
   let input = $in
@@ -1638,7 +1699,7 @@ export def "tags-all-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a tag permanently. Deleting a tag removes the tag from any messages that have been sent, and also deletes the tag's stats. There is no way to undo this operation, so use it carefully.
@@ -1652,6 +1713,7 @@ export def "tags-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
 ]: any -> record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int> {
@@ -1663,7 +1725,7 @@ export def "tags-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return more detailed information about a single tag, including aggregates of recent stats
@@ -1677,6 +1739,7 @@ export def "tags-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
 ]: any -> record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, tag: string, unsubs: int> {
@@ -1688,7 +1751,7 @@ export def "tags-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return all of the user-defined tag information
@@ -1702,6 +1765,7 @@ export def "tags-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int> {
   let input = $in
@@ -1712,7 +1776,7 @@ export def "tags-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the recent history (hourly stats for the last 30 days) for a tag
@@ -1726,6 +1790,7 @@ export def "tags-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
@@ -1737,7 +1802,7 @@ export def "tags-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new template
@@ -1751,6 +1816,7 @@ export def "templates-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --from-email: string
   --from-name: string
@@ -1769,7 +1835,7 @@ export def "templates-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a template
@@ -1783,6 +1849,7 @@ export def "templates-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
 ]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
@@ -1794,7 +1861,7 @@ export def "templates-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the information for an existing template
@@ -1808,6 +1875,7 @@ export def "templates-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
 ]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
@@ -1819,7 +1887,7 @@ export def "templates-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of all the templates available to this user
@@ -1833,6 +1901,7 @@ export def "templates-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --label: string
 ]: any -> table<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
@@ -1844,7 +1913,7 @@ export def "templates-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish the content for the template. Any new messages sent using this template will start using the content that was previously in draft.
@@ -1858,6 +1927,7 @@ export def "templates-publishjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
 ]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
@@ -1869,7 +1939,7 @@ export def "templates-publishjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Inject content and optionally merge fields into a template, returning the HTML that results
@@ -1885,6 +1955,7 @@ export def "templates-renderjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --merge-vars: list # item shape: {content?: string, name?: string}
   --template-content: list # item shape: {content?: string, name?: string}
@@ -1898,7 +1969,7 @@ export def "templates-renderjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the recent history (hourly stats for the last 30 days) for a template
@@ -1912,6 +1983,7 @@ export def "templates-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
 ]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int> {
@@ -1923,7 +1995,7 @@ export def "templates-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the code for an existing template. If null is provided for any fields, the values will remain unchanged.
@@ -1937,6 +2009,7 @@ export def "templates-updatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --from-email: string
   --from-name: string
@@ -1955,7 +2028,7 @@ export def "templates-updatejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a tracking domain to your account
@@ -1969,6 +2042,7 @@ export def "urls-add-tracking-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
@@ -1980,7 +2054,7 @@ export def "urls-add-tracking-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Checks the CNAME settings for a tracking domain. The domain must have been added already with the add-tracking-domain call
@@ -1994,6 +2068,7 @@ export def "urls-check-tracking-domainjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
 ]: any -> record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
@@ -2005,7 +2080,7 @@ export def "urls-check-tracking-domainjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the 100 most clicked URLs
@@ -2019,6 +2094,7 @@ export def "urls-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<clicks: int, sent: int, unique_clicks: int, url: string> {
   let input = $in
@@ -2029,7 +2105,7 @@ export def "urls-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the 100 most clicked URLs that match the search query given
@@ -2043,6 +2119,7 @@ export def "urls-searchjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --q: string
 ]: any -> table<clicks: int, sent: int, unique_clicks: int, url: string> {
@@ -2054,7 +2131,7 @@ export def "urls-searchjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the recent history (hourly stats for the last 30 days) for a url
@@ -2068,6 +2145,7 @@ export def "urls-time-seriesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --body-url: string
 ]: any -> table<clicks: int, sent: int, time: string, unique_clicks: int> {
@@ -2079,7 +2157,7 @@ export def "urls-time-seriesjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of tracking domains set up for this account
@@ -2093,6 +2171,7 @@ export def "urls-tracking-domainsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
   let input = $in
@@ -2103,7 +2182,7 @@ export def "urls-tracking-domainsjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the information about the API-connected user
@@ -2117,6 +2196,7 @@ export def "users-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> record<backlog: int, created_at: string, hourly_quota: int, public_id: string, reputation: int, stats: record<all_time: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, username: string> {
   let input = $in
@@ -2127,7 +2207,7 @@ export def "users-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate an API key and respond to a ping
@@ -2141,6 +2221,7 @@ export def "users-pingjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> any {
   let input = $in
@@ -2151,7 +2232,7 @@ export def "users-pingjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate an API key and respond to a ping (anal JSON parser version)
@@ -2165,6 +2246,7 @@ export def "users-ping2json post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> record<PING: string> {
   let input = $in
@@ -2175,7 +2257,7 @@ export def "users-ping2json post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return the senders that have tried to use this account, both verified and unverified
@@ -2189,6 +2271,7 @@ export def "users-sendersjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int> {
   let input = $in
@@ -2199,7 +2282,7 @@ export def "users-sendersjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new webhook
@@ -2213,6 +2296,7 @@ export def "webhooks-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --events: list
   --key: string
@@ -2226,7 +2310,7 @@ export def "webhooks-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing webhook
@@ -2240,6 +2324,7 @@ export def "webhooks-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int
   --key: string
 ]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
@@ -2251,7 +2336,7 @@ export def "webhooks-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Given the ID of an existing webhook, return the data about it
@@ -2265,6 +2350,7 @@ export def "webhooks-infojson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int
   --key: string
 ]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
@@ -2276,7 +2362,7 @@ export def "webhooks-infojson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of all webhooks defined on the account
@@ -2290,6 +2376,7 @@ export def "webhooks-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: any -> table<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
   let input = $in
@@ -2300,7 +2387,7 @@ export def "webhooks-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing webhook
@@ -2314,6 +2401,7 @@ export def "webhooks-updatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --events: list
   --id: int
@@ -2328,7 +2416,7 @@ export def "webhooks-updatejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds an email to your email rejection whitelist. If the address is currently on your blacklist, that blacklist entry will be removed automatically.
@@ -2342,6 +2430,7 @@ export def "whitelists-addjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
 ]: any -> record<email: string, whether: bool> {
@@ -2353,7 +2442,7 @@ export def "whitelists-addjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes an email address from the whitelist.
@@ -2367,6 +2456,7 @@ export def "whitelists-deletejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
 ]: any -> record<deleted: bool, email: string> {
@@ -2378,7 +2468,7 @@ export def "whitelists-deletejson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves your email rejection whitelist. You can provide an email address or search prefix to limit the results. Returns up to 1000 results.
@@ -2392,6 +2482,7 @@ export def "whitelists-listjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
 ]: any -> table<created_at: string, detail: string, email: string> {
@@ -2403,5 +2494,5 @@ export def "whitelists-listjson post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

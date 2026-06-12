@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def evaluationCategory-completer [] { ["CLB_INTERPRETATION_BASED" "METADATA_CONT
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "validation get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,13 +104,14 @@ export def "validation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, sourceId: string, installationKey: string, created: string, modified: string, deleted: string, username: string, file: string, fileSize: int, fileFormat: string, status: string, metrics: record<indexeable: bool, stepTypes: list<record>, error: string, files: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/validation/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /validation/{key}
@@ -125,6 +127,7 @@ export def "validation update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: string # format: uuid
   --sourceId: string
   --installationKey: string # format: uuid
@@ -146,7 +149,7 @@ export def "validation update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /validation/{key}
@@ -161,13 +164,14 @@ export def "validation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/validation/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /validation/{key}/cancel
@@ -182,13 +186,14 @@ export def "validation-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, sourceId: string, installationKey: string, created: string, modified: string, deleted: string, username: string, file: string, fileSize: int, fileFormat: string, status: string, metrics: record<indexeable: bool, stepTypes: list<record>, error: string, files: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/validation/($key)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation
@@ -202,6 +207,7 @@ export def "validation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arg0: record
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, sourceId: string, installationKey: string, created: string, modified: string, deleted: string, username: string, file: string, fileSize: int, fileFormat: string, status: string, metrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -210,7 +216,7 @@ export def "validation list" [
   let full_url = (build-url $base "/validation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /validation
@@ -225,6 +231,7 @@ export def "validation submitFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # format: binary
   --arg1: record # shape: {sourceId?: string, installationKey?: string, notificationEmail?: list}
 ]: any -> record<key: string, sourceId: string, installationKey: string, created: string, modified: string, deleted: string, username: string, file: string, fileSize: int, fileFormat: string, status: string, metrics: record<indexeable: bool, stepTypes: list<record>, error: string, files: list<record>>> {
@@ -236,7 +243,7 @@ export def "validation submitFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # POST /validation/url
@@ -250,6 +257,7 @@ export def "validation-url submitUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fileUrl: string
   --sourceId: string
   --installationKey: string # format: uuid
@@ -264,7 +272,7 @@ export def "validation-url submitUrl" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # POST /validation/eml
@@ -278,6 +286,7 @@ export def "validation-eml validateEml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<issue: string, issueCategory: string, count: int, samples: list<record>> {
   let input = $in
@@ -287,7 +296,7 @@ export def "validation-eml validateEml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/xml" $body
 }
 
 # GET /validation/{key}/eml
@@ -302,13 +311,14 @@ export def "validation-eml get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list<string>, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record<text: string, identifier: string, citationProvidedBySource: bool>, contactsCitation: table<key: int, abbreviatedName: string, firstName: string, lastName: string, roles: list, userId: list>, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>, bibliographicCitations: table<text: string, identifier: string, citationProvidedBySource: bool>, curatorialUnits: table<type: string, typeVerbatim: string, count: int, deviation: int, lower: int, upper: int>, taxonomicCoverages: table<description: string, coverages: list>, geographicCoverageDescription: string, geographicCoverages: table<description: string, boundingBox: record>, temporalCoverages: list<any>, keywordCollections: table<thesaurus: string, keywords: list>, project: record<title: string, identifier: string, description: string, contacts: list<record>, funding: string, awards: list<record>, studyAreaDescription: string, designDescription: string, relatedProjects: list<record>, abstract: string>, samplingDescription: record<studyExtent: string, sampling: string, qualityControl: string, methodSteps: list<string>>, countryCoverage: list<string>, collections: table<name: string, identifier: string, parentIdentifier: string, specimenPreservationMethod: string, curatorialUnits: list>, dataDescriptions: table<name: string, charset: string, url: string, format: string, formatVersion: string>, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record<coreType: string, extensions: list<string>, modified: string>, category: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/validation/($key)/eml")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/sequence
@@ -322,6 +332,7 @@ export def "validation-sequence validateSequence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sequence: string
 ]: nothing -> record<seqId: string, rawSequence: string, sequence: string, sequenceLength: int, nonIupacFraction: float, nonACGTNFraction: float, nFraction: float, nNrunsCapped: int, gcContent: float, naturalLanguageDetected: bool, endsTrimmed: bool, gapsOrWhitespaceRemoved: bool, nucleotideSequenceID: string, invalid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -330,7 +341,7 @@ export def "validation-sequence validateSequence" [
   let full_url = (build-url $base "/validation/sequence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/running
@@ -344,6 +355,7 @@ export def "validation-running get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --min: int # format: int32
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -352,7 +364,7 @@ export def "validation-running get" [
   let full_url = (build-url $base "/validation/running" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration
@@ -366,13 +378,14 @@ export def "validation-enumeration inventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/enumeration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/ValidationStatus
@@ -386,13 +399,14 @@ export def "validation-enumeration-validation-status validationStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/enumeration/ValidationStatus")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/FileFormat
@@ -406,13 +420,14 @@ export def "validation-enumeration-file-format fileFormats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/enumeration/FileFormat")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/EvaluationType
@@ -426,6 +441,7 @@ export def "validation-enumeration-evaluation-type evaluationTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --evaluationCategory: string@evaluationCategory-completer
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -434,7 +450,7 @@ export def "validation-enumeration-evaluation-type evaluationTypes" [
   let full_url = (build-url $base "/validation/enumeration/EvaluationType" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/EvaluationCategory
@@ -448,13 +464,14 @@ export def "validation-enumeration-evaluation-category evaluationCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/enumeration/EvaluationCategory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/EvaluationCategory/{evaluationCategory}
@@ -469,13 +486,14 @@ export def "validation-enumeration-evaluation-category categoryEvaluationTypes" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/validation/enumeration/EvaluationCategory/($evaluationCategory)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/enumeration/DwcFileType
@@ -489,13 +507,14 @@ export def "validation-enumeration-dwc-file-type dwcFileTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/enumeration/DwcFileType")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /validation/eml/schemas
@@ -509,11 +528,12 @@ export def "validation-eml-schemas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validation/eml/schemas")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

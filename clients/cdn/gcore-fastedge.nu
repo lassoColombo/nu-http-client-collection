@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def sort-completer [] { ["asc" "desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "fastedge-apps listApps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "fastedge-apps listApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter by application name (case-insensitive partial match)
   --api-type: string@api-type-completer # API type:   wasi-http - WASI with HTTP entry point   proxy-wasm - Proxy-Wasm app, callable from CDN (e.g. wasi-http)
   --status: int # Status code:   0 - draft (inactive)   1 - enabled   2 - disabled   3 - hourly call limit exceeded   4 - daily call limit exceeded   5 - suspended (e.g. 1)
@@ -121,7 +123,7 @@ export def "fastedge-apps listApps" [
   let full_url = (build-url $base "/fastedge/v1/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new app
@@ -137,6 +139,7 @@ export def "fastedge-apps addApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Unique application name (alphanumeric, hyphens allowed) (e.g. my-edge-app)
   --binary: int # ID of the WebAssembly binary to deploy (format: int64, e.g. 12345)
   --template: int # Template ID (format: int64)
@@ -157,7 +160,7 @@ export def "fastedge-apps addApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete app
@@ -173,13 +176,14 @@ export def "fastedge-apps delApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/apps/($app_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app details
@@ -195,13 +199,14 @@ export def "fastedge-apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, url: string, binary: int, template: int, template_name: string, status: int, plan_id: int, plan: string, env: record, rsp_headers: record, log: string, debug: bool, debug_until: string, comment: string, api_type: string, networks: list<string>, secrets: record, stores: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/apps/($app_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update app
@@ -218,6 +223,7 @@ export def "fastedge-apps patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Unique application name (alphanumeric, hyphens allowed) (e.g. my-edge-app)
   --binary: int # ID of the WebAssembly binary to deploy (format: int64, e.g. 12345)
   --template: int # Template ID (format: int64)
@@ -238,7 +244,7 @@ export def "fastedge-apps patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an app
@@ -255,6 +261,7 @@ export def "fastedge-apps updateApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Unique application name (alphanumeric, hyphens allowed) (e.g. my-edge-app)
   binary: int # ID of the WebAssembly binary to deploy (format: int64, e.g. 12345)
   --template: int # Template ID (format: int64)
@@ -275,7 +282,7 @@ export def "fastedge-apps updateApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List application logs
@@ -291,6 +298,7 @@ export def "fastedge-apps-logs listLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start of log retrieval period in RFC3339 format. Defaults to 1 hour ago if not specified. (format: date-time, e.g. 2023-12-31T23:59:59Z)
   --qp-to: string # Reporting period end time, RFC3339 format. Default current time in UTC. (format: date-time, e.g. 2026-01-31T23:59:59Z)
   --edge: string # Edge name (format: string)
@@ -307,7 +315,7 @@ export def "fastedge-apps-logs listLogs" [
   let full_url = (build-url $base $"/fastedge/v1/apps/($app_id)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app id by app name
@@ -325,13 +333,14 @@ export def "fastedge-apps-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/apps/by-name/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List binaries
@@ -346,13 +355,14 @@ export def "fastedge-binaries listBinaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<binaries: table<id: int, status: int, unref_since: string, api_type: string, checksum: string, source: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fastedge/v1/binaries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a binary
@@ -368,13 +378,14 @@ export def "fastedge-binaries delBinary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/binaries/($binary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get binary
@@ -390,13 +401,14 @@ export def "fastedge-binaries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, status: int, source: int, unref_since: string, api_type: string, checksum: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/binaries/($binary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store compiled WASM binary
@@ -411,6 +423,7 @@ export def "fastedge-binaries-raw storeBinary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: int, status: int, unref_since: string, api_type: string, checksum: string, source: int> {
   let input = $in
@@ -420,7 +433,7 @@ export def "fastedge-binaries-raw storeBinary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # List available edge stores
@@ -435,6 +448,7 @@ export def "fastedge-kv listStores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: int # Filter stores by application ID. Returns only stores associated with this app. (format: int64)
   --limit: int # Maximum number of stores to return per page (default: 50, e.g. 50)
   --offset: int # Number of stores to skip for pagination (default: 0, e.g. 0)
@@ -445,7 +459,7 @@ export def "fastedge-kv listStores" [
   let full_url = (build-url $base "/fastedge/v1/kv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new edge store
@@ -461,6 +475,7 @@ export def "fastedge-kv addStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # A name of the store
   --comment: string # A description of the store
   --byod: record # BYOD (Bring Your Own Data) settings — shape: {url: string, prefix: string}
@@ -473,7 +488,7 @@ export def "fastedge-kv addStore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a store
@@ -489,13 +504,14 @@ export def "fastedge-kv delStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/kv/($store_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get edge store details
@@ -511,13 +527,14 @@ export def "fastedge-kv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, comment: string, app_count: int, byod: record<url: string, prefix: string>, size: int, revision: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/kv/($store_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an edge store
@@ -534,6 +551,7 @@ export def "fastedge-kv updateStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # A name of the store
   --comment: string # A description of the store
   --byod: record # BYOD (Bring Your Own Data) settings — shape: {url: string, prefix: string}
@@ -546,7 +564,7 @@ export def "fastedge-kv updateStore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get edge store data entries
@@ -562,6 +580,7 @@ export def "fastedge-kv-data list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data-type: list # Data type filter
   --search: string # Key prefix to search for
   --min-score: float # Minimum score for sorted set (format: double)
@@ -575,7 +594,7 @@ export def "fastedge-kv-data list" [
   let full_url = (build-url $base $"/fastedge/v1/kv/($store_id)/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify data in store
@@ -591,6 +610,7 @@ export def "fastedge-kv-data modifyStoreData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Force data type change (default: false)
   --body: record
 ]: any -> record<del_count: int, revision: int, store_size: int, write_count: int, write_size: int> {
@@ -602,7 +622,7 @@ export def "fastedge-kv-data modifyStoreData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get edge store key value
@@ -619,6 +639,7 @@ export def "fastedge-kv-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Value prefix to search for
   --hash: string # Value hash to search for
   --min-score: float # Minimum score for sorted set (format: double)
@@ -632,7 +653,7 @@ export def "fastedge-kv-data get" [
   let full_url = (build-url $base $"/fastedge/v1/kv/($store_id)/data/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get status and limits for the client
@@ -647,13 +668,14 @@ export def "fastedge-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: int, hourly_consumption: int, daily_consumption: int, app_count: int, monthly_consumption: int, networks: table<name: string, is_default: bool>, plan_id: int, plan: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fastedge/v1/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available secrets
@@ -668,6 +690,7 @@ export def "fastedge-secrets listSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: int # App ID (format: int64)
   --secret-name: string # Secret name
 ]: nothing -> record<count: int, secrets: table<id: int, name: string, comment: string, app_count: int>> {
@@ -677,7 +700,7 @@ export def "fastedge-secrets listSecrets" [
   let full_url = (build-url $base "/fastedge/v1/secrets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new secret
@@ -693,6 +716,7 @@ export def "fastedge-secrets addSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The unique name of the secret.
   --comment: string # A description or comment about the secret.
   --secret-slots: list # A list of secret slots associated with this secret. — item shape: {slot: int, value?: string}
@@ -705,7 +729,7 @@ export def "fastedge-secrets addSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a secret
@@ -721,6 +745,7 @@ export def "fastedge-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # When true, deletes secret even if used by applications. Defaults to false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -729,7 +754,7 @@ export def "fastedge-secrets delete" [
   let full_url = (build-url $base $"/fastedge/v1/secrets/($secret_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get secret details
@@ -745,13 +770,14 @@ export def "fastedge-secrets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, comment: string, app_count: int, secret_slots: table<slot: int, value: string, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/secrets/($secret_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a secret
@@ -768,6 +794,7 @@ export def "fastedge-secrets patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The unique name of the secret.
   --comment: string # A description or comment about the secret.
   --secret-slots: list # A list of secret slots associated with this secret. — item shape: {slot: int, value?: string}
@@ -780,7 +807,7 @@ export def "fastedge-secrets patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a secret
@@ -797,6 +824,7 @@ export def "fastedge-secrets updateSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The unique name of the secret.
   --comment: string # A description or comment about the secret.
   --secret-slots: list # A list of secret slots associated with this secret. — item shape: {slot: int, value?: string}
@@ -809,7 +837,7 @@ export def "fastedge-secrets updateSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Execution duration statistics
@@ -824,6 +852,7 @@ export def "fastedge-stats-app-duration StatsDuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Filter statistics by specific application ID (format: int64)
   --qp-from: string # Reporting period start time in RFC3339 format (format: date-time, e.g. 2026-01-01T00:00:00Z)
   --qp-to: string # Reporting period end time in RFC3339 format (exclusive) (format: date-time, e.g. 2026-01-31T23:59:59Z)
@@ -836,7 +865,7 @@ export def "fastedge-stats-app-duration StatsDuration" [
   let full_url = (build-url $base "/fastedge/v1/stats/app_duration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call statistics
@@ -851,6 +880,7 @@ export def "fastedge-stats-calls StatsCalls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Reporting period start time in RFC3339 format (format: date-time, e.g. 2026-01-01T00:00:00Z)
   --qp-to: string # Reporting period end time in RFC3339 format (exclusive) (format: date-time, e.g. 2026-01-31T23:59:59Z)
   --step: int # Reporting time granularity in seconds. Common values are 60 (1 minute), 300 (5 minutes), 3600 (1 hour). (default: 60, e.g. 300)
@@ -863,7 +893,7 @@ export def "fastedge-stats-calls StatsCalls" [
   let full_url = (build-url $base "/fastedge/v1/stats/calls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edge storage statistics
@@ -878,6 +908,7 @@ export def "fastedge-stats-kv-store StatsKVStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Reporting period start time in RFC3339 format (format: date-time, e.g. 2026-01-01T00:00:00Z)
   --qp-to: string # Reporting period end time in RFC3339 format (exclusive) (format: date-time, e.g. 2026-01-31T23:59:59Z)
 ]: nothing -> record<stats: table<time: string, read_count: int, write_size: int, storage_size: float, del_count: int>> {
@@ -887,7 +918,7 @@ export def "fastedge-stats-kv-store StatsKVStore" [
   let full_url = (build-url $base "/fastedge/v1/stats/kv_store" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List app templates
@@ -902,6 +933,7 @@ export def "fastedge-template listTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-type: string@api-type-completer # API type:   wasi-http - WASI with HTTP entry point   proxy-wasm - Proxy-Wasm app, callable from CDN (e.g. wasi-http)
   --only-mine: oneof<nothing, bool> # When true, returns only templates created by the client. When false, includes shared templates. (default: false, e.g. false)
   --limit: int # Maximum number of results to return (default: 50, e.g. 50)
@@ -913,7 +945,7 @@ export def "fastedge-template listTemplates" [
   let full_url = (build-url $base "/fastedge/v1/template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add template
@@ -929,6 +961,7 @@ export def "fastedge-template addTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   binary_id: int # ID of the WebAssembly binary to use for this template (format: int64, e.g. 12345)
   name: string # Unique name for the template (used for identification and searching) (e.g. api-gateway-template)
   --short-descr: string # Brief one-line description displayed in template listings (e.g. HTTP API gateway with authentication)
@@ -944,7 +977,7 @@ export def "fastedge-template addTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete template
@@ -960,6 +993,7 @@ export def "fastedge-template delTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # When true, deletes template even if shared with groups. Defaults to false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -968,7 +1002,7 @@ export def "fastedge-template delTemplate" [
   let full_url = (build-url $base $"/fastedge/v1/template/($template_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get template details
@@ -984,13 +1018,14 @@ export def "fastedge-template get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<binary_id: int, name: string, short_descr: string, long_descr: string, api_type: string, owned: bool, params: table<name: string, data_type: string, mandatory: bool, descr: string, metadata: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fastedge/v1/template/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template
@@ -1007,6 +1042,7 @@ export def "fastedge-template updateTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   binary_id: int # ID of the WebAssembly binary to use for this template (format: int64, e.g. 12345)
   name: string # Unique name for the template (used for identification and searching) (e.g. api-gateway-template)
   --short-descr: string # Brief one-line description displayed in template listings (e.g. HTTP API gateway with authentication)
@@ -1022,5 +1058,5 @@ export def "fastedge-template updateTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

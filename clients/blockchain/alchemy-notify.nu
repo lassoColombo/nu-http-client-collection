@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def webhook-type-completer [] { ["ADDRESS_ACTIVITY" "DROPPED_TRANSACTION" "GRAPH
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql-variables read-custom-webhook-variable" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "graphql-variables read-custom-webhook-variable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 100
   --after: string # The cursor that points to the end of the current set of results.
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
@@ -115,7 +117,7 @@ export def "graphql-variables read-custom-webhook-variable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Variable
@@ -131,6 +133,7 @@ export def "graphql-variables create-custom-webhook-variable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   items: list # A variable defined as a set of addresses or byte32 elements. Must be a non-empty list. (default: [])
 ]: any -> any {
@@ -144,7 +147,7 @@ export def "graphql-variables create-custom-webhook-variable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Variable
@@ -160,6 +163,7 @@ export def "graphql-variables delete-custom-webhook-variable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -169,7 +173,7 @@ export def "graphql-variables delete-custom-webhook-variable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Variable
@@ -185,6 +189,7 @@ export def "graphql-variables update-custom-webhook-variable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   --add: list # Set of addresses or byte32 elements to be ADDED to a given Custom Webhook variable (default: [])
   --delete: list # Set of addresses or byte32 elements to be DELETED for a given Custom Webhook variable (default: [])
@@ -199,7 +204,7 @@ export def "graphql-variables update-custom-webhook-variable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks
@@ -214,6 +219,7 @@ export def "team-webhooks team-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
 ]: nothing -> table<data: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -223,7 +229,7 @@ export def "team-webhooks team-webhooks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all addresses for an Address Activity webhook
@@ -238,6 +244,7 @@ export def "webhook-addresses webhook-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook-id: string # ID of the address activity webhook.
   --limit: int # default: 100
   --after: string # The cursor that points to the end of the current set of results.
@@ -251,7 +258,7 @@ export def "webhook-addresses webhook-addresses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -268,6 +275,7 @@ export def "create-webhook create-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   network: string@network-completer # Network of webhook (default: ETH_MAINNET)
   webhook_type: string@webhook-type-completer # Type of webhook.
@@ -288,7 +296,7 @@ export def "create-webhook create-webhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add and remove webhook addresses
@@ -303,6 +311,7 @@ export def "update-webhook-addresses update-webhook-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   webhook_id: string # ID of the address activity webhook
   --addresses-to-add: list # List of addresses to add, **use [] if none**. (default: [])
@@ -318,7 +327,7 @@ export def "update-webhook-addresses update-webhook-addresses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace webhook addresses
@@ -333,6 +342,7 @@ export def "update-webhook-addresses replace-webhook-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   --webhook-id: string # ID of the address activity webhook.
   --addresses: list # New list of addresses to track. This replaces any existing addresses.
@@ -347,7 +357,7 @@ export def "update-webhook-addresses replace-webhook-addresses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update webhook status
@@ -362,6 +372,7 @@ export def "update-webhook update-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   --webhook-id: string # ID of the address activity webhook
   --is-active: oneof<nothing, bool> # True - set webhook to active state False - set webhook to inactive state
@@ -376,7 +387,7 @@ export def "update-webhook update-webhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update webhook NFT filters
@@ -393,6 +404,7 @@ export def "update-webhook-nft-filters update-webhook-nft-filters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   webhook_id: string # ID of the address activity webhook
   --nft-filters-to-add: list # List of nft filters to add, use [] if none. (default: []) — item shape: {contract_address?: string, token_id?: string}
@@ -408,7 +420,7 @@ export def "update-webhook-nft-filters update-webhook-nft-filters" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update NFT metadata webhook filters
@@ -425,6 +437,7 @@ export def "update-webhook-nft-metadata-filters update-webhook-nft-metadata-filt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   webhook_id: string # ID of the address activity webhook
   --nft-metadata-filters-to-add: list # List of nft metadata filters to add, **use [] if none**. — item shape: {contract_address?: string, token_id?: string}
@@ -440,7 +453,7 @@ export def "update-webhook-nft-metadata-filters update-webhook-nft-metadata-filt
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhook NFT filters
@@ -455,6 +468,7 @@ export def "webhook-nft-filters webhook-nft-filters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook-id: string # ID of the address activity webhook.
   --limit: int # default: 100
   --after: string # The cursor that points to the end of the current set of results.
@@ -468,7 +482,7 @@ export def "webhook-nft-filters webhook-nft-filters" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete webhook
@@ -483,6 +497,7 @@ export def "delete-webhook delete-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook-id: string # ID of the address activity webhook.
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
 ]: nothing -> record {
@@ -494,5 +509,5 @@ export def "delete-webhook delete-webhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

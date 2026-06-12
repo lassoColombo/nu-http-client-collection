@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -100,7 +101,7 @@ def permission-completer-1 [] { ["admin" "create-repo" "read" "write"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "addon delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -132,13 +133,14 @@ export def "addon delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addon")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an installed app
@@ -152,13 +154,14 @@ export def "addon put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addon")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List linkers for an app
@@ -174,13 +177,14 @@ export def "addon-linkers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addon/linkers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a linker for an app
@@ -197,13 +201,14 @@ export def "addon-linkers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all linker values
@@ -220,13 +225,14 @@ export def "addon-linkers-values delete-by-linker_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List linker values for a linker
@@ -243,13 +249,14 @@ export def "addon-linkers-values list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a linker value
@@ -266,13 +273,14 @@ export def "addon-linkers-values post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a linker value
@@ -289,13 +297,14 @@ export def "addon-linkers-values put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a linker value
@@ -313,13 +322,14 @@ export def "addon-linkers-values delete-by-linker_key-value_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values/($value_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a linker value
@@ -337,13 +347,14 @@ export def "addon-linkers-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/linkers/($linker_key)/values/($value_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the client key of a Connect addon
@@ -358,13 +369,14 @@ export def "addon-client-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addon/($addon_key)/client-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook resource
@@ -378,13 +390,14 @@ export def "hook-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<repository: record<events: record<href: string, name: string>>, workspace: record<events: record<href: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hook_events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subscribable webhook types
@@ -399,13 +412,14 @@ export def "hook-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<event: string, category: string, label: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/hook_events/($subject_type)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List public repositories
@@ -421,6 +435,7 @@ export def "repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Filter the results to include only repositories created on or after this [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)  timestamp. Example: `YYYY-MM-DDTHH:mm:ss.sssZ`
   --role: string@role-completer # Filters the result based on the authenticated user's role on each repository.  * **member**: returns repositories to which the user has explicit read access * **contributor**: returns repositories to which the user has explicit write access * **admin**: returns repositories to which the user has explicit administrator access * **owner**: returns all repositories owned by the current user
   --q: string # Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). `role` parameter must also be specified.
@@ -432,7 +447,7 @@ export def "repositories get" [
   let full_url = (build-url $base "/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repositories in a workspace
@@ -447,6 +462,7 @@ export def "repositories get-by-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer #  Filters the result based on the authenticated user's role on each repository.  * **member**: returns repositories to which the user has explicit read access * **contributor**: returns repositories to which the user has explicit write access * **admin**: returns repositories to which the user has explicit administrator access * **owner**: returns all repositories owned by the current user
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).         
@@ -457,7 +473,7 @@ export def "repositories get-by-workspace" [
   let full_url = (build-url $base $"/repositories/($workspace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a repository
@@ -473,6 +489,7 @@ export def "repositories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redirect-to: string # If a repository has been moved to a new location, use this parameter to show users a friendly message in the Bitbucket UI that the repository has moved to a new location. However, a GET to this endpoint will still return a 404.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -481,7 +498,7 @@ export def "repositories delete" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository
@@ -497,13 +514,14 @@ export def "repositories get-by-repo_slug-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, avatar: record<href: string, name: string>, pullrequests: record<href: string, name: string>, commits: record<href: string, name: string>, forks: record<href: string, name: string>, watchers: record<href: string, name: string>, downloads: record<href: string, name: string>, clone: list<record>, hooks: record<href: string, name: string>>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record<self: record, commits: record, html: record>, name: string, target: record<repository: any, participants: list>, merge_strategies: list<string>, default_merge_strategy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a repository
@@ -520,6 +538,7 @@ export def "repositories post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
@@ -548,7 +567,7 @@ export def "repositories post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a repository
@@ -565,6 +584,7 @@ export def "repositories put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
@@ -593,7 +613,7 @@ export def "repositories put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List branch restrictions
@@ -609,6 +629,7 @@ export def "repositories-branch-restrictions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Branch restrictions of this type
   --pattern: string # Branch restrictions applied to branches of this pattern
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, id: int, kind: string, branch_match_kind: string, branch_type: string, pattern: string, value: int, users: list, groups: list>> {
@@ -618,7 +639,7 @@ export def "repositories-branch-restrictions list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a branch restriction rule
@@ -637,6 +658,7 @@ export def "repositories-branch-restrictions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record}
   --id: int # The branch restriction status' id.
@@ -656,7 +678,7 @@ export def "repositories-branch-restrictions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a branch restriction rule
@@ -673,13 +695,14 @@ export def "repositories-branch-restrictions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a branch restriction rule
@@ -696,13 +719,14 @@ export def "repositories-branch-restrictions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, id: int, kind: string, branch_match_kind: string, branch_type: string, pattern: string, value: int, users: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, groups: table<type: string, links: record, owner: record, workspace: record, name: string, slug: string, full_slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a branch restriction rule
@@ -722,6 +746,7 @@ export def "repositories-branch-restrictions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record}
   --body-id: int # The branch restriction status' id.
@@ -741,7 +766,7 @@ export def "repositories-branch-restrictions put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the branching model for a repository
@@ -757,13 +782,14 @@ export def "repositories-branching-model get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>, name: string, use_mainbranch: bool>, production: record<branch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the branching model config for a repository
@@ -779,13 +805,14 @@ export def "repositories-branching-model-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, production: record<is_valid: bool, name: string, use_mainbranch: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the branching model config for a repository
@@ -801,13 +828,14 @@ export def "repositories-branching-model-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, production: record<is_valid: bool, name: string, use_mainbranch: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a commit
@@ -824,13 +852,14 @@ export def "repositories-commit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: any, merge_strategies: list, default_merge_strategy: string>>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unapprove a commit
@@ -847,13 +876,14 @@ export def "repositories-commit-approve delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Approve a commit
@@ -870,13 +900,14 @@ export def "repositories-commit-approve post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, role: string, approved: bool, state: string, participated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a commit's comments
@@ -893,6 +924,7 @@ export def "repositories-commit-comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string # Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<commit: record>> {
@@ -902,7 +934,7 @@ export def "repositories-commit-comments list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create comment for a commit
@@ -919,6 +951,7 @@ export def "repositories-commit-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-commit: any
 ]: any -> any {
   let input = $in
@@ -929,7 +962,7 @@ export def "repositories-commit-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a commit comment
@@ -947,13 +980,14 @@ export def "repositories-commit-comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a commit comment
@@ -971,13 +1005,14 @@ export def "repositories-commit-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commit: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, participants: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a commit comment
@@ -995,6 +1030,7 @@ export def "repositories-commit-comments put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-commit: any
 ]: any -> any {
   let input = $in
@@ -1005,7 +1041,7 @@ export def "repositories-commit-comments put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a commit application property
@@ -1025,6 +1061,7 @@ export def "repositories-commit-properties updateCommitHostedPropertyValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list
 ]: any -> any {
   let input = $in
@@ -1035,7 +1072,7 @@ export def "repositories-commit-properties updateCommitHostedPropertyValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a commit application property
@@ -1055,13 +1092,14 @@ export def "repositories-commit-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a commit application property
@@ -1081,13 +1119,14 @@ export def "repositories-commit-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pull requests that contain a commit
@@ -1105,6 +1144,7 @@ export def "repositories-commit-pullrequests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page to retrieve (format: int32, default: 1)
   --pagelen: int # How many pull requests to retrieve per page (format: int32, default: 30)
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, id: int, title: string, rendered: record, summary: record, state: string, author: record, source: record, destination: record, merge_commit: record, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record, reason: string, created_on: string, updated_on: string, reviewers: list, participants: list, draft: bool, queued: bool, mergeable: bool>> {
@@ -1114,7 +1154,7 @@ export def "repositories-commit-pullrequests get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/pullrequests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List reports
@@ -1132,13 +1172,14 @@ export def "repositories-commit-reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, title: string, details: string, external_id: string, reporter: string, link: string, remote_link_enabled: bool, logo_url: string, report_type: string, result: string, data: list, created_on: string, updated_on: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a report
@@ -1158,6 +1199,7 @@ export def "repositories-commit-reports createOrUpdateReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID that can be used to identify the report.
   --title: string # The title of the report.
@@ -1181,7 +1223,7 @@ export def "repositories-commit-reports createOrUpdateReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a report
@@ -1200,13 +1242,14 @@ export def "repositories-commit-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, title: string, details: string, external_id: string, reporter: string, link: string, remote_link_enabled: bool, logo_url: string, report_type: string, result: string, data: table<type: string, title: string, value: record>, created_on: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a report
@@ -1225,13 +1268,14 @@ export def "repositories-commit-reports delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List annotations
@@ -1250,13 +1294,14 @@ export def "repositories-commit-reports-annotations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, external_id: string, uuid: string, annotation_type: string, path: string, line: int, summary: string, details: string, result: string, severity: string, link: string, created_on: string, updated_on: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create or update annotations
@@ -1275,6 +1320,7 @@ export def "repositories-commit-reports-annotations bulkCreateOrUpdateAnnotation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<type: string, external_id: string, uuid: string, annotation_type: string, path: string, line: int, summary: string, details: string, result: string, severity: string, link: string, created_on: string, updated_on: string> {
   let input = $in
@@ -1284,7 +1330,7 @@ export def "repositories-commit-reports-annotations bulkCreateOrUpdateAnnotation
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an annotation
@@ -1304,13 +1350,14 @@ export def "repositories-commit-reports-annotations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, external_id: string, uuid: string, annotation_type: string, path: string, line: int, summary: string, details: string, result: string, severity: string, link: string, created_on: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update an annotation
@@ -1330,6 +1377,7 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --external-id: string # ID of the annotation provided by the annotation creator. It can be used to identify the annotation as an alternative to it's generated uuid. It is not used by Bitbucket, but only by the annotation creator for updating or deleting this specific annotation. Needs to be unique.
   --uuid: string # The UUID that can be used to identify the annotation.
@@ -1352,7 +1400,7 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an annotation
@@ -1372,13 +1420,14 @@ export def "repositories-commit-reports-annotations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commit statuses for a commit
@@ -1395,6 +1444,7 @@ export def "repositories-commit-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refname: string # If specified, only return commit status objects that were either created without a refname, or were created with the specified refname
   --q: string # Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string # Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). Defaults to `created_on`.
@@ -1405,7 +1455,7 @@ export def "repositories-commit-statuses get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a build status for a commit
@@ -1423,6 +1473,7 @@ export def "repositories-commit-statuses-build post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, commit?: record}
   key: string # An identifier for the status that's unique to         its type (current "build" is the only supported type) and the vendor,         e.g. BB-DEPLOY
@@ -1442,7 +1493,7 @@ export def "repositories-commit-statuses-build post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a build status for a commit
@@ -1460,13 +1511,14 @@ export def "repositories-commit-statuses-build get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, commit: record<href: string, name: string>>, key: string, refname: string, url: string, state: string, name: string, description: string, created_on: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses/build/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a build status for a commit
@@ -1485,6 +1537,7 @@ export def "repositories-commit-statuses-build put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, commit?: record}
   --body-key: string # An identifier for the status that's unique to         its type (current "build" is the only supported type) and the vendor,         e.g. BB-DEPLOY
@@ -1504,7 +1557,7 @@ export def "repositories-commit-statuses-build put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List commits
@@ -1520,13 +1573,14 @@ export def "repositories-commits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, hash: string, date: string, author: record, committer: record, message: string, summary: record, parents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commits with include/exclude
@@ -1542,13 +1596,14 @@ export def "repositories-commits post-by-repo_slug-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, hash: string, date: string, author: record, committer: record, message: string, summary: record, parents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commits for revision
@@ -1565,13 +1620,14 @@ export def "repositories-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, hash: string, date: string, author: record, committer: record, message: string, summary: record, parents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits/($revision)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commits for revision using include/exclude
@@ -1588,13 +1644,14 @@ export def "repositories-commits post-by-repo_slug-revision-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, hash: string, date: string, author: record, committer: record, message: string, summary: record, parents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits/($revision)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List components
@@ -1612,13 +1669,14 @@ export def "repositories-components list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/components")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a component for issues
@@ -1637,13 +1695,14 @@ export def "repositories-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, name: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/components/($component_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List default reviewers
@@ -1659,13 +1718,14 @@ export def "repositories-default-reviewers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a user from the default reviewers
@@ -1682,13 +1742,14 @@ export def "repositories-default-reviewers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a default reviewer
@@ -1705,13 +1766,14 @@ export def "repositories-default-reviewers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<avatar: record<href: string, name: string>>, created_on: string, display_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a user to the default reviewers
@@ -1728,13 +1790,14 @@ export def "repositories-default-reviewers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<avatar: record<href: string, name: string>>, created_on: string, display_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repository deploy keys
@@ -1750,13 +1813,14 @@ export def "repositories-deploy-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, key: string, repository: record, comment: string, label: string, added_on: string, last_used: string, links: record, owner: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a repository deploy key
@@ -1772,13 +1836,14 @@ export def "repositories-deploy-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, key: string, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, comment: string, label: string, added_on: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a repository deploy key
@@ -1795,13 +1860,14 @@ export def "repositories-deploy-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository deploy key
@@ -1818,13 +1884,14 @@ export def "repositories-deploy-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, key: string, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, comment: string, label: string, added_on: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a repository deploy key
@@ -1841,13 +1908,14 @@ export def "repositories-deploy-keys put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, key: string, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, comment: string, label: string, added_on: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deployments
@@ -1864,13 +1932,14 @@ export def "repositories-deployments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, state: record, environment: record, release: record>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a deployment
@@ -1888,13 +1957,14 @@ export def "repositories-deployments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, state: record<type: string>, environment: record<type: string, uuid: string, name: string>, release: record<type: string, uuid: string, name: string, url: string, commit: record<repository: record, participants: list>, created_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments/($deployment_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables for an environment
@@ -1912,13 +1982,14 @@ export def "repositories-deployments-config-environments-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, key: string, value: string, secured: bool>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable for an environment
@@ -1936,6 +2007,7 @@ export def "repositories-deployments-config-environments-variables createDeploym
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -1950,7 +2022,7 @@ export def "repositories-deployments-config-environments-variables createDeploym
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a variable for an environment
@@ -1969,6 +2041,7 @@ export def "repositories-deployments-config-environments-variables updateDeploym
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -1983,7 +2056,7 @@ export def "repositories-deployments-config-environments-variables updateDeploym
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable for an environment
@@ -2002,13 +2075,14 @@ export def "repositories-deployments-config-environments-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compare two commits
@@ -2025,6 +2099,7 @@ export def "repositories-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: int # Generate diffs with <n> lines of context instead of the usual three.
   --path: string # Limit the diff to a particular file (this parameter can be repeated for multiple paths).
   --ignore-whitespace: oneof<nothing, bool> # Generate diffs that ignore whitespace.
@@ -2039,7 +2114,7 @@ export def "repositories-diff get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/diff/($spec)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compare two commit diff stats
@@ -2056,6 +2131,7 @@ export def "repositories-diffstat get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignore-whitespace: oneof<nothing, bool> # Generate diffs that ignore whitespace
   --merge: oneof<nothing, bool> # This parameter is deprecated. The 'topic' parameter should be used instead. The 'merge' and 'topic' parameters cannot be both used at the same time.  If true, the source commit is merged into the destination commit, and then a diffstat from the destination to the merge result is returned. If false, a simple 'two dot' diffstat between the source and destination is returned. True if omitted.
   --path: string # Limit the diffstat to a particular file (this parameter can be repeated for multiple paths).
@@ -2068,7 +2144,7 @@ export def "repositories-diffstat get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/diffstat/($spec)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List download artifacts
@@ -2084,13 +2160,14 @@ export def "repositories-downloads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a download artifact
@@ -2106,13 +2183,14 @@ export def "repositories-downloads post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a download artifact
@@ -2129,13 +2207,14 @@ export def "repositories-downloads delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads/($filename)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a download artifact link
@@ -2152,13 +2231,14 @@ export def "repositories-downloads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads/($filename)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the effective, or currently applied, branching model for a repository
@@ -2174,13 +2254,14 @@ export def "repositories-effective-branching-model get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>, name: string, use_mainbranch: bool>, production: record<branch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/effective-branching-model")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List effective default reviewers
@@ -2196,13 +2277,14 @@ export def "repositories-effective-default-reviewers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, reviewer_type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/effective-default-reviewers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List environments
@@ -2219,13 +2301,14 @@ export def "repositories-environments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, name: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an environment
@@ -2242,6 +2325,7 @@ export def "repositories-environments createEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the environment.
   --name: string # The name of the environment.
@@ -2254,7 +2338,7 @@ export def "repositories-environments createEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an environment
@@ -2272,13 +2356,14 @@ export def "repositories-environments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an environment
@@ -2296,13 +2381,14 @@ export def "repositories-environments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an environment
@@ -2320,13 +2406,14 @@ export def "repositories-environments-changes updateEnvironmentForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)/changes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file conflicts for a commit spec
@@ -2343,13 +2430,14 @@ export def "repositories-file-conflicts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, path: string, scenario: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/file-conflicts/($spec)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commits that modified a file
@@ -2367,6 +2455,7 @@ export def "repositories-filehistory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --renames: string #  When `true`, Bitbucket will follow the history of the file across renames (this is the default behavior). This can be turned off by specifying `false`.
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Name of a response property sort the result by as per [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results).
@@ -2377,7 +2466,7 @@ export def "repositories-filehistory get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/filehistory/($commit)/($path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repository forks
@@ -2393,6 +2482,7 @@ export def "repositories-forks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # Filters the result based on the authenticated user's role on each repository.  * **member**: returns repositories to which the user has explicit read access * **contributor**: returns repositories to which the user has explicit write access * **admin**: returns repositories to which the user has explicit administrator access * **owner**: returns all repositories owned by the current user
   --q: string # Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string # Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
@@ -2403,7 +2493,7 @@ export def "repositories-forks get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/forks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fork a repository
@@ -2420,6 +2510,7 @@ export def "repositories-forks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
@@ -2448,7 +2539,7 @@ export def "repositories-forks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List webhooks for a repository
@@ -2464,13 +2555,14 @@ export def "repositories-hooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record, active: bool, created_at: string, events: list, secret_set: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook for a repository
@@ -2486,13 +2578,14 @@ export def "repositories-hooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook for a repository
@@ -2509,13 +2602,14 @@ export def "repositories-hooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook for a repository
@@ -2532,13 +2626,14 @@ export def "repositories-hooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook for a repository
@@ -2555,13 +2650,14 @@ export def "repositories-hooks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issues
@@ -2579,13 +2675,14 @@ export def "repositories-issues list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, id: int, repository: record, title: string, reporter: record, assignee: record, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record, version: record, component: record, votes: int, content: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an issue
@@ -2605,6 +2702,7 @@ export def "repositories-issues post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, comments?: record, attachments?: record, watch?: record, vote?: record}
   --id: int
@@ -2632,7 +2730,7 @@ export def "repositories-issues post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export issues
@@ -2650,6 +2748,7 @@ export def "repositories-issues-export post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --project-key: string
   --project-name: string
@@ -2664,7 +2763,7 @@ export def "repositories-issues-export post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check issue export status
@@ -2684,13 +2783,14 @@ export def "repositories-issues-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: string, phase: string, total: int, count: int, pct: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/export/($repo_name)-issues-($task_id).zip")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check issue import status
@@ -2708,13 +2808,14 @@ export def "repositories-issues-import get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: string, phase: string, total: int, count: int, pct: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/import")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import issues
@@ -2732,13 +2833,14 @@ export def "repositories-issues-import post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, status: string, phase: string, total: int, count: int, pct: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/import")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an issue
@@ -2757,13 +2859,14 @@ export def "repositories-issues delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an issue
@@ -2782,13 +2885,14 @@ export def "repositories-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, comments: record<href: string, name: string>, attachments: record<href: string, name: string>, watch: record<href: string, name: string>, vote: record<href: string, name: string>>, id: int, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, title: string, reporter: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, assignee: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record<type: string, links: record<self: record>, name: string, id: int>, version: record<type: string, links: record<self: record>, name: string, id: int>, component: record<type: string, links: record<self: record>, name: string, id: int>, votes: int, content: record<raw: string, markup: string, html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an issue
@@ -2807,13 +2911,14 @@ export def "repositories-issues put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, comments: record<href: string, name: string>, attachments: record<href: string, name: string>, watch: record<href: string, name: string>, vote: record<href: string, name: string>>, id: int, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, title: string, reporter: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, assignee: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record<type: string, links: record<self: record>, name: string, id: int>, version: record<type: string, links: record<self: record>, name: string, id: int>, component: record<type: string, links: record<self: record>, name: string, id: int>, votes: int, content: record<raw: string, markup: string, html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List attachments for an issue
@@ -2832,13 +2937,14 @@ export def "repositories-issues-attachments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload an attachment to an issue
@@ -2857,13 +2963,14 @@ export def "repositories-issues-attachments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an attachment for an issue
@@ -2883,13 +2990,14 @@ export def "repositories-issues-attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments/($path)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment for an issue
@@ -2909,13 +3017,14 @@ export def "repositories-issues-attachments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments/($path)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List changes on an issue
@@ -2934,6 +3043,7 @@ export def "repositories-issues-changes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response. See [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering) for details.
   --qp-sort: string #  Name of a response property to sort results. See [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results) for details.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, created_on: string, user: record, issue: record, changes: record, message: record>> {
@@ -2943,7 +3053,7 @@ export def "repositories-issues-changes list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify the state of an issue
@@ -2965,6 +3075,7 @@ export def "repositories-issues-changes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, issue?: record}
   --name: string
@@ -2982,7 +3093,7 @@ export def "repositories-issues-changes post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue change object
@@ -3002,13 +3113,14 @@ export def "repositories-issues-changes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, issue: record<href: string, name: string>>, name: string, created_on: string, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, issue: record<type: string, links: record<self: record, html: record, comments: record, attachments: record, watch: record, vote: record>, id: int, repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, title: string, reporter: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, assignee: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record<type: string, links: record, name: string, id: int>, version: record<type: string, links: record, name: string, id: int>, component: record<type: string, links: record, name: string, id: int>, votes: int, content: record<raw: string, markup: string, html: string>>, changes: record<assignee: record<old: string, new: string>, state: record<old: string, new: string>, title: record<old: string, new: string>, kind: record<old: string, new: string>, milestone: record<old: string, new: string>, component: record<old: string, new: string>, priority: record<old: string, new: string>, version: record<old: string, new: string>, content: record<old: string, new: string>>, message: record<raw: string, markup: string, html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/changes/($change_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List comments on an issue
@@ -3027,6 +3139,7 @@ export def "repositories-issues-comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<issue: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3035,7 +3148,7 @@ export def "repositories-issues-comments list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment on an issue
@@ -3054,6 +3167,7 @@ export def "repositories-issues-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issue: any
 ]: any -> any {
   let input = $in
@@ -3064,7 +3178,7 @@ export def "repositories-issues-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment on an issue
@@ -3084,13 +3198,14 @@ export def "repositories-issues-comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a comment on an issue
@@ -3110,13 +3225,14 @@ export def "repositories-issues-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issue: record<type: string, links: record<self: record, html: record, comments: record, attachments: record, watch: record, vote: record>, id: int, repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, title: string, reporter: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, assignee: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record<type: string, links: record, name: string, id: int>, version: record<type: string, links: record, name: string, id: int>, component: record<type: string, links: record, name: string, id: int>, votes: int, content: record<raw: string, markup: string, html: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a comment on an issue
@@ -3136,6 +3252,7 @@ export def "repositories-issues-comments put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issue: any
 ]: any -> record<issue: record<type: string, links: record<self: record, html: record, comments: record, attachments: record, watch: record, vote: record>, id: int, repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, title: string, reporter: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, assignee: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string, updated_on: string, edited_on: string, state: string, kind: string, priority: string, milestone: record<type: string, links: record, name: string, id: int>, version: record<type: string, links: record, name: string, id: int>, component: record<type: string, links: record, name: string, id: int>, votes: int, content: record<raw: string, markup: string, html: string>>> {
   let input = $in
@@ -3146,7 +3263,7 @@ export def "repositories-issues-comments put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove vote for an issue
@@ -3165,13 +3282,14 @@ export def "repositories-issues-vote delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, error: record<message: string, detail: string, data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if current user voted for an issue
@@ -3190,13 +3308,14 @@ export def "repositories-issues-vote get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Vote for an issue
@@ -3215,13 +3334,14 @@ export def "repositories-issues-vote put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop watching an issue
@@ -3240,13 +3360,14 @@ export def "repositories-issues-watch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if current user is watching a issue
@@ -3265,13 +3386,14 @@ export def "repositories-issues-watch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watch an issue
@@ -3290,13 +3412,14 @@ export def "repositories-issues-watch put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the common ancestor between two commits
@@ -3313,13 +3436,14 @@ export def "repositories-merge-base get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: any, merge_strategies: list, default_merge_strategy: string>>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/merge-base/($revspec)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List milestones
@@ -3337,13 +3461,14 @@ export def "repositories-milestones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/milestones")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a milestone
@@ -3362,13 +3487,14 @@ export def "repositories-milestones get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, name: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/milestones/($milestone_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the inheritance state for repository settings
@@ -3384,13 +3510,14 @@ export def "repositories-override-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, override_settings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/override-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the inheritance state for repository settings                 
@@ -3406,13 +3533,14 @@ export def "repositories-override-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/override-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a patch for two commits
@@ -3429,13 +3557,14 @@ export def "repositories-patch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/patch/($spec)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List explicit group permissions for a repository
@@ -3451,13 +3580,14 @@ export def "repositories-permissions-config-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, permission: string, group: record, repository: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an explicit group permission for a repository
@@ -3474,13 +3604,14 @@ export def "repositories-permissions-config-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups/($group_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an explicit group permission for a repository
@@ -3497,13 +3628,14 @@ export def "repositories-permissions-config-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, group: record<type: string, links: record<self: record, html: record>, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>, name: string, slug: string, full_slug: string>, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups/($group_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an explicit group permission for a repository
@@ -3520,6 +3652,7 @@ export def "repositories-permissions-config-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   permission: string@permission-completer
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, group: record<type: string, links: record<self: record, html: record>, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>, name: string, slug: string, full_slug: string>, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>> {
   let input = $in
@@ -3530,7 +3663,7 @@ export def "repositories-permissions-config-groups put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List explicit user permissions for a repository
@@ -3546,13 +3679,14 @@ export def "repositories-permissions-config-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, permission: string, user: record, repository: record, links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an explicit user permission for a repository
@@ -3569,13 +3703,14 @@ export def "repositories-permissions-config-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users/($selected_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an explicit user permission for a repository
@@ -3592,13 +3727,14 @@ export def "repositories-permissions-config-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, permission: string, user: record<links: record<avatar: record, self: record, html: record, repositories: record>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool>, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, links: record<self: record<href: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users/($selected_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an explicit user permission for a repository
@@ -3615,6 +3751,7 @@ export def "repositories-permissions-config-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   permission: string@permission-completer
 ]: any -> record<type: string, permission: string, user: record<links: record<avatar: record, self: record, html: record, repositories: record>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool>, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, links: record<self: record<href: string, name: string>>> {
   let input = $in
@@ -3625,7 +3762,7 @@ export def "repositories-permissions-config-users put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List pipelines
@@ -3642,6 +3779,7 @@ export def "repositories-pipelines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creatoruuid: string # The UUID of the creator of the pipeline to filter by. (format: uuid)
   --targetref-type: string@targetref-type-completer # The type of the reference to filter by.
   --targetref-name: string # The reference name to filter by.
@@ -3662,7 +3800,7 @@ export def "repositories-pipelines list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run a pipeline
@@ -3681,6 +3819,7 @@ export def "repositories-pipelines createPipelineForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the pipeline.
   --build-number: int # The build number of the pipeline.
@@ -3704,7 +3843,7 @@ export def "repositories-pipelines createPipelineForRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List caches
@@ -3721,13 +3860,14 @@ export def "repositories-pipelines-config-caches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, pipeline_uuid: string, step_uuid: string, name: string, key_hash: string, path: string, file_size_bytes: int, created_on: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete caches
@@ -3744,6 +3884,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The cache name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3752,7 +3893,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug" 
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a cache
@@ -3770,13 +3911,14 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches/($cache_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cache content URI
@@ -3794,13 +3936,14 @@ export def "repositories-pipelines-config-caches-content-uri get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches/($cache_uuid)/content-uri")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository runners
@@ -3817,13 +3960,14 @@ export def "repositories-pipelines-config-runners list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, name: string, labels: list, state: record, created_on: string, updated_on: string, oauth_client: record>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/runners")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create repository runner
@@ -3840,13 +3984,14 @@ export def "repositories-pipelines-config-runners createRepositoryRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/runners")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository runner
@@ -3864,13 +4009,14 @@ export def "repositories-pipelines-config-runners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository runner
@@ -3888,13 +4034,14 @@ export def "repositories-pipelines-config-runners updateRepositoryRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete repository runner
@@ -3912,13 +4059,14 @@ export def "repositories-pipelines-config-runners delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pipeline
@@ -3936,13 +4084,14 @@ export def "repositories-pipelines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, build_number: int, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>, target: record<type: string>, trigger: record<type: string>, state: record<type: string>, variables: table<type: string, uuid: string, key: string, value: string, secured: bool>, created_on: string, completed_on: string, build_seconds_used: int, configuration_sources: table<source: string, uri: string>, links: record<type: string, self: record<type: string, href: string>, steps: record<type: string, href: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List steps for a pipeline
@@ -3960,13 +4109,14 @@ export def "repositories-pipelines-steps list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, started_on: string, completed_on: string, state: record, image: record, setup_commands: list, script_commands: list>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a step of a pipeline
@@ -3985,13 +4135,14 @@ export def "repositories-pipelines-steps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, started_on: string, completed_on: string, state: record<type: string>, image: record<name: string, username: string, password: string, email: string>, setup_commands: table<name: string, command: string>, script_commands: table<name: string, command: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get log file for a step
@@ -4010,13 +4161,14 @@ export def "repositories-pipelines-steps-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/log")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the logs for the build container or a service container for a given step of a pipeline.
@@ -4036,13 +4188,14 @@ export def "repositories-pipelines-steps-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/logs/($log_uuid)")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a summary of test reports for a given step of a pipeline.
@@ -4061,13 +4214,14 @@ export def "repositories-pipelines-steps-test-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get test cases for a given step of a pipeline.
@@ -4086,13 +4240,14 @@ export def "repositories-pipelines-steps-test-reports-test-cases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports/test_cases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get test case reasons (output) for a given test case in a step of a pipeline.
@@ -4112,13 +4267,14 @@ export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reaso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports/test_cases/($test_case_uuid)/test_case_reasons")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a pipeline
@@ -4136,13 +4292,14 @@ export def "repositories-pipelines-stop-pipeline stopPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/stopPipeline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get configuration
@@ -4159,13 +4316,14 @@ export def "repositories-pipelines-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, enabled: bool, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update configuration
@@ -4182,6 +4340,7 @@ export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --enabled: oneof<nothing, bool> # Whether Pipelines is enabled for the repository.
   --repository: any
@@ -4194,7 +4353,7 @@ export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the next build number
@@ -4211,6 +4370,7 @@ export def "repositories-pipelines-config-build-number updateRepositoryBuildNumb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --next: int # The next number that will be used as build number.
 ]: any -> record<type: string, next: int> {
@@ -4222,7 +4382,7 @@ export def "repositories-pipelines-config-build-number updateRepositoryBuildNumb
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a schedule
@@ -4240,6 +4400,7 @@ export def "repositories-pipelines-config-schedules createRepositoryPipelineSche
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   target: record # The target on which the schedule will be executed. — shape: {selector: any, ref_name: string, ref_type: "branch"}
   --enabled: oneof<nothing, bool> # Whether the schedule is enabled.
@@ -4253,7 +4414,7 @@ export def "repositories-pipelines-config-schedules createRepositoryPipelineSche
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List schedules
@@ -4270,13 +4431,14 @@ export def "repositories-pipelines-config-schedules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, enabled: bool, target: record, cron_pattern: string, created_on: string, updated_on: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a schedule
@@ -4294,13 +4456,14 @@ export def "repositories-pipelines-config-schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, enabled: bool, target: record<ref_type: string, ref_name: string, commit: record<repository: record, participants: list>, selector: record<type: string, pattern: string>>, cron_pattern: string, created_on: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a schedule
@@ -4318,6 +4481,7 @@ export def "repositories-pipelines-config-schedules updateRepositoryPipelineSche
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --enabled: oneof<nothing, bool> # Whether the schedule is enabled.
 ]: any -> record<type: string, uuid: string, enabled: bool, target: record<ref_type: string, ref_name: string, commit: record<repository: record, participants: list>, selector: record<type: string, pattern: string>>, cron_pattern: string, created_on: string, updated_on: string> {
@@ -4329,7 +4493,7 @@ export def "repositories-pipelines-config-schedules updateRepositoryPipelineSche
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a schedule
@@ -4347,13 +4511,14 @@ export def "repositories-pipelines-config-schedules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List executions of a schedule
@@ -4371,13 +4536,14 @@ export def "repositories-pipelines-config-schedules-executions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)/executions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSH key pair
@@ -4394,13 +4560,14 @@ export def "repositories-pipelines-config-ssh-key-pair get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, private_key: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/key_pair")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SSH key pair
@@ -4417,6 +4584,7 @@ export def "repositories-pipelines-config-ssh-key-pair updateRepositoryPipelineK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --private-key: string # The SSH private key. This value will be empty when retrieving the SSH key pair.
   --public-key: string # The SSH public key.
@@ -4429,7 +4597,7 @@ export def "repositories-pipelines-config-ssh-key-pair updateRepositoryPipelineK
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SSH key pair
@@ -4446,13 +4614,14 @@ export def "repositories-pipelines-config-ssh-key-pair delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/key_pair")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List known hosts
@@ -4469,13 +4638,14 @@ export def "repositories-pipelines-config-ssh-known-hosts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, hostname: string, public_key: record>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a known host
@@ -4492,6 +4662,7 @@ export def "repositories-pipelines-config-ssh-known-hosts createRepositoryPipeli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the known host.
   --hostname: string # The hostname of the known host.
@@ -4505,7 +4676,7 @@ export def "repositories-pipelines-config-ssh-known-hosts createRepositoryPipeli
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a known host
@@ -4523,13 +4694,14 @@ export def "repositories-pipelines-config-ssh-known-hosts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, hostname: string, public_key: record<type: string, key_type: string, key: string, md5_fingerprint: string, sha256_fingerprint: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/($known_host_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a known host
@@ -4547,6 +4719,7 @@ export def "repositories-pipelines-config-ssh-known-hosts updateRepositoryPipeli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the known host.
   --hostname: string # The hostname of the known host.
@@ -4560,7 +4733,7 @@ export def "repositories-pipelines-config-ssh-known-hosts updateRepositoryPipeli
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a known host
@@ -4578,13 +4751,14 @@ export def "repositories-pipelines-config-ssh-known-hosts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/($known_host_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables for a repository
@@ -4601,13 +4775,14 @@ export def "repositories-pipelines-config-variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, key: string, value: string, secured: bool>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable for a repository
@@ -4624,6 +4799,7 @@ export def "repositories-pipelines-config-variables createRepositoryPipelineVari
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -4638,7 +4814,7 @@ export def "repositories-pipelines-config-variables createRepositoryPipelineVari
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a variable for a repository
@@ -4656,13 +4832,14 @@ export def "repositories-pipelines-config-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a variable for a repository
@@ -4680,6 +4857,7 @@ export def "repositories-pipelines-config-variables updateRepositoryPipelineVari
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -4694,7 +4872,7 @@ export def "repositories-pipelines-config-variables updateRepositoryPipelineVari
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable for a repository
@@ -4712,13 +4890,14 @@ export def "repositories-pipelines-config-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a repository application property
@@ -4737,6 +4916,7 @@ export def "repositories-properties updateRepositoryHostedPropertyValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list
 ]: any -> any {
   let input = $in
@@ -4747,7 +4927,7 @@ export def "repositories-properties updateRepositoryHostedPropertyValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a repository application property
@@ -4766,13 +4946,14 @@ export def "repositories-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository application property
@@ -4791,13 +4972,14 @@ export def "repositories-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pull requests
@@ -4813,6 +4995,7 @@ export def "repositories-pullrequests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-2 # Only return pull requests that are in this state. This parameter can be repeated.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, id: int, title: string, rendered: record, summary: record, state: string, author: record, source: record, destination: record, merge_commit: record, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record, reason: string, created_on: string, updated_on: string, reviewers: list, participants: list, draft: bool, queued: bool, mergeable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4821,7 +5004,7 @@ export def "repositories-pullrequests list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pull request
@@ -4845,6 +5028,7 @@ export def "repositories-pullrequests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, commits?: record, approve?: record, diff?: record, diffstat?: record, comments?: record, activity?: record, merge?: record, decline?: record}
   --id: int # The pull request's unique ID. Note that pull request IDs are only unique within their associated repository.
@@ -4877,7 +5061,7 @@ export def "repositories-pullrequests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a pull request activity log
@@ -4893,13 +5077,14 @@ export def "repositories-pullrequests-activity list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/activity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pull request
@@ -4916,13 +5101,14 @@ export def "repositories-pullrequests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, commits: record<href: string, name: string>, approve: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, comments: record<href: string, name: string>, activity: record<href: string, name: string>, merge: record<href: string, name: string>, decline: record<href: string, name: string>>, id: int, title: string, rendered: record<title: record<raw: string, markup: string, html: string>, description: record<raw: string, markup: string, html: string>, reason: record<raw: string, markup: string, html: string>>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, source: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, destination: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>, draft: bool, queued: bool, mergeable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a pull request
@@ -4947,6 +5133,7 @@ export def "repositories-pullrequests put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record, commits?: record, approve?: record, diff?: record, diffstat?: record, comments?: record, activity?: record, merge?: record, decline?: record}
   --id: int # The pull request's unique ID. Note that pull request IDs are only unique within their associated repository.
@@ -4979,7 +5166,7 @@ export def "repositories-pullrequests put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a pull request activity log
@@ -4996,13 +5183,14 @@ export def "repositories-pullrequests-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/activity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unapprove a pull request
@@ -5019,13 +5207,14 @@ export def "repositories-pullrequests-approve delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Approve a pull request
@@ -5042,13 +5231,14 @@ export def "repositories-pullrequests-approve post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, role: string, approved: bool, state: string, participated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List comments on a pull request
@@ -5065,13 +5255,14 @@ export def "repositories-pullrequests-comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<pullrequest: record, resolution: record, pending: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment on a pull request
@@ -5089,6 +5280,7 @@ export def "repositories-pullrequests-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pullrequest: any
   --resolution: record # The resolution object for a Comment. — shape: {type: string, user?: any, created_on?: string}
   --pending: oneof<nothing, bool>
@@ -5101,7 +5293,7 @@ export def "repositories-pullrequests-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment on a pull request
@@ -5119,13 +5311,14 @@ export def "repositories-pullrequests-comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a comment on a pull request
@@ -5143,13 +5336,14 @@ export def "repositories-pullrequests-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pullrequest: record<type: string, links: record<self: record, html: record, commits: record, approve: record, diff: record, diffstat: record, comments: record, activity: record, merge: record, decline: record>, id: int, title: string, rendered: record<title: record, description: record, reason: record>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, source: record<repository: record, branch: record, commit: record>, destination: record<repository: record, branch: record, commit: record>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: list<record>, participants: list<record>, draft: bool, queued: bool, mergeable: bool>, resolution: record<type: string, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string>, pending: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a comment on a pull request
@@ -5168,6 +5362,7 @@ export def "repositories-pullrequests-comments put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pullrequest: any
   --resolution: record # The resolution object for a Comment. — shape: {type: string, user?: any, created_on?: string}
   --pending: oneof<nothing, bool>
@@ -5180,7 +5375,7 @@ export def "repositories-pullrequests-comments put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reopen a comment thread
@@ -5198,13 +5393,14 @@ export def "repositories-pullrequests-comments-resolve delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)/resolve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve a comment thread
@@ -5222,13 +5418,14 @@ export def "repositories-pullrequests-comments-resolve post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, created_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)/resolve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commits on a pull request
@@ -5245,13 +5442,14 @@ export def "repositories-pullrequests-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/commits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file conflicts for a pull request
@@ -5268,13 +5466,14 @@ export def "repositories-pullrequests-conflicts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/conflicts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Decline a pull request
@@ -5291,13 +5490,14 @@ export def "repositories-pullrequests-decline post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, commits: record<href: string, name: string>, approve: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, comments: record<href: string, name: string>, activity: record<href: string, name: string>, merge: record<href: string, name: string>, decline: record<href: string, name: string>>, id: int, title: string, rendered: record<title: record<raw: string, markup: string, html: string>, description: record<raw: string, markup: string, html: string>, reason: record<raw: string, markup: string, html: string>>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, source: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, destination: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>, draft: bool, queued: bool, mergeable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/decline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List changes in a pull request
@@ -5314,13 +5514,14 @@ export def "repositories-pullrequests-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/diff")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the diff stat for a pull request
@@ -5337,13 +5538,14 @@ export def "repositories-pullrequests-diffstat get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/diffstat")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge a pull request
@@ -5360,6 +5562,7 @@ export def "repositories-pullrequests-merge post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool> # Default value is false.   When set to true, runs merge asynchronously and immediately returns a 202 with polling link to the task-status API in the Location header.   When set to false, runs merge and waits for it to complete, returning 200 when it succeeds. If the duration of the merge exceeds a timeout threshold, the API returns a 202 with polling link to the task-status API in the Location header.
   type: string
   --message: string # The commit message that will be used on the resulting commit. Note that the size of the message is limited to 128 KiB.
@@ -5375,7 +5578,7 @@ export def "repositories-pullrequests-merge post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the merge task status for a pull request
@@ -5393,13 +5596,14 @@ export def "repositories-pullrequests-merge-task-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/merge/task-status/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the patch for a pull request
@@ -5416,13 +5620,14 @@ export def "repositories-pullrequests-patch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/patch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove change request for a pull request
@@ -5439,13 +5644,14 @@ export def "repositories-pullrequests-request-changes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/request-changes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request changes for a pull request
@@ -5462,13 +5668,14 @@ export def "repositories-pullrequests-request-changes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, role: string, approved: bool, state: string, participated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/request-changes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commit statuses for a pull request
@@ -5485,6 +5692,7 @@ export def "repositories-pullrequests-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string # Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). Defaults to `created_on`.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, key: string, refname: string, url: string, state: string, name: string, description: string, created_on: string, updated_on: string>> {
@@ -5494,7 +5702,7 @@ export def "repositories-pullrequests-statuses get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tasks on a pull request
@@ -5511,6 +5719,7 @@ export def "repositories-pullrequests-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response. See [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering) for details.
   --qp-sort: string #  Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). Defaults to `created_on`.
   --pagelen: int #  Current number of objects on the existing page. The default value is 10 with 100 being the maximum allowed value. Individual APIs may enforce different values.
@@ -5521,7 +5730,7 @@ export def "repositories-pullrequests-tasks list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a task on a pull request
@@ -5539,6 +5748,7 @@ export def "repositories-pullrequests-tasks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: record # task raw content — shape: {raw: string}
   --comment: any
   --pending: oneof<nothing, bool>
@@ -5551,7 +5761,7 @@ export def "repositories-pullrequests-tasks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a task on a pull request
@@ -5569,13 +5779,14 @@ export def "repositories-pullrequests-tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a task on a pull request
@@ -5593,13 +5804,14 @@ export def "repositories-pullrequests-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: record<type: string, id: int, created_on: string, updated_on: string, content: record<raw: string, markup: string, html: string>, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, deleted: bool, parent: any, inline: record<from: int, to: int, start_from: int, start_to: int, path: string>, links: record<self: record, html: record, code: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a task on a pull request
@@ -5618,6 +5830,7 @@ export def "repositories-pullrequests-tasks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content: record # task raw content — shape: {raw: string}
   --state: string@state-completer-4
 ]: any -> record<comment: record<type: string, id: int, created_on: string, updated_on: string, content: record<raw: string, markup: string, html: string>, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, deleted: bool, parent: any, inline: record<from: int, to: int, start_from: int, start_to: int, path: string>, links: record<self: record, html: record, code: record>>> {
@@ -5629,7 +5842,7 @@ export def "repositories-pullrequests-tasks put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a pull request application property
@@ -5649,6 +5862,7 @@ export def "repositories-pullrequests-properties updatePullRequestHostedProperty
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list
 ]: any -> any {
   let input = $in
@@ -5659,7 +5873,7 @@ export def "repositories-pullrequests-properties updatePullRequestHostedProperty
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a pull request application property
@@ -5679,13 +5893,14 @@ export def "repositories-pullrequests-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pullrequest_id)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pull request application property
@@ -5705,13 +5920,14 @@ export def "repositories-pullrequests-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pullrequest_id)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List branches and tags
@@ -5727,6 +5943,7 @@ export def "repositories-refs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). The `name` field is handled specially for refs in that, if specified as the sort field, it uses a natural sort order instead of the default lexicographical sort order. For example, it will return ['1.1', '1.2', '1.10'] instead of ['1.1', '1.10', '1.2'].
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, target: record>> {
@@ -5736,7 +5953,7 @@ export def "repositories-refs get" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List open branches
@@ -5752,6 +5969,7 @@ export def "repositories-refs-branches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). The `name` field is handled specially for branches in that, if specified as the sort field, it uses a natural sort order instead of the default lexicographical sort order. For example, it will return ['branch1', 'branch2', 'branch10'] instead of ['branch1', 'branch10', 'branch2'].
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>> {
@@ -5761,7 +5979,7 @@ export def "repositories-refs-branches list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a branch
@@ -5777,13 +5995,14 @@ export def "repositories-refs-branches post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, commits: record<href: string, name: string>, html: record<href: string, name: string>>, name: string, target: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: any>, participants: list<record>>, merge_strategies: list<string>, default_merge_strategy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a branch
@@ -5800,13 +6019,14 @@ export def "repositories-refs-branches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a branch
@@ -5823,13 +6043,14 @@ export def "repositories-refs-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, commits: record<href: string, name: string>, html: record<href: string, name: string>>, name: string, target: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: any>, participants: list<record>>, merge_strategies: list<string>, default_merge_strategy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tags
@@ -5845,6 +6066,7 @@ export def "repositories-refs-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Field by which the results should be sorted as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering). The `name` field is handled specially for tags in that, if specified as the sort field, it uses a natural sort order instead of the default lexicographical sort order. For example, it will return ['1.1', '1.2', '1.10'] instead of ['1.1', '1.10', '1.2'].
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, target: record, message: string, date: string, tagger: record>> {
@@ -5854,7 +6076,7 @@ export def "repositories-refs-tags list" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tag
@@ -5871,6 +6093,7 @@ export def "repositories-refs-tags post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, commits?: record, html?: record}
   --name: string # The name of the ref.
@@ -5887,7 +6110,7 @@ export def "repositories-refs-tags post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tag
@@ -5904,13 +6127,14 @@ export def "repositories-refs-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a tag
@@ -5927,13 +6151,14 @@ export def "repositories-refs-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, commits: record<href: string, name: string>, html: record<href: string, name: string>>, name: string, target: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, participants: list<record>>, message: string, date: string, tagger: record<type: string, raw: string, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the root directory of the main branch
@@ -5949,6 +6174,7 @@ export def "repositories-src get-by-repo_slug-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Instead of returning the file's contents, return the (json) meta data for it.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, path: string, commit: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5957,7 +6183,7 @@ export def "repositories-src get-by-repo_slug-workspace" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a commit by uploading a file
@@ -5973,6 +6199,7 @@ export def "repositories-src post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # The commit message. When omitted, Bitbucket uses a canned string.
   --author: string #  The raw string to be used as the new commit's author. This string follows the format `Erik van Zijst <evzijst@atlassian.com>`.  When omitted, Bitbucket uses the authenticated user's full/display name and primary email address. Commits cannot be created anonymously.
   --parents: string #  #### Deprecation Notice: Support for specifying multiple parent commits is deprecated and will be removed in a future release. Only a single SHA1 is accepted.  A SHA1 of the commit that should be the parent of the newly created commit. When omitted, the new commit will inherit from and become a child of the main branch's tip/HEAD commit.
@@ -5985,7 +6212,7 @@ export def "repositories-src post" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file or directory contents
@@ -6003,6 +6230,7 @@ export def "repositories-src get-by-commit-path-repo_slug-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1 # If 'meta' is provided, returns the (json) meta data for the contents of the file.  If 'rendered' is provided, returns the contents of a non-binary file in HTML-formatted rendered markup. The 'rendered' option only supports these filetypes: `.md`, `.markdown`, `.mkd`, `.mkdn`, `.mdown`, `.text`, `.rst`, and `.textile`. Since Git does not generally track what text encoding scheme is used, this endpoint attempts to detect the most appropriate character encoding. While usually correct, determining the character encoding can be ambiguous which in exceptional cases can lead to misinterpretation of the characters. As such, the raw element in the response object should not be treated as equivalent to the file's actual contents.
   --q: string # Optional filter expression as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string # Optional sorting parameter as per [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results).
@@ -6014,7 +6242,7 @@ export def "repositories-src get-by-commit-path-repo_slug-workspace" [
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src/($commit)/($path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List defined versions for issues
@@ -6032,13 +6260,14 @@ export def "repositories-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, name: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/versions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a defined version for issues
@@ -6057,13 +6286,14 @@ export def "repositories-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, name: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/versions/($version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repositories watchers
@@ -6079,13 +6309,14 @@ export def "repositories-watchers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/watchers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List snippets
@@ -6101,6 +6332,7 @@ export def "snippets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer-1 # Filter down the result based on the authenticated user's role (`owner`, `contributor`, or `member`).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record, creator: record, is_private: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6109,7 +6341,7 @@ export def "snippets get" [
   let full_url = (build-url $base "/snippets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a snippet
@@ -6123,6 +6355,7 @@ export def "snippets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --id: int
   --title: string
@@ -6141,7 +6374,7 @@ export def "snippets post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List snippets in a workspace
@@ -6156,6 +6389,7 @@ export def "snippets get-by-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer-1 # Filter down the result based on the authenticated user's role (`owner`, `contributor`, or `member`).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record, creator: record, is_private: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6164,7 +6398,7 @@ export def "snippets get-by-workspace" [
   let full_url = (build-url $base $"/snippets/($workspace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a snippet for a workspace
@@ -6179,6 +6413,7 @@ export def "snippets post-by-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --id: int
   --title: string
@@ -6197,7 +6432,7 @@ export def "snippets post-by-workspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a snippet
@@ -6213,13 +6448,14 @@ export def "snippets delete-by-encoded_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a snippet
@@ -6235,6 +6471,7 @@ export def "snippets get-by-encoded_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6242,7 +6479,7 @@ export def "snippets get-by-encoded_id-workspace" [
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a snippet
@@ -6258,6 +6495,7 @@ export def "snippets put-by-encoded_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6265,7 +6503,7 @@ export def "snippets put-by-encoded_id-workspace" [
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List comments on a snippet
@@ -6281,13 +6519,14 @@ export def "snippets-comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment on a snippet
@@ -6304,6 +6543,7 @@ export def "snippets-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record}
   --snippet: any
@@ -6316,7 +6556,7 @@ export def "snippets-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment on a snippet
@@ -6333,13 +6573,14 @@ export def "snippets-comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a comment on a snippet
@@ -6356,13 +6597,14 @@ export def "snippets-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>>, snippet: record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, is_private: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments/($comment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a comment on a snippet
@@ -6380,6 +6622,7 @@ export def "snippets-comments put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {self?: record, html?: record}
   --snippet: any
@@ -6392,7 +6635,7 @@ export def "snippets-comments put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List snippet changes
@@ -6408,13 +6651,14 @@ export def "snippets-commits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/commits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a previous snippet change
@@ -6431,13 +6675,14 @@ export def "snippets-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, diff: record<href: string, name: string>>, snippet: record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, is_private: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/commits/($revision)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a snippet's raw file at HEAD
@@ -6454,13 +6699,14 @@ export def "snippets-files list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/files/($path)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop watching a snippet
@@ -6476,13 +6722,14 @@ export def "snippets-watch delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if the current user is watching a snippet
@@ -6498,13 +6745,14 @@ export def "snippets-watch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watch a snippet
@@ -6520,13 +6768,14 @@ export def "snippets-watch put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users watching a snippet
@@ -6544,13 +6793,14 @@ export def "snippets-watchers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watchers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a previous revision of a snippet
@@ -6567,13 +6817,14 @@ export def "snippets delete-by-encoded_id-node_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a previous revision of a snippet
@@ -6590,6 +6841,7 @@ export def "snippets get-by-encoded_id-node_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6597,7 +6849,7 @@ export def "snippets get-by-encoded_id-node_id-workspace" [
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a previous revision of a snippet
@@ -6614,6 +6866,7 @@ export def "snippets put-by-encoded_id-node_id-workspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6621,7 +6874,7 @@ export def "snippets put-by-encoded_id-node_id-workspace" [
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a snippet's raw file
@@ -6639,13 +6892,14 @@ export def "snippets-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)/files/($path)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get snippet changes between versions
@@ -6662,6 +6916,7 @@ export def "snippets-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # When used, only one the diff of the specified file will be returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6670,7 +6925,7 @@ export def "snippets-diff get" [
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($revision)/diff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get snippet patch between versions
@@ -6687,13 +6942,14 @@ export def "snippets-patch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($revision)/patch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables for an account
@@ -6711,13 +6967,14 @@ export def "teams-pipelines-config-variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, key: string, value: string, secured: bool>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable for a user
@@ -6735,6 +6992,7 @@ export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -6749,7 +7007,7 @@ export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a variable for a team
@@ -6768,13 +7026,14 @@ export def "teams-pipelines-config-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a variable for a team
@@ -6793,6 +7052,7 @@ export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -6807,7 +7067,7 @@ export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable for a team
@@ -6826,13 +7086,14 @@ export def "teams-pipelines-config-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for code in a team's repositories
@@ -6850,6 +7111,7 @@ export def "teams-search-code searchTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search-query: string # The search query
   --page: int # Which page of the search results to retrieve (format: int32, default: 1)
   --pagelen: int # How many search results to retrieve per page (format: int32, default: 10)
@@ -6860,7 +7122,7 @@ export def "teams-search-code searchTeam" [
   let full_url = (build-url $base $"/teams/($username)/search/code" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current user
@@ -6874,13 +7136,14 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<avatar: record<href: string, name: string>>, created_on: string, display_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List email addresses for current user
@@ -6894,13 +7157,14 @@ export def "user-emails list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, error: record<message: string, detail: string, data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an email address for current user
@@ -6915,13 +7179,14 @@ export def "user-emails get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, error: record<message: string, detail: string, data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/emails/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repository permissions for a user
@@ -6937,6 +7202,7 @@ export def "user-permissions-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Name of a response property sort the result by as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, permission: string, user: record, repository: record>> {
@@ -6946,7 +7212,7 @@ export def "user-permissions-repositories get" [
   let full_url = (build-url $base "/user/permissions/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List workspaces for the current user
@@ -6962,6 +7228,7 @@ export def "user-permissions-workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response. See [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering) for details.
   --qp-sort: string #  Name of a response property to sort results. See [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results) for details.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, user: record, workspace: record>> {
@@ -6971,7 +7238,7 @@ export def "user-permissions-workspaces get" [
   let full_url = (build-url $base "/user/permissions/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List workspaces for the current user
@@ -6985,6 +7252,7 @@ export def "user-workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Name of a response property to sort results (only slug is supported).
   --administrator: oneof<nothing, bool> # Filter workspaces based on which ones the caller has admin permissions or not.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, administrator: bool, workspace: record>> {
@@ -6994,7 +7262,7 @@ export def "user-workspaces get" [
   let full_url = (build-url $base "/user/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user permission on a workspace
@@ -7009,13 +7277,14 @@ export def "user-workspaces-permission get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record<avatar: record, html: record, members: record, owners: record, projects: record, repositories: record, snippets: record, self: record>, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/workspaces/($workspace)/permission")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repository permissions in a workspace for a user
@@ -7030,6 +7299,7 @@ export def "user-workspaces-permissions-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Name of a response property sort the result by as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, permission: string, user: record, repository: record>> {
@@ -7039,7 +7309,7 @@ export def "user-workspaces-permissions-repositories get" [
   let full_url = (build-url $base $"/user/workspaces/($workspace)/permissions/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -7054,13 +7324,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<avatar: record<href: string, name: string>>, created_on: string, display_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List GPG keys
@@ -7075,13 +7346,14 @@ export def "users-gpg-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, owner: record, key: string, key_id: string, fingerprint: string, parent_fingerprint: string, name: string, expires_on: string, created_on: string, added_on: string, last_used: string, subkeys: list, links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/gpg-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new GPG key
@@ -7098,6 +7370,7 @@ export def "users-gpg-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --owner: any
   --key: string # The GPG key value in X format.
@@ -7120,7 +7393,7 @@ export def "users-gpg-keys post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a GPG key
@@ -7136,13 +7409,14 @@ export def "users-gpg-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/gpg-keys/($fingerprint)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a GPG key
@@ -7158,13 +7432,14 @@ export def "users-gpg-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, key: string, key_id: string, fingerprint: string, parent_fingerprint: string, name: string, expires_on: string, created_on: string, added_on: string, last_used: string, subkeys: list<any>, links: record<self: record<href: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/gpg-keys/($fingerprint)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables for a user
@@ -7182,13 +7457,14 @@ export def "users-pipelines-config-variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, key: string, value: string, secured: bool>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable for a user
@@ -7206,6 +7482,7 @@ export def "users-pipelines-config-variables createPipelineVariableForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -7220,7 +7497,7 @@ export def "users-pipelines-config-variables createPipelineVariableForUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a variable for a user
@@ -7239,13 +7516,14 @@ export def "users-pipelines-config-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a variable for a user
@@ -7264,6 +7542,7 @@ export def "users-pipelines-config-variables updatePipelineVariableForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -7278,7 +7557,7 @@ export def "users-pipelines-config-variables updatePipelineVariableForUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable for a user
@@ -7297,13 +7576,14 @@ export def "users-pipelines-config-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user application property
@@ -7321,6 +7601,7 @@ export def "users-properties updateUserHostedPropertyValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list
 ]: any -> any {
   let input = $in
@@ -7331,7 +7612,7 @@ export def "users-properties updateUserHostedPropertyValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user application property
@@ -7349,13 +7630,14 @@ export def "users-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user application property
@@ -7373,13 +7655,14 @@ export def "users-properties retrieveUserHostedPropertyValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/properties/($app_key)/($property_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for code in a user's repositories
@@ -7397,6 +7680,7 @@ export def "users-search-code searchAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search-query: string # The search query
   --page: int # Which page of the search results to retrieve (format: int32, default: 1)
   --pagelen: int # How many search results to retrieve per page (format: int32, default: 10)
@@ -7407,7 +7691,7 @@ export def "users-search-code searchAccount" [
   let full_url = (build-url $base $"/users/($selected_user)/search/code" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List SSH keys
@@ -7422,13 +7706,14 @@ export def "users-ssh-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<owner: record, expires_on: string, fingerprint: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/ssh-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new SSH key
@@ -7443,6 +7728,7 @@ export def "users-ssh-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expires-on: string # The date or date-time of when the key will expire, in [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) format. Example: `YYYY-MM-DDTHH:mm:ss.sssZ`
   --owner: any
   --expires-on: string # format: date-time
@@ -7457,7 +7743,7 @@ export def "users-ssh-keys post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a SSH key
@@ -7473,13 +7759,14 @@ export def "users-ssh-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/ssh-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a SSH key
@@ -7495,13 +7782,14 @@ export def "users-ssh-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, expires_on: string, fingerprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($selected_user)/ssh-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a SSH key
@@ -7517,6 +7805,7 @@ export def "users-ssh-keys put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: any
   --expires-on: string # format: date-time
   --fingerprint: string # The SSH key fingerprint in SHA-256 format.
@@ -7529,7 +7818,7 @@ export def "users-ssh-keys put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List workspaces for user
@@ -7545,6 +7834,7 @@ export def "workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer-2 #              Filters the workspaces based on the authenticated user's role on each workspace.              * **member**: returns a list of all the workspaces which the caller is a member of                 at least one workspace group or repository             * **collaborator**: returns a list of workspaces which the caller has write access                 to at least one repository in the workspace             * **owner**: returns a list of workspaces which the caller has administrator access             
   --q: string #  Query string to narrow down the response. See [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering) for details.
   --qp-sort: string #  Name of a response property to sort results. See [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results) for details.
@@ -7555,7 +7845,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a workspace
@@ -7570,13 +7860,14 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>, members: record<href: string, name: string>, owners: record<href: string, name: string>, projects: record<href: string, name: string>, repositories: record<href: string, name: string>, snippets: record<href: string, name: string>, self: record<href: string, name: string>>, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webhooks for a workspace
@@ -7591,13 +7882,14 @@ export def "workspaces-hooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record, active: bool, created_at: string, events: list, secret_set: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/hooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook for a workspace
@@ -7612,13 +7904,14 @@ export def "workspaces-hooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/hooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook for a workspace
@@ -7634,13 +7927,14 @@ export def "workspaces-hooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook for a workspace
@@ -7656,13 +7950,14 @@ export def "workspaces-hooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook for a workspace
@@ -7678,13 +7973,14 @@ export def "workspaces-hooks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, url: string, description: string, subject_type: string, subject: record<type: string>, active: bool, created_at: string, events: list<string>, secret_set: bool, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users in a workspace
@@ -7699,13 +7995,14 @@ export def "workspaces-members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/members")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user membership for a workspace
@@ -7721,13 +8018,14 @@ export def "workspaces-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, user: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record<avatar: record, html: record, members: record, owners: record, projects: record, repositories: record, snippets: record, self: record>, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/members/($member)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user permissions in a workspace
@@ -7742,6 +8040,7 @@ export def "workspaces-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7750,7 +8049,7 @@ export def "workspaces-permissions get" [
   let full_url = (build-url $base $"/workspaces/($workspace)/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all repository permissions for a workspace
@@ -7765,6 +8064,7 @@ export def "workspaces-permissions-repositories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Name of a response property sort the result by as per [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, permission: string, user: record, repository: record>> {
@@ -7774,7 +8074,7 @@ export def "workspaces-permissions-repositories list" [
   let full_url = (build-url $base $"/workspaces/($workspace)/permissions/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a repository permissions for a workspace
@@ -7790,6 +8090,7 @@ export def "workspaces-permissions-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string #  Query string to narrow down the response as per [filtering and sorting](/cloud/bitbucket/rest/intro/#filtering).
   --qp-sort: string #  Name of a response property sort the result by as per [filtering and sorting](/cloud/bitbucket/rest/intro/#sorting-query-results).
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, permission: string, user: record, repository: record>> {
@@ -7799,7 +8100,7 @@ export def "workspaces-permissions-repositories get" [
   let full_url = (build-url $base $"/workspaces/($workspace)/permissions/repositories/($repo_slug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OpenID configuration for OIDC in Pipelines
@@ -7815,13 +8116,14 @@ export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configur
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/identity/oidc/.well-known/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get keys for OIDC in Pipelines
@@ -7837,13 +8139,14 @@ export def "workspaces-pipelines-config-identity-oidc-keysjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/identity/oidc/keys.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workspace runners
@@ -7859,13 +8162,14 @@ export def "workspaces-pipelines-config-runners list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, name: string, labels: list, state: record, created_on: string, updated_on: string, oauth_client: record>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/runners")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create workspace runner
@@ -7881,13 +8185,14 @@ export def "workspaces-pipelines-config-runners createWorkspaceRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/runners")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workspace runner
@@ -7904,13 +8209,14 @@ export def "workspaces-pipelines-config-runners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update workspace runner
@@ -7927,13 +8233,14 @@ export def "workspaces-pipelines-config-runners updateWorkspaceRunner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, name: string, labels: list<string>, state: record<type: string, status: string, version: record<type: string, version: string, current: string>, updated_on: string, cordoned: bool>, created_on: string, updated_on: string, oauth_client: record<type: string, id: string, secret: string, token_endpoint: string, audience: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete workspace runner
@@ -7950,13 +8257,14 @@ export def "workspaces-pipelines-config-runners delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/runners/($runner_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables for a workspace
@@ -7972,13 +8280,14 @@ export def "workspaces-pipelines-config-variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page: int, values: table<type: string, uuid: string, key: string, value: string, secured: bool>, size: int, pagelen: int, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable for a workspace
@@ -7994,6 +8303,7 @@ export def "workspaces-pipelines-config-variables createPipelineVariableForWorks
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -8008,7 +8318,7 @@ export def "workspaces-pipelines-config-variables createPipelineVariableForWorks
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get variable for a workspace
@@ -8025,13 +8335,14 @@ export def "workspaces-pipelines-config-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update variable for a workspace
@@ -8048,6 +8359,7 @@ export def "workspaces-pipelines-config-variables updatePipelineVariableForWorks
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
@@ -8062,7 +8374,7 @@ export def "workspaces-pipelines-config-variables updatePipelineVariableForWorks
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable for a workspace
@@ -8079,13 +8391,14 @@ export def "workspaces-pipelines-config-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables/($variable_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List projects in a workspace
@@ -8100,13 +8413,14 @@ export def "workspaces-projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project in a workspace
@@ -8122,6 +8436,7 @@ export def "workspaces-projects post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {html?: record, avatar?: record}
   --uuid: string # The project's immutable id.
@@ -8142,7 +8457,7 @@ export def "workspaces-projects post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a project for a workspace
@@ -8158,13 +8473,14 @@ export def "workspaces-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project for a workspace
@@ -8180,13 +8496,14 @@ export def "workspaces-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<html: record<href: string, name: string>, avatar: record<href: string, name: string>>, uuid: string, key: string, owner: record<links: record<avatar: record, self: record, html: record, members: record, projects: record, repositories: record>>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project for a workspace
@@ -8203,6 +8520,7 @@ export def "workspaces-projects put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string
   --links: record # shape: {html?: record, avatar?: record}
   --uuid: string # The project's immutable id.
@@ -8223,7 +8541,7 @@ export def "workspaces-projects put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the branching model for a project
@@ -8239,13 +8557,14 @@ export def "workspaces-projects-branching-model get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<name: string, use_mainbranch: bool>, production: record<name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the branching model config for a project
@@ -8261,13 +8580,14 @@ export def "workspaces-projects-branching-model-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, production: record<is_valid: bool, name: string, use_mainbranch: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the branching model config for a project
@@ -8283,13 +8603,14 @@ export def "workspaces-projects-branching-model-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, production: record<is_valid: bool, name: string, use_mainbranch: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the default reviewers in a project
@@ -8305,13 +8626,14 @@ export def "workspaces-projects-default-reviewers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, reviewer_type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove the specific user from the project's default reviewers
@@ -8328,13 +8650,14 @@ export def "workspaces-projects-default-reviewers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a default reviewer
@@ -8351,13 +8674,14 @@ export def "workspaces-projects-default-reviewers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<links: record<avatar: record<href: string, name: string>, self: record<href: string, name: string>, html: record<href: string, name: string>, repositories: record<href: string, name: string>>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add the specific user as a default reviewer for the project
@@ -8374,13 +8698,14 @@ export def "workspaces-projects-default-reviewers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<links: record<avatar: record<href: string, name: string>, self: record<href: string, name: string>, html: record<href: string, name: string>, repositories: record<href: string, name: string>>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List project deploy keys
@@ -8396,13 +8721,14 @@ export def "workspaces-projects-deploy-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, key: string, project: record, comment: string, label: string, added_on: string, last_used: string, links: record, created_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a project deploy key
@@ -8418,13 +8744,14 @@ export def "workspaces-projects-deploy-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, key: string, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, comment: string, label: string, added_on: string, last_used: string, links: record<self: record<href: string, name: string>>, created_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a deploy key from a project
@@ -8441,13 +8768,14 @@ export def "workspaces-projects-deploy-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project deploy key
@@ -8464,13 +8792,14 @@ export def "workspaces-projects-deploy-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, key: string, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, comment: string, label: string, added_on: string, last_used: string, links: record<self: record<href: string, name: string>>, created_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List explicit group permissions for a project
@@ -8486,13 +8815,14 @@ export def "workspaces-projects-permissions-config-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, permission: string, group: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/groups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an explicit group permission for a project
@@ -8509,13 +8839,14 @@ export def "workspaces-projects-permissions-config-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/groups/($group_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an explicit group permission for a project
@@ -8532,13 +8863,14 @@ export def "workspaces-projects-permissions-config-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, group: record<type: string, links: record<self: record, html: record>, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>, name: string, slug: string, full_slug: string>, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/groups/($group_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an explicit group permission for a project
@@ -8555,6 +8887,7 @@ export def "workspaces-projects-permissions-config-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   permission: string@permission-completer-1
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, group: record<type: string, links: record<self: record, html: record>, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, workspace: record<type: string, links: record, uuid: string, name: string, slug: string, is_private: bool, is_privacy_enforced: bool, forking_mode: string, created_on: string, updated_on: string>, name: string, slug: string, full_slug: string>, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>> {
   let input = $in
@@ -8565,7 +8898,7 @@ export def "workspaces-projects-permissions-config-groups put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List explicit user permissions for a project
@@ -8581,13 +8914,14 @@ export def "workspaces-projects-permissions-config-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, permission: string, user: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an explicit user permission for a project
@@ -8604,13 +8938,14 @@ export def "workspaces-projects-permissions-config-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/users/($selected_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an explicit user permission for a project
@@ -8627,13 +8962,14 @@ export def "workspaces-projects-permissions-config-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, user: record<links: record<avatar: record, self: record, html: record, repositories: record>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool>, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/permissions-config/users/($selected_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an explicit user permission for a project
@@ -8650,6 +8986,7 @@ export def "workspaces-projects-permissions-config-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   permission: string@permission-completer-1
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>>, permission: string, user: record<links: record<avatar: record, self: record, html: record, repositories: record>, account_id: string, account_status: string, has_2fa_enabled: bool, nickname: string, is_staff: bool>, project: record<type: string, links: record<html: record, avatar: record>, uuid: string, key: string, owner: record<links: record>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>> {
   let input = $in
@@ -8660,7 +8997,7 @@ export def "workspaces-projects-permissions-config-users put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List workspace pull requests for a user
@@ -8676,6 +9013,7 @@ export def "workspaces-pullrequests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-2 # Only return pull requests that are in this state. This parameter can be repeated.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, links: record, id: int, title: string, rendered: record, summary: record, state: string, author: record, source: record, destination: record, merge_commit: record, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record, reason: string, created_on: string, updated_on: string, reviewers: list, participants: list, draft: bool, queued: bool, mergeable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8684,7 +9022,7 @@ export def "workspaces-pullrequests get" [
   let full_url = (build-url $base $"/workspaces/($workspace)/pullrequests/($selected_user)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for code in a workspace
@@ -8702,6 +9040,7 @@ export def "workspaces-search-code searchWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search-query: string # The search query
   --page: int # Which page of the search results to retrieve (format: int32, default: 1)
   --pagelen: int # How many search results to retrieve per page (format: int32, default: 10)
@@ -8712,7 +9051,7 @@ export def "workspaces-search-code searchWorkspace" [
   let full_url = (build-url $base $"/workspaces/($workspace)/search/code" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the workspace system GPG public key(s)
@@ -8727,11 +9066,12 @@ export def "workspaces-settings-gpg-public-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/workspaces/($workspace)/settings/gpg/public-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

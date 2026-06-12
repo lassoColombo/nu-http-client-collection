@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def accept-completer-1 [] { ["application/ld+json" "application/x-jsonlines" "te
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "sampling-point list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "sampling-point list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
@@ -131,7 +133,7 @@ export def "sampling-point list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a sampling point by its notation
@@ -147,6 +149,7 @@ export def "sampling-point get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Accept-Crs: string@Accept-Crs-completer # Coordinate Reference System URI for response, e.g. http://www.opengis.net/def/crs/EPSG/0/27700 or http://www.opengis.net/def/crs/EPSG/0/4326
   --API-Version: string # Content negotiation header to specify version of the API to use. (e.g. 1)
@@ -158,7 +161,7 @@ export def "sampling-point get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter sampling points (including GeoJSON Polygon or MultiPolygon)
@@ -173,6 +176,7 @@ export def "data-sampling-point post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
@@ -206,7 +210,7 @@ export def "data-sampling-point post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List and filter samplings for a specific sampling point by its notation
@@ -222,6 +226,7 @@ export def "sampling-point-sampling list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --samplingPurpose: string # Filter by sampling purpose code(s), optionally as a comma-separated list
@@ -238,7 +243,7 @@ export def "sampling-point-sampling list" [
   let full_url = (build-url $base $"/sampling-point/($pointNotation)/sampling" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific sampling from its constituent notations
@@ -255,13 +260,14 @@ export def "sampling-point-sampling get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sampling-point/($pointNotation)/sampling/($samplingNotation)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter samples for a specific sampling point by its notation
@@ -277,6 +283,7 @@ export def "sampling-point-sample list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --samplingPurpose: string # Filter by sampling purpose code(s), optionally as a comma-separated list
@@ -293,7 +300,7 @@ export def "sampling-point-sample list" [
   let full_url = (build-url $base $"/sampling-point/($pointNotation)/sample" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific sample from its constituent notations
@@ -310,13 +317,14 @@ export def "sampling-point-sample get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sampling-point/($pointNotation)/sample/($sampleNotation)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter observations for a specific sampling point by its notation
@@ -332,6 +340,7 @@ export def "sampling-point-observation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
@@ -355,7 +364,7 @@ export def "sampling-point-observation get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific observation from its constituent notations
@@ -373,6 +382,7 @@ export def "sampling-point-sample-observation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Crs: string@Accept-Crs-completer # Coordinate Reference System URI for response, e.g. http://www.opengis.net/def/crs/EPSG/0/27700 or http://www.opengis.net/def/crs/EPSG/0/4326
   --API-Version: string # Content negotiation header to specify version of the API to use. (e.g. 1)
 ]: nothing -> any {
@@ -383,7 +393,7 @@ export def "sampling-point-sample-observation get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter observations (including for multiple sampling points)
@@ -398,6 +408,7 @@ export def "data-observation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 250)
@@ -440,7 +451,7 @@ export def "data-observation post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Context File
@@ -456,13 +467,14 @@ export def "context get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/context/($contextFilename)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter sample materials
@@ -477,6 +489,7 @@ export def "codelist-sample-material get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -489,7 +502,7 @@ export def "codelist-sample-material get" [
   let full_url = (build-url $base "/codelist/sample-material" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter sampling point statuses
@@ -504,6 +517,7 @@ export def "codelist-sampling-point-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -516,7 +530,7 @@ export def "codelist-sampling-point-status get" [
   let full_url = (build-url $base "/codelist/sampling-point-status" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter sampling point types
@@ -531,6 +545,7 @@ export def "codelist-sampling-point-type get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -543,7 +558,7 @@ export def "codelist-sampling-point-type get" [
   let full_url = (build-url $base "/codelist/sampling-point-type" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter determinands
@@ -558,6 +573,7 @@ export def "codelist-determinand get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -570,7 +586,7 @@ export def "codelist-determinand get" [
   let full_url = (build-url $base "/codelist/determinand" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter units
@@ -585,6 +601,7 @@ export def "codelist-unit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -597,7 +614,7 @@ export def "codelist-unit get" [
   let full_url = (build-url $base "/codelist/unit" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List and filter sampling purposes
@@ -612,6 +629,7 @@ export def "codelist-sampling-purpose get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # (Pagination) Number of records to skip (default: 0)
   --limit: int # (Pagination) Maximum number of records to return (default: 100)
   --notation: string # (Codelist) Exact match for notation
@@ -624,5 +642,5 @@ export def "codelist-sampling-purpose get" [
   let full_url = (build-url $base "/codelist/sampling-purpose" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

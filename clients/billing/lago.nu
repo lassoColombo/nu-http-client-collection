@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -89,7 +90,7 @@ def subscription-status-completer [] { ["active" "canceled" "pending" "terminate
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "billing-entities listBillingEntities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -122,13 +123,14 @@ export def "billing-entities listBillingEntities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billing_entities: table<lago_id: string, code: string, name: string, default_currency: string, document_locale: string, document_numbering: string, document_number_prefix: string, finalize_zero_amount_invoice: bool, invoice_footer: string, invoice_grace_period: int, subscription_invoice_issuing_date_anchor: string, subscription_invoice_issuing_date_adjustment: string, is_default: bool, net_payment_term: int, address_line1: string, address_line2: string, city: string, state: string, country: string, zipcode: string, email: string, legal_name: string, legal_number: string, tax_identification_number: string, timezone: string, email_settings: list, eu_tax_management: bool, logo_url: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing_entities")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a billing entity
@@ -144,6 +146,7 @@ export def "billing-entities createBillingEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   billing_entity: record # shape: {code: string, name: string, default_currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", document_numbering?: "per_customer"|"per_billing_entity", document_number_prefix?: string, finalize_zero_amount_invoice?: bool, billing_configuration?: record, net_payment_term?: int, address_line1?: string, address_line2?: string, city?: string, state?: string, country?: "AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", zipcode?: string, email?: string, legal_name?: string, legal_number?: string, tax_identification_number?: string, timezone?: "UTC"|"Africa/Algiers"|"Africa/Cairo"|"Africa/Casablanca"|"Africa/Harare"|"Africa/Johannesburg"|"Africa/Monrovia"|"Africa/Nairobi"|"America/Argentina/Buenos_Aires"|"America/Bogota"|"America/Caracas"|"America/Chicago"|"America/Chihuahua"|"America/Denver"|"America/Guatemala"|"America/Guyana"|"America/Halifax"|"America/Indiana/Indianapolis"|"America/Juneau"|"America/La_Paz"|"America/Lima"|"America/Los_Angeles"|"America/Mazatlan"|"America/Mexico_City"|"America/Monterrey"|"America/Montevideo"|"America/New_York"|"America/Nuuk"|"America/Phoenix"|"America/Puerto_Rico"|"America/Regina"|"America/Santiago"|"America/Sao_Paulo"|"America/St_Johns"|"America/Tijuana"|"Asia/Almaty"|"Asia/Baghdad"|"Asia/Baku"|"Asia/Bangkok"|"Asia/Chongqing"|"Asia/Colombo"|"Asia/Dhaka"|"Asia/Hong_Kong"|"Asia/Irkutsk"|"Asia/Jakarta"|"Asia/Jerusalem"|"Asia/Kabul"|"Asia/Kamchatka"|"Asia/Karachi"|"Asia/Kathmandu"|"Asia/Kolkata"|"Asia/Krasnoyarsk"|"Asia/Kuala_Lumpur"|"Asia/Kuwait"|"Asia/Magadan"|"Asia/Muscat"|"Asia/Novosibirsk"|"Asia/Riyadh"|"Asia/Seoul"|"Asia/Shanghai"|"Asia/Singapore"|"Asia/Srednekolymsk"|"Asia/Taipei"|"Asia/Tashkent"|"Asia/Tbilisi"|"Asia/Tehran"|"Asia/Tokyo"|"Asia/Ulaanbaatar"|"Asia/Urumqi"|"Asia/Vladivostok"|"Asia/Yakutsk"|"Asia/Yangon"|"Asia/Yekaterinburg"|"Asia/Yerevan"|"Atlantic/Azores"|"Atlantic/Cape_Verde"|"Atlantic/South_Georgia"|"Australia/Adelaide"|"Australia/Brisbane"|"Australia/Darwin"|"Australia/Hobart"|"Australia/Melbourne"|"Australia/Perth"|"Australia/Sydney"|"Europe/Amsterdam"|"Europe/Athens"|"Europe/Belgrade"|"Europe/Berlin"|"Europe/Bratislava"|"Europe/Brussels"|"Europe/Bucharest"|"Europe/Budapest"|"Europe/Copenhagen"|"Europe/Dublin"|"Europe/Helsinki"|"Europe/Istanbul"|"Europe/Kaliningrad"|"Europe/Kyiv"|"Europe/Lisbon"|"Europe/Ljubljana"|"Europe/London"|"Europe/Madrid"|"Europe/Minsk"|"Europe/Moscow"|"Europe/Paris"|"Europe/Prague"|"Europe/Riga"|"Europe/Rome"|"Europe/Samara"|"Europe/Sarajevo"|"Europe/Skopje"|"Europe/Sofia"|"Europe/Stockholm"|"Europe/Tallinn"|"Europe/Vienna"|"Europe/Vilnius"|"Europe/Volgograd"|"Europe/Warsaw"|"Europe/Zagreb"|"Europe/Zurich"|"GMT+12"|"Pacific/Apia"|"Pacific/Auckland"|"Pacific/Chatham"|"Pacific/Fakaofo"|"Pacific/Fiji"|"Pacific/Guadalcanal"|"Pacific/Guam"|"Pacific/Honolulu"|"Pacific/Majuro"|"Pacific/Midway"|"Pacific/Noumea"|"Pacific/Pago_Pago"|"Pacific/Port_Moresby"|"Pacific/Tongatapu", email_settings?: list, eu_tax_management?: bool, logo?: string}
 ]: any -> record<lago_id: string, code: string, name: string, default_currency: string, document_locale: string, document_numbering: string, document_number_prefix: string, finalize_zero_amount_invoice: bool, invoice_footer: string, invoice_grace_period: int, subscription_invoice_issuing_date_anchor: string, subscription_invoice_issuing_date_adjustment: string, is_default: bool, net_payment_term: int, address_line1: string, address_line2: string, city: string, state: string, country: string, zipcode: string, email: string, legal_name: string, legal_number: string, tax_identification_number: string, timezone: string, email_settings: list<string>, eu_tax_management: bool, logo_url: string, created_at: string, updated_at: string> {
   let input = $in
@@ -154,7 +157,7 @@ export def "billing-entities createBillingEntity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a billing entity
@@ -170,13 +173,14 @@ export def "billing-entities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billing_entity: record<lago_id: string, code: string, name: string, default_currency: string, document_locale: string, document_numbering: string, document_number_prefix: string, finalize_zero_amount_invoice: bool, invoice_footer: string, invoice_grace_period: int, subscription_invoice_issuing_date_anchor: string, subscription_invoice_issuing_date_adjustment: string, is_default: bool, net_payment_term: int, address_line1: string, address_line2: string, city: string, state: string, country: string, zipcode: string, email: string, legal_name: string, legal_number: string, tax_identification_number: string, timezone: string, email_settings: list<string>, eu_tax_management: bool, logo_url: string, created_at: string, updated_at: string, taxes: list<record>, selected_invoice_custom_sections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/billing_entities/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a billing entity
@@ -193,6 +197,7 @@ export def "billing-entities updateBillingEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the billing entity (e.g. Acme Corp)
   --default-currency: string@default-currency-completer # e.g. USD
   --document-numbering: string@document-numbering-completer # The type of document numbering for this billing entity: - `per_customer`: document numbers are unique per customer - `per_billing_entity`: document numbers are unique per billing entity
@@ -225,7 +230,7 @@ export def "billing-entities updateBillingEntity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all activity logs
@@ -240,6 +245,7 @@ export def "activity-logs findAllActivityLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --from-date: string # Filter activity logs from a specific date. (format: date, e.g. 2022-08-09)
@@ -258,7 +264,7 @@ export def "activity-logs findAllActivityLogs" [
   let full_url = (build-url $base "/activity_logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an activity log
@@ -274,13 +280,14 @@ export def "activity-logs findActivityLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<activity_log: record<activity_id: string, user_email: string, activity_type: string, activity_source: string, activity_object: record, activity_object_changes: record, external_customer_id: string, external_subscription_id: string, resource_id: string, resource_type: string, organization_id: string, logged_at: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/activity_logs/($activity_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an add-on
@@ -296,6 +303,7 @@ export def "add-ons createAddOn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   add_on: record # shape: {name?: string, invoice_display_name?: string, code?: string, amount_cents?: int, amount_currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", description?: string, tax_codes?: list}
 ]: any -> record<add_on: record<lago_id: string, name: string, invoice_display_name: string, code: string, amount_cents: int, amount_currency: string, description: string, created_at: string, taxes: list<record>>> {
   let input = $in
@@ -306,7 +314,7 @@ export def "add-ons createAddOn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all add-ons
@@ -321,6 +329,7 @@ export def "add-ons findAllAddOns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<add_ons: table<lago_id: string, name: string, invoice_display_name: string, code: string, amount_cents: int, amount_currency: string, description: string, created_at: string, taxes: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -330,7 +339,7 @@ export def "add-ons findAllAddOns" [
   let full_url = (build-url $base "/add_ons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an add-on
@@ -347,6 +356,7 @@ export def "add-ons updateAddOn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   add_on: record # shape: {name?: string, invoice_display_name?: string, code?: string, amount_cents?: int, amount_currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", description?: string, tax_codes?: list}
 ]: any -> record<add_on: record<lago_id: string, name: string, invoice_display_name: string, code: string, amount_cents: int, amount_currency: string, description: string, created_at: string, taxes: list<record>>> {
   let input = $in
@@ -357,7 +367,7 @@ export def "add-ons updateAddOn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an add-on
@@ -373,13 +383,14 @@ export def "add-ons findAddOn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<add_on: record<lago_id: string, name: string, invoice_display_name: string, code: string, amount_cents: int, amount_currency: string, description: string, created_at: string, taxes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/add_ons/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an add-on
@@ -395,13 +406,14 @@ export def "add-ons destroyAddOn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<add_on: record<lago_id: string, name: string, invoice_display_name: string, code: string, amount_cents: int, amount_currency: string, description: string, created_at: string, taxes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/add_ons/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all api logs
@@ -416,6 +428,7 @@ export def "api-logs findAllApiLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --from-date: string # Filter api logs from a specific date. (format: date, e.g. 2022-08-09)
@@ -431,7 +444,7 @@ export def "api-logs findAllApiLogs" [
   let full_url = (build-url $base "/api_logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an api log
@@ -447,13 +460,14 @@ export def "api-logs findApiLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<api_log: record<api_version: string, client: string, http_method: string, http_status: int, logged_at: string, request_body: string, request_origin: string, request_path: string, created_at: string, request_id: string, request_response: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api_logs/($request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List gross revenue
@@ -468,6 +482,7 @@ export def "analytics-gross-revenue findAllGrossRevenues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # Currency of revenue analytics. Format must be ISO 4217.
   --external-customer-id: string # The customer external unique identifier (provided by your own application). Use it to filter revenue analytics at the customer level. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
   --months: int # Show data only for given number of months. (e.g. 12)
@@ -478,7 +493,7 @@ export def "analytics-gross-revenue findAllGrossRevenues" [
   let full_url = (build-url $base "/analytics/gross_revenue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of finalized invoices
@@ -493,6 +508,7 @@ export def "analytics-invoice-collection findAllInvoiceCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # The currency of revenue analytics. Format must be ISO 4217.
   --months: int # Show data only for given number of months. (e.g. 12)
 ]: nothing -> record<invoice_collections: table<month: string, payment_status: string, invoices_count: int, amount_cents: int, currency: string>> {
@@ -502,7 +518,7 @@ export def "analytics-invoice-collection findAllInvoiceCollections" [
   let full_url = (build-url $base "/analytics/invoice_collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List usage revenue
@@ -517,6 +533,7 @@ export def "analytics-invoiced-usage findAllInvoicedUsages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # The currency of invoiced usage analytics. Format must be ISO 4217.
   --months: int # Show data only for given number of months. (e.g. 12)
 ]: nothing -> record<invoiced_usages: table<month: string, code: string, amount_cents: int, currency: string>> {
@@ -526,7 +543,7 @@ export def "analytics-invoiced-usage findAllInvoicedUsages" [
   let full_url = (build-url $base "/analytics/invoiced_usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List MRR
@@ -541,6 +558,7 @@ export def "analytics-mrr findAllMrrs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # Quantifies the revenue generated from `subscription` fees on a monthly basis. This figure is calculated post-application of applicable taxes and deduction of any applicable discounts. The method of calculation varies based on the subscription billing cycle:  - Revenue from `monthly` subscription invoices is included in the MRR for the month in which the invoice is issued. - Revenue from `quarterly` subscription invoices is distributed evenly over three months. This distribution applies to fees paid in advance (allocated to the next remaining months depending on calendar or anniversary billing) as well as to fees paid in arrears (allocated to the preceding months depending on calendar or anniversary billing). - Revenue from `yearly` subscription invoices is distributed evenly over twelve months. This allocation is applicable for fees paid in advance (spread over the next remaining months depending on calendar or anniversary billing) and for fees paid in arrears (spread over the previous months depending on calendar or anniversary billing). - Revenue from `semiannual` subscription invoices is distributed evenly over six months. This allocation is applicable for fees paid in advance (spread over the next remaining months depending on calendar or anniversary billing) and for fees paid in arrears (spread over the previous months depending on calendar or anniversary billing). - Revenue from `weekly` subscription invoices, the total revenue from all invoices issued within a month is summed up. This total is then divided by the number of invoices issued during that month, and the result is multiplied by 4.33, representing the average number of weeks in a month.
   --months: int # Show data only for given number of months. (e.g. 12)
 ]: nothing -> record<mrrs: table<month: string, amount_cents: int, currency: string>> {
@@ -550,7 +568,7 @@ export def "analytics-mrr findAllMrrs" [
   let full_url = (build-url $base "/analytics/mrr" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List overdue balance
@@ -565,6 +583,7 @@ export def "analytics-overdue-balance findAllOverdueBalances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # Currency of revenue analytics. Format must be ISO 4217.
   --external-customer-id: string # The customer external unique identifier (provided by your own application). Use it to filter revenue analytics at the customer level. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
   --months: int # Show data only for given number of months. (e.g. 12)
@@ -575,7 +594,7 @@ export def "analytics-overdue-balance findAllOverdueBalances" [
   let full_url = (build-url $base "/analytics/overdue_balance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List usage
@@ -590,6 +609,7 @@ export def "analytics-usage findAllUsages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time-granularity: string@time-granularity-completer # The time granularity of usage analytics. Possible values are 'daily', 'weekly', 'monthly', 'yearly'. (e.g. monthly)
   --currency: string # The currency of usage analytics. Format must be ISO 4217.
   --from-date: string # The start date of the period for which the usage analytics is calculated. (format: date, e.g. 2023-11-01)
@@ -608,7 +628,7 @@ export def "analytics-usage findAllUsages" [
   let full_url = (build-url $base "/analytics/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply a coupon to a customer
@@ -624,6 +644,7 @@ export def "applied-coupons applyCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   applied_coupon: record # shape: {external_customer_id: string, coupon_code: string, frequency?: "once"|"recurring"|"forever"|"", frequency_duration?: int, amount_cents?: int, amount_currency?: ""|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", percentage_rate?: string}
 ]: any -> record<applied_coupon: record<lago_id: string, lago_coupon_id: string, coupon_code: string, coupon_name: string, coupon_status: string, coupon_deleted_at: string, lago_customer_id: string, external_customer_id: string, status: string, amount_cents: int, amount_cents_remaining: int, amount_currency: string, percentage_rate: string, frequency: string, frequency_duration: int, frequency_duration_remaining: int, expiration_at: string, created_at: string, terminated_at: string>> {
   let input = $in
@@ -634,7 +655,7 @@ export def "applied-coupons applyCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all applied coupons
@@ -649,6 +670,7 @@ export def "applied-coupons findAllAppliedCoupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --status: string@status-completer # The status of the coupon. Can be either `active` or `terminated`. (e.g. active)
@@ -661,7 +683,7 @@ export def "applied-coupons findAllAppliedCoupons" [
   let full_url = (build-url $base "/applied_coupons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a billable metric
@@ -677,6 +699,7 @@ export def "billable-metrics createBillableMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   billable_metric: record # shape: {name?: string, code?: string, description?: string, recurring?: bool, expression?: string, rounding_function?: "ceil"|"floor"|"round"|"", rounding_precision?: int, field_name?: string, aggregation_type?: "count_agg"|"sum_agg"|"max_agg"|"unique_count_agg"|"weighted_sum_agg"|"latest_agg", weighted_interval?: "seconds"|"", filters?: list}
 ]: any -> record<billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list<record>>> {
   let input = $in
@@ -687,7 +710,7 @@ export def "billable-metrics createBillableMetric" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all billable metrics
@@ -702,6 +725,7 @@ export def "billable-metrics findAllBillableMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<billable_metrics: table<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -711,7 +735,7 @@ export def "billable-metrics findAllBillableMetrics" [
   let full_url = (build-url $base "/billable_metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Evaluate an expression for a billable metric
@@ -727,6 +751,7 @@ export def "billable-metrics-evaluate-expression evaluateBillableMetricExpressio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   expression: string # Expression used to calculate the event units. The expression is evalutated for each event and the result is then used to calculate the total aggregated units. Accepted function are `ceil`, `concat` and `round` as well as `+`, `-`, `\` and `*` operations. Round is accepting an optional second parameter to specify the number of decimal.  (e.g. round((ended_at - started_at) * units))
   event: record # shape: {code: string, timestamp?: any, properties: record}
 ]: any -> record<expression_result: record<value: any>> {
@@ -738,7 +763,7 @@ export def "billable-metrics-evaluate-expression evaluateBillableMetricExpressio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a billable metric
@@ -755,6 +780,7 @@ export def "billable-metrics updateBillableMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   billable_metric: record # shape: {name?: string, code?: string, description?: string, recurring?: bool, expression?: string, rounding_function?: "ceil"|"floor"|"round"|"", rounding_precision?: int, field_name?: string, aggregation_type?: "count_agg"|"sum_agg"|"max_agg"|"unique_count_agg"|"weighted_sum_agg"|"latest_agg", weighted_interval?: "seconds"|"", filters?: list}
 ]: any -> record<billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list<record>>> {
   let input = $in
@@ -765,7 +791,7 @@ export def "billable-metrics updateBillableMetric" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a billable metric
@@ -781,13 +807,14 @@ export def "billable-metrics destroyBillableMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/billable_metrics/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a billable metric
@@ -803,13 +830,14 @@ export def "billable-metrics findBillableMetric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/billable_metrics/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a feature
@@ -824,6 +852,7 @@ export def "features createFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   feature: any
 ]: any -> record<feature: record<code: string, name: string, description: string, privileges: list<record>, created_at: string>> {
   let input = $in
@@ -834,7 +863,7 @@ export def "features createFeature" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all features
@@ -849,6 +878,7 @@ export def "features findAllFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --search-term: string # Search in name, code and description.
@@ -859,7 +889,7 @@ export def "features findAllFeatures" [
   let full_url = (build-url $base "/features" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a feature
@@ -876,6 +906,7 @@ export def "features updateFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   feature: record # shape: {name?: string, description?: string, privileges?: list}
 ]: any -> record<feature: record<code: string, name: string, description: string, privileges: list<record>, created_at: string>> {
   let input = $in
@@ -886,7 +917,7 @@ export def "features updateFeature" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a feature
@@ -902,13 +933,14 @@ export def "features destroyFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<feature: record<code: string, name: string, description: string, privileges: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/features/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a feature
@@ -924,13 +956,14 @@ export def "features findFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<feature: record<code: string, name: string, description: string, privileges: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/features/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a privilege. Deleting a privilege removes it from all plans and subscriptions.
@@ -947,13 +980,14 @@ export def "features-privileges delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<feature: record<code: string, name: string, description: string, privileges: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/features/($code)/privileges/($privilege_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a coupon
@@ -969,6 +1003,7 @@ export def "coupons createCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   coupon: record # shape: {name?: string, code?: string, description?: string, coupon_type?: "fixed_amount"|"percentage", amount_cents?: int, amount_currency?: ""|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", reusable?: bool, percentage_rate?: string, frequency?: "once"|"recurring"|"forever", frequency_duration?: int, expiration?: "no_expiration"|"time_limit", expiration_at?: string, applies_to?: record}
 ]: any -> record<coupon: record<lago_id: string, name: string, code: string, description: string, coupon_type: string, amount_cents: int, amount_currency: string, reusable: bool, limited_plans: bool, plan_codes: list<string>, limited_billable_metrics: bool, billable_metric_codes: list<string>, percentage_rate: string, frequency: string, frequency_duration: int, expiration: string, expiration_at: string, created_at: string, terminated_at: string>> {
   let input = $in
@@ -979,7 +1014,7 @@ export def "coupons createCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all coupons
@@ -994,6 +1029,7 @@ export def "coupons findAllCoupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<coupons: table<lago_id: string, name: string, code: string, description: string, coupon_type: string, amount_cents: int, amount_currency: string, reusable: bool, limited_plans: bool, plan_codes: list, limited_billable_metrics: bool, billable_metric_codes: list, percentage_rate: string, frequency: string, frequency_duration: int, expiration: string, expiration_at: string, created_at: string, terminated_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -1003,7 +1039,7 @@ export def "coupons findAllCoupons" [
   let full_url = (build-url $base "/coupons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a coupon
@@ -1020,6 +1056,7 @@ export def "coupons updateCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   coupon: record # shape: {name?: string, code?: string, description?: string, coupon_type?: "fixed_amount"|"percentage", amount_cents?: int, amount_currency?: ""|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", reusable?: bool, percentage_rate?: string, frequency?: "once"|"recurring"|"forever", frequency_duration?: int, expiration?: "no_expiration"|"time_limit", expiration_at?: string, applies_to?: record}
 ]: any -> record<coupon: record<lago_id: string, name: string, code: string, description: string, coupon_type: string, amount_cents: int, amount_currency: string, reusable: bool, limited_plans: bool, plan_codes: list<string>, limited_billable_metrics: bool, billable_metric_codes: list<string>, percentage_rate: string, frequency: string, frequency_duration: int, expiration: string, expiration_at: string, created_at: string, terminated_at: string>> {
   let input = $in
@@ -1030,7 +1067,7 @@ export def "coupons updateCoupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a coupon
@@ -1046,13 +1083,14 @@ export def "coupons findCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<coupon: record<lago_id: string, name: string, code: string, description: string, coupon_type: string, amount_cents: int, amount_currency: string, reusable: bool, limited_plans: bool, plan_codes: list<string>, limited_billable_metrics: bool, billable_metric_codes: list<string>, percentage_rate: string, frequency: string, frequency_duration: int, expiration: string, expiration_at: string, created_at: string, terminated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coupons/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a coupon
@@ -1068,13 +1106,14 @@ export def "coupons destroyCoupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<coupon: record<lago_id: string, name: string, code: string, description: string, coupon_type: string, amount_cents: int, amount_currency: string, reusable: bool, limited_plans: bool, plan_codes: list<string>, limited_billable_metrics: bool, billable_metric_codes: list<string>, percentage_rate: string, frequency: string, frequency_duration: int, expiration: string, expiration_at: string, created_at: string, terminated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coupons/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a credit note
@@ -1090,6 +1129,7 @@ export def "credit-notes createCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   credit_note: record # shape: {invoice_id: string, reason?: "duplicated_charge"|"product_unsatisfactory"|"order_change"|"order_cancellation"|"fraudulent_charge"|"other"|"", description?: string, credit_amount_cents?: int, refund_amount_cents?: int, offset_amount_cents?: int, items: list, metadata?: record}
 ]: any -> record<credit_note: record<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list<record>, applied_taxes: list<record>, self_billed: bool, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, metadata: record, error_details: list<record>>> {
   let input = $in
@@ -1100,7 +1140,7 @@ export def "credit-notes createCreditNote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all credit notes
@@ -1115,6 +1155,7 @@ export def "credit-notes findAllCreditNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # Unique identifier assigned to the customer in your application. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -1137,7 +1178,7 @@ export def "credit-notes findAllCreditNotes" [
   let full_url = (build-url $base "/credit_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a credit note
@@ -1154,6 +1195,7 @@ export def "credit-notes updateCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   credit_note: record # shape: {refund_status: "pending"|"succeeded"|"failed", metadata?: record}
 ]: any -> record<credit_note: record<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list<record>, applied_taxes: list<record>, self_billed: bool, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, metadata: record, error_details: list<record>>> {
   let input = $in
@@ -1164,7 +1206,7 @@ export def "credit-notes updateCreditNote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a credit note
@@ -1180,13 +1222,14 @@ export def "credit-notes findCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<credit_note: record<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list<record>, applied_taxes: list<record>, self_billed: bool, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, metadata: record, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_notes/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download a credit note PDF
@@ -1202,13 +1245,14 @@ export def "credit-notes-download downloadCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<credit_note: record<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list<record>, applied_taxes: list<record>, self_billed: bool, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, metadata: record, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_notes/($lago_id)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Estimate amounts for a new credit note
@@ -1224,6 +1268,7 @@ export def "credit-notes-estimate estimateCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   credit_note: record # shape: {invoice_id: string, items: list}
 ]: any -> record<estimated_credit_note: record<lago_invoice_id: string, invoice_number: string, currency: string, taxes_amount_cents: int, precise_taxes_amount_cents: float, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, max_creditable_amount_cents: int, max_refundable_amount_cents: int, max_offsettable_amount_cents: int, coupons_adjustment_amount_cents: int, precise_coupons_adjustment_amount_cents: float, items: list<record>, applied_taxes: list<record>>> {
   let input = $in
@@ -1234,7 +1279,7 @@ export def "credit-notes-estimate estimateCreditNote" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Void available credit
@@ -1250,13 +1295,14 @@ export def "credit-notes-void voidCreditNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<credit_note: record<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list<record>, applied_taxes: list<record>, self_billed: bool, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, metadata: record, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_notes/($lago_id)/void")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace credit note metadata
@@ -1272,6 +1318,7 @@ export def "credit-notes-metadata replaceCreditNoteMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -1282,7 +1329,7 @@ export def "credit-notes-metadata replaceCreditNoteMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge credit note metadata
@@ -1298,6 +1345,7 @@ export def "credit-notes-metadata mergeCreditNoteMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -1308,7 +1356,7 @@ export def "credit-notes-metadata mergeCreditNoteMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all credit note metadata
@@ -1324,13 +1372,14 @@ export def "credit-notes-metadata delete-by-lago_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_notes/($lago_id)/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a metadata key
@@ -1347,13 +1396,14 @@ export def "credit-notes-metadata delete-by-lago_id-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_notes/($lago_id)/metadata/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a customer
@@ -1369,6 +1419,7 @@ export def "customers createCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer: record # shape: {external_id: string, billing_entity_code?: string, address_line1?: string, address_line2?: string, city?: string, country?: ""|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", currency?: ""|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", email?: string, legal_name?: string, legal_number?: string, logo_url?: string, name?: string, firstname?: string, lastname?: string, account_type?: "customer"|"partner"|"", customer_type?: "company"|"individual"|"", phone?: string, state?: string, tax_codes?: list, tax_identification_number?: string, timezone?: ""|"UTC"|"Africa/Algiers"|"Africa/Cairo"|"Africa/Casablanca"|"Africa/Harare"|"Africa/Johannesburg"|"Africa/Monrovia"|"Africa/Nairobi"|"America/Argentina/Buenos_Aires"|"America/Bogota"|"America/Caracas"|"America/Chicago"|"America/Chihuahua"|"America/Denver"|"America/Godthab"|"America/Guatemala"|"America/Guyana"|"America/Halifax"|"America/Indiana/Indianapolis"|"America/Juneau"|"America/La_Paz"|"America/Lima"|"America/Los_Angeles"|"America/Mazatlan"|"America/Mexico_City"|"America/Monterrey"|"America/Montevideo"|"America/New_York"|"America/Phoenix"|"America/Puerto_Rico"|"America/Regina"|"America/Santiago"|"America/Sao_Paulo"|"America/St_Johns"|"America/Tijuana"|"Asia/Almaty"|"Asia/Baghdad"|"Asia/Baku"|"Asia/Bangkok"|"Asia/Chongqing"|"Asia/Colombo"|"Asia/Dhaka"|"Asia/Hong_Kong"|"Asia/Irkutsk"|"Asia/Jakarta"|"Asia/Jerusalem"|"Asia/Kabul"|"Asia/Kamchatka"|"Asia/Karachi"|"Asia/Kathmandu"|"Asia/Kolkata"|"Asia/Krasnoyarsk"|"Asia/Kuala_Lumpur"|"Asia/Kuwait"|"Asia/Magadan"|"Asia/Muscat"|"Asia/Novosibirsk"|"Asia/Rangoon"|"Asia/Riyadh"|"Asia/Seoul"|"Asia/Shanghai"|"Asia/Singapore"|"Asia/Srednekolymsk"|"Asia/Taipei"|"Asia/Tashkent"|"Asia/Tbilisi"|"Asia/Tehran"|"Asia/Tokyo"|"Asia/Ulaanbaatar"|"Asia/Urumqi"|"Asia/Vladivostok"|"Asia/Yakutsk"|"Asia/Yekaterinburg"|"Asia/Yerevan"|"Atlantic/Azores"|"Atlantic/Cape_Verde"|"Atlantic/South_Georgia"|"Australia/Adelaide"|"Australia/Brisbane"|"Australia/Darwin"|"Australia/Hobart"|"Australia/Melbourne"|"Australia/Perth"|"Australia/Sydney"|"Europe/Amsterdam"|"Europe/Athens"|"Europe/Belgrade"|"Europe/Berlin"|"Europe/Bratislava"|"Europe/Brussels"|"Europe/Bucharest"|"Europe/Budapest"|"Europe/Copenhagen"|"Europe/Dublin"|"Europe/Helsinki"|"Europe/Istanbul"|"Europe/Kaliningrad"|"Europe/Kiev"|"Europe/Lisbon"|"Europe/Ljubljana"|"Europe/London"|"Europe/Madrid"|"Europe/Minsk"|"Europe/Moscow"|"Europe/Paris"|"Europe/Prague"|"Europe/Riga"|"Europe/Rome"|"Europe/Samara"|"Europe/Sarajevo"|"Europe/Skopje"|"Europe/Sofia"|"Europe/Stockholm"|"Europe/Tallinn"|"Europe/Vienna"|"Europe/Vilnius"|"Europe/Volgograd"|"Europe/Warsaw"|"Europe/Zagreb"|"Europe/Zurich"|"GMT+12"|"Pacific/Apia"|"Pacific/Auckland"|"Pacific/Chatham"|"Pacific/Fakaofo"|"Pacific/Fiji"|"Pacific/Guadalcanal"|"Pacific/Guam"|"Pacific/Honolulu"|"Pacific/Majuro"|"Pacific/Midway"|"Pacific/Noumea"|"Pacific/Pago_Pago"|"Pacific/Port_Moresby"|"Pacific/Tongatapu", url?: string, zipcode?: string, net_payment_term?: int, finalize_zero_amount_invoice?: "inherit"|"skip"|"finalize", billing_configuration?: record, shipping_address?: record, integration_customers?: list, metadata?: list, skip_invoice_custom_sections?: bool, invoice_custom_section_codes?: list}
 ]: any -> record<customer: record<metadata: list<record>, taxes: list<record>, applicable_invoice_custom_sections: list<record>, error_details: list<record>>> {
   let input = $in
@@ -1379,7 +1430,7 @@ export def "customers createCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all customers
@@ -1394,6 +1445,7 @@ export def "customers findAllCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --account-type: list # Filter customers by account type. (e.g. [customer, partner])
@@ -1414,7 +1466,7 @@ export def "customers findAllCustomers" [
   let full_url = (build-url $base "/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a customer
@@ -1430,13 +1482,14 @@ export def "customers findCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customer: record<metadata: list<record>, taxes: list<record>, applicable_invoice_custom_sections: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a customer
@@ -1452,13 +1505,14 @@ export def "customers destroyCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customer: record<metadata: list<record>, taxes: list<record>, applicable_invoice_custom_sections: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's applied coupons
@@ -1474,6 +1528,7 @@ export def "customers-applied-coupons findAllCustomerAppliedCoupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --status: string@status-completer # The status of the coupon. Can be either `active` or `terminated`. (e.g. active)
@@ -1485,7 +1540,7 @@ export def "customers-applied-coupons findAllCustomerAppliedCoupons" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/applied_coupons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an applied coupon
@@ -1502,13 +1557,14 @@ export def "customers-applied-coupons delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<applied_coupon: record<lago_id: string, lago_coupon_id: string, coupon_code: string, coupon_name: string, coupon_status: string, coupon_deleted_at: string, lago_customer_id: string, external_customer_id: string, status: string, amount_cents: int, amount_cents_remaining: int, amount_currency: string, percentage_rate: string, frequency: string, frequency_duration: int, frequency_duration_remaining: int, expiration_at: string, created_at: string, terminated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/applied_coupons/($applied_coupon_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's credit notes
@@ -1524,6 +1580,7 @@ export def "customers-credit-notes findAllCustomerCreditNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --issuing-date-from: string # Filter credit notes starting from a specific date. (format: date, e.g. 2022-07-08)
@@ -1543,7 +1600,7 @@ export def "customers-credit-notes findAllCustomerCreditNotes" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/credit_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's invoices
@@ -1559,6 +1616,7 @@ export def "customers-invoices findAllCustomerInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --amount-from: int # Filter invoices of at least a specific amount. This parameter must be defined in cents to ensure consistent handling for all currency types. (e.g. 9000)
@@ -1580,7 +1638,7 @@ export def "customers-invoices findAllCustomerInvoices" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's payments
@@ -1596,6 +1654,7 @@ export def "customers-payments findAllCustomerPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --invoice-id: string # Unique identifier assigned to the invoice within the Lago application. This ID is exclusively created by Lago and serves as a unique identifier for the invoice's record within the Lago system. (format: uuid, e.g. 1a901a90-1a90-1a90-1a90-1a901a901a90)
@@ -1606,7 +1665,7 @@ export def "customers-payments findAllCustomerPayments" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's payment requests
@@ -1622,6 +1681,7 @@ export def "customers-payment-requests findAllCustomerPaymentRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --payment-status: string@payment-status-completer # Filter by payment status. Possible values are `pending`, `failed` or `succeeded`. (e.g. pending)
@@ -1632,7 +1692,7 @@ export def "customers-payment-requests findAllCustomerPaymentRequests" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/payment_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a customer portal URL
@@ -1648,13 +1708,14 @@ export def "customers-portal-url get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customer: record<portal_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/portal_url")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer's subscriptions
@@ -1670,6 +1731,7 @@ export def "customers-subscriptions findAllCustomerSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --plan-code: string # The unique code representing the plan to be attached to the customer. This code must correspond to the code property of one of the active plans. (e.g. premium)
@@ -1681,7 +1743,7 @@ export def "customers-subscriptions findAllCustomerSubscriptions" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a wallet
@@ -1698,6 +1760,7 @@ export def "customers-wallets createCustomerWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wallet: record # shape: {name?: string, code?: string, priority?: int, rate_amount: string, currency: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", paid_credits?: string, granted_credits?: string, external_customer_id: string, expiration_at?: string, invoice_requires_successful_payment?: bool, transaction_metadata?: list, transaction_name?: string, applies_to?: record, paid_top_up_min_amount_cents?: int, paid_top_up_max_amount_cents?: int, ignore_paid_top_up_limits_on_creation?: bool, invoice_custom_section?: record, recurring_transaction_rules?: list, payment_method?: record, metadata?: record}
 ]: any -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let input = $in
@@ -1708,7 +1771,7 @@ export def "customers-wallets createCustomerWallet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all customer's wallets
@@ -1724,6 +1787,7 @@ export def "customers-wallets findAllCustomerWallets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<wallets: table<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record, recurring_transaction_rules: list, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list, payment_method: record, metadata: record>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -1733,7 +1797,7 @@ export def "customers-wallets findAllCustomerWallets" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a wallet
@@ -1751,6 +1815,7 @@ export def "customers-wallets updateCustomerWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   wallet: record # shape: {name?: string, code?: string, priority?: int, expiration_at?: string, invoice_requires_successful_payment?: bool, invoice_custom_section?: record, recurring_transaction_rules?: list, payment_method?: record, applies_to?: record, metadata?: record}
 ]: any -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let input = $in
@@ -1761,7 +1826,7 @@ export def "customers-wallets updateCustomerWallet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a wallet
@@ -1778,13 +1843,14 @@ export def "customers-wallets findCustomerWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Terminate a wallet
@@ -1801,13 +1867,14 @@ export def "customers-wallets destroyCustomerWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace wallet metadata
@@ -1824,6 +1891,7 @@ export def "customers-wallets-metadata replaceCustomerWalletMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -1834,7 +1902,7 @@ export def "customers-wallets-metadata replaceCustomerWalletMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge wallet metadata
@@ -1851,6 +1919,7 @@ export def "customers-wallets-metadata mergeCustomerWalletMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -1861,7 +1930,7 @@ export def "customers-wallets-metadata mergeCustomerWalletMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all wallet metadata
@@ -1878,13 +1947,14 @@ export def "customers-wallets-metadata delete-by-external_customer_id-wallet_cod
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a metadata key
@@ -1902,13 +1972,14 @@ export def "customers-wallets-metadata delete-by-external_customer_id-wallet_cod
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/metadata/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List wallet alerts
@@ -1925,13 +1996,14 @@ export def "customers-wallets-alerts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alerts: table<lago_id: string, lago_organization_id: string, external_subscription_id: any, lago_wallet_id: string, wallet_code: string, billable_metric: any, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/alerts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create wallet alert(s)
@@ -1949,6 +2021,7 @@ export def "customers-wallets-alerts createCustomerWalletAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alert: any
   --alerts: list # Array of alerts to create. All alerts are created atomically - if any fail validation, none are created. — item shape: {code: string, name?: string, thresholds: list, alert_type: "wallet_balance_amount"|"wallet_credits_balance"|"wallet_ongoing_balance_amount"|"wallet_credits_ongoing_balance"}
 ]: any -> any {
@@ -1960,7 +2033,7 @@ export def "customers-wallets-alerts createCustomerWalletAlert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all wallet alerts
@@ -1977,13 +2050,14 @@ export def "customers-wallets-alerts delete-by-external_customer_id-wallet_code"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/alerts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a wallet alert
@@ -2001,13 +2075,14 @@ export def "customers-wallets-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: any, lago_wallet_id: string, wallet_code: string, billable_metric: any, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/alerts/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a wallet alert
@@ -2025,6 +2100,7 @@ export def "customers-wallets-alerts updateCustomerWalletAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alert: any
 ]: any -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: any, lago_wallet_id: string, wallet_code: string, billable_metric: any, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
   let input = $in
@@ -2035,7 +2111,7 @@ export def "customers-wallets-alerts updateCustomerWalletAlert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a wallet alert
@@ -2053,13 +2129,14 @@ export def "customers-wallets-alerts delete-by-external_customer_id-wallet_code-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: any, lago_wallet_id: string, wallet_code: string, billable_metric: any, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/wallets/($wallet_code)/alerts/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve customer current usage
@@ -2078,6 +2155,7 @@ export def "customers-current-usage findCustomerCurrentUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --external-subscription-id: string # The unique identifier of the subscription within your application. (e.g. sub_1234567890)
   --apply-taxes: oneof<nothing, bool> # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
   --charge-id: string # Filter usage to a specific charge by its Lago ID (UUID). Replaces deprecated `filter_by_charge_id`. (format: uuid, e.g. 1a901a90-1a90-1a90-1a90-1a901a901a90)
@@ -2096,7 +2174,7 @@ export def "customers-current-usage findCustomerCurrentUsage" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/current_usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve customer current and projected usage
@@ -2112,6 +2190,7 @@ export def "customers-projected-usage findCustomerProjectedUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --external-subscription-id: string # The unique identifier of the subscription within your application. (e.g. sub_1234567890)
   --apply-taxes: oneof<nothing, bool> # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
 ]: nothing -> record<customer_projected_usage: record<from_datetime: string, to_datetime: string, issuing_date: string, lago_invoice_id: string, currency: string, amount_cents: int, projected_amount_cents: int, taxes_amount_cents: int, total_amount_cents: int, charges_usage: list<record>>> {
@@ -2121,7 +2200,7 @@ export def "customers-projected-usage findCustomerProjectedUsage" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/projected_usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve customer past usage
@@ -2137,6 +2216,7 @@ export def "customers-past-usage findAllCustomerPastUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-subscription-id: string # The unique identifier of the subscription within your application. (e.g. sub_1234567890)
@@ -2149,7 +2229,7 @@ export def "customers-past-usage findAllCustomerPastUsage" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/past_usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a Customer Payment Provider Checkout URL
@@ -2165,13 +2245,14 @@ export def "customers-checkout-url generateCustomerCheckoutURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customer: record<lago_customer_id: string, external_customer_id: string, payment_provider: string, payment_provider_code: string, checkout_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/checkout_url")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all customer payment methods
@@ -2187,6 +2268,7 @@ export def "customers-payment-methods findAllCustomersPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<payment_methods: table<lago_id: string, is_default: bool, payment_provider_code: string, payment_provider_name: string, payment_provider_type: string, provider_method_id: string, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -2196,7 +2278,7 @@ export def "customers-payment-methods findAllCustomersPaymentMethods" [
   let full_url = (build-url $base $"/customers/($external_customer_id)/payment_methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the payment method as default
@@ -2213,13 +2295,14 @@ export def "customers-payment-methods-set-as-default paymentMethodSetAsDefault" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payment_method: record<lago_id: string, is_default: bool, payment_provider_code: string, payment_provider_name: string, payment_provider_type: string, provider_method_id: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/payment_methods/($lago_id)/set_as_default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a payment method
@@ -2236,13 +2319,14 @@ export def "customers-payment-methods destroyPaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payment_method: record<lago_id: string, is_default: bool, payment_provider_code: string, payment_provider_name: string, payment_provider_type: string, provider_method_id: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/customers/($external_customer_id)/payment_methods/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send usage events
@@ -2258,6 +2342,7 @@ export def "events createEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {transaction_id: string, external_subscription_id: string, code: string, timestamp?: any, precise_total_amount_cents?: string, properties?: record}
 ]: any -> record<event: record<lago_id: string, transaction_id: string, lago_customer_id: any, code: string, timestamp: string, precise_total_amount_cents: string, properties: record<operation_type: string>, lago_subscription_id: string, external_subscription_id: string, created_at: string>> {
   let input = $in
@@ -2268,7 +2353,7 @@ export def "events createEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all events
@@ -2283,6 +2368,7 @@ export def "events findAllEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-subscription-id: string # External subscription ID (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -2297,7 +2383,7 @@ export def "events findAllEvents" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch multiple events
@@ -2313,6 +2399,7 @@ export def "events-batch createBatchEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list # item shape: {transaction_id: string, external_subscription_id: string, code: string, timestamp?: any, precise_total_amount_cents?: string, properties?: record}
 ]: any -> record<events: table<lago_id: string, transaction_id: string, lago_customer_id: any, code: string, timestamp: string, precise_total_amount_cents: string, properties: record, lago_subscription_id: string, external_subscription_id: string, created_at: string>> {
   let input = $in
@@ -2323,7 +2410,7 @@ export def "events-batch createBatchEvents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Estimate fees for a pay in advance charge
@@ -2339,6 +2426,7 @@ export def "events-estimate-fees eventEstimateFees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {code: string, external_subscription_id: string, properties?: record}
 ]: any -> record<fees: table<lago_id: string, lago_charge_id: string, lago_charge_filter_id: string, lago_fixed_charge_id: string, lago_invoice_id: string, lago_true_up_fee_id: string, lago_true_up_parent_fee_id: string, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: string, precise_total_amount: string, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: string, taxes_rate: float, units: string, precise_unit_amount: string, total_aggregated_units: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, from_date: string, to_date: string, payment_status: string, created_at: string, succeeded_at: string, failed_at: string, refunded_at: string, event_transaction_id: string, description: string, precise_coupons_amount_cents: string, sub_total_excluding_taxes_amount_cents: int, sub_total_excluding_taxes_precise_amount_cents: string, amount_details: record, self_billed: bool, item: record, applied_taxes: list, pricing_unit_details: record, presentation_breakdowns: list>> {
   let input = $in
@@ -2349,7 +2437,7 @@ export def "events-estimate-fees eventEstimateFees" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Estimate instant fees for a pay in advance charge
@@ -2365,6 +2453,7 @@ export def "events-estimate-instant-fees eventEstimateInstantFees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {code: string, external_subscription_id: string, properties?: record, transaction_id?: string}
 ]: any -> record<fees: table<lago_id: any, lago_charge_id: string, lago_charge_filter_id: string, lago_invoice_id: any, lago_true_up_fee_id: any, lago_true_up_parent_fee_id: any, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: float, precise_total_amount: float, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: float, taxes_rate: float, units: string, description: any, precise_unit_amount: float, precise_coupons_amount_cents: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, payment_status: string, created_at: any, succeeded_at: any, failed_at: any, refunded_at: any, event_transaction_id: string, amount_details: any, item: record>> {
   let input = $in
@@ -2375,7 +2464,7 @@ export def "events-estimate-instant-fees eventEstimateInstantFees" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch estimate instant fees for a pay in advance charge
@@ -2391,6 +2480,7 @@ export def "events-batch-estimate-instant-fees eventBatchEstimateInstantFees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list # item shape: {event: record}
 ]: any -> record<fees: table<lago_id: any, lago_charge_id: string, lago_charge_filter_id: string, lago_invoice_id: any, lago_true_up_fee_id: any, lago_true_up_parent_fee_id: any, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: float, precise_total_amount: float, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: float, taxes_rate: float, units: string, description: any, precise_unit_amount: float, precise_coupons_amount_cents: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, payment_status: string, created_at: any, succeeded_at: any, failed_at: any, refunded_at: any, event_transaction_id: string, amount_details: any, item: record>> {
   let input = $in
@@ -2401,7 +2491,7 @@ export def "events-batch-estimate-instant-fees eventBatchEstimateInstantFees" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a specific event
@@ -2417,13 +2507,14 @@ export def "events findEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<event: record<lago_id: string, transaction_id: string, lago_customer_id: string, code: string, timestamp: string, precise_total_amount_cents: string, properties: record<operation_type: string>, lago_subscription_id: string, external_subscription_id: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/events/($transaction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all fees
@@ -2438,6 +2529,7 @@ export def "fees findAllFees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # Unique identifier assigned to the customer in your application. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -2462,7 +2554,7 @@ export def "fees findAllFees" [
   let full_url = (build-url $base "/fees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a specific fee
@@ -2478,13 +2570,14 @@ export def "fees findFee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fee: record<lago_id: string, lago_charge_id: string, lago_charge_filter_id: string, lago_fixed_charge_id: string, lago_invoice_id: string, lago_true_up_fee_id: string, lago_true_up_parent_fee_id: string, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: string, precise_total_amount: string, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: string, taxes_rate: float, units: string, precise_unit_amount: string, total_aggregated_units: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, from_date: string, to_date: string, payment_status: string, created_at: string, succeeded_at: string, failed_at: string, refunded_at: string, event_transaction_id: string, description: string, precise_coupons_amount_cents: string, sub_total_excluding_taxes_amount_cents: int, sub_total_excluding_taxes_precise_amount_cents: string, amount_details: record<plan_amount_cents: int, graduated_ranges: list, graduated_percentage_ranges: list, free_units: string, paid_units: string, per_package_size: int, per_package_unit_amount: string, per_unit_total_amount: string, units: string, free_events: int, rate: string, paid_events: int, fixed_fee_unit_amount: string, fixed_fee_total_amount: string, min_max_adjustment_total_amount: string, per_unit_amount: string, flat_unit_amount: string>, self_billed: bool, item: record<type: string, code: string, name: string, description: string, invoice_display_name: string, filter_invoice_display_name: string, filters: record, lago_item_id: string, item_type: string, grouped_by: record>, applied_taxes: list<record>, pricing_unit_details: record<lago_pricing_unit_id: string, pricing_unit_code: string, short_name: string, amount_cents: int, precise_amount_cents: string, unit_amount_cents: int, precise_unit_amount: string, conversion_rate: string>, presentation_breakdowns: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fees/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a fee
@@ -2501,6 +2594,7 @@ export def "fees updateFee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fee: record # shape: {payment_status: "pending"|"succeeded"|"failed"|"refunded"}
 ]: any -> record<fee: record<lago_id: string, lago_charge_id: string, lago_charge_filter_id: string, lago_fixed_charge_id: string, lago_invoice_id: string, lago_true_up_fee_id: string, lago_true_up_parent_fee_id: string, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: string, precise_total_amount: string, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: string, taxes_rate: float, units: string, precise_unit_amount: string, total_aggregated_units: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, from_date: string, to_date: string, payment_status: string, created_at: string, succeeded_at: string, failed_at: string, refunded_at: string, event_transaction_id: string, description: string, precise_coupons_amount_cents: string, sub_total_excluding_taxes_amount_cents: int, sub_total_excluding_taxes_precise_amount_cents: string, amount_details: record<plan_amount_cents: int, graduated_ranges: list, graduated_percentage_ranges: list, free_units: string, paid_units: string, per_package_size: int, per_package_unit_amount: string, per_unit_total_amount: string, units: string, free_events: int, rate: string, paid_events: int, fixed_fee_unit_amount: string, fixed_fee_total_amount: string, min_max_adjustment_total_amount: string, per_unit_amount: string, flat_unit_amount: string>, self_billed: bool, item: record<type: string, code: string, name: string, description: string, invoice_display_name: string, filter_invoice_display_name: string, filters: record, lago_item_id: string, item_type: string, grouped_by: record>, applied_taxes: list<record>, pricing_unit_details: record<lago_pricing_unit_id: string, pricing_unit_code: string, short_name: string, amount_cents: int, precise_amount_cents: string, unit_amount_cents: int, precise_unit_amount: string, conversion_rate: string>, presentation_breakdowns: list<record>>> {
   let input = $in
@@ -2511,7 +2605,7 @@ export def "fees updateFee" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a fee
@@ -2527,13 +2621,14 @@ export def "fees delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fee: record<lago_id: string, lago_charge_id: string, lago_charge_filter_id: string, lago_fixed_charge_id: string, lago_invoice_id: string, lago_true_up_fee_id: string, lago_true_up_parent_fee_id: string, lago_subscription_id: string, lago_customer_id: string, external_customer_id: string, external_subscription_id: string, amount_cents: int, precise_amount: string, precise_total_amount: string, amount_currency: string, taxes_amount_cents: int, taxes_precise_amount: string, taxes_rate: float, units: string, precise_unit_amount: string, total_aggregated_units: string, total_amount_cents: int, total_amount_currency: string, events_count: int, pay_in_advance: bool, invoiceable: bool, from_date: string, to_date: string, payment_status: string, created_at: string, succeeded_at: string, failed_at: string, refunded_at: string, event_transaction_id: string, description: string, precise_coupons_amount_cents: string, sub_total_excluding_taxes_amount_cents: int, sub_total_excluding_taxes_precise_amount_cents: string, amount_details: record<plan_amount_cents: int, graduated_ranges: list, graduated_percentage_ranges: list, free_units: string, paid_units: string, per_package_size: int, per_package_unit_amount: string, per_unit_total_amount: string, units: string, free_events: int, rate: string, paid_events: int, fixed_fee_unit_amount: string, fixed_fee_total_amount: string, min_max_adjustment_total_amount: string, per_unit_amount: string, flat_unit_amount: string>, self_billed: bool, item: record<type: string, code: string, name: string, description: string, invoice_display_name: string, filter_invoice_display_name: string, filters: record, lago_item_id: string, item_type: string, grouped_by: record>, applied_taxes: list<record>, pricing_unit_details: record<lago_pricing_unit_id: string, pricing_unit_code: string, short_name: string, amount_cents: int, precise_amount_cents: string, unit_amount_cents: int, precise_unit_amount: string, conversion_rate: string>, presentation_breakdowns: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fees/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a one-off invoice
@@ -2549,6 +2644,7 @@ export def "invoices createInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invoice: record # shape: {external_customer_id: string, currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", fees: list, invoice_custom_section?: record, payment_method?: record}
 ]: any -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let input = $in
@@ -2559,7 +2655,7 @@ export def "invoices createInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all invoices
@@ -2574,6 +2670,7 @@ export def "invoices findAllInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # Unique identifier assigned to the customer in your application. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -2598,7 +2695,7 @@ export def "invoices findAllInvoices" [
   let full_url = (build-url $base "/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an invoice
@@ -2615,6 +2712,7 @@ export def "invoices updateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invoice: record # shape: {payment_status?: "pending"|"succeeded"|"failed", metadata?: list}
 ]: any -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let input = $in
@@ -2625,7 +2723,7 @@ export def "invoices updateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an invoice
@@ -2641,13 +2739,14 @@ export def "invoices findInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download an invoice PDF
@@ -2663,13 +2762,14 @@ export def "invoices-download downloadInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Finalize a draft invoice
@@ -2685,13 +2785,14 @@ export def "invoices-finalize finalizeInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/finalize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark an invoice payment dispute as lost
@@ -2707,13 +2808,14 @@ export def "invoices-lose-dispute loseDisputeInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/lose_dispute")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh a draft invoice
@@ -2729,13 +2831,14 @@ export def "invoices-refresh refreshInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/refresh")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry generation of a failed invoice
@@ -2751,13 +2854,14 @@ export def "invoices-retry retryInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/retry")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a payment URL
@@ -2773,13 +2877,14 @@ export def "invoices-payment-url invoicePaymentUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice_payment_details: record<lago_customer_id: string, lago_invoice_id: string, external_customer_id: string, payment_provider: string, payment_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($lago_id)/payment_url")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an invoice preview
@@ -2797,6 +2902,7 @@ export def "invoices-preview invoicePreview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer: record # shape: {address_line1?: string, address_line2?: string, city?: string, country?: "AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", external_id?: string, integration_customers?: list, name?: string, currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", shipping_address?: record, state?: string, tax_identification_number?: string, timezone?: "UTC"|"Africa/Algiers"|"Africa/Cairo"|"Africa/Casablanca"|"Africa/Harare"|"Africa/Johannesburg"|"Africa/Monrovia"|"Africa/Nairobi"|"America/Argentina/Buenos_Aires"|"America/Bogota"|"America/Caracas"|"America/Chicago"|"America/Chihuahua"|"America/Denver"|"America/Guatemala"|"America/Guyana"|"America/Halifax"|"America/Indiana/Indianapolis"|"America/Juneau"|"America/La_Paz"|"America/Lima"|"America/Los_Angeles"|"America/Mazatlan"|"America/Mexico_City"|"America/Monterrey"|"America/Montevideo"|"America/New_York"|"America/Nuuk"|"America/Phoenix"|"America/Puerto_Rico"|"America/Regina"|"America/Santiago"|"America/Sao_Paulo"|"America/St_Johns"|"America/Tijuana"|"Asia/Almaty"|"Asia/Baghdad"|"Asia/Baku"|"Asia/Bangkok"|"Asia/Chongqing"|"Asia/Colombo"|"Asia/Dhaka"|"Asia/Hong_Kong"|"Asia/Irkutsk"|"Asia/Jakarta"|"Asia/Jerusalem"|"Asia/Kabul"|"Asia/Kamchatka"|"Asia/Karachi"|"Asia/Kathmandu"|"Asia/Kolkata"|"Asia/Krasnoyarsk"|"Asia/Kuala_Lumpur"|"Asia/Kuwait"|"Asia/Magadan"|"Asia/Muscat"|"Asia/Novosibirsk"|"Asia/Riyadh"|"Asia/Seoul"|"Asia/Shanghai"|"Asia/Singapore"|"Asia/Srednekolymsk"|"Asia/Taipei"|"Asia/Tashkent"|"Asia/Tbilisi"|"Asia/Tehran"|"Asia/Tokyo"|"Asia/Ulaanbaatar"|"Asia/Urumqi"|"Asia/Vladivostok"|"Asia/Yakutsk"|"Asia/Yangon"|"Asia/Yekaterinburg"|"Asia/Yerevan"|"Atlantic/Azores"|"Atlantic/Cape_Verde"|"Atlantic/South_Georgia"|"Australia/Adelaide"|"Australia/Brisbane"|"Australia/Darwin"|"Australia/Hobart"|"Australia/Melbourne"|"Australia/Perth"|"Australia/Sydney"|"Europe/Amsterdam"|"Europe/Athens"|"Europe/Belgrade"|"Europe/Berlin"|"Europe/Bratislava"|"Europe/Brussels"|"Europe/Bucharest"|"Europe/Budapest"|"Europe/Copenhagen"|"Europe/Dublin"|"Europe/Helsinki"|"Europe/Istanbul"|"Europe/Kaliningrad"|"Europe/Kyiv"|"Europe/Lisbon"|"Europe/Ljubljana"|"Europe/London"|"Europe/Madrid"|"Europe/Minsk"|"Europe/Moscow"|"Europe/Paris"|"Europe/Prague"|"Europe/Riga"|"Europe/Rome"|"Europe/Samara"|"Europe/Sarajevo"|"Europe/Skopje"|"Europe/Sofia"|"Europe/Stockholm"|"Europe/Tallinn"|"Europe/Vienna"|"Europe/Vilnius"|"Europe/Volgograd"|"Europe/Warsaw"|"Europe/Zagreb"|"Europe/Zurich"|"GMT+12"|"Pacific/Apia"|"Pacific/Auckland"|"Pacific/Chatham"|"Pacific/Fakaofo"|"Pacific/Fiji"|"Pacific/Guadalcanal"|"Pacific/Guam"|"Pacific/Honolulu"|"Pacific/Majuro"|"Pacific/Midway"|"Pacific/Noumea"|"Pacific/Pago_Pago"|"Pacific/Port_Moresby"|"Pacific/Tongatapu"}
   --plan-code: string # The code of the plan. It serves as a unique identifier associated with a particular plan. The code is typically used for internal or system-level identification purposes, like assigning a subscription, for instance. (e.g. startup)
   --subscription-at: string # The anniversary date and time of the initial subscription. This date serves as the basis for billing subscriptions with `anniversary` billing time. The `anniversary_date` should be provided in ISO 8601 datetime format and expressed in Coordinated Universal Time (UTC). (format: date-time, e.g. 2022-08-08T00:00:00Z)
@@ -2813,7 +2919,7 @@ export def "invoices-preview invoicePreview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retry an invoice payment
@@ -2830,6 +2936,7 @@ export def "invoices-retry-payment retryPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method: record # Reference to a specific payment method for processing the payment. — shape: {payment_method_type?: "provider"|"manual", payment_method_id?: string}
 ]: any -> any {
   let input = $in
@@ -2840,7 +2947,7 @@ export def "invoices-retry-payment retryPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Void an invoice
@@ -2856,6 +2963,7 @@ export def "invoices-void voidInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --generate-credit-note: oneof<nothing, bool> # Set to `true` to force voiding the invoice and generate a credit note. (e.g. true)
   --refund-amount: int # Portion of the invoice amount (in cents) to be refunded to the customer in the generated credit note. (e.g. 2000)
   --credit-amount: int # Portion of the invoice amount (in cents) to be credited to the customer's balance in the generated credit note. (e.g. 1150)
@@ -2868,7 +2976,7 @@ export def "invoices-void voidInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update your organization
@@ -2884,6 +2992,7 @@ export def "organizations updateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization: record # shape: {webhook_url?: string, country?: ""|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", default_currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", address_line1?: string, address_line2?: string, state?: string, zipcode?: string, email?: string, city?: string, legal_name?: string, legal_number?: string, document_numbering?: "per_customer"|"per_organization", document_number_prefix?: string, net_payment_term?: int, tax_identification_number?: string, timezone?: "UTC"|"Africa/Algiers"|"Africa/Cairo"|"Africa/Casablanca"|"Africa/Harare"|"Africa/Johannesburg"|"Africa/Monrovia"|"Africa/Nairobi"|"America/Argentina/Buenos_Aires"|"America/Bogota"|"America/Caracas"|"America/Chicago"|"America/Chihuahua"|"America/Denver"|"America/Guatemala"|"America/Guyana"|"America/Halifax"|"America/Indiana/Indianapolis"|"America/Juneau"|"America/La_Paz"|"America/Lima"|"America/Los_Angeles"|"America/Mazatlan"|"America/Mexico_City"|"America/Monterrey"|"America/Montevideo"|"America/New_York"|"America/Nuuk"|"America/Phoenix"|"America/Puerto_Rico"|"America/Regina"|"America/Santiago"|"America/Sao_Paulo"|"America/St_Johns"|"America/Tijuana"|"Asia/Almaty"|"Asia/Baghdad"|"Asia/Baku"|"Asia/Bangkok"|"Asia/Chongqing"|"Asia/Colombo"|"Asia/Dhaka"|"Asia/Hong_Kong"|"Asia/Irkutsk"|"Asia/Jakarta"|"Asia/Jerusalem"|"Asia/Kabul"|"Asia/Kamchatka"|"Asia/Karachi"|"Asia/Kathmandu"|"Asia/Kolkata"|"Asia/Krasnoyarsk"|"Asia/Kuala_Lumpur"|"Asia/Kuwait"|"Asia/Magadan"|"Asia/Muscat"|"Asia/Novosibirsk"|"Asia/Riyadh"|"Asia/Seoul"|"Asia/Shanghai"|"Asia/Singapore"|"Asia/Srednekolymsk"|"Asia/Taipei"|"Asia/Tashkent"|"Asia/Tbilisi"|"Asia/Tehran"|"Asia/Tokyo"|"Asia/Ulaanbaatar"|"Asia/Urumqi"|"Asia/Vladivostok"|"Asia/Yakutsk"|"Asia/Yangon"|"Asia/Yekaterinburg"|"Asia/Yerevan"|"Atlantic/Azores"|"Atlantic/Cape_Verde"|"Atlantic/South_Georgia"|"Australia/Adelaide"|"Australia/Brisbane"|"Australia/Darwin"|"Australia/Hobart"|"Australia/Melbourne"|"Australia/Perth"|"Australia/Sydney"|"Europe/Amsterdam"|"Europe/Athens"|"Europe/Belgrade"|"Europe/Berlin"|"Europe/Bratislava"|"Europe/Brussels"|"Europe/Bucharest"|"Europe/Budapest"|"Europe/Copenhagen"|"Europe/Dublin"|"Europe/Helsinki"|"Europe/Istanbul"|"Europe/Kaliningrad"|"Europe/Kyiv"|"Europe/Lisbon"|"Europe/Ljubljana"|"Europe/London"|"Europe/Madrid"|"Europe/Minsk"|"Europe/Moscow"|"Europe/Paris"|"Europe/Prague"|"Europe/Riga"|"Europe/Rome"|"Europe/Samara"|"Europe/Sarajevo"|"Europe/Skopje"|"Europe/Sofia"|"Europe/Stockholm"|"Europe/Tallinn"|"Europe/Vienna"|"Europe/Vilnius"|"Europe/Volgograd"|"Europe/Warsaw"|"Europe/Zagreb"|"Europe/Zurich"|"GMT+12"|"Pacific/Apia"|"Pacific/Auckland"|"Pacific/Chatham"|"Pacific/Fakaofo"|"Pacific/Fiji"|"Pacific/Guadalcanal"|"Pacific/Guam"|"Pacific/Honolulu"|"Pacific/Majuro"|"Pacific/Midway"|"Pacific/Noumea"|"Pacific/Pago_Pago"|"Pacific/Port_Moresby"|"Pacific/Tongatapu", email_settings?: list, billing_configuration?: record, finalize_zero_amount_invoice?: bool}
 ]: any -> record<organization: record<lago_id: string, name: string, created_at: string, webhook_url: string, webhook_urls: list<string>, country: string, default_currency: string, address_line1: string, address_line2: string, state: string, zipcode: string, email: string, city: string, legal_name: string, legal_number: string, document_numbering: string, document_number_prefix: string, net_payment_term: int, tax_identification_number: string, timezone: string, billing_configuration: record<invoice_footer: string, invoice_grace_period: int, document_locale: string>, taxes: list<record>, finalize_zero_amount_invoice: bool, events_store: string>> {
   let input = $in
@@ -2894,7 +3003,7 @@ export def "organizations updateOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all payment receipts
@@ -2909,6 +3018,7 @@ export def "payment-receipts findAllPaymentReceipts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --invoice-id: string # Filter payment receipts by invoice id. (e.g. 1a901a90-1a90-1a90-1a90-1a901a901a90)
@@ -2919,7 +3029,7 @@ export def "payment-receipts findAllPaymentReceipts" [
   let full_url = (build-url $base "/payment_receipts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a payment receipt
@@ -2935,13 +3045,14 @@ export def "payment-receipts findPaymentReceipt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payment_receipt: record<lago_id: string, created_at: string, number: string, payment: record<lago_id: string, lago_customer_id: string, external_customer_id: string, invoice_ids: list, invoice_numbers: list, lago_payable_id: string, payable_type: string, amount_cents: int, amount_currency: string, status: string, payment_status: string, type: string, reference: string, payment_provider_code: string, payment_provider_type: string, external_payment_id: string, provider_payment_id: string, provider_customer_id: string, payment_method_id: string, next_action: record, created_at: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payment_receipts/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a payment request
@@ -2957,6 +3068,7 @@ export def "payment-requests createPaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment_request: record # shape: {external_customer_id: string, email: string, lago_invoice_ids: list, payment_method?: record}
 ]: any -> record<payment_request: record<lago_id: string, email: string, amount_cents: int, amount_currency: string, payment_status: string, created_at: string, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record, shipping_address: record, metadata: list>, invoices: list<record>>> {
   let input = $in
@@ -2967,7 +3079,7 @@ export def "payment-requests createPaymentRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all payment requests
@@ -2982,6 +3094,7 @@ export def "payment-requests findAllPaymentRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # Unique identifier assigned to the customer in your application. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -2993,7 +3106,7 @@ export def "payment-requests findAllPaymentRequests" [
   let full_url = (build-url $base "/payment_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a payment request
@@ -3009,13 +3122,14 @@ export def "payment-requests findPaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lago_id: string, email: string, amount_cents: int, amount_currency: string, payment_status: string, created_at: string, customer: record<lago_id: string, sequential_id: int, slug: string, external_id: string, billing_entity_code: string, address_line1: string, address_line2: string, applicable_timezone: string, city: string, country: string, currency: string, email: string, legal_name: string, legal_number: string, logo_url: string, name: string, firstname: string, lastname: string, account_type: string, customer_type: string, phone: string, state: string, tax_identification_number: string, timezone: string, url: string, zipcode: string, net_payment_term: int, created_at: string, updated_at: string, finalize_zero_amount_invoice: string, skip_invoice_custom_sections: bool, billing_configuration: record<invoice_grace_period: int, subscription_invoice_issuing_date_anchor: string, subscription_invoice_issuing_date_adjustment: string, payment_provider: string, payment_provider_code: string, provider_customer_id: string, sync: bool, sync_with_provider: bool, document_locale: string, provider_payment_methods: list>, shipping_address: record<address_line1: string, address_line2: string, city: string, country: string, state: string, zipcode: string>, metadata: list<record>>, invoices: table<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, issuing_date: string, payment_dispute_lost_at: string, payment_due_date: string, payment_overdue: bool, net_payment_term: int, invoice_type: string, status: string, payment_status: string, currency: string, fees_amount_cents: int, coupons_amount_cents: int, credit_notes_amount_cents: int, sub_total_excluding_taxes_amount_cents: int, taxes_amount_cents: int, sub_total_including_taxes_amount_cents: int, prepaid_credit_amount_cents: int, prepaid_granted_credit_amount_cents: int, prepaid_purchased_credit_amount_cents: int, progressive_billing_credit_amount_cents: int, total_amount_cents: int, version_number: int, self_billed: bool, file_url: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payment_requests/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a payment
@@ -3031,6 +3145,7 @@ export def "payments createPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment: record # shape: {invoice_id: string, amount_cents: int, reference: string, paid_at?: string}
 ]: any -> record<payment: record<lago_id: string, lago_customer_id: string, external_customer_id: string, invoice_ids: list<string>, invoice_numbers: list<string>, lago_payable_id: string, payable_type: string, amount_cents: int, amount_currency: string, status: string, payment_status: string, type: string, reference: string, payment_provider_code: string, payment_provider_type: string, external_payment_id: string, provider_payment_id: string, provider_customer_id: string, payment_method_id: string, next_action: record, created_at: string>> {
   let input = $in
@@ -3041,7 +3156,7 @@ export def "payments createPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all payments
@@ -3056,6 +3171,7 @@ export def "payments findAllPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # Unique identifier assigned to the customer in your application. (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -3067,7 +3183,7 @@ export def "payments findAllPayments" [
   let full_url = (build-url $base "/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a payment
@@ -3083,13 +3199,14 @@ export def "payments findPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lago_id: string, lago_customer_id: string, external_customer_id: string, invoice_ids: list<string>, invoice_numbers: list<string>, lago_payable_id: string, payable_type: string, amount_cents: int, amount_currency: string, status: string, payment_status: string, type: string, reference: string, payment_provider_code: string, payment_provider_type: string, external_payment_id: string, provider_payment_id: string, provider_customer_id: string, payment_method_id: string, next_action: record, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payments/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a plan
@@ -3105,6 +3222,7 @@ export def "plans createPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan: record # shape: {name: string, invoice_display_name?: string, code: string, interval: "weekly"|"monthly"|"quarterly"|"semiannual"|"yearly", description?: string, amount_cents: int, amount_currency: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", trial_period?: float, pay_in_advance: bool, bill_charges_monthly?: bool, bill_fixed_charges_monthly?: bool, tax_codes?: list, minimum_commitment?: record, charges?: list, fixed_charges?: list, usage_thresholds?: list, metadata?: record}
 ]: any -> record<plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record<lago_id: string, plan_code: string, amount_cents: int, invoice_display_name: string, interval: string, created_at: string, updated_at: string, taxes: list>, charges: list<record>, fixed_charges: list<record>, taxes: list<record>, usage_thresholds: list<record>, entitlements: list<record>, metadata: record>> {
   let input = $in
@@ -3115,7 +3233,7 @@ export def "plans createPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all plans
@@ -3130,6 +3248,7 @@ export def "plans findAllPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<plans: table<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record, charges: list, fixed_charges: list, taxes: list, usage_thresholds: list, entitlements: list, metadata: record>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -3139,7 +3258,7 @@ export def "plans findAllPlans" [
   let full_url = (build-url $base "/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a plan
@@ -3156,6 +3275,7 @@ export def "plans updatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan: record # shape: {name?: string, invoice_display_name?: string, code?: string, interval?: "weekly"|"monthly"|"quarterly"|"semiannual"|"yearly", description?: string, amount_cents?: int, amount_currency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", trial_period?: float, pay_in_advance?: bool, bill_charges_monthly?: bool, bill_fixed_charges_monthly?: bool, tax_codes?: list, minimum_commitment?: record, charges?: list, fixed_charges?: list, usage_thresholds?: list, cascade_updates?: bool, metadata?: record}
 ]: any -> record<plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record<lago_id: string, plan_code: string, amount_cents: int, invoice_display_name: string, interval: string, created_at: string, updated_at: string, taxes: list>, charges: list<record>, fixed_charges: list<record>, taxes: list<record>, usage_thresholds: list<record>, entitlements: list<record>, metadata: record>> {
   let input = $in
@@ -3166,7 +3286,7 @@ export def "plans updatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a plan
@@ -3182,13 +3302,14 @@ export def "plans findPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record<lago_id: string, plan_code: string, amount_cents: int, invoice_display_name: string, interval: string, created_at: string, updated_at: string, taxes: list>, charges: list<record>, fixed_charges: list<record>, taxes: list<record>, usage_thresholds: list<record>, entitlements: list<record>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a plan
@@ -3204,13 +3325,14 @@ export def "plans destroyPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record<lago_id: string, plan_code: string, amount_cents: int, invoice_display_name: string, interval: string, created_at: string, updated_at: string, taxes: list>, charges: list<record>, fixed_charges: list<record>, taxes: list<record>, usage_thresholds: list<record>, entitlements: list<record>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an entitlement
@@ -3226,6 +3348,7 @@ export def "plans-entitlements createEntitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entitlements: record # Feature entitlements with their privilege values. Each key is a feature code, and the value is an object containing privilege codes with their associated values. (e.g. {seats: {max: 20, max_admins: 10, root: false}, sso: {provider: okta}})
 ]: any -> record<entitlements: table<code: string, name: string, description: string, privileges: list>> {
   let input = $in
@@ -3236,7 +3359,7 @@ export def "plans-entitlements createEntitlement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all entitlements
@@ -3252,13 +3375,14 @@ export def "plans-entitlements findAllEntitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entitlements: table<code: string, name: string, description: string, privileges: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/entitlements")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update of an entitlement
@@ -3274,6 +3398,7 @@ export def "plans-entitlements updateEntitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entitlements: record # Feature entitlements with their privilege values. Each key is a feature code, and the value is an object containing privilege codes with their associated values. (e.g. {seats: {max: 20, max_admins: 10, root: false}, sso: {provider: okta}})
 ]: any -> record<entitlements: table<code: string, name: string, description: string, privileges: list>> {
   let input = $in
@@ -3284,7 +3409,7 @@ export def "plans-entitlements updateEntitlement" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an entitlement
@@ -3301,13 +3426,14 @@ export def "plans-entitlements findEntitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entitlement: record<code: string, name: string, description: string, privileges: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/entitlements/($feature_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an entitlement
@@ -3324,13 +3450,14 @@ export def "plans-entitlements destroyEntitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entitlement: record<code: string, name: string, description: string, privileges: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/entitlements/($feature_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a privilege from an entitlement
@@ -3348,13 +3475,14 @@ export def "plans-entitlements-privileges removeEntitlementPrivilege" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entitlement: record<code: string, name: string, description: string, privileges: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/entitlements/($feature_code)/privileges/($privilege_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace plan metadata
@@ -3370,6 +3498,7 @@ export def "plans-metadata replacePlanMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -3380,7 +3509,7 @@ export def "plans-metadata replacePlanMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge plan metadata
@@ -3396,6 +3525,7 @@ export def "plans-metadata mergePlanMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -3406,7 +3536,7 @@ export def "plans-metadata mergePlanMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all plan metadata
@@ -3422,13 +3552,14 @@ export def "plans-metadata delete-by-code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a metadata key
@@ -3445,13 +3576,14 @@ export def "plans-metadata delete-by-code-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/metadata/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a charge
@@ -3467,6 +3599,7 @@ export def "plans-charges createPlanCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   charge: any
 ]: any -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
   let input = $in
@@ -3477,7 +3610,7 @@ export def "plans-charges createPlanCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all charges for a plan
@@ -3493,6 +3626,7 @@ export def "plans-charges findAllPlanCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<charges: table<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record, filters: list, taxes: list, applied_pricing_unit: record, accepts_target_wallet: bool, lago_parent_id: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -3502,7 +3636,7 @@ export def "plans-charges findAllPlanCharges" [
   let full_url = (build-url $base $"/plans/($code)/charges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a charge
@@ -3519,13 +3653,14 @@ export def "plans-charges findPlanCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/charges/($charge_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a charge
@@ -3542,6 +3677,7 @@ export def "plans-charges updatePlanCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   charge: any
 ]: any -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
   let input = $in
@@ -3552,7 +3688,7 @@ export def "plans-charges updatePlanCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a charge
@@ -3570,6 +3706,7 @@ export def "plans-charges destroyPlanCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --charge: record # shape: {cascade_updates?: bool}
 ]: any -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
   let input = $in
@@ -3580,7 +3717,7 @@ export def "plans-charges destroyPlanCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a charge filter
@@ -3598,6 +3735,7 @@ export def "plans-charges-filters createPlanChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {cascade_updates?: bool, invoice_display_name?: string, properties: record, values: record}
 ]: any -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let input = $in
@@ -3608,7 +3746,7 @@ export def "plans-charges-filters createPlanChargeFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all filters for a charge
@@ -3625,6 +3763,7 @@ export def "plans-charges-filters findAllPlanChargeFilters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<filters: table<lago_id: string, charge_code: string, invoice_display_name: string, properties: record, values: record>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -3634,7 +3773,7 @@ export def "plans-charges-filters findAllPlanChargeFilters" [
   let full_url = (build-url $base $"/plans/($code)/charges/($charge_code)/filters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a charge filter
@@ -3652,13 +3791,14 @@ export def "plans-charges-filters findPlanChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/charges/($charge_code)/filters/($filter_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a charge filter
@@ -3677,6 +3817,7 @@ export def "plans-charges-filters updatePlanChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {cascade_updates?: bool, invoice_display_name?: string, properties?: record, values?: record}
 ]: any -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let input = $in
@@ -3687,7 +3828,7 @@ export def "plans-charges-filters updatePlanChargeFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a charge filter
@@ -3706,6 +3847,7 @@ export def "plans-charges-filters destroyPlanChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # shape: {cascade_updates?: bool}
 ]: any -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let input = $in
@@ -3716,7 +3858,7 @@ export def "plans-charges-filters destroyPlanChargeFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a fixed charge
@@ -3732,6 +3874,7 @@ export def "plans-fixed-charges createPlanFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fixed_charge: any
 ]: any -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
   let input = $in
@@ -3742,7 +3885,7 @@ export def "plans-fixed-charges createPlanFixedCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all fixed charges for a plan
@@ -3758,6 +3901,7 @@ export def "plans-fixed-charges findAllPlanFixedCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<fixed_charges: table<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record, units: float, lago_parent_id: string, taxes: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -3767,7 +3911,7 @@ export def "plans-fixed-charges findAllPlanFixedCharges" [
   let full_url = (build-url $base $"/plans/($code)/fixed_charges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a fixed charge
@@ -3784,13 +3928,14 @@ export def "plans-fixed-charges findPlanFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($code)/fixed_charges/($fixed_charge_code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a fixed charge
@@ -3807,6 +3952,7 @@ export def "plans-fixed-charges updatePlanFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fixed_charge: any
 ]: any -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
   let input = $in
@@ -3817,7 +3963,7 @@ export def "plans-fixed-charges updatePlanFixedCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a fixed charge
@@ -3835,6 +3981,7 @@ export def "plans-fixed-charges destroyPlanFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fixed-charge: record # shape: {cascade_updates?: bool}
 ]: any -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
   let input = $in
@@ -3845,7 +3992,7 @@ export def "plans-fixed-charges destroyPlanFixedCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign a plan to a customer
@@ -3862,6 +4009,7 @@ export def "subscriptions createSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: record # Optionally, you can create a pre-authorization on the customer's card before creating a subscription. This process places a temporary hold (capture) for a specified amount on the customer's account, but does not actually withdraw the funds.  Important notes:   - The final amount due for the subscription is not known at the time of creation; it is determined only after the invoice is finalized.   - The payment intent generated for pre-authorization cannot be reused, as the final invoice amount may exceed the authorized amount.   - The payment intent is canceled immediately after creation, but this cancellation occurs asynchronously.   - For these reasons, it is recommended to use a small amount (such as $1) for pre-authorization. While this does not guarantee sufficient funds for the final payment, it helps reduce the likelihood of payment errors. — shape: {amount_cents: int, amount_currency: string}
   subscription: record # shape: {billing_entity_code?: string, external_customer_id: string, plan_code: string, name?: string, external_id: string, billing_time?: "calendar"|"anniversary", ending_at?: string, subscription_at?: string, plan_overrides?: record, invoice_custom_section?: record, payment_method?: record, consolidate_invoice?: bool}
 ]: any -> record<subscription: record<lago_id: string, external_id: string, lago_customer_id: string, external_customer_id: string, billing_time: string, name: string, plan_code: string, plan_amount_cents: int, plan_amount_currency: string, status: string, created_at: string, canceled_at: string, started_at: string, ending_at: string, subscription_at: string, terminated_at: string, previous_plan_code: string, next_plan_code: string, downgrade_plan_date: string, trial_ended_at: string, current_billing_period_started_at: string, current_billing_period_ending_at: string, on_termination_credit_note: string, on_termination_invoice: string, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, consolidate_invoice: bool, plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record, charges: list, fixed_charges: list, taxes: list, usage_thresholds: list, entitlements: list, metadata: record>, applicable_usage_thresholds: list<record>>> {
@@ -3873,7 +4021,7 @@ export def "subscriptions createSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all subscriptions
@@ -3888,6 +4036,7 @@ export def "subscriptions findAllSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # The customer external unique identifier (provided by your own application) (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -3900,7 +4049,7 @@ export def "subscriptions findAllSubscriptions" [
   let full_url = (build-url $base "/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a subscription
@@ -3916,6 +4065,7 @@ export def "subscriptions findSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # By default, this endpoint only return `active` subscriptions. If you want to retrieve a subscription with a different `status`, you can specify it here.  _Note: As there may exists multiple `canceled` or `terminated` subscribtions for the same `external_id`, it is recommended to use the "List all subscriptions" endpoint to retrieve those subscriptions._  (default: active, e.g. active)
 ]: nothing -> record<subscription: record<lago_id: string, external_id: string, lago_customer_id: string, external_customer_id: string, billing_time: string, name: string, plan_code: string, plan_amount_cents: int, plan_amount_currency: string, status: string, created_at: string, canceled_at: string, started_at: string, ending_at: string, subscription_at: string, terminated_at: string, previous_plan_code: string, next_plan_code: string, downgrade_plan_date: string, trial_ended_at: string, current_billing_period_started_at: string, current_billing_period_ending_at: string, on_termination_credit_note: string, on_termination_invoice: string, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, consolidate_invoice: bool, plan: record<lago_id: string, name: string, invoice_display_name: string, created_at: string, code: string, interval: string, description: string, amount_cents: int, amount_currency: string, trial_period: float, pay_in_advance: bool, bill_charges_monthly: bool, bill_fixed_charges_monthly: bool, minimum_commitment: record, charges: list, fixed_charges: list, taxes: list, usage_thresholds: list, entitlements: list, metadata: record>, applicable_usage_thresholds: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3924,7 +4074,7 @@ export def "subscriptions findSubscription" [
   let full_url = (build-url $base $"/subscriptions/($external_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription
@@ -3941,6 +4091,7 @@ export def "subscriptions updateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-3 # By default, this endpoint only return `active` subscriptions. If you want to update a subscription with a different `status`, you can specify it here.  (default: active, e.g. active)
   --status: string@status-completer-3 # If the field is not defined and multiple `active` and `pending` subscriptions exists, Lago will update the `active` subscription. However, if you wish to update a `pending` subscription, please ensure that you include the `status` attribute with the `pending` value in your request body. (e.g. active)
   subscription: record # shape: {name?: string, ending_at: string, subscription_at?: string, plan_overrides?: record, invoice_custom_section?: record, payment_method?: record, consolidate_invoice?: bool}
@@ -3954,7 +4105,7 @@ export def "subscriptions updateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Terminate a subscription
@@ -3970,6 +4121,7 @@ export def "subscriptions destroySubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # If the field is not defined, Lago will terminate only `active` subscriptions. However, if you wish to cancel a `pending` subscription, please ensure that you include `status=pending` in your request. (e.g. pending)
   --on-termination-credit-note: string@on-termination-credit-note-completer # When a pay-in-advance subscription is terminated before the end of its billing period, we generate a credit note for the unused subscription time by default. This field allows you to control the behavior of the credit note generation:  - `credit`: A credit note is generated for the unused subscription time. The unused amount is credited back to the customer. - `refund`: A credit note is generated for the unused subscription time. If the invoice is paid or partially paid, the unused paid amount is refunded; any unpaid unused amount is credited back to the customer. - `skip`: No credit note is generated for the unused subscription time.  _Note: This field is only applicable to pay-in-advance plans and is ignored for pay-in-arrears plans._  (e.g. credit)
   --on-termination-invoice: string@on-termination-invoice-completer # When a subscription is terminated before the end of its billing period, we generate an invoice for the unbilled usage. This field allows you to control the behavior of the invoice generation:  - `generate`: An invoice is generated for the unbilled usage. - `skip`: No invoice is generated for the unbilled usage.  (e.g. generate)
@@ -3980,7 +4132,7 @@ export def "subscriptions destroySubscription" [
   let full_url = (build-url $base $"/subscriptions/($external_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve subscription lifetime usage
@@ -3996,13 +4148,14 @@ export def "subscriptions-lifetime-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lifetime_usage: record<lago_id: string, lago_subscription_id: string, external_subscription_id: string, external_historical_usage_amount_cents: int, invoiced_usage_amount_cents: int, current_usage_amount_cents: int, from_datetime: string, to_datetime: string, usage_thresholds: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($external_id)/lifetime_usage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription lifetime usage
@@ -4019,6 +4172,7 @@ export def "subscriptions-lifetime-usage updateSubscriptionLifetimeUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   lifetime_usage: record # shape: {external_historical_usage_amount_cents: int}
 ]: any -> record<lifetime_usage: record<lago_id: string, lago_subscription_id: string, external_subscription_id: string, external_historical_usage_amount_cents: int, invoiced_usage_amount_cents: int, current_usage_amount_cents: int, from_datetime: string, to_datetime: string, usage_thresholds: list<record>>> {
   let input = $in
@@ -4029,7 +4183,7 @@ export def "subscriptions-lifetime-usage updateSubscriptionLifetimeUsage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List subscription alerts
@@ -4045,6 +4199,7 @@ export def "subscriptions-alerts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<alerts: table<lago_id: string, lago_organization_id: string, external_subscription_id: string, lago_wallet_id: any, wallet_code: any, billable_metric: record, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4053,7 +4208,7 @@ export def "subscriptions-alerts list" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create subscription alert(s)
@@ -4070,6 +4225,7 @@ export def "subscriptions-alerts createSubscriptionAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   --alert: any
   --alerts: list # Array of alerts to create. All alerts are created atomically - if any fail validation, none are created. — item shape: {code: string, name?: string, thresholds: list, alert_type: "current_usage_amount"|"billable_metric_current_usage_amount"|"billable_metric_current_usage_units"|"lifetime_usage_amount", billable_metric_code?: string}
@@ -4083,7 +4239,7 @@ export def "subscriptions-alerts createSubscriptionAlert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all subscription alerts
@@ -4099,6 +4255,7 @@ export def "subscriptions-alerts delete-by-external_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4107,7 +4264,7 @@ export def "subscriptions-alerts delete-by-external_id" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a subscription alert
@@ -4124,6 +4281,7 @@ export def "subscriptions-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: string, lago_wallet_id: any, wallet_code: any, billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list>, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4132,7 +4290,7 @@ export def "subscriptions-alerts get" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/alerts/($code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription alert
@@ -4149,6 +4307,7 @@ export def "subscriptions-alerts updateSubscriptionAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   alert: any
 ]: any -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: string, lago_wallet_id: any, wallet_code: any, billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list>, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
@@ -4161,7 +4320,7 @@ export def "subscriptions-alerts updateSubscriptionAlert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a subscription alert
@@ -4178,6 +4337,7 @@ export def "subscriptions-alerts delete-by-external_id-code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<alert: record<lago_id: string, lago_organization_id: string, external_subscription_id: string, lago_wallet_id: any, wallet_code: any, billable_metric: record<lago_id: string, name: string, code: string, description: string, recurring: bool, rounding_function: string, rounding_precision: int, created_at: string, expression: string, field_name: string, aggregation_type: string, weighted_interval: string, filters: list>, alert_type: string, code: string, name: string, direction: string, previous_value: float, last_processed_at: string, thresholds: list<record>, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4186,7 +4346,7 @@ export def "subscriptions-alerts delete-by-external_id-code" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/alerts/($code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all subscription entitlements
@@ -4202,6 +4362,7 @@ export def "subscriptions-entitlements findAllSubscriptionEntitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<entitlements: table<code: string, name: string, description: string, privileges: list, overrides: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4210,7 +4371,7 @@ export def "subscriptions-entitlements findAllSubscriptionEntitlements" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/entitlements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update subscription entitlements
@@ -4226,6 +4387,7 @@ export def "subscriptions-entitlements updateSubscriptionEntitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   entitlements: record # Feature entitlements with their privilege values. Each key is a feature code, and the value is an object containing privilege codes with their associated values. (e.g. {seats: {max: 20, max_admins: 10, root: false}, sso: {provider: okta}})
 ]: any -> record<entitlements: table<code: string, name: string, description: string, privileges: list, overrides: record>> {
@@ -4238,7 +4400,7 @@ export def "subscriptions-entitlements updateSubscriptionEntitlements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an entitlement from a subscription
@@ -4255,6 +4417,7 @@ export def "subscriptions-entitlements destroySubscriptionEntitlement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<entitlement: record<code: string, name: string, description: string, privileges: list<record>, overrides: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4263,7 +4426,7 @@ export def "subscriptions-entitlements destroySubscriptionEntitlement" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/entitlements/($feature_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a privilege from a subscription entitlement override
@@ -4281,6 +4444,7 @@ export def "subscriptions-entitlements-privileges destroySubscriptionEntitlement
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<entitlement: record<code: string, name: string, description: string, privileges: list<record>, overrides: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4289,7 +4453,7 @@ export def "subscriptions-entitlements-privileges destroySubscriptionEntitlement
   let full_url = (build-url $base $"/subscriptions/($external_id)/entitlements/($feature_code)/privileges/($privilege_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all fixed charges for a subscription
@@ -4305,6 +4469,7 @@ export def "subscriptions-fixed-charges findAllSubscriptionFixedCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
@@ -4315,7 +4480,7 @@ export def "subscriptions-fixed-charges findAllSubscriptionFixedCharges" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/fixed_charges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all charges for a subscription
@@ -4331,6 +4496,7 @@ export def "subscriptions-charges findAllSubscriptionCharges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
@@ -4341,7 +4507,7 @@ export def "subscriptions-charges findAllSubscriptionCharges" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/charges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a charge for a subscription
@@ -4358,6 +4524,7 @@ export def "subscriptions-charges findSubscriptionCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4366,7 +4533,7 @@ export def "subscriptions-charges findSubscriptionCharge" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/charges/($charge_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Override a charge for a subscription
@@ -4384,6 +4551,7 @@ export def "subscriptions-charges overrideSubscriptionCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   charge: record # Properties of a charge that can be overridden at the subscription level. — shape: {invoice_display_name?: string, min_amount_cents?: int, properties?: any, filters?: list, tax_codes?: list, applied_pricing_unit?: record}
 ]: any -> record<charge: record<lago_id: string, lago_billable_metric_id: string, code: string, billable_metric_code: string, invoice_display_name: string, created_at: string, charge_model: string, pay_in_advance: bool, invoiceable: bool, regroup_paid_fees: string, prorated: bool, min_amount_cents: int, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list, presentation_group_keys: list>, filters: list<record>, taxes: list<record>, applied_pricing_unit: record<code: string, conversion_rate: string>, accepts_target_wallet: bool, lago_parent_id: string>> {
@@ -4396,7 +4564,7 @@ export def "subscriptions-charges overrideSubscriptionCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a charge filter
@@ -4414,6 +4582,7 @@ export def "subscriptions-charges-filters createSubscriptionChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   filter: record # shape: {cascade_updates?: bool, invoice_display_name?: string, properties: record, values: record}
 ]: any -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
@@ -4426,7 +4595,7 @@ export def "subscriptions-charges-filters createSubscriptionChargeFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all filters for a charge
@@ -4443,6 +4612,7 @@ export def "subscriptions-charges-filters findAllSubscriptionChargeFilters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
@@ -4453,7 +4623,7 @@ export def "subscriptions-charges-filters findAllSubscriptionChargeFilters" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/charges/($charge_code)/filters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a charge filter
@@ -4471,6 +4641,7 @@ export def "subscriptions-charges-filters findSubscriptionChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4479,7 +4650,7 @@ export def "subscriptions-charges-filters findSubscriptionChargeFilter" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/charges/($charge_code)/filters/($filter_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a charge filter
@@ -4498,6 +4669,7 @@ export def "subscriptions-charges-filters updateSubscriptionChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   filter: record # shape: {cascade_updates?: bool, invoice_display_name?: string, properties?: record, values?: record}
 ]: any -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
@@ -4510,7 +4682,7 @@ export def "subscriptions-charges-filters updateSubscriptionChargeFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a charge filter
@@ -4528,6 +4700,7 @@ export def "subscriptions-charges-filters destroySubscriptionChargeFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<filter: record<lago_id: string, charge_code: string, invoice_display_name: string, properties: record<grouped_by: list, pricing_group_keys: list, graduated_ranges: list, graduated_percentage_ranges: list, amount: string, free_units: int, package_size: int, rate: string, fixed_amount: string, free_units_per_events: int, free_units_per_total_aggregation: string, per_transaction_max_amount: string, per_transaction_min_amount: string, volume_ranges: list>, values: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4536,7 +4709,7 @@ export def "subscriptions-charges-filters destroySubscriptionChargeFilter" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/charges/($charge_code)/filters/($filter_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a fixed charge for a subscription
@@ -4553,6 +4726,7 @@ export def "subscriptions-fixed-charges findSubscriptionFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
 ]: nothing -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4561,7 +4735,7 @@ export def "subscriptions-fixed-charges findSubscriptionFixedCharge" [
   let full_url = (build-url $base $"/subscriptions/($external_id)/fixed_charges/($fixed_charge_code)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Override a fixed charge for a subscription
@@ -4579,6 +4753,7 @@ export def "subscriptions-fixed-charges overrideSubscriptionFixedCharge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-status: string@subscription-status-completer # Filter by subscription status. When provided, the subscription is looked up with this status instead of the default `active` status. Possible values are `pending`, `active`, `terminated`, or `canceled`.  (default: active, e.g. active)
   fixed_charge: record # Properties of a fixed charge that can be overridden at the subscription level. — shape: {invoice_display_name?: string, units?: string, apply_units_immediately?: bool, properties?: record, tax_codes?: list}
 ]: any -> record<fixed_charge: record<lago_id: string, lago_add_on_id: string, invoice_display_name: string, add_on_code: string, created_at: string, code: string, charge_model: string, pay_in_advance: bool, prorated: bool, properties: record<amount: string, graduated_ranges: list, volume_ranges: list>, units: float, lago_parent_id: string, taxes: list<record>>> {
@@ -4591,7 +4766,7 @@ export def "subscriptions-fixed-charges overrideSubscriptionFixedCharge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a tax
@@ -4607,6 +4782,7 @@ export def "taxes createTax" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tax: record # shape: {name?: string, code?: string, rate?: string, description?: string, applied_to_organization?: bool}
 ]: any -> record<tax: record<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>> {
   let input = $in
@@ -4617,7 +4793,7 @@ export def "taxes createTax" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all taxes
@@ -4632,6 +4808,7 @@ export def "taxes findAllTaxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<taxes: table<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -4641,7 +4818,7 @@ export def "taxes findAllTaxes" [
   let full_url = (build-url $base "/taxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a tax
@@ -4658,6 +4835,7 @@ export def "taxes updateTax" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tax: record # shape: {name?: string, code?: string, rate?: string, description?: string, applied_to_organization?: bool}
 ]: any -> record<tax: record<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>> {
   let input = $in
@@ -4668,7 +4846,7 @@ export def "taxes updateTax" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Tax
@@ -4684,13 +4862,14 @@ export def "taxes findTax" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tax: record<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/taxes/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tax
@@ -4706,13 +4885,14 @@ export def "taxes destroyTax" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tax: record<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/taxes/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a wallet
@@ -4728,6 +4908,7 @@ export def "wallets createWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wallet: record # shape: {name?: string, code?: string, priority?: int, rate_amount: string, currency: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"ISK"|"JMD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KRW"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"STD"|"SZL"|"THB"|"TJS"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW", paid_credits?: string, granted_credits?: string, external_customer_id: string, expiration_at?: string, invoice_requires_successful_payment?: bool, transaction_metadata?: list, transaction_name?: string, applies_to?: record, paid_top_up_min_amount_cents?: int, paid_top_up_max_amount_cents?: int, ignore_paid_top_up_limits_on_creation?: bool, invoice_custom_section?: record, recurring_transaction_rules?: list, payment_method?: record, metadata?: record}
 ]: any -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let input = $in
@@ -4738,7 +4919,7 @@ export def "wallets createWallet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all wallets
@@ -4753,6 +4934,7 @@ export def "wallets findAllWallets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --external-customer-id: string # The customer external unique identifier (provided by your own application). (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
@@ -4763,7 +4945,7 @@ export def "wallets findAllWallets" [
   let full_url = (build-url $base "/wallets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a wallet
@@ -4780,6 +4962,7 @@ export def "wallets updateWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   wallet: record # shape: {name?: string, code?: string, priority?: int, expiration_at?: string, invoice_requires_successful_payment?: bool, invoice_custom_section?: record, recurring_transaction_rules?: list, payment_method?: record, applies_to?: record, metadata?: record}
 ]: any -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let input = $in
@@ -4790,7 +4973,7 @@ export def "wallets updateWallet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a wallet
@@ -4806,13 +4989,14 @@ export def "wallets findWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallets/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Terminate a wallet
@@ -4828,13 +5012,14 @@ export def "wallets destroyWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wallet: record<lago_id: string, lago_customer_id: string, external_customer_id: string, status: string, currency: string, name: string, code: string, priority: int, rate_amount: string, credits_balance: string, balance_cents: int, consumed_credits: string, created_at: string, expiration_at: string, last_balance_sync_at: string, last_consumed_credit_at: string, terminated_at: string, invoice_requires_successful_payment: bool, applies_to: record<fee_types: list, billable_metric_codes: list>, recurring_transaction_rules: list<record>, ongoing_balance_cents: int, ongoing_usage_balance_cents: int, credits_ongoing_balance: string, credits_ongoing_usage_balance: string, paid_top_up_min_amount_cents: int, paid_top_up_max_amount_cents: int, applied_invoice_custom_sections: list<record>, payment_method: record<payment_method_type: string, payment_method_id: string>, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallets/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace wallet metadata
@@ -4850,6 +5035,7 @@ export def "wallets-metadata replaceWalletMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -4860,7 +5046,7 @@ export def "wallets-metadata replaceWalletMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge wallet metadata
@@ -4876,6 +5062,7 @@ export def "wallets-metadata mergeWalletMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Custom metadata stored as key-value pairs. Keys are strings (max 100 characters), values can be strings (max 255 characters) or null. (nullable, e.g. {external_id: ext-123, synced_at: 2024-01-15, source: })
 ]: any -> record<metadata: record> {
   let input = $in
@@ -4886,7 +5073,7 @@ export def "wallets-metadata mergeWalletMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all wallet metadata
@@ -4902,13 +5089,14 @@ export def "wallets-metadata delete-by-lago_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallets/($lago_id)/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a metadata key
@@ -4925,13 +5113,14 @@ export def "wallets-metadata delete-by-lago_id-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallets/($lago_id)/metadata/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top up a wallet
@@ -4947,6 +5136,7 @@ export def "wallet-transactions createWalletTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   wallet_transaction: record # shape: {wallet_id: string, name?: string, paid_credits?: string, granted_credits?: string, voided_credits?: string, invoice_requires_successful_payment?: bool, ignore_paid_top_up_limits?: bool, invoice_custom_section?: record, payment_method?: record, metadata?: list}
 ]: any -> record<wallet_transactions: table<lago_id: string, lago_wallet_id: string, lago_invoice_id: string, lago_credit_note_id: string, lago_voided_invoice_id: string, status: string, source: string, transaction_status: string, transaction_type: string, amount: string, credit_amount: string, invoice_requires_successful_payment: bool, metadata: list, remaining_amount_cents: int, remaining_credit_amount: string, priority: int, settled_at: string, failed_at: string, created_at: string, name: string, applied_invoice_custom_sections: list, payment_method: record>> {
   let input = $in
@@ -4957,7 +5147,7 @@ export def "wallet-transactions createWalletTransaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a wallet transaction
@@ -4973,13 +5163,14 @@ export def "wallet-transactions findWalletTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lago_id: string, lago_wallet_id: string, lago_invoice_id: string, lago_credit_note_id: string, lago_voided_invoice_id: string, status: string, source: string, transaction_status: string, transaction_type: string, amount: string, credit_amount: string, invoice_requires_successful_payment: bool, metadata: table<key: string, value: string>, remaining_amount_cents: int, remaining_credit_amount: string, priority: int, settled_at: string, failed_at: string, created_at: string, name: string, applied_invoice_custom_sections: table<lago_id: string, created_at: string, invoice_custom_section_id: string, invoice_custom_section: record>, payment_method: record<payment_method_type: string, payment_method_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallet_transactions/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a payment URL
@@ -4995,13 +5186,14 @@ export def "wallet-transactions-payment-url walletTransactionPaymentUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wallet_transaction_payment_details: record<lago_customer_id: string, lago_wallet_transaction_id: string, external_customer_id: string, payment_provider: string, payment_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wallet_transactions/($lago_id)/payment_url")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all consumptions for a wallet transaction
@@ -5017,6 +5209,7 @@ export def "wallet-transactions-consumptions findAllWalletTransactionConsumption
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<wallet_transaction_consumptions: table<lago_id: string, amount_cents: int, credit_amount: string, created_at: string, wallet_transaction: record>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -5026,7 +5219,7 @@ export def "wallet-transactions-consumptions findAllWalletTransactionConsumption
   let full_url = (build-url $base $"/wallet_transactions/($lago_id)/consumptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all fundings for a wallet transaction
@@ -5042,6 +5235,7 @@ export def "wallet-transactions-fundings findAllWalletTransactionFundings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<wallet_transaction_fundings: table<lago_id: string, amount_cents: int, credit_amount: string, created_at: string, wallet_transaction: record>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -5051,7 +5245,7 @@ export def "wallet-transactions-fundings findAllWalletTransactionFundings" [
   let full_url = (build-url $base $"/wallet_transactions/($lago_id)/fundings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all wallet transactions
@@ -5067,6 +5261,7 @@ export def "wallets-wallet-transactions findAllWalletTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
   --status: string # The status of the wallet transaction. Possible values are `pending` or `settled`. (e.g. pending)
@@ -5079,7 +5274,7 @@ export def "wallets-wallet-transactions findAllWalletTransactions" [
   let full_url = (build-url $base $"/wallets/($lago_id)/wallet_transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve webhook public key
@@ -5094,13 +5289,14 @@ export def "webhooks-public-key fetchPublicKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/public_key")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook_endpoint
@@ -5116,6 +5312,7 @@ export def "webhook-endpoints createWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook-endpoint: record # shape: {webhook_url: string, signature_algo?: "jwt"|"hmac"|""}
 ]: any -> record<webhook_endpoint: record<lago_id: string, lago_organization_id: string, webhook_url: string, signature_algo: string, created_at: string>> {
   let input = $in
@@ -5126,7 +5323,7 @@ export def "webhook-endpoints createWebhookEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all webhook endpoints
@@ -5141,6 +5338,7 @@ export def "webhook-endpoints findAllWebhookEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 1)
   --per-page: int # Number of records per page. (e.g. 20)
 ]: nothing -> record<webhook_endpoints: table<lago_id: string, lago_organization_id: string, webhook_url: string, signature_algo: string, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -5150,7 +5348,7 @@ export def "webhook-endpoints findAllWebhookEndpoints" [
   let full_url = (build-url $base "/webhook_endpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook endpoint
@@ -5167,6 +5365,7 @@ export def "webhook-endpoints updateWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook-endpoint: record # shape: {webhook_url: string, signature_algo?: "jwt"|"hmac"|""}
 ]: any -> record<webhook_endpoint: record<lago_id: string, lago_organization_id: string, webhook_url: string, signature_algo: string, created_at: string>> {
   let input = $in
@@ -5177,7 +5376,7 @@ export def "webhook-endpoints updateWebhookEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a webhook endpoint
@@ -5193,13 +5392,14 @@ export def "webhook-endpoints findWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhook_endpoint: record<lago_id: string, lago_organization_id: string, webhook_url: string, signature_algo: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhook_endpoints/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook endpoint
@@ -5215,11 +5415,12 @@ export def "webhook-endpoints destroyWebhookEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhook_endpoint: record<lago_id: string, lago_organization_id: string, webhook_url: string, signature_algo: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/webhook_endpoints/($lago_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

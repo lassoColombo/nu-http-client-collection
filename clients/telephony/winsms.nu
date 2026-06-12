@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "credits-balance get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,13 +101,14 @@ export def "credits-balance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creditBalance: float, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credits/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer credits between main and sub accounts.
@@ -121,6 +123,7 @@ export def "credits-transfer transferCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   receivingAccountNumber: int # The WinSMS account number of the account to which credits will be added. (e.g. 10345)
   sendingAccountNumber: int # The WinSMS account number of the account from which credits will be deducted. (e.g. 7564)
   transferQuantity: int # The number of credits to transfer from the sending account to the receiving account. (e.g. 100)
@@ -133,7 +136,7 @@ export def "credits-transfer transferCredits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of incoming short/long code messages
@@ -148,6 +151,7 @@ export def "shortcode-incoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
   --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
 ]: nothing -> record<resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, shortcodeMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, receiveTime: string>, statusCode: int, timeStamp: string, version: string> {
@@ -157,7 +161,7 @@ export def "shortcode-incoming get" [
   let full_url = (build-url $base "/shortcode/incoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of incoming SMS messages
@@ -172,6 +176,7 @@ export def "sms-incoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
   --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
 ]: nothing -> record<incomingMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, outgoingApiMessageId: float, receiveTime: string>, resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, statusCode: int, timeStamp: string, version: string> {
@@ -181,7 +186,7 @@ export def "sms-incoming get" [
   let full_url = (build-url $base "/sms/incoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of incoming opt-out SMS messages
@@ -196,13 +201,14 @@ export def "sms-incoming-optout get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incomingOptoutMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, receiveTime: string>, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/incoming/optout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send SMS messages
@@ -218,6 +224,7 @@ export def "sms-outgoing-send smsSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxSegments: int # ***Optional*** - The maximum [GSM Encoded segment count]("https://support.winsms.co.za/rest/GSM") that the message is allowed to utilise.  This defaults to 1, allowing for a maximum GSM Encoded message length of 160 characters.  The maximum value is 6, which allows for a GSM Encoded message length of 918 characters.  If you intend to send a message longer than 160 characters, this value should be specified.  (default: 1, e.g. 3)
   message: string # The SMS text to be sent. (e.g. Happy holidays from all at TelAmeriCorp.)
   recipients: list # An array of messageRecipientDetails objects. — item shape: {clientMessageId?: string, mobileNumber: string}
@@ -231,7 +238,7 @@ export def "sms-outgoing-send smsSend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send multiple different SMS messages
@@ -247,6 +254,7 @@ export def "sms-outgoing-sendmulti smsSendBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messages: list # item shape: {maxSegments?: int, message: string, recipients: list, scheduledTime?: string}
 ]: any -> record<messages: table<message: string, recipients: list>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
@@ -257,7 +265,7 @@ export def "sms-outgoing-sendmulti smsSendBatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SMS delivery statuses
@@ -272,6 +280,7 @@ export def "sms-outgoing-status smsStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<messageStatuses: table<apiMessageId: int, creditCost: float, mobileNumber: string, statusDelivered: bool, statusErrorCode: string, statusTime: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
@@ -281,7 +290,7 @@ export def "sms-outgoing-status smsStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of scheduled SMS messages
@@ -296,6 +305,7 @@ export def "sms-scheduled get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
   --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
 ]: nothing -> record<resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, scheduledMessages: table<apiMessageId: int, creditCost: float, mobileNumber: string, scheduledSendTime: string, submitTime: string>, statusCode: int, timeStamp: string, version: string> {
@@ -305,7 +315,7 @@ export def "sms-scheduled get" [
   let full_url = (build-url $base "/sms/scheduled" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete scheduled SMS messages and refund credits
@@ -320,6 +330,7 @@ export def "sms-scheduled-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<deletedMessageStatuses: table<apiMessageId: int, creditCost: float, deleteError: string, deleted: bool, mobileNumber: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
@@ -329,7 +340,7 @@ export def "sms-scheduled-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of all Sub Accounts.
@@ -344,11 +355,12 @@ export def "subaccounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<statusCode: int, subAccounts: table<accountNumber: int, creditBalance: float, firstName: string, loginName: string, surname: string>, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

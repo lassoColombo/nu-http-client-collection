@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-container-instance-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "providers-microsoft-container-instance-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,7 +110,7 @@ export def "providers-microsoft-container-instance-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.ContainerInstance/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of container groups in the specified subscription.
@@ -124,6 +126,7 @@ export def "subscriptions-providers-microsoft-container-instance-container-group
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, tags: record, type: string, identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -132,7 +135,7 @@ export def "subscriptions-providers-microsoft-container-instance-container-group
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ContainerInstance/containerGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of cached images.
@@ -149,6 +152,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-cache
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<nextLink: string, value: table<id: string, image: string, osType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -157,7 +161,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-cache
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ContainerInstance/locations/($location)/cachedImages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of capabilities of the location.
@@ -174,6 +178,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-capab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<nextLink: string, value: table<capabilities: record, gpu: string, ipAddressType: string, location: string, osType: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -182,7 +187,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-capab
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ContainerInstance/locations/($location)/capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the usage for a subscription
@@ -199,6 +204,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-usage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<value: table<currentValue: int, limit: int, name: record, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -207,7 +213,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-usage
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ContainerInstance/locations/($location)/usages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of container groups in the specified subscription and resource group.
@@ -224,6 +230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, tags: record, type: string, identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -232,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specified container group.
@@ -250,6 +257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<id: string, location: string, name: string, tags: record, type: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<containers: list<record>, diagnostics: record<logAnalytics: record>, dnsConfig: record<nameServers: list, options: string, searchDomains: string>, imageRegistryCredentials: list<record>, instanceView: record<events: list, state: string>, ipAddress: record<dnsNameLabel: string, fqdn: string, ip: string, ports: list, type: string>, networkProfile: record<id: string>, osType: string, provisioningState: string, restartPolicy: string, volumes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -258,7 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the properties of the specified container group.
@@ -276,6 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<id: string, location: string, name: string, tags: record, type: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<containers: list<record>, diagnostics: record<logAnalytics: record>, dnsConfig: record<nameServers: list, options: string, searchDomains: string>, imageRegistryCredentials: list<record>, instanceView: record<events: list, state: string>, ipAddress: record<dnsNameLabel: string, fqdn: string, ip: string, ports: list, type: string>, networkProfile: record<id: string>, osType: string, provisioningState: string, restartPolicy: string, volumes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -284,7 +293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update container groups.
@@ -302,6 +311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
   --location: string # The resource location.
   --tags: record # The resource tags.
@@ -315,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update container groups.
@@ -335,6 +345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
   --location: string # The resource location.
   --tags: record # The resource tags.
@@ -350,7 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Executes a command in a specific container instance.
@@ -370,6 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
   --command: string # The command to be executed.
   --terminalSize: record # The size of the terminal. — shape: {cols?: int, rows?: int}
@@ -383,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the logs for a specified container instance.
@@ -402,6 +414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
   --tail: int # The number of lines to show from the tail of the container instance log. If not provided, all available logs are shown up to 4mb.
 ]: nothing -> record<content: string> {
@@ -411,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)/containers/($containerName)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restarts all containers in a container group.
@@ -429,6 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -437,7 +451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)/restart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts all containers in a container group.
@@ -455,6 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -463,7 +478,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)/start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops all containers in a container group.
@@ -481,6 +496,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -489,7 +505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerInstance/containerGroups/($containerGroupName)/stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the container instance service association link for the subnet.
@@ -508,6 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -516,5 +533,5 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)/providers/Microsoft.ContainerInstance/serviceAssociationLinks/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

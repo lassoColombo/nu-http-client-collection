@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -80,7 +81,7 @@ def sort-completer-3 [] { ["added" "artist" "catno" "format" "label" "rating" "t
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "database-search searchDatabase" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "database-search searchDatabase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Your search query. (e.g. The Cure)
   --type: string@type-completer # The type of resource to search for.
   --title: string # Search by combined "Artist Name - Release Title" field. (e.g. The Cure - Disintegration)
@@ -140,7 +142,7 @@ export def "database-search searchDatabase" [
   let full_url = (build-url $base "/database/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a release
@@ -156,6 +158,7 @@ export def "releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --curr-abbr: string@curr-abbr-completer # Currency for marketplace data.
 ]: nothing -> record<id: int, title: string, resource_url: string, uri: string, status: string, data_quality: string, thumb: string, country: string, year: int, notes: string, released: string, released_formatted: string, date_added: string, date_changed: string, lowest_price: float, num_for_sale: int, estimated_weight: int, format_quantity: int, master_id: int, master_url: string, artists: table<id: int, name: string, resource_url: string, anv: string, join: string, role: string, tracks: string>, labels: table<id: int, name: string, resource_url: string, catno: string, entity_type: string>, extraartists: table<id: int, name: string, resource_url: string, anv: string, join: string, role: string, tracks: string>, formats: table<name: string, qty: string, text: string, descriptions: list>, genres: list<string>, styles: list<string>, community: record<have: int, want: int, rating: record<count: int, average: float>, submitter: record<id: int, username: string, resource_url: string>, contributors: list<record>, data_quality: string, status: string>, companies: table<id: int, name: string, resource_url: string, catno: string, entity_type: string>, tracklist: table<position: string, type_: string, title: string, duration: string, extraartists: list>, videos: table<uri: string, duration: int, title: string, description: string, embed: bool>, identifiers: table<type: string, value: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -164,7 +167,7 @@ export def "releases get" [
   let full_url = (build-url $base $"/releases/($release_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a master release
@@ -180,13 +183,14 @@ export def "masters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/masters/($master_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get master release versions
@@ -202,6 +206,7 @@ export def "masters-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
   --format: string # Filter by format.
@@ -217,7 +222,7 @@ export def "masters-versions get" [
   let full_url = (build-url $base $"/masters/($master_id)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an artist
@@ -233,13 +238,14 @@ export def "artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, realname: string, resource_url: string, uri: string, releases_url: string, profile: string, urls: list<string>, namevariations: list<string>, members: table<id: int, name: string, resource_url: string, anv: string, join: string, role: string, tracks: string>, images: table<type: string, uri: string, resource_url: string, uri150: string, width: int, height: int>, data_quality: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/artists/($artist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artist releases
@@ -255,6 +261,7 @@ export def "artists-releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
   --qp-sort: string@sort-completer-1 # The field to sort the results by. (default: year)
@@ -266,7 +273,7 @@ export def "artists-releases get" [
   let full_url = (build-url $base $"/artists/($artist_id)/releases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a label
@@ -282,13 +289,14 @@ export def "labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, resource_url: string, uri: string, releases_url: string, profile: string, contact_info: string, parent_label: record<id: int, name: string, resource_url: string, catno: string, entity_type: string>, sublabels: table<id: int, name: string, resource_url: string, catno: string, entity_type: string>, urls: list<string>, images: table<type: string, uri: string, resource_url: string, uri150: string, width: int, height: int>, data_quality: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/labels/($label_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all label releases
@@ -304,6 +312,7 @@ export def "labels-releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
 ]: nothing -> record<pagination: record<page: int, pages: int, per_page: int, items: int, urls: record<first: string, prev: string, next: string, last: string>>, releases: table<id: int, resource_url: string, thumb: string, artist: string, title: string, format: string, catno: string, status: string, year: int>> {
@@ -313,7 +322,7 @@ export def "labels-releases get" [
   let full_url = (build-url $base $"/labels/($label_id)/releases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a listing
@@ -329,6 +338,7 @@ export def "marketplace-listings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --curr-abbr: string@curr-abbr-completer # Currency for marketplace data.
 ]: nothing -> record<id: int, resource_url: string, uri: string, status: string, price: record<currency: string, value: float>, allow_offers: bool, sleeve_condition: string, condition: string, posted: string, ships_from: string, comments: string, seller: record<id: int, username: string, resource_url: string>, release: record<id: int, resource_url: string, description: string, thumbnail: string, artist: string, title: string, year: int, format: string, catalog_number: string>, audio: bool, weight: int, format_quantity: int, external_id: string, location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -337,7 +347,7 @@ export def "marketplace-listings get" [
   let full_url = (build-url $base $"/marketplace/listings/($listing_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a listing
@@ -353,6 +363,7 @@ export def "marketplace-listings editListing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   release_id: int # The ID of the release.
   condition: string@condition-completer
   --sleeve-condition: string@sleeve-condition-completer
@@ -373,7 +384,7 @@ export def "marketplace-listings editListing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a listing
@@ -389,13 +400,14 @@ export def "marketplace-listings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "oauth"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/marketplace/listings/($listing_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new listing
@@ -410,6 +422,7 @@ export def "marketplace-listings createListing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   release_id: int # The ID of the release.
   condition: string@condition-completer
   --sleeve-condition: string@sleeve-condition-completer
@@ -430,7 +443,7 @@ export def "marketplace-listings createListing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user inventory
@@ -446,6 +459,7 @@ export def "users-inventory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Only show items with this status. (default: For Sale)
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
@@ -458,7 +472,7 @@ export def "users-inventory get" [
   let full_url = (build-url $base $"/users/($username)/inventory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user identity
@@ -473,13 +487,14 @@ export def "oauth-identity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, username: string, resource_url: string, consumer_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "oauth"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/identity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user profile
@@ -495,13 +510,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, username: string, resource_url: string, uri: string, name: string, home_page: string, location: string, profile: string, registered: string, rank: float, num_pending: int, num_for_sale: int, num_collection: int, num_wantlist: int, num_lists: int, releases_contributed: int, releases_rated: int, rating_avg: float, inventory_url: string, collection_folders_url: string, collection_fields_url: string, wantlist_url: string, avatar_url: string, banner_url: string, curr_abbr: string, seller_rating: float, seller_num_ratings: int, buyer_rating: float, buyer_num_ratings: int, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a user profile
@@ -517,6 +533,7 @@ export def "users editUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The real name of the user.
   --home-page: string # The user's website. (format: uri)
   --location: string # The geographical location of the user.
@@ -531,7 +548,7 @@ export def "users editUserProfile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get collection folders
@@ -547,13 +564,14 @@ export def "users-collection-folders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<folders: table<id: int, name: string, count: int, resource_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)/collection/folders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a collection folder
@@ -569,6 +587,7 @@ export def "users-collection-folders createCollectionFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new folder. (e.g. My Favorites)
 ]: any -> record<id: int, name: string, count: int, resource_url: string> {
   let input = $in
@@ -579,7 +598,7 @@ export def "users-collection-folders createCollectionFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get collection items by folder
@@ -596,6 +615,7 @@ export def "users-collection-folders-releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
   --qp-sort: string@sort-completer-3 # The field to sort the results by. (default: added)
@@ -607,7 +627,7 @@ export def "users-collection-folders-releases get" [
   let full_url = (build-url $base $"/users/($username)/collection/folders/($folder_id)/releases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add release to collection folder
@@ -625,13 +645,14 @@ export def "users-collection-folders-releases addReleaseToCollectionFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<instance_id: int, resource_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "oauth"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)/collection/folders/($folder_id)/releases/($release_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user wantlist
@@ -647,6 +668,7 @@ export def "users-wants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. (default: 1)
   --per-page: int # The number of items to return per page. (default: 50)
 ]: nothing -> record<pagination: record<page: int, pages: int, per_page: int, items: int, urls: record<first: string, prev: string, next: string, last: string>>, wants: table<id: int, resource_url: string, rating: int, notes: string, basic_information: record>> {
@@ -656,7 +678,7 @@ export def "users-wants get" [
   let full_url = (build-url $base $"/users/($username)/wants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add release to wantlist
@@ -673,6 +695,7 @@ export def "users-wants addReleaseToWantlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notes: string # User notes for this item.
   --rating: int # User's rating for the release (0-5). (default: 0)
 ]: any -> record<id: int, resource_url: string, rating: int, notes: string, basic_information: record<id: int, title: string, year: int, resource_url: string, thumb: string, cover_image: string, formats: list<record>, labels: list<record>, artists: list<record>, genres: list<string>, styles: list<string>>> {
@@ -684,7 +707,7 @@ export def "users-wants addReleaseToWantlist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete release from wantlist
@@ -701,11 +724,12 @@ export def "users-wants delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "oauth"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)/wants/($release_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

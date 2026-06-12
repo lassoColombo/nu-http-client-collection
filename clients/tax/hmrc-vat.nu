@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "organisations-vat-obligations RetrieveVATobligations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "organisations-vat-obligations RetrieveVATobligations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Date from which to return obligations. Mandatory unless the status is O. (e.g. 2017-01-25)
   --qp-to: string # Date to which to return obligations. Mandatory unless the status is O. (e.g. 2017-01-25)
   --status: string # Obligation status to return: O=Open, F= Fulfilled. Omit status to retrieve all obligations. (e.g. F)
@@ -114,7 +116,7 @@ export def "organisations-vat-obligations RetrieveVATobligations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit VAT return for period
@@ -130,6 +132,7 @@ export def "organisations-vat-returns SubmitVATreturnforperiod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
   periodKey: string # The ID code for the period that this obligation belongs to. The format is a string of four alphanumeric characters. Occasionally the format includes the # symbol.
   vatDueSales: float # Defines a monetary value (to 2 decimal places), between -9,999,999,999,999.99 and 9,999,999,999,999.99
@@ -153,7 +156,7 @@ export def "organisations-vat-returns SubmitVATreturnforperiod" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View VAT Return
@@ -170,6 +173,7 @@ export def "organisations-vat-returns ViewVATReturn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
 ]: nothing -> record<periodKey: string, vatDueSales: float, vatDueAcquisitions: float, totalVatDue: float, vatReclaimedCurrPeriod: float, netVatDue: float, totalValueSalesExVAT: float, totalValuePurchasesExVAT: float, totalValueGoodsSuppliedExVAT: float, totalAcquisitionsExVAT: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -179,7 +183,7 @@ export def "organisations-vat-returns ViewVATReturn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve VAT liabilities
@@ -195,6 +199,7 @@ export def "organisations-vat-liabilities RetrieveVATliabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Liabilities to return from date, the minimum 'from' date is 2017-12-01 (e.g. 2018-01-25)
   --qp-to: string # Liabilities to return up to date, the maximum 'to' date is the current date (e.g. 2018-12-31)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
@@ -207,7 +212,7 @@ export def "organisations-vat-liabilities RetrieveVATliabilities" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve VAT payments
@@ -223,6 +228,7 @@ export def "organisations-vat-payments RetrieveVATpayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Payments to return from date, the minimum 'from' date is 2017-12-01 (e.g. 2018-01-25)
   --qp-to: string # Payments to return up to date, the maximum 'to' date is the current date (e.g. 2018-12-31)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
@@ -235,7 +241,7 @@ export def "organisations-vat-payments RetrieveVATpayments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve VAT penalties
@@ -251,6 +257,7 @@ export def "organisations-vat-penalties RetrieveVATpenalties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
 ]: nothing -> record<totalisations: record<lateSubmissionPenaltyTotalValue: float, penalisedPrincipalTotal: float, latePaymentPenaltyPostedTotal: float, latePaymentPenaltyEstimateTotal: float>, lateSubmissionPenalty: record<summary: record<activePenaltyPoints: float, inactivePenaltyPoints: float, periodOfComplianceAchievement: string, regimeThreshold: float, penaltyChargeAmount: float>, details: list<record>>, latePaymentPenalty: record<details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -260,7 +267,7 @@ export def "organisations-vat-penalties RetrieveVATpenalties" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve financial details
@@ -277,6 +284,7 @@ export def "organisations-vat-financial-details Retrievefinancialdetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
 ]: nothing -> record<totalisations: record<totalOverdue: float, totalNotYetDue: float, totalBalance: float, totalCredit: float, totalCleared: float, additionalReceivableTotalisations: record<totalAccountPostedInterest: float, totalAccountAccruingInterest: float>>, documentDetails: table<postingDate: string, issueDate: string, documentInterestTotals: record, documentTotalAmount: float, documentClearedAmount: float, documentOutstandingAmount: float, lineItemDetails: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -286,7 +294,7 @@ export def "organisations-vat-financial-details Retrievefinancialdetails" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve VAT customer information
@@ -302,6 +310,7 @@ export def "organisations-vat-information RetrieveVATCustomerInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values. (e.g. -)
 ]: nothing -> record<customerDetails: record<effectiveRegistrationDate: string>, flatRateScheme: record<frsCategory: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -311,5 +320,5 @@ export def "organisations-vat-information RetrieveVATCustomerInformation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

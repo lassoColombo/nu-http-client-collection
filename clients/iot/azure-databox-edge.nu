@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def kind-completer-1 [] { ["FileEvent" "PeriodicTimerEvent"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-box-edge-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "providers-microsoft-data-box-edge-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -111,7 +113,7 @@ export def "providers-microsoft-data-box-edge-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.DataBoxEdge/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the Data Box Edge/Data Box Gateway devices in a subscription.
@@ -127,6 +129,7 @@ export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-device
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --expand: string # Specify $expand=details to populate additional fields related to the resource or Specify $skipToken=<token> to populate the next page in the list.
 ]: nothing -> record<nextLink: string, value: table<etag: string, location: string, properties: record, sku: record, tags: record>> {
@@ -136,7 +139,7 @@ export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-device
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the Data Box Edge/Data Box Gateway devices in a resource group.
@@ -153,6 +156,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --expand: string # Specify $expand=details to populate additional fields related to the resource or Specify $skipToken=<token> to populate the next page in the list.
 ]: nothing -> record<nextLink: string, value: table<etag: string, location: string, properties: record, sku: record, tags: record>> {
@@ -162,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the Data Box Edge/Data Box Gateway device.
@@ -180,6 +184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -188,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the properties of the Data Box Edge/Data Box Gateway device.
@@ -206,6 +211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<etag: string, location: string, properties: record<configuredRoleTypes: list<string>, culture: string, dataBoxEdgeDeviceStatus: string, description: string, deviceHcsVersion: string, deviceLocalCapacity: int, deviceModel: string, deviceSoftwareVersion: string, deviceType: string, friendlyName: string, modelDescription: string, nodeCount: int, serialNumber: string, timeZone: string>, sku: record<name: string, tier: string>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -214,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modifies a Data Box Edge/Data Box Gateway resource.
@@ -232,6 +238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --tags: record # The tags attached to the Data Box Edge/Gateway resource.
 ]: any -> record<etag: string, location: string, properties: record<configuredRoleTypes: list<string>, culture: string, dataBoxEdgeDeviceStatus: string, description: string, deviceHcsVersion: string, deviceLocalCapacity: int, deviceModel: string, deviceSoftwareVersion: string, deviceType: string, friendlyName: string, modelDescription: string, nodeCount: int, serialNumber: string, timeZone: string>, sku: record<name: string, tier: string>, tags: record> {
@@ -244,7 +251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a Data Box Edge/Data Box Gateway resource.
@@ -264,6 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --etag: string # The etag for the devices.
   location: string # The location of the device. This is a supported and registered Azure geographical region (for example, West US, East US, or Southeast Asia). The geographical region of a device cannot be changed once it is created, but if an identical geographical region is specified on update, the request will succeed.
@@ -280,7 +288,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all the alerts for a Data Box Edge/Data Box Gateway device.
@@ -298,6 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -306,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an alert by name.
@@ -325,6 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<alertType: string, appearedAtDateTime: string, detailedInformation: record, errorDetails: record<errorCode: string, errorMessage: string, occurrences: int>, recommendation: string, severity: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/alerts/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the bandwidth schedules for a Data Box Edge/Data Box Gateway device.
@@ -351,6 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -359,7 +370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the specified bandwidth schedule.
@@ -378,6 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -386,7 +398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the properties of the specified bandwidth schedule.
@@ -405,6 +417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<days: list<string>, rateInMbps: int, start: string, stop: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -413,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a bandwidth schedule.
@@ -433,6 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # The properties of the bandwidth schedule. — shape: {days: list, rateInMbps: int, start: string, stop: string}
 ]: any -> record<properties: record<days: list<string>, rateInMbps: int, start: string, stop: string>> {
@@ -445,7 +459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Downloads the updates on a Data Box Edge/Data Box Gateway device.
@@ -463,6 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -471,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/downloadUpdates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets additional information for the specified Data Box Edge/Data Box Gateway device.
@@ -489,6 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<encryptionKey: string, encryptionKeyThumbprint: string, resourceKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -497,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/getExtendedInformation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Installs the updates on the Data Box Edge/Data Box Gateway device.
@@ -515,6 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -523,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/installUpdates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the details of a specified job on a Data Box Edge/Data Box Gateway device.
@@ -542,6 +559,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<endTime: string, error: record<code: string, errorDetails: list<record>, message: string>, id: string, name: string, percentComplete: int, properties: record<currentStage: string, downloadProgress: record<downloadPhase: string, numberOfUpdatesDownloaded: int, numberOfUpdatesToDownload: int, percentComplete: int, totalBytesDownloaded: float, totalBytesToDownload: float>, errorManifestFile: string, folder: string, installProgress: record<numberOfUpdatesInstalled: int, numberOfUpdatesToInstall: int, percentComplete: int>, jobType: string, shareId: string, totalRefreshErrors: int>, startTime: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -550,7 +568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/jobs/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the network settings of the specified Data Box Edge/Data Box Gateway device.
@@ -568,6 +586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<networkAdapters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -576,7 +595,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/networkSettings/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the nodes currently configured under this Data Box Edge device
@@ -594,6 +613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -602,7 +622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the details of a specified job on a Data Box Edge/Data Box Gateway device.
@@ -621,6 +641,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<endTime: string, error: record<code: string, errorDetails: list<record>, message: string>, id: string, name: string, percentComplete: int, properties: record<currentStage: string, downloadProgress: record<downloadPhase: string, numberOfUpdatesDownloaded: int, numberOfUpdatesToDownload: int, percentComplete: int, totalBytesDownloaded: float, totalBytesToDownload: float>, errorManifestFile: string, folder: string, installProgress: record<numberOfUpdatesInstalled: int, numberOfUpdatesToInstall: int, percentComplete: int>, jobType: string, shareId: string, totalRefreshErrors: int>, startTime: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -629,7 +650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/operationsStatus/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all the orders related to a Data Box Edge/Data Box Gateway device.
@@ -647,6 +668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -655,7 +677,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the order related to the device.
@@ -673,6 +695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -681,7 +704,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a specific order by name.
@@ -699,6 +722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<contactInformation: record<companyName: string, contactPerson: string, emailList: list, phone: string>, currentStatus: record<comments: string, status: string, updateDateTime: string>, deliveryTrackingInfo: list<record>, orderHistory: list<record>, returnTrackingInfo: list<record>, serialNumber: string, shippingAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, postalCode: string, state: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -707,7 +731,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an order.
@@ -726,6 +750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --properties: record # Order properties. — shape: {contactInformation: record, currentStatus?: record, shippingAddress: record}
 ]: any -> record<properties: record<contactInformation: record<companyName: string, contactPerson: string, emailList: list, phone: string>, currentStatus: record<comments: string, status: string, updateDateTime: string>, deliveryTrackingInfo: list<record>, orderHistory: list<record>, returnTrackingInfo: list<record>, serialNumber: string, shippingAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, postalCode: string, state: string>>> {
@@ -738,7 +763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all the roles configured in a Data Box Edge/Data Box Gateway device.
@@ -756,6 +781,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -764,7 +790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the role on the device.
@@ -783,6 +809,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -791,7 +818,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a specific role by name.
@@ -810,6 +837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -818,7 +846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a role.
@@ -838,6 +866,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   kind: string@kind-completer # Role type.
 ]: any -> record<kind: string> {
@@ -850,7 +879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Scans for updates on a Data Box Edge/Data Box Gateway device.
@@ -868,6 +897,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -876,7 +906,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/scanForUpdates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the security settings on a Data Box Edge/Data Box Gateway device.
@@ -895,6 +925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # The properties of security settings. — shape: {deviceAdminPassword: record}
 ]: any -> record<error: record<code: string, details: list<any>, message: string>> {
@@ -907,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all the shares in a Data Box Edge/Data Box Gateway device.
@@ -925,6 +956,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -933,7 +965,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the share on the Data Box Edge/Data Box Gateway device.
@@ -952,6 +984,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -960,7 +993,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a share by name.
@@ -979,6 +1012,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<accessProtocol: string, azureContainerInfo: record<containerName: string, dataFormat: string, storageAccountCredentialId: string>, clientAccessRights: list<record>, dataPolicy: string, description: string, monitoringStatus: string, refreshDetails: record<errorManifestFile: string, inProgressRefreshJobId: string, lastCompletedRefreshJobTimeInUTC: string, lastJob: string>, shareMappings: list<record>, shareStatus: string, userAccessRights: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -987,7 +1021,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new share or updates an existing share on the device.
@@ -1007,6 +1041,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # The share properties. — shape: {accessProtocol: "SMB"|"NFS", azureContainerInfo?: record, clientAccessRights?: list, dataPolicy?: "Cloud"|"Local", description?: string, monitoringStatus: "Enabled"|"Disabled", refreshDetails?: record, shareStatus: "Offline"|"Unknown"|"OK"|"Updating"|"NeedsAttention", userAccessRights?: list}
 ]: any -> record<properties: record<accessProtocol: string, azureContainerInfo: record<containerName: string, dataFormat: string, storageAccountCredentialId: string>, clientAccessRights: list<record>, dataPolicy: string, description: string, monitoringStatus: string, refreshDetails: record<errorManifestFile: string, inProgressRefreshJobId: string, lastCompletedRefreshJobTimeInUTC: string, lastJob: string>, shareMappings: list<record>, shareStatus: string, userAccessRights: list<record>>> {
@@ -1019,7 +1054,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refreshes the share metadata with the data from the cloud.
@@ -1038,6 +1073,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1046,7 +1082,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)/refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the storage account credentials in a Data Box Edge/Data Box Gateway device.
@@ -1064,6 +1100,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1072,7 +1109,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the storage account credential.
@@ -1091,6 +1128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1099,7 +1137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the properties of the specified storage account credential.
@@ -1118,6 +1156,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<accountKey: record<encryptionAlgorithm: string, encryptionCertThumbprint: string, value: string>, accountType: string, alias: string, blobDomainName: string, connectionString: string, sslStatus: string, storageAccountId: string, userName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1126,7 +1165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates the storage account credential.
@@ -1146,6 +1185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # The storage account credential properties. — shape: {accountKey?: record, accountType: "GeneralPurposeStorage"|"BlobStorage", alias: string, blobDomainName?: string, connectionString?: string, sslStatus: "Enabled"|"Disabled", storageAccountId?: string, userName?: string}
 ]: any -> record<properties: record<accountKey: record<encryptionAlgorithm: string, encryptionCertThumbprint: string, value: string>, accountType: string, alias: string, blobDomainName: string, connectionString: string, sslStatus: string, storageAccountId: string, userName: string>> {
@@ -1158,7 +1198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all the triggers configured in the device.
@@ -1176,6 +1216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --expand: string # Specify $filter='CustomContextTag eq <tag>' to filter on custom context tag property
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
@@ -1185,7 +1226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the trigger on the gateway device.
@@ -1204,6 +1245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1212,7 +1254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific trigger by name.
@@ -1231,6 +1273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1239,7 +1282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a trigger.
@@ -1259,6 +1302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   kind: string@kind-completer-1 # Trigger Kind.
 ]: any -> record<kind: string> {
@@ -1271,7 +1315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about the availability of updates based on the last scan of the device. It also gets information about any ongoing download or install jobs on the device.
@@ -1289,6 +1333,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<deviceLastScannedDateTime: string, deviceVersionNumber: string, friendlyDeviceVersionName: string, inProgressDownloadJobId: string, inProgressDownloadJobStartedDateTime: string, inProgressInstallJobId: string, inProgressInstallJobStartedDateTime: string, lastCompletedDownloadJobDateTime: string, lastCompletedInstallJobDateTime: string, lastCompletedScanJobDateTime: string, ongoingUpdateOperation: string, rebootBehavior: string, totalNumberOfUpdatesAvailable: int, totalNumberOfUpdatesPendingDownload: int, totalNumberOfUpdatesPendingInstall: int, totalUpdateSizeInBytes: float, updateTitles: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1297,7 +1342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/updateSummary/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads registration certificate for the device.
@@ -1316,6 +1361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # Raw Certificate Data. — shape: {authenticationType?: "Invalid"|"AzureActiveDirectory", certificate: string}
 ]: any -> record<aadAuthority: string, aadTenantId: string, authType: string, azureManagementEndpointAudience: string, resourceId: string, servicePrincipalClientId: string, servicePrincipalObjectId: string> {
@@ -1328,7 +1374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all the users registered on a Data Box Edge/Data Box Gateway device.
@@ -1346,6 +1392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1354,7 +1401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the user on a databox edge/gateway device.
@@ -1373,6 +1420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1381,7 +1429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the properties of the specified user.
@@ -1400,6 +1448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
 ]: nothing -> record<properties: record<encryptedPassword: record<encryptionAlgorithm: string, encryptionCertThumbprint: string, value: string>, shareAccessRights: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1408,7 +1457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new user or updates an existing user's information on a Data Box Edge/Data Box Gateway device.
@@ -1428,6 +1477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   properties: record # The user properties. — shape: {encryptedPassword?: record, shareAccessRights?: list}
 ]: any -> record<properties: record<encryptedPassword: record<encryptionAlgorithm: string, encryptionCertThumbprint: string, value: string>, shareAccessRights: list<record>>> {
@@ -1440,5 +1490,5 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

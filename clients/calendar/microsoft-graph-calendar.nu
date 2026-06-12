@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def defaultOnlineMeetingProvider-completer [] { ["skypeForBusiness" "skypeForCon
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-calendar GetCalendar" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "groups-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -122,7 +124,7 @@ export def "groups-calendar GetCalendar" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarPermissions from groups
@@ -138,6 +140,7 @@ export def "groups-calendar-calendar-permissions ListCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -153,7 +156,7 @@ export def "groups-calendar-calendar-permissions ListCalendarPermission" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/calendarPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarPermissions for groups
@@ -170,6 +173,7 @@ export def "groups-calendar-calendar-permissions CreateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -185,7 +189,7 @@ export def "groups-calendar-calendar-permissions CreateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarPermissions from groups
@@ -202,6 +206,7 @@ export def "groups-calendar-calendar-permissions GetCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
@@ -211,7 +216,7 @@ export def "groups-calendar-calendar-permissions GetCalendarPermission" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/calendarPermissions/($calendarPermission_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendarPermissions in groups
@@ -229,6 +234,7 @@ export def "groups-calendar-calendar-permissions UpdateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -244,7 +250,7 @@ export def "groups-calendar-calendar-permissions UpdateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendarPermissions for groups
@@ -261,6 +267,7 @@ export def "groups-calendar-calendar-permissions DeleteCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -270,7 +277,7 @@ export def "groups-calendar-calendar-permissions DeleteCalendarPermission" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -286,6 +293,7 @@ export def "groups-calendar-calendar-permissions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -295,7 +303,7 @@ export def "groups-calendar-calendar-permissions-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/calendarPermissions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarView from groups
@@ -311,6 +319,7 @@ export def "groups-calendar-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -328,7 +337,7 @@ export def "groups-calendar-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -345,6 +354,7 @@ export def "groups-calendar-calendar-view-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -362,7 +372,7 @@ export def "groups-calendar-calendar-view-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from groups
@@ -378,6 +388,7 @@ export def "groups-calendar-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -393,7 +404,7 @@ export def "groups-calendar-events ListEvent" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for groups
@@ -425,6 +436,7 @@ export def "groups-calendar-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -478,7 +490,7 @@ export def "groups-calendar-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from groups
@@ -495,6 +507,7 @@ export def "groups-calendar-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -504,7 +517,7 @@ export def "groups-calendar-events GetEvent" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update event
@@ -538,6 +551,7 @@ export def "groups-calendar-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -591,7 +605,7 @@ export def "groups-calendar-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for groups
@@ -608,6 +622,7 @@ export def "groups-calendar-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -617,7 +632,7 @@ export def "groups-calendar-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from groups
@@ -634,6 +649,7 @@ export def "groups-calendar-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -649,7 +665,7 @@ export def "groups-calendar-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for groups
@@ -666,6 +682,7 @@ export def "groups-calendar-events-attachments CreateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -681,7 +698,7 @@ export def "groups-calendar-events-attachments CreateAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from groups
@@ -699,6 +716,7 @@ export def "groups-calendar-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -708,7 +726,7 @@ export def "groups-calendar-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for groups
@@ -726,6 +744,7 @@ export def "groups-calendar-events-attachments DeleteAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -735,7 +754,7 @@ export def "groups-calendar-events-attachments DeleteAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -752,6 +771,7 @@ export def "groups-calendar-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -761,7 +781,7 @@ export def "groups-calendar-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -780,6 +800,7 @@ export def "groups-calendar-events-attachments-microsoftgraphcreate-upload-sessi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -790,7 +811,7 @@ export def "groups-calendar-events-attachments-microsoftgraphcreate-upload-sessi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from groups
@@ -807,6 +828,7 @@ export def "groups-calendar-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -816,7 +838,7 @@ export def "groups-calendar-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get extensions from groups
@@ -833,6 +855,7 @@ export def "groups-calendar-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -848,7 +871,7 @@ export def "groups-calendar-events-extensions ListExtension" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to extensions for groups
@@ -865,6 +888,7 @@ export def "groups-calendar-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -875,7 +899,7 @@ export def "groups-calendar-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extensions from groups
@@ -893,6 +917,7 @@ export def "groups-calendar-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -902,7 +927,7 @@ export def "groups-calendar-events-extensions GetExtension" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in groups
@@ -920,6 +945,7 @@ export def "groups-calendar-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -930,7 +956,7 @@ export def "groups-calendar-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for groups
@@ -948,6 +974,7 @@ export def "groups-calendar-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -957,7 +984,7 @@ export def "groups-calendar-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -974,6 +1001,7 @@ export def "groups-calendar-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -983,7 +1011,7 @@ export def "groups-calendar-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from groups
@@ -1000,6 +1028,7 @@ export def "groups-calendar-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -1017,7 +1046,7 @@ export def "groups-calendar-events-instances ListInstance" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -1035,6 +1064,7 @@ export def "groups-calendar-events-instances-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -1052,7 +1082,7 @@ export def "groups-calendar-events-instances-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -1070,6 +1100,7 @@ export def "groups-calendar-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -1081,7 +1112,7 @@ export def "groups-calendar-events-microsoftgraphaccept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -1099,6 +1130,7 @@ export def "groups-calendar-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -1109,7 +1141,7 @@ export def "groups-calendar-events-microsoftgraphcancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -1128,6 +1160,7 @@ export def "groups-calendar-events-microsoftgraphdecline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -1140,7 +1173,7 @@ export def "groups-calendar-events-microsoftgraphdecline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -1158,13 +1191,14 @@ export def "groups-calendar-events-microsoftgraphdismiss-reminder dismissReminde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -1183,6 +1217,7 @@ export def "groups-calendar-events-microsoftgraphforward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -1194,7 +1229,7 @@ export def "groups-calendar-events-microsoftgraphforward forward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -1211,13 +1246,14 @@ export def "groups-calendar-events-microsoftgraphpermanent-delete permanentDelet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -1236,6 +1272,7 @@ export def "groups-calendar-events-microsoftgraphsnooze-reminder snoozeReminder"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -1246,7 +1283,7 @@ export def "groups-calendar-events-microsoftgraphsnooze-reminder snoozeReminder"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -1265,6 +1302,7 @@ export def "groups-calendar-events-microsoftgraphtentatively-accept tentativelyA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -1277,7 +1315,7 @@ export def "groups-calendar-events-microsoftgraphtentatively-accept tentativelyA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -1293,6 +1331,7 @@ export def "groups-calendar-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1302,7 +1341,7 @@ export def "groups-calendar-events-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -1319,6 +1358,7 @@ export def "groups-calendar-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -1336,7 +1376,7 @@ export def "groups-calendar-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/calendar/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function allowedCalendarSharingRoles
@@ -1353,6 +1393,7 @@ export def "groups-calendar-microsoftgraphallowed-calendar-sharing-roles-user-us
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1365,7 +1406,7 @@ export def "groups-calendar-microsoftgraphallowed-calendar-sharing-roles-user-us
   let full_url = (build-url $base $"/groups/($group_id)/calendar/microsoft.graph.allowedCalendarSharingRoles(User='($User)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action getSchedule
@@ -1384,6 +1425,7 @@ export def "groups-calendar-microsoftgraphget-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Schedules: list
   --EndTime: record # shape: {dateTime?: string, timeZone?: string}
   --StartTime: record # shape: {dateTime?: string, timeZone?: string}
@@ -1397,7 +1439,7 @@ export def "groups-calendar-microsoftgraphget-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -1413,13 +1455,14 @@ export def "groups-calendar-microsoftgraphpermanent-delete permanentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)/calendar/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List group calendarView
@@ -1436,6 +1479,7 @@ export def "groups-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -1453,7 +1497,7 @@ export def "groups-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/groups/($group_id)/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -1470,6 +1514,7 @@ export def "groups-calendar-view-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -1487,7 +1532,7 @@ export def "groups-calendar-view-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events
@@ -1504,6 +1549,7 @@ export def "groups-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1519,7 +1565,7 @@ export def "groups-events ListEvent" [
   let full_url = (build-url $base $"/groups/($group_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create event
@@ -1552,6 +1598,7 @@ export def "groups-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -1605,7 +1652,7 @@ export def "groups-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get event
@@ -1623,6 +1670,7 @@ export def "groups-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -1632,7 +1680,7 @@ export def "groups-events GetEvent" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in groups
@@ -1665,6 +1713,7 @@ export def "groups-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -1718,7 +1767,7 @@ export def "groups-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete event
@@ -1736,6 +1785,7 @@ export def "groups-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1745,7 +1795,7 @@ export def "groups-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from groups
@@ -1762,6 +1812,7 @@ export def "groups-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1777,7 +1828,7 @@ export def "groups-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for groups
@@ -1794,6 +1845,7 @@ export def "groups-events-attachments CreateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -1809,7 +1861,7 @@ export def "groups-events-attachments CreateAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from groups
@@ -1827,6 +1879,7 @@ export def "groups-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -1836,7 +1889,7 @@ export def "groups-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for groups
@@ -1854,6 +1907,7 @@ export def "groups-events-attachments DeleteAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1863,7 +1917,7 @@ export def "groups-events-attachments DeleteAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1880,6 +1934,7 @@ export def "groups-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1889,7 +1944,7 @@ export def "groups-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -1908,6 +1963,7 @@ export def "groups-events-attachments-microsoftgraphcreate-upload-session create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -1918,7 +1974,7 @@ export def "groups-events-attachments-microsoftgraphcreate-upload-session create
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from groups
@@ -1935,6 +1991,7 @@ export def "groups-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -1944,7 +2001,7 @@ export def "groups-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get open extension
@@ -1961,6 +2018,7 @@ export def "groups-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1976,7 +2034,7 @@ export def "groups-events-extensions ListExtension" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create open extension
@@ -1994,6 +2052,7 @@ export def "groups-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -2004,7 +2063,7 @@ export def "groups-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get open extension
@@ -2023,6 +2082,7 @@ export def "groups-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -2032,7 +2092,7 @@ export def "groups-events-extensions GetExtension" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in groups
@@ -2050,6 +2110,7 @@ export def "groups-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -2060,7 +2121,7 @@ export def "groups-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for groups
@@ -2078,6 +2139,7 @@ export def "groups-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2087,7 +2149,7 @@ export def "groups-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2104,6 +2166,7 @@ export def "groups-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2113,7 +2176,7 @@ export def "groups-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from groups
@@ -2130,6 +2193,7 @@ export def "groups-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -2147,7 +2211,7 @@ export def "groups-events-instances ListInstance" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -2165,6 +2229,7 @@ export def "groups-events-instances-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -2182,7 +2247,7 @@ export def "groups-events-instances-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -2200,6 +2265,7 @@ export def "groups-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -2211,7 +2277,7 @@ export def "groups-events-microsoftgraphaccept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -2229,6 +2295,7 @@ export def "groups-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -2239,7 +2306,7 @@ export def "groups-events-microsoftgraphcancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -2258,6 +2325,7 @@ export def "groups-events-microsoftgraphdecline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -2270,7 +2338,7 @@ export def "groups-events-microsoftgraphdecline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -2288,13 +2356,14 @@ export def "groups-events-microsoftgraphdismiss-reminder dismissReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -2313,6 +2382,7 @@ export def "groups-events-microsoftgraphforward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -2324,7 +2394,7 @@ export def "groups-events-microsoftgraphforward forward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -2341,13 +2411,14 @@ export def "groups-events-microsoftgraphpermanent-delete permanentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/groups/($group_id)/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -2366,6 +2437,7 @@ export def "groups-events-microsoftgraphsnooze-reminder snoozeReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -2376,7 +2448,7 @@ export def "groups-events-microsoftgraphsnooze-reminder snoozeReminder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -2395,6 +2467,7 @@ export def "groups-events-microsoftgraphtentatively-accept tentativelyAccept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -2407,7 +2480,7 @@ export def "groups-events-microsoftgraphtentatively-accept tentativelyAccept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -2423,6 +2496,7 @@ export def "groups-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2432,7 +2506,7 @@ export def "groups-events-count GetCount" [
   let full_url = (build-url $base $"/groups/($group_id)/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -2449,6 +2523,7 @@ export def "groups-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -2466,7 +2541,7 @@ export def "groups-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/groups/($group_id)/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create place
@@ -2485,6 +2560,7 @@ export def "places CreatePlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --displayName: string # The name that is associated with the place.
@@ -2504,7 +2580,7 @@ export def "places CreatePlace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update place
@@ -2524,6 +2600,7 @@ export def "places UpdatePlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --displayName: string # The name that is associated with the place.
@@ -2543,7 +2620,7 @@ export def "places UpdatePlace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete place
@@ -2560,6 +2637,7 @@ export def "places DeletePlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2569,7 +2647,7 @@ export def "places DeletePlace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkInClaim
@@ -2585,6 +2663,7 @@ export def "places-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2600,7 +2679,7 @@ export def "places-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create checkInClaim
@@ -2617,6 +2696,7 @@ export def "places-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -2629,7 +2709,7 @@ export def "places-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkInClaim
@@ -2647,6 +2727,7 @@ export def "places-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -2656,7 +2737,7 @@ export def "places-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -2673,6 +2754,7 @@ export def "places-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -2685,7 +2767,7 @@ export def "places-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -2702,6 +2784,7 @@ export def "places-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2711,7 +2794,7 @@ export def "places-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2727,6 +2810,7 @@ export def "places-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2736,7 +2820,7 @@ export def "places-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -2753,6 +2837,7 @@ export def "places-microsoftgraphbuilding GetPlaceAsBuilding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<resourceLinks: table<linkType: string, name: string, value: string>, wifiState: string, map: record<placeId: string, footprints: list<record>, levels: list<record>>> {
@@ -2762,7 +2847,7 @@ export def "places-microsoftgraphbuilding GetPlaceAsBuilding" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -2778,6 +2863,7 @@ export def "places-microsoftgraphbuilding-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2793,7 +2879,7 @@ export def "places-microsoftgraphbuilding-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -2809,6 +2895,7 @@ export def "places-microsoftgraphbuilding-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -2821,7 +2908,7 @@ export def "places-microsoftgraphbuilding-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -2838,6 +2925,7 @@ export def "places-microsoftgraphbuilding-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -2847,7 +2935,7 @@ export def "places-microsoftgraphbuilding-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -2864,6 +2952,7 @@ export def "places-microsoftgraphbuilding-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -2876,7 +2965,7 @@ export def "places-microsoftgraphbuilding-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -2893,6 +2982,7 @@ export def "places-microsoftgraphbuilding-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2902,7 +2992,7 @@ export def "places-microsoftgraphbuilding-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2918,6 +3008,7 @@ export def "places-microsoftgraphbuilding-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2927,7 +3018,7 @@ export def "places-microsoftgraphbuilding-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get buildingMap
@@ -2944,6 +3035,7 @@ export def "places-microsoftgraphbuilding-map GetMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<placeId: string, footprints: list<record>, levels: table<placeId: string, fixtures: list, sections: list, units: list>> {
@@ -2953,7 +3045,7 @@ export def "places-microsoftgraphbuilding-map GetMap" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property map in places
@@ -2970,6 +3062,7 @@ export def "places-microsoftgraphbuilding-map UpdateMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier for the building to which this buildingMap belongs. (nullable)
   --footprints: list # Represents the approximate physical extent of a referenced building. It corresponds to footprint.geojson in IMDF format.
   --levels: list # Represents a physical floor structure within a building. It corresponds to level.geojson in IMDF format. — item shape: {placeId?: string, fixtures?: list, sections?: list, units?: list}
@@ -2982,7 +3075,7 @@ export def "places-microsoftgraphbuilding-map UpdateMap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete buildingMap
@@ -2999,6 +3092,7 @@ export def "places-microsoftgraphbuilding-map DeleteMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3008,7 +3102,7 @@ export def "places-microsoftgraphbuilding-map DeleteMap" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List footprints
@@ -3025,6 +3119,7 @@ export def "places-microsoftgraphbuilding-map-footprints ListFootprint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3040,7 +3135,7 @@ export def "places-microsoftgraphbuilding-map-footprints ListFootprint" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/footprints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to footprints for places
@@ -3056,6 +3151,7 @@ export def "places-microsoftgraphbuilding-map-footprints CreateFootprint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3065,7 +3161,7 @@ export def "places-microsoftgraphbuilding-map-footprints CreateFootprint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get footprints from places
@@ -3082,6 +3178,7 @@ export def "places-microsoftgraphbuilding-map-footprints GetFootprint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record {
@@ -3091,7 +3188,7 @@ export def "places-microsoftgraphbuilding-map-footprints GetFootprint" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/footprints/($footprintMap_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property footprints in places
@@ -3108,6 +3205,7 @@ export def "places-microsoftgraphbuilding-map-footprints UpdateFootprint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3117,7 +3215,7 @@ export def "places-microsoftgraphbuilding-map-footprints UpdateFootprint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property footprints for places
@@ -3134,6 +3232,7 @@ export def "places-microsoftgraphbuilding-map-footprints DeleteFootprint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3143,7 +3242,7 @@ export def "places-microsoftgraphbuilding-map-footprints DeleteFootprint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3159,6 +3258,7 @@ export def "places-microsoftgraphbuilding-map-footprints-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3168,7 +3268,7 @@ export def "places-microsoftgraphbuilding-map-footprints-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/footprints/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List levels
@@ -3185,6 +3285,7 @@ export def "places-microsoftgraphbuilding-map-levels ListLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3200,7 +3301,7 @@ export def "places-microsoftgraphbuilding-map-levels ListLevel" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to levels for places
@@ -3219,6 +3320,7 @@ export def "places-microsoftgraphbuilding-map-levels CreateLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the floor to which this levelMap belongs. (nullable)
   --fixtures: list # Collection of fixtures (such as furniture or equipment) on this level. Supports upsert. — item shape: {placeId?: string}
   --sections: list # Collection of sections (such as zones or partitions) on this level. Supports upsert. — item shape: {placeId?: string}
@@ -3232,7 +3334,7 @@ export def "places-microsoftgraphbuilding-map-levels CreateLevel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get levels from places
@@ -3249,6 +3351,7 @@ export def "places-microsoftgraphbuilding-map-levels GetLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<placeId: string, fixtures: table<placeId: string>, sections: table<placeId: string>, units: table<placeId: string>> {
@@ -3258,7 +3361,7 @@ export def "places-microsoftgraphbuilding-map-levels GetLevel" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property levels in places
@@ -3278,6 +3381,7 @@ export def "places-microsoftgraphbuilding-map-levels UpdateLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the floor to which this levelMap belongs. (nullable)
   --fixtures: list # Collection of fixtures (such as furniture or equipment) on this level. Supports upsert. — item shape: {placeId?: string}
   --sections: list # Collection of sections (such as zones or partitions) on this level. Supports upsert. — item shape: {placeId?: string}
@@ -3291,7 +3395,7 @@ export def "places-microsoftgraphbuilding-map-levels UpdateLevel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property levels for places
@@ -3308,6 +3412,7 @@ export def "places-microsoftgraphbuilding-map-levels DeleteLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3317,7 +3422,7 @@ export def "places-microsoftgraphbuilding-map-levels DeleteLevel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List fixtures
@@ -3335,6 +3440,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures ListFixture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3350,7 +3456,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures ListFixture" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/fixtures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to fixtures for places
@@ -3367,6 +3473,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures CreateFixture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier for the floor to which this fixtureMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3377,7 +3484,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures CreateFixture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get fixtures from places
@@ -3395,6 +3502,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures GetFixture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<placeId: string> {
@@ -3404,7 +3512,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures GetFixture" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/fixtures/($fixtureMap_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update fixtureMap
@@ -3423,6 +3531,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures UpdateFixture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier for the floor to which this fixtureMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3433,7 +3542,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures UpdateFixture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete fixtureMap
@@ -3452,6 +3561,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures DeleteFixture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3461,7 +3571,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures DeleteFixture" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3478,6 +3588,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3487,7 +3598,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/fixtures/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List sections
@@ -3505,6 +3616,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections ListSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3520,7 +3632,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections ListSection" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/sections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to sections for places
@@ -3537,6 +3649,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections CreateSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the section to which this sectionMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3547,7 +3660,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections CreateSection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sections from places
@@ -3565,6 +3678,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections GetSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<placeId: string> {
@@ -3574,7 +3688,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections GetSection" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/sections/($sectionMap_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property sections in places
@@ -3592,6 +3706,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections UpdateSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the section to which this sectionMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3602,7 +3717,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections UpdateSection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property sections for places
@@ -3620,6 +3735,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections DeleteSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3629,7 +3745,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections DeleteSection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3646,6 +3762,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3655,7 +3772,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/sections/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List units
@@ -3673,6 +3790,7 @@ export def "places-microsoftgraphbuilding-map-levels-units ListUnit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3688,7 +3806,7 @@ export def "places-microsoftgraphbuilding-map-levels-units ListUnit" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/units" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to units for places
@@ -3705,6 +3823,7 @@ export def "places-microsoftgraphbuilding-map-levels-units CreateUnit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the place (such as a room) to which this unitMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3715,7 +3834,7 @@ export def "places-microsoftgraphbuilding-map-levels-units CreateUnit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get units from places
@@ -3733,6 +3852,7 @@ export def "places-microsoftgraphbuilding-map-levels-units GetUnit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<placeId: string> {
@@ -3742,7 +3862,7 @@ export def "places-microsoftgraphbuilding-map-levels-units GetUnit" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/units/($unitMap_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update unitMap
@@ -3761,6 +3881,7 @@ export def "places-microsoftgraphbuilding-map-levels-units UpdateUnit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeId: string # Identifier of the place (such as a room) to which this unitMap belongs. (nullable)
 ]: any -> record<placeId: string> {
   let input = $in
@@ -3771,7 +3892,7 @@ export def "places-microsoftgraphbuilding-map-levels-units UpdateUnit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete unitMap
@@ -3790,6 +3911,7 @@ export def "places-microsoftgraphbuilding-map-levels-units DeleteUnit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3799,7 +3921,7 @@ export def "places-microsoftgraphbuilding-map-levels-units DeleteUnit" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3816,6 +3938,7 @@ export def "places-microsoftgraphbuilding-map-levels-units-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3825,7 +3948,7 @@ export def "places-microsoftgraphbuilding-map-levels-units-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/($levelMap_id)/units/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3841,6 +3964,7 @@ export def "places-microsoftgraphbuilding-map-levels-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3850,7 +3974,7 @@ export def "places-microsoftgraphbuilding-map-levels-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.building/map/levels/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function descendants
@@ -3866,6 +3990,7 @@ export def "places-microsoftgraphdescendants descendant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3881,7 +4006,7 @@ export def "places-microsoftgraphdescendants descendant" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.descendants()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -3898,6 +4023,7 @@ export def "places-microsoftgraphdesk GetPlaceAsDesk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<displayDeviceName: string, heightAdjustableState: string, mailboxDetails: record<emailAddress: string, externalDirectoryObjectId: string>, mode: record> {
@@ -3907,7 +4033,7 @@ export def "places-microsoftgraphdesk GetPlaceAsDesk" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.desk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -3923,6 +4049,7 @@ export def "places-microsoftgraphdesk-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3938,7 +4065,7 @@ export def "places-microsoftgraphdesk-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.desk/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -3954,6 +4081,7 @@ export def "places-microsoftgraphdesk-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -3966,7 +4094,7 @@ export def "places-microsoftgraphdesk-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -3983,6 +4111,7 @@ export def "places-microsoftgraphdesk-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -3992,7 +4121,7 @@ export def "places-microsoftgraphdesk-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.desk/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -4009,6 +4138,7 @@ export def "places-microsoftgraphdesk-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4021,7 +4151,7 @@ export def "places-microsoftgraphdesk-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -4038,6 +4168,7 @@ export def "places-microsoftgraphdesk-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4047,7 +4178,7 @@ export def "places-microsoftgraphdesk-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4063,6 +4194,7 @@ export def "places-microsoftgraphdesk-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4072,7 +4204,7 @@ export def "places-microsoftgraphdesk-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.desk/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -4089,6 +4221,7 @@ export def "places-microsoftgraphfloor GetPlaceAsFloor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<sortOrder: float> {
@@ -4098,7 +4231,7 @@ export def "places-microsoftgraphfloor GetPlaceAsFloor" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.floor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -4114,6 +4247,7 @@ export def "places-microsoftgraphfloor-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4129,7 +4263,7 @@ export def "places-microsoftgraphfloor-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.floor/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -4145,6 +4279,7 @@ export def "places-microsoftgraphfloor-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4157,7 +4292,7 @@ export def "places-microsoftgraphfloor-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -4174,6 +4309,7 @@ export def "places-microsoftgraphfloor-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -4183,7 +4319,7 @@ export def "places-microsoftgraphfloor-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.floor/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -4200,6 +4336,7 @@ export def "places-microsoftgraphfloor-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4212,7 +4349,7 @@ export def "places-microsoftgraphfloor-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -4229,6 +4366,7 @@ export def "places-microsoftgraphfloor-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4238,7 +4376,7 @@ export def "places-microsoftgraphfloor-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4254,6 +4392,7 @@ export def "places-microsoftgraphfloor-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4263,7 +4402,7 @@ export def "places-microsoftgraphfloor-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.floor/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -4280,6 +4419,7 @@ export def "places-microsoftgraphroom GetPlaceAsRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<audioDeviceName: string, bookingType: string, building: string, capacity: float, displayDeviceName: string, emailAddress: string, floorLabel: string, floorNumber: float, nickname: string, placeId: string, teamsEnabledState: string, videoDeviceName: string> {
@@ -4289,7 +4429,7 @@ export def "places-microsoftgraphroom GetPlaceAsRoom" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.room" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -4305,6 +4445,7 @@ export def "places-microsoftgraphroom-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4320,7 +4461,7 @@ export def "places-microsoftgraphroom-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.room/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -4336,6 +4477,7 @@ export def "places-microsoftgraphroom-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4348,7 +4490,7 @@ export def "places-microsoftgraphroom-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -4365,6 +4507,7 @@ export def "places-microsoftgraphroom-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -4374,7 +4517,7 @@ export def "places-microsoftgraphroom-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.room/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -4391,6 +4534,7 @@ export def "places-microsoftgraphroom-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4403,7 +4547,7 @@ export def "places-microsoftgraphroom-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -4420,6 +4564,7 @@ export def "places-microsoftgraphroom-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4429,7 +4574,7 @@ export def "places-microsoftgraphroom-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4445,6 +4590,7 @@ export def "places-microsoftgraphroom-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4454,7 +4600,7 @@ export def "places-microsoftgraphroom-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.room/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get place
@@ -4471,6 +4617,7 @@ export def "places-microsoftgraphroom-list GetPlaceAsRoomList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<emailAddress: string, rooms: table<audioDeviceName: string, bookingType: string, building: string, capacity: float, displayDeviceName: string, emailAddress: string, floorLabel: string, floorNumber: float, nickname: string, placeId: string, teamsEnabledState: string, videoDeviceName: string>, workspaces: table<capacity: float, displayDeviceName: string, emailAddress: string, mode: record, nickname: string, placeId: string>> {
@@ -4480,7 +4627,7 @@ export def "places-microsoftgraphroom-list GetPlaceAsRoomList" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -4496,6 +4643,7 @@ export def "places-microsoftgraphroom-list-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4511,7 +4659,7 @@ export def "places-microsoftgraphroom-list-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -4527,6 +4675,7 @@ export def "places-microsoftgraphroom-list-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4539,7 +4688,7 @@ export def "places-microsoftgraphroom-list-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -4556,6 +4705,7 @@ export def "places-microsoftgraphroom-list-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -4565,7 +4715,7 @@ export def "places-microsoftgraphroom-list-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -4582,6 +4732,7 @@ export def "places-microsoftgraphroom-list-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4594,7 +4745,7 @@ export def "places-microsoftgraphroom-list-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -4611,6 +4762,7 @@ export def "places-microsoftgraphroom-list-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4620,7 +4772,7 @@ export def "places-microsoftgraphroom-list-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4636,6 +4788,7 @@ export def "places-microsoftgraphroom-list-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4645,7 +4798,7 @@ export def "places-microsoftgraphroom-list-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rooms from places
@@ -4661,6 +4814,7 @@ export def "places-microsoftgraphroom-list-rooms ListRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4676,7 +4830,7 @@ export def "places-microsoftgraphroom-list-rooms ListRoom" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to rooms for places
@@ -4692,6 +4846,7 @@ export def "places-microsoftgraphroom-list-rooms CreateRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audioDeviceName: string # Specifies the name of the audio device in the room. (nullable)
   --bookingType: string@bookingType-completer
   --building: string # Specifies the building name or building number that the room is in. (nullable)
@@ -4713,7 +4868,7 @@ export def "places-microsoftgraphroom-list-rooms CreateRoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rooms from places
@@ -4730,6 +4885,7 @@ export def "places-microsoftgraphroom-list-rooms GetRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<audioDeviceName: string, bookingType: string, building: string, capacity: float, displayDeviceName: string, emailAddress: string, floorLabel: string, floorNumber: float, nickname: string, placeId: string, teamsEnabledState: string, videoDeviceName: string> {
@@ -4739,7 +4895,7 @@ export def "places-microsoftgraphroom-list-rooms GetRoom" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms/($room_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property rooms in places
@@ -4756,6 +4912,7 @@ export def "places-microsoftgraphroom-list-rooms UpdateRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audioDeviceName: string # Specifies the name of the audio device in the room. (nullable)
   --bookingType: string@bookingType-completer
   --building: string # Specifies the building name or building number that the room is in. (nullable)
@@ -4777,7 +4934,7 @@ export def "places-microsoftgraphroom-list-rooms UpdateRoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property rooms for places
@@ -4794,6 +4951,7 @@ export def "places-microsoftgraphroom-list-rooms DeleteRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4803,7 +4961,7 @@ export def "places-microsoftgraphroom-list-rooms DeleteRoom" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -4820,6 +4978,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4835,7 +4994,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms/($room_id)/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -4852,6 +5011,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4864,7 +5024,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -4882,6 +5042,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -4891,7 +5052,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms/($room_id)/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -4909,6 +5070,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -4921,7 +5083,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -4939,6 +5101,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4948,7 +5111,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4965,6 +5128,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4974,7 +5138,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms/($room_id)/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4990,6 +5154,7 @@ export def "places-microsoftgraphroom-list-rooms-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4999,7 +5164,7 @@ export def "places-microsoftgraphroom-list-rooms-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/rooms/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workspaces from places
@@ -5015,6 +5180,7 @@ export def "places-microsoftgraphroom-list-workspaces ListWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5030,7 +5196,7 @@ export def "places-microsoftgraphroom-list-workspaces ListWorkspace" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to workspaces for places
@@ -5046,6 +5212,7 @@ export def "places-microsoftgraphroom-list-workspaces CreateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --capacity: float # The maximum number of individual desks within a workspace. (nullable, format: int32)
   --displayDeviceName: string # The name of the display device (for example, monitor or projector) that is available in the workspace. (nullable)
   --emailAddress: string # The email address that is associated with the workspace. This email address is used for booking. (nullable)
@@ -5061,7 +5228,7 @@ export def "places-microsoftgraphroom-list-workspaces CreateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workspaces from places
@@ -5078,6 +5245,7 @@ export def "places-microsoftgraphroom-list-workspaces GetWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<capacity: float, displayDeviceName: string, emailAddress: string, mode: record, nickname: string, placeId: string> {
@@ -5087,7 +5255,7 @@ export def "places-microsoftgraphroom-list-workspaces GetWorkspace" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces/($workspace_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property workspaces in places
@@ -5104,6 +5272,7 @@ export def "places-microsoftgraphroom-list-workspaces UpdateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --capacity: float # The maximum number of individual desks within a workspace. (nullable, format: int32)
   --displayDeviceName: string # The name of the display device (for example, monitor or projector) that is available in the workspace. (nullable)
   --emailAddress: string # The email address that is associated with the workspace. This email address is used for booking. (nullable)
@@ -5119,7 +5288,7 @@ export def "places-microsoftgraphroom-list-workspaces UpdateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property workspaces for places
@@ -5136,6 +5305,7 @@ export def "places-microsoftgraphroom-list-workspaces DeleteWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5145,7 +5315,7 @@ export def "places-microsoftgraphroom-list-workspaces DeleteWorkspace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -5162,6 +5332,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5177,7 +5348,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces/($workspace_id)/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -5194,6 +5365,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5206,7 +5378,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -5224,6 +5396,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -5233,7 +5406,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces/($workspace_id)/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -5251,6 +5424,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5263,7 +5437,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -5281,6 +5455,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5290,7 +5465,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5307,6 +5482,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins-count GetCount" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5316,7 +5492,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins-count GetCount" 
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces/($workspace_id)/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5332,6 +5508,7 @@ export def "places-microsoftgraphroom-list-workspaces-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5341,7 +5518,7 @@ export def "places-microsoftgraphroom-list-workspaces-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.roomList/workspaces/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5358,6 +5535,7 @@ export def "places-microsoftgraphsection GetPlaceAsSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record {
@@ -5367,7 +5545,7 @@ export def "places-microsoftgraphsection GetPlaceAsSection" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.section" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -5383,6 +5561,7 @@ export def "places-microsoftgraphsection-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5398,7 +5577,7 @@ export def "places-microsoftgraphsection-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.section/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -5414,6 +5593,7 @@ export def "places-microsoftgraphsection-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5426,7 +5606,7 @@ export def "places-microsoftgraphsection-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -5443,6 +5623,7 @@ export def "places-microsoftgraphsection-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -5452,7 +5633,7 @@ export def "places-microsoftgraphsection-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.section/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -5469,6 +5650,7 @@ export def "places-microsoftgraphsection-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5481,7 +5663,7 @@ export def "places-microsoftgraphsection-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -5498,6 +5680,7 @@ export def "places-microsoftgraphsection-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5507,7 +5690,7 @@ export def "places-microsoftgraphsection-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5523,6 +5706,7 @@ export def "places-microsoftgraphsection-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5532,7 +5716,7 @@ export def "places-microsoftgraphsection-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.section/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5549,6 +5733,7 @@ export def "places-microsoftgraphworkspace GetPlaceAsWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<capacity: float, displayDeviceName: string, emailAddress: string, mode: record, nickname: string, placeId: string> {
@@ -5558,7 +5743,7 @@ export def "places-microsoftgraphworkspace GetPlaceAsWorkspace" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.workspace" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get checkIns from places
@@ -5574,6 +5759,7 @@ export def "places-microsoftgraphworkspace-check-ins ListCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5589,7 +5775,7 @@ export def "places-microsoftgraphworkspace-check-ins ListCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.workspace/checkIns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to checkIns for places
@@ -5605,6 +5791,7 @@ export def "places-microsoftgraphworkspace-check-ins CreateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5617,7 +5804,7 @@ export def "places-microsoftgraphworkspace-check-ins CreateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get checkIns from places
@@ -5634,6 +5821,7 @@ export def "places-microsoftgraphworkspace-check-ins GetCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<calendarEventId: string, checkInMethod: string, createdDateTime: string> {
@@ -5643,7 +5831,7 @@ export def "places-microsoftgraphworkspace-check-ins GetCheckIn" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.workspace/checkIns/($checkInClaim_calendarEventId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property checkIns in places
@@ -5660,6 +5848,7 @@ export def "places-microsoftgraphworkspace-check-ins UpdateCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarEventId: string # The unique identifier for an Outlook calendar event associated with the checkInClaim object. For more information, see the iCalUId property in event.
   --checkInMethod: string@checkInMethod-completer
   --createdDateTime: string # The date and time when the checkInClaim object was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -5672,7 +5861,7 @@ export def "places-microsoftgraphworkspace-check-ins UpdateCheckIn" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property checkIns for places
@@ -5689,6 +5878,7 @@ export def "places-microsoftgraphworkspace-check-ins DeleteCheckIn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5698,7 +5888,7 @@ export def "places-microsoftgraphworkspace-check-ins DeleteCheckIn" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5714,6 +5904,7 @@ export def "places-microsoftgraphworkspace-check-ins-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5723,7 +5914,7 @@ export def "places-microsoftgraphworkspace-check-ins-count GetCount" [
   let full_url = (build-url $base $"/places/($place_id)/microsoft.graph.workspace/checkIns/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5738,6 +5929,7 @@ export def "places-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5747,7 +5939,7 @@ export def "places-count GetCount" [
   let full_url = (build-url $base "/places/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5763,6 +5955,7 @@ export def "places-microsoftgraphbuilding ListPlaceAsBuilding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5778,7 +5971,7 @@ export def "places-microsoftgraphbuilding ListPlaceAsBuilding" [
   let full_url = (build-url $base "/places/microsoft.graph.building" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5793,6 +5986,7 @@ export def "places-microsoftgraphbuilding-count GetCountAsBuilding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5802,7 +5996,7 @@ export def "places-microsoftgraphbuilding-count GetCountAsBuilding" [
   let full_url = (build-url $base "/places/microsoft.graph.building/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5818,6 +6012,7 @@ export def "places-microsoftgraphdesk ListPlaceAsDesk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5833,7 +6028,7 @@ export def "places-microsoftgraphdesk ListPlaceAsDesk" [
   let full_url = (build-url $base "/places/microsoft.graph.desk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5848,6 +6043,7 @@ export def "places-microsoftgraphdesk-count GetCountAsDesk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5857,7 +6053,7 @@ export def "places-microsoftgraphdesk-count GetCountAsDesk" [
   let full_url = (build-url $base "/places/microsoft.graph.desk/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5873,6 +6069,7 @@ export def "places-microsoftgraphfloor ListPlaceAsFloor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5888,7 +6085,7 @@ export def "places-microsoftgraphfloor ListPlaceAsFloor" [
   let full_url = (build-url $base "/places/microsoft.graph.floor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5903,6 +6100,7 @@ export def "places-microsoftgraphfloor-count GetCountAsFloor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5912,7 +6110,7 @@ export def "places-microsoftgraphfloor-count GetCountAsFloor" [
   let full_url = (build-url $base "/places/microsoft.graph.floor/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -5928,6 +6126,7 @@ export def "places-microsoftgraphroom ListPlaceAsRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5943,7 +6142,7 @@ export def "places-microsoftgraphroom ListPlaceAsRoom" [
   let full_url = (build-url $base "/places/microsoft.graph.room" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5958,6 +6157,7 @@ export def "places-microsoftgraphroom-count GetCountAsRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5967,7 +6167,7 @@ export def "places-microsoftgraphroom-count GetCountAsRoom" [
   let full_url = (build-url $base "/places/microsoft.graph.room/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get place
@@ -5983,6 +6183,7 @@ export def "places-microsoftgraphroom-list ListPlaceAsRoomList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5998,7 +6199,7 @@ export def "places-microsoftgraphroom-list ListPlaceAsRoomList" [
   let full_url = (build-url $base "/places/microsoft.graph.roomList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6013,6 +6214,7 @@ export def "places-microsoftgraphroom-list-count GetCountAsRoomList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6022,7 +6224,7 @@ export def "places-microsoftgraphroom-list-count GetCountAsRoomList" [
   let full_url = (build-url $base "/places/microsoft.graph.roomList/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -6038,6 +6240,7 @@ export def "places-microsoftgraphsection ListPlaceAsSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6053,7 +6256,7 @@ export def "places-microsoftgraphsection ListPlaceAsSection" [
   let full_url = (build-url $base "/places/microsoft.graph.section" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6068,6 +6271,7 @@ export def "places-microsoftgraphsection-count GetCountAsSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6077,7 +6281,7 @@ export def "places-microsoftgraphsection-count GetCountAsSection" [
   let full_url = (build-url $base "/places/microsoft.graph.section/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List place objects
@@ -6093,6 +6297,7 @@ export def "places-microsoftgraphworkspace ListPlaceAsWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6108,7 +6313,7 @@ export def "places-microsoftgraphworkspace ListPlaceAsWorkspace" [
   let full_url = (build-url $base "/places/microsoft.graph.workspace" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6123,6 +6328,7 @@ export def "places-microsoftgraphworkspace-count GetCountAsWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6132,7 +6338,7 @@ export def "places-microsoftgraphworkspace-count GetCountAsWorkspace" [
   let full_url = (build-url $base "/places/microsoft.graph.workspace/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendar from users
@@ -6148,6 +6354,7 @@ export def "users-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -6157,7 +6364,7 @@ export def "users-calendar GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendar in users
@@ -6179,6 +6386,7 @@ export def "users-calendar UpdateCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
   --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
@@ -6207,7 +6415,7 @@ export def "users-calendar UpdateCalendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List calendarPermissions
@@ -6224,6 +6432,7 @@ export def "users-calendar-calendar-permissions ListCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6239,7 +6448,7 @@ export def "users-calendar-calendar-permissions ListCalendarPermission" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/calendarPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarPermissions for users
@@ -6256,6 +6465,7 @@ export def "users-calendar-calendar-permissions CreateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -6271,7 +6481,7 @@ export def "users-calendar-calendar-permissions CreateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarPermission
@@ -6289,6 +6499,7 @@ export def "users-calendar-calendar-permissions GetCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
@@ -6298,7 +6509,7 @@ export def "users-calendar-calendar-permissions GetCalendarPermission" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/calendarPermissions/($calendarPermission_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update calendarPermission
@@ -6317,6 +6528,7 @@ export def "users-calendar-calendar-permissions UpdateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -6332,7 +6544,7 @@ export def "users-calendar-calendar-permissions UpdateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete calendarPermission
@@ -6350,6 +6562,7 @@ export def "users-calendar-calendar-permissions DeleteCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6359,7 +6572,7 @@ export def "users-calendar-calendar-permissions DeleteCalendarPermission" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6375,6 +6588,7 @@ export def "users-calendar-calendar-permissions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6384,7 +6598,7 @@ export def "users-calendar-calendar-permissions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/calendarPermissions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarView from users
@@ -6400,6 +6614,7 @@ export def "users-calendar-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -6417,7 +6632,7 @@ export def "users-calendar-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -6434,6 +6649,7 @@ export def "users-calendar-calendar-view-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -6451,7 +6667,7 @@ export def "users-calendar-calendar-view-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from users
@@ -6467,6 +6683,7 @@ export def "users-calendar-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6482,7 +6699,7 @@ export def "users-calendar-events ListEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for users
@@ -6514,6 +6731,7 @@ export def "users-calendar-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -6567,7 +6785,7 @@ export def "users-calendar-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from users
@@ -6584,6 +6802,7 @@ export def "users-calendar-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -6593,7 +6812,7 @@ export def "users-calendar-events GetEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in users
@@ -6626,6 +6845,7 @@ export def "users-calendar-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -6679,7 +6899,7 @@ export def "users-calendar-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for users
@@ -6696,6 +6916,7 @@ export def "users-calendar-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6705,7 +6926,7 @@ export def "users-calendar-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from users
@@ -6722,6 +6943,7 @@ export def "users-calendar-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6737,7 +6959,7 @@ export def "users-calendar-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for users
@@ -6754,6 +6976,7 @@ export def "users-calendar-events-attachments CreateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -6769,7 +6992,7 @@ export def "users-calendar-events-attachments CreateAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from users
@@ -6787,6 +7010,7 @@ export def "users-calendar-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -6796,7 +7020,7 @@ export def "users-calendar-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for users
@@ -6814,6 +7038,7 @@ export def "users-calendar-events-attachments DeleteAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6823,7 +7048,7 @@ export def "users-calendar-events-attachments DeleteAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -6840,6 +7065,7 @@ export def "users-calendar-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -6849,7 +7075,7 @@ export def "users-calendar-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -6868,6 +7094,7 @@ export def "users-calendar-events-attachments-microsoftgraphcreate-upload-sessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -6878,7 +7105,7 @@ export def "users-calendar-events-attachments-microsoftgraphcreate-upload-sessio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from users
@@ -6895,6 +7122,7 @@ export def "users-calendar-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -6904,7 +7132,7 @@ export def "users-calendar-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get extensions from users
@@ -6921,6 +7149,7 @@ export def "users-calendar-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -6936,7 +7165,7 @@ export def "users-calendar-events-extensions ListExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to extensions for users
@@ -6953,6 +7182,7 @@ export def "users-calendar-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -6963,7 +7193,7 @@ export def "users-calendar-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extensions from users
@@ -6981,6 +7211,7 @@ export def "users-calendar-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -6990,7 +7221,7 @@ export def "users-calendar-events-extensions GetExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in users
@@ -7008,6 +7239,7 @@ export def "users-calendar-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -7018,7 +7250,7 @@ export def "users-calendar-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for users
@@ -7036,6 +7268,7 @@ export def "users-calendar-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7045,7 +7278,7 @@ export def "users-calendar-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -7062,6 +7295,7 @@ export def "users-calendar-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -7071,7 +7305,7 @@ export def "users-calendar-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from users
@@ -7088,6 +7322,7 @@ export def "users-calendar-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -7105,7 +7340,7 @@ export def "users-calendar-events-instances ListInstance" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -7123,6 +7358,7 @@ export def "users-calendar-events-instances-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -7140,7 +7376,7 @@ export def "users-calendar-events-instances-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -7158,6 +7394,7 @@ export def "users-calendar-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -7169,7 +7406,7 @@ export def "users-calendar-events-microsoftgraphaccept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -7187,6 +7424,7 @@ export def "users-calendar-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -7197,7 +7435,7 @@ export def "users-calendar-events-microsoftgraphcancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -7216,6 +7454,7 @@ export def "users-calendar-events-microsoftgraphdecline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -7228,7 +7467,7 @@ export def "users-calendar-events-microsoftgraphdecline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -7246,13 +7485,14 @@ export def "users-calendar-events-microsoftgraphdismiss-reminder dismissReminder
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -7271,6 +7511,7 @@ export def "users-calendar-events-microsoftgraphforward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -7282,7 +7523,7 @@ export def "users-calendar-events-microsoftgraphforward forward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -7299,13 +7540,14 @@ export def "users-calendar-events-microsoftgraphpermanent-delete permanentDelete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -7324,6 +7566,7 @@ export def "users-calendar-events-microsoftgraphsnooze-reminder snoozeReminder" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -7334,7 +7577,7 @@ export def "users-calendar-events-microsoftgraphsnooze-reminder snoozeReminder" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -7353,6 +7596,7 @@ export def "users-calendar-events-microsoftgraphtentatively-accept tentativelyAc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -7365,7 +7609,7 @@ export def "users-calendar-events-microsoftgraphtentatively-accept tentativelyAc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -7381,6 +7625,7 @@ export def "users-calendar-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -7390,7 +7635,7 @@ export def "users-calendar-events-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -7407,6 +7652,7 @@ export def "users-calendar-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -7424,7 +7670,7 @@ export def "users-calendar-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendar/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function allowedCalendarSharingRoles
@@ -7441,6 +7687,7 @@ export def "users-calendar-microsoftgraphallowed-calendar-sharing-roles-user-use
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -7453,7 +7700,7 @@ export def "users-calendar-microsoftgraphallowed-calendar-sharing-roles-user-use
   let full_url = (build-url $base $"/users/($user_id)/calendar/microsoft.graph.allowedCalendarSharingRoles(User='($User)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action getSchedule
@@ -7472,6 +7719,7 @@ export def "users-calendar-microsoftgraphget-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Schedules: list
   --EndTime: record # shape: {dateTime?: string, timeZone?: string}
   --StartTime: record # shape: {dateTime?: string, timeZone?: string}
@@ -7485,7 +7733,7 @@ export def "users-calendar-microsoftgraphget-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -7501,13 +7749,14 @@ export def "users-calendar-microsoftgraphpermanent-delete permanentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendar/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarGroups from users
@@ -7523,6 +7772,7 @@ export def "users-calendar-groups ListCalendarGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -7538,7 +7788,7 @@ export def "users-calendar-groups ListCalendarGroup" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarGroups for users
@@ -7555,6 +7805,7 @@ export def "users-calendar-groups CreateCalendarGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --changeKey: string # Identifies the version of the calendar group. Every time the calendar group is changed, ChangeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --classId: string # The class identifier. Read-only. (nullable, format: uuid)
@@ -7569,7 +7820,7 @@ export def "users-calendar-groups CreateCalendarGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarGroups from users
@@ -7586,6 +7837,7 @@ export def "users-calendar-groups GetCalendarGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, changeKey: string, classId: string, name: string, calendars: table<id: string, allowedOnlineMeetingProviders: list, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record, calendarPermissions: list, calendarView: list, events: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>> {
@@ -7595,7 +7847,7 @@ export def "users-calendar-groups GetCalendarGroup" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendarGroups in users
@@ -7613,6 +7865,7 @@ export def "users-calendar-groups UpdateCalendarGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --changeKey: string # Identifies the version of the calendar group. Every time the calendar group is changed, ChangeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --classId: string # The class identifier. Read-only. (nullable, format: uuid)
@@ -7627,7 +7880,7 @@ export def "users-calendar-groups UpdateCalendarGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendarGroups for users
@@ -7644,6 +7897,7 @@ export def "users-calendar-groups DeleteCalendarGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7653,7 +7907,7 @@ export def "users-calendar-groups DeleteCalendarGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendars from users
@@ -7670,6 +7924,7 @@ export def "users-calendar-groups-calendars ListCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -7685,7 +7940,7 @@ export def "users-calendar-groups-calendars ListCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendars for users
@@ -7708,6 +7963,7 @@ export def "users-calendar-groups-calendars CreateCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
   --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
@@ -7736,7 +7992,7 @@ export def "users-calendar-groups-calendars CreateCalendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendars from users
@@ -7754,6 +8010,7 @@ export def "users-calendar-groups-calendars GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -7763,7 +8020,7 @@ export def "users-calendar-groups-calendars GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendars in users
@@ -7787,6 +8044,7 @@ export def "users-calendar-groups-calendars UpdateCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
   --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
@@ -7815,7 +8073,7 @@ export def "users-calendar-groups-calendars UpdateCalendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendars for users
@@ -7833,6 +8091,7 @@ export def "users-calendar-groups-calendars DeleteCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7842,7 +8101,7 @@ export def "users-calendar-groups-calendars DeleteCalendar" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarPermissions from users
@@ -7860,6 +8119,7 @@ export def "users-calendar-groups-calendars-calendar-permissions ListCalendarPer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -7875,7 +8135,7 @@ export def "users-calendar-groups-calendars-calendar-permissions ListCalendarPer
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/calendarPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarPermissions for users
@@ -7894,6 +8154,7 @@ export def "users-calendar-groups-calendars-calendar-permissions CreateCalendarP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -7909,7 +8170,7 @@ export def "users-calendar-groups-calendars-calendar-permissions CreateCalendarP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarPermissions from users
@@ -7928,6 +8189,7 @@ export def "users-calendar-groups-calendars-calendar-permissions GetCalendarPerm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
@@ -7937,7 +8199,7 @@ export def "users-calendar-groups-calendars-calendar-permissions GetCalendarPerm
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/calendarPermissions/($calendarPermission_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendarPermissions in users
@@ -7957,6 +8219,7 @@ export def "users-calendar-groups-calendars-calendar-permissions UpdateCalendarP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -7972,7 +8235,7 @@ export def "users-calendar-groups-calendars-calendar-permissions UpdateCalendarP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendarPermissions for users
@@ -7991,6 +8254,7 @@ export def "users-calendar-groups-calendars-calendar-permissions DeleteCalendarP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8000,7 +8264,7 @@ export def "users-calendar-groups-calendars-calendar-permissions DeleteCalendarP
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -8018,6 +8282,7 @@ export def "users-calendar-groups-calendars-calendar-permissions-count GetCount"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -8027,7 +8292,7 @@ export def "users-calendar-groups-calendars-calendar-permissions-count GetCount"
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/calendarPermissions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarView from users
@@ -8045,6 +8310,7 @@ export def "users-calendar-groups-calendars-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -8062,7 +8328,7 @@ export def "users-calendar-groups-calendars-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -8081,6 +8347,7 @@ export def "users-calendar-groups-calendars-calendar-view-microsoftgraphdelta de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -8098,7 +8365,7 @@ export def "users-calendar-groups-calendars-calendar-view-microsoftgraphdelta de
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from users
@@ -8116,6 +8383,7 @@ export def "users-calendar-groups-calendars-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -8131,7 +8399,7 @@ export def "users-calendar-groups-calendars-events ListEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for users
@@ -8165,6 +8433,7 @@ export def "users-calendar-groups-calendars-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -8218,7 +8487,7 @@ export def "users-calendar-groups-calendars-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from users
@@ -8237,6 +8506,7 @@ export def "users-calendar-groups-calendars-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -8246,7 +8516,7 @@ export def "users-calendar-groups-calendars-events GetEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in users
@@ -8281,6 +8551,7 @@ export def "users-calendar-groups-calendars-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -8334,7 +8605,7 @@ export def "users-calendar-groups-calendars-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for users
@@ -8353,6 +8624,7 @@ export def "users-calendar-groups-calendars-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8362,7 +8634,7 @@ export def "users-calendar-groups-calendars-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from users
@@ -8381,6 +8653,7 @@ export def "users-calendar-groups-calendars-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -8396,7 +8669,7 @@ export def "users-calendar-groups-calendars-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for users
@@ -8415,6 +8688,7 @@ export def "users-calendar-groups-calendars-events-attachments CreateAttachment"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -8430,7 +8704,7 @@ export def "users-calendar-groups-calendars-events-attachments CreateAttachment"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from users
@@ -8450,6 +8724,7 @@ export def "users-calendar-groups-calendars-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -8459,7 +8734,7 @@ export def "users-calendar-groups-calendars-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for users
@@ -8479,6 +8754,7 @@ export def "users-calendar-groups-calendars-events-attachments DeleteAttachment"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8488,7 +8764,7 @@ export def "users-calendar-groups-calendars-events-attachments DeleteAttachment"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -8507,6 +8783,7 @@ export def "users-calendar-groups-calendars-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -8516,7 +8793,7 @@ export def "users-calendar-groups-calendars-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -8537,6 +8814,7 @@ export def "users-calendar-groups-calendars-events-attachments-microsoftgraphcre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -8547,7 +8825,7 @@ export def "users-calendar-groups-calendars-events-attachments-microsoftgraphcre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from users
@@ -8566,6 +8844,7 @@ export def "users-calendar-groups-calendars-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -8575,7 +8854,7 @@ export def "users-calendar-groups-calendars-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get extensions from users
@@ -8594,6 +8873,7 @@ export def "users-calendar-groups-calendars-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -8609,7 +8889,7 @@ export def "users-calendar-groups-calendars-events-extensions ListExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to extensions for users
@@ -8628,6 +8908,7 @@ export def "users-calendar-groups-calendars-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -8638,7 +8919,7 @@ export def "users-calendar-groups-calendars-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extensions from users
@@ -8658,6 +8939,7 @@ export def "users-calendar-groups-calendars-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -8667,7 +8949,7 @@ export def "users-calendar-groups-calendars-events-extensions GetExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in users
@@ -8687,6 +8969,7 @@ export def "users-calendar-groups-calendars-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -8697,7 +8980,7 @@ export def "users-calendar-groups-calendars-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for users
@@ -8717,6 +9000,7 @@ export def "users-calendar-groups-calendars-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8726,7 +9010,7 @@ export def "users-calendar-groups-calendars-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -8745,6 +9029,7 @@ export def "users-calendar-groups-calendars-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -8754,7 +9039,7 @@ export def "users-calendar-groups-calendars-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from users
@@ -8773,6 +9058,7 @@ export def "users-calendar-groups-calendars-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -8790,7 +9076,7 @@ export def "users-calendar-groups-calendars-events-instances ListInstance" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -8810,6 +9096,7 @@ export def "users-calendar-groups-calendars-events-instances-microsoftgraphdelta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -8827,7 +9114,7 @@ export def "users-calendar-groups-calendars-events-instances-microsoftgraphdelta
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -8847,6 +9134,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphaccept accept" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -8858,7 +9146,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphaccept accept" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -8878,6 +9166,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphcancel cancel" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -8888,7 +9177,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphcancel cancel" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -8909,6 +9198,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdecline decline
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -8921,7 +9211,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdecline decline
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -8941,13 +9231,14 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdismiss-reminde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -8968,6 +9259,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphforward forward
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -8979,7 +9271,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphforward forward
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -8998,13 +9290,14 @@ export def "users-calendar-groups-calendars-events-microsoftgraphpermanent-delet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -9025,6 +9318,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphsnooze-reminder
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -9035,7 +9329,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphsnooze-reminder
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -9056,6 +9350,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphtentatively-acc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -9068,7 +9363,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphtentatively-acc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -9086,6 +9381,7 @@ export def "users-calendar-groups-calendars-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -9095,7 +9391,7 @@ export def "users-calendar-groups-calendars-events-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -9114,6 +9410,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -9131,7 +9428,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function allowedCalendarSharingRoles
@@ -9150,6 +9447,7 @@ export def "users-calendar-groups-calendars-microsoftgraphallowed-calendar-shari
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -9162,7 +9460,7 @@ export def "users-calendar-groups-calendars-microsoftgraphallowed-calendar-shari
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/microsoft.graph.allowedCalendarSharingRoles(User='($User)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action getSchedule
@@ -9183,6 +9481,7 @@ export def "users-calendar-groups-calendars-microsoftgraphget-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Schedules: list
   --EndTime: record # shape: {dateTime?: string, timeZone?: string}
   --StartTime: record # shape: {dateTime?: string, timeZone?: string}
@@ -9196,7 +9495,7 @@ export def "users-calendar-groups-calendars-microsoftgraphget-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -9214,13 +9513,14 @@ export def "users-calendar-groups-calendars-microsoftgraphpermanent-delete perma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/($calendar_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -9237,6 +9537,7 @@ export def "users-calendar-groups-calendars-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -9246,7 +9547,7 @@ export def "users-calendar-groups-calendars-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/($calendarGroup_id)/calendars/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -9262,6 +9563,7 @@ export def "users-calendar-groups-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -9271,7 +9573,7 @@ export def "users-calendar-groups-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendarGroups/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendars from users
@@ -9287,6 +9589,7 @@ export def "users-calendars ListCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -9302,7 +9605,7 @@ export def "users-calendars ListCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendars for users
@@ -9324,6 +9627,7 @@ export def "users-calendars CreateCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
   --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
@@ -9352,7 +9656,7 @@ export def "users-calendars CreateCalendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendars from users
@@ -9369,6 +9673,7 @@ export def "users-calendars GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -9378,7 +9683,7 @@ export def "users-calendars GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendars in users
@@ -9401,6 +9706,7 @@ export def "users-calendars UpdateCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
   --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
@@ -9429,7 +9735,7 @@ export def "users-calendars UpdateCalendar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendars for users
@@ -9446,6 +9752,7 @@ export def "users-calendars DeleteCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9455,7 +9762,7 @@ export def "users-calendars DeleteCalendar" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarPermissions from users
@@ -9472,6 +9779,7 @@ export def "users-calendars-calendar-permissions ListCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -9487,7 +9795,7 @@ export def "users-calendars-calendar-permissions ListCalendarPermission" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/calendarPermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarPermissions for users
@@ -9505,6 +9813,7 @@ export def "users-calendars-calendar-permissions CreateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -9520,7 +9829,7 @@ export def "users-calendars-calendar-permissions CreateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarPermissions from users
@@ -9538,6 +9847,7 @@ export def "users-calendars-calendar-permissions GetCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
@@ -9547,7 +9857,7 @@ export def "users-calendars-calendar-permissions GetCalendarPermission" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/calendarPermissions/($calendarPermission_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendarPermissions in users
@@ -9566,6 +9876,7 @@ export def "users-calendars-calendar-permissions UpdateCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
@@ -9581,7 +9892,7 @@ export def "users-calendars-calendar-permissions UpdateCalendarPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendarPermissions for users
@@ -9599,6 +9910,7 @@ export def "users-calendars-calendar-permissions DeleteCalendarPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9608,7 +9920,7 @@ export def "users-calendars-calendar-permissions DeleteCalendarPermission" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -9625,6 +9937,7 @@ export def "users-calendars-calendar-permissions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -9634,7 +9947,7 @@ export def "users-calendars-calendar-permissions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/calendarPermissions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarView from users
@@ -9651,6 +9964,7 @@ export def "users-calendars-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -9668,7 +9982,7 @@ export def "users-calendars-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -9686,6 +10000,7 @@ export def "users-calendars-calendar-view-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -9703,7 +10018,7 @@ export def "users-calendars-calendar-view-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from users
@@ -9720,6 +10035,7 @@ export def "users-calendars-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -9735,7 +10051,7 @@ export def "users-calendars-events ListEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for users
@@ -9768,6 +10084,7 @@ export def "users-calendars-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -9821,7 +10138,7 @@ export def "users-calendars-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from users
@@ -9839,6 +10156,7 @@ export def "users-calendars-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -9848,7 +10166,7 @@ export def "users-calendars-events GetEvent" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in users
@@ -9882,6 +10200,7 @@ export def "users-calendars-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -9935,7 +10254,7 @@ export def "users-calendars-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for users
@@ -9953,6 +10272,7 @@ export def "users-calendars-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9962,7 +10282,7 @@ export def "users-calendars-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from users
@@ -9980,6 +10300,7 @@ export def "users-calendars-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -9995,7 +10316,7 @@ export def "users-calendars-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for users
@@ -10013,6 +10334,7 @@ export def "users-calendars-events-attachments CreateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -10028,7 +10350,7 @@ export def "users-calendars-events-attachments CreateAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from users
@@ -10047,6 +10369,7 @@ export def "users-calendars-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -10056,7 +10379,7 @@ export def "users-calendars-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for users
@@ -10075,6 +10398,7 @@ export def "users-calendars-events-attachments DeleteAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10084,7 +10408,7 @@ export def "users-calendars-events-attachments DeleteAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -10102,6 +10426,7 @@ export def "users-calendars-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -10111,7 +10436,7 @@ export def "users-calendars-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -10131,6 +10456,7 @@ export def "users-calendars-events-attachments-microsoftgraphcreate-upload-sessi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -10141,7 +10467,7 @@ export def "users-calendars-events-attachments-microsoftgraphcreate-upload-sessi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from users
@@ -10159,6 +10485,7 @@ export def "users-calendars-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -10168,7 +10495,7 @@ export def "users-calendars-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get extensions from users
@@ -10186,6 +10513,7 @@ export def "users-calendars-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -10201,7 +10529,7 @@ export def "users-calendars-events-extensions ListExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to extensions for users
@@ -10219,6 +10547,7 @@ export def "users-calendars-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -10229,7 +10558,7 @@ export def "users-calendars-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extensions from users
@@ -10248,6 +10577,7 @@ export def "users-calendars-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -10257,7 +10587,7 @@ export def "users-calendars-events-extensions GetExtension" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in users
@@ -10276,6 +10606,7 @@ export def "users-calendars-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -10286,7 +10617,7 @@ export def "users-calendars-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for users
@@ -10305,6 +10636,7 @@ export def "users-calendars-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10314,7 +10646,7 @@ export def "users-calendars-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -10332,6 +10664,7 @@ export def "users-calendars-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -10341,7 +10674,7 @@ export def "users-calendars-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from users
@@ -10359,6 +10692,7 @@ export def "users-calendars-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -10376,7 +10710,7 @@ export def "users-calendars-events-instances ListInstance" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -10395,6 +10729,7 @@ export def "users-calendars-events-instances-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -10412,7 +10747,7 @@ export def "users-calendars-events-instances-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -10431,6 +10766,7 @@ export def "users-calendars-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -10442,7 +10778,7 @@ export def "users-calendars-events-microsoftgraphaccept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -10461,6 +10797,7 @@ export def "users-calendars-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -10471,7 +10808,7 @@ export def "users-calendars-events-microsoftgraphcancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -10491,6 +10828,7 @@ export def "users-calendars-events-microsoftgraphdecline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -10503,7 +10841,7 @@ export def "users-calendars-events-microsoftgraphdecline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -10522,13 +10860,14 @@ export def "users-calendars-events-microsoftgraphdismiss-reminder dismissReminde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -10548,6 +10887,7 @@ export def "users-calendars-events-microsoftgraphforward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -10559,7 +10899,7 @@ export def "users-calendars-events-microsoftgraphforward forward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -10577,13 +10917,14 @@ export def "users-calendars-events-microsoftgraphpermanent-delete permanentDelet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -10603,6 +10944,7 @@ export def "users-calendars-events-microsoftgraphsnooze-reminder snoozeReminder"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -10613,7 +10955,7 @@ export def "users-calendars-events-microsoftgraphsnooze-reminder snoozeReminder"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -10633,6 +10975,7 @@ export def "users-calendars-events-microsoftgraphtentatively-accept tentativelyA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -10645,7 +10988,7 @@ export def "users-calendars-events-microsoftgraphtentatively-accept tentativelyA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -10662,6 +11005,7 @@ export def "users-calendars-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -10671,7 +11015,7 @@ export def "users-calendars-events-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -10689,6 +11033,7 @@ export def "users-calendars-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -10706,7 +11051,7 @@ export def "users-calendars-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function allowedCalendarSharingRoles
@@ -10724,6 +11069,7 @@ export def "users-calendars-microsoftgraphallowed-calendar-sharing-roles-user-us
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -10736,7 +11082,7 @@ export def "users-calendars-microsoftgraphallowed-calendar-sharing-roles-user-us
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/microsoft.graph.allowedCalendarSharingRoles(User='($User)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action getSchedule
@@ -10756,6 +11102,7 @@ export def "users-calendars-microsoftgraphget-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Schedules: list
   --EndTime: record # shape: {dateTime?: string, timeZone?: string}
   --StartTime: record # shape: {dateTime?: string, timeZone?: string}
@@ -10769,7 +11116,7 @@ export def "users-calendars-microsoftgraphget-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -10786,13 +11133,14 @@ export def "users-calendars-microsoftgraphpermanent-delete permanentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/calendars/($calendar_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -10808,6 +11156,7 @@ export def "users-calendars-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -10817,7 +11166,7 @@ export def "users-calendars-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/calendars/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get calendarView from users
@@ -10833,6 +11182,7 @@ export def "users-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -10850,7 +11200,7 @@ export def "users-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/users/($user_id)/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -10867,6 +11217,7 @@ export def "users-calendar-view-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -10884,7 +11235,7 @@ export def "users-calendar-view-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/calendarView/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from users
@@ -10900,6 +11251,7 @@ export def "users-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -10915,7 +11267,7 @@ export def "users-events ListEvent" [
   let full_url = (build-url $base $"/users/($user_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for users
@@ -10947,6 +11299,7 @@ export def "users-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -11000,7 +11353,7 @@ export def "users-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from users
@@ -11017,6 +11370,7 @@ export def "users-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<allowNewTimeProposals: bool, attendees: table<proposedNewTime: record, status: record>, body: record<content: string, contentType: string>, bodyPreview: string, cancelledOccurrences: list<string>, end: record<dateTime: string, timeZone: string>, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, locations: table<address: record, coordinates: record, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, onlineMeeting: record<conferenceId: string, joinUrl: string, phones: list<record>, quickDial: string, tollFreeNumbers: list<string>, tollNumber: string>, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record<emailAddress: record<address: string, name: string>>, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record<pattern: record<dayOfMonth: float, daysOfWeek: list, firstDayOfWeek: string, index: string, interval: float, month: float, type: string>, range: record<endDate: string, numberOfOccurrences: float, recurrenceTimeZone: string, startDate: string, type: string>>, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record<response: string, time: string>, sensitivity: string, seriesMasterId: string, showAs: string, start: record<dateTime: string, timeZone: string>, subject: string, transactionId: string, type: string, webLink: string, attachments: table<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float>, calendar: record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: list<record>, calendarView: list<any>, events: list<any>, multiValueExtendedProperties: list<record>, singleValueExtendedProperties: list<record>>, exceptionOccurrences: list<any>, extensions: table<id: string>, instances: list<any>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -11026,7 +11380,7 @@ export def "users-events GetEvent" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in users
@@ -11059,6 +11413,7 @@ export def "users-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -11112,7 +11467,7 @@ export def "users-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for users
@@ -11129,6 +11484,7 @@ export def "users-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11138,7 +11494,7 @@ export def "users-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachments from users
@@ -11155,6 +11511,7 @@ export def "users-events-attachments ListAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -11170,7 +11527,7 @@ export def "users-events-attachments ListAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attachments for users
@@ -11187,6 +11544,7 @@ export def "users-events-attachments CreateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
   --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
@@ -11202,7 +11560,7 @@ export def "users-events-attachments CreateAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments from users
@@ -11220,6 +11578,7 @@ export def "users-events-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, contentType: string, isInline: bool, lastModifiedDateTime: string, name: string, size: float> {
@@ -11229,7 +11588,7 @@ export def "users-events-attachments GetAttachment" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/attachments/($attachment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete navigation property attachments for users
@@ -11247,6 +11606,7 @@ export def "users-events-attachments DeleteAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11256,7 +11616,7 @@ export def "users-events-attachments DeleteAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -11273,6 +11633,7 @@ export def "users-events-attachments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -11282,7 +11643,7 @@ export def "users-events-attachments-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/attachments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action createUploadSession
@@ -11301,6 +11662,7 @@ export def "users-events-attachments-microsoftgraphcreate-upload-session createU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AttachmentItem: record # shape: {attachmentType?: "file"|"item"|"reference", contentId?: string, contentType?: string, isInline?: bool, name?: string, size?: float}
 ]: any -> record<expirationDateTime: string, nextExpectedRanges: list<string>, uploadUrl: string> {
   let input = $in
@@ -11311,7 +11673,7 @@ export def "users-events-attachments-microsoftgraphcreate-upload-session createU
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendar from users
@@ -11328,6 +11690,7 @@ export def "users-events-calendar GetCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, allowedOnlineMeetingProviders: list<string>, canEdit: bool, canShare: bool, canViewPrivateItems: bool, changeKey: string, color: string, defaultOnlineMeetingProvider: string, hexColor: string, isDefaultCalendar: bool, isRemovable: bool, isTallyingResponses: bool, name: string, owner: record<address: string, name: string>, calendarPermissions: table<id: string, allowedRoles: list, emailAddress: record, isInsideOrganization: bool, isRemovable: bool, role: string>, calendarView: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, events: table<allowNewTimeProposals: bool, attendees: list, body: record, bodyPreview: string, cancelledOccurrences: list, end: record, hasAttachments: bool, hideAttendees: bool, iCalUId: string, importance: string, isAllDay: bool, isCancelled: bool, isDraft: bool, isOnlineMeeting: bool, isOrganizer: bool, isReminderOn: bool, location: record, locations: list, onlineMeeting: record, onlineMeetingProvider: string, onlineMeetingUrl: string, organizer: record, originalEndTimeZone: string, originalStart: string, originalStartTimeZone: string, recurrence: record, reminderMinutesBeforeStart: float, responseRequested: bool, responseStatus: record, sensitivity: string, seriesMasterId: string, showAs: string, start: record, subject: string, transactionId: string, type: string, webLink: string, attachments: list, calendar: any, exceptionOccurrences: list, extensions: list, instances: list, multiValueExtendedProperties: list, singleValueExtendedProperties: list>, multiValueExtendedProperties: table<id: string, value: list>, singleValueExtendedProperties: table<id: string, value: string>> {
@@ -11337,7 +11700,7 @@ export def "users-events-calendar GetCalendar" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get extensions from users
@@ -11354,6 +11717,7 @@ export def "users-events-extensions ListExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -11369,7 +11733,7 @@ export def "users-events-extensions ListExtension" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/extensions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to extensions for users
@@ -11386,6 +11750,7 @@ export def "users-events-extensions CreateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -11396,7 +11761,7 @@ export def "users-events-extensions CreateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extensions from users
@@ -11414,6 +11779,7 @@ export def "users-events-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -11423,7 +11789,7 @@ export def "users-events-extensions GetExtension" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/extensions/($extension_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property extensions in users
@@ -11441,6 +11807,7 @@ export def "users-events-extensions UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -11451,7 +11818,7 @@ export def "users-events-extensions UpdateExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property extensions for users
@@ -11469,6 +11836,7 @@ export def "users-events-extensions DeleteExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11478,7 +11846,7 @@ export def "users-events-extensions DeleteExtension" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -11495,6 +11863,7 @@ export def "users-events-extensions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -11504,7 +11873,7 @@ export def "users-events-extensions-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/extensions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instances from users
@@ -11521,6 +11890,7 @@ export def "users-events-instances ListInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --endDateTime: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -11538,7 +11908,7 @@ export def "users-events-instances ListInstance" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -11556,6 +11926,7 @@ export def "users-events-instances-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -11573,7 +11944,7 @@ export def "users-events-instances-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/instances/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action accept
@@ -11591,6 +11962,7 @@ export def "users-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
@@ -11602,7 +11974,7 @@ export def "users-events-microsoftgraphaccept accept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action cancel
@@ -11620,6 +11992,7 @@ export def "users-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -11630,7 +12003,7 @@ export def "users-events-microsoftgraphcancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action decline
@@ -11649,6 +12022,7 @@ export def "users-events-microsoftgraphdecline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -11661,7 +12035,7 @@ export def "users-events-microsoftgraphdecline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action dismissReminder
@@ -11679,13 +12053,14 @@ export def "users-events-microsoftgraphdismiss-reminder dismissReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/microsoft.graph.dismissReminder")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action forward
@@ -11704,6 +12079,7 @@ export def "users-events-microsoftgraphforward forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ToRecipients: list # item shape: {emailAddress?: record}
   --Comment: string # nullable
 ]: any -> any {
@@ -11715,7 +12091,7 @@ export def "users-events-microsoftgraphforward forward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action permanentDelete
@@ -11732,13 +12108,14 @@ export def "users-events-microsoftgraphpermanent-delete permanentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/events/($event_id)/microsoft.graph.permanentDelete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action snoozeReminder
@@ -11757,6 +12134,7 @@ export def "users-events-microsoftgraphsnooze-reminder snoozeReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --NewReminderTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> any {
   let input = $in
@@ -11767,7 +12145,7 @@ export def "users-events-microsoftgraphsnooze-reminder snoozeReminder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action tentativelyAccept
@@ -11786,6 +12164,7 @@ export def "users-events-microsoftgraphtentatively-accept tentativelyAccept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ProposedNewTime: record # shape: {end?: record, start?: record}
   --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
@@ -11798,7 +12177,7 @@ export def "users-events-microsoftgraphtentatively-accept tentativelyAccept" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -11814,6 +12193,7 @@ export def "users-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -11823,7 +12203,7 @@ export def "users-events-count GetCount" [
   let full_url = (build-url $base $"/users/($user_id)/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function delta
@@ -11840,6 +12220,7 @@ export def "users-events-microsoftgraphdelta delta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDateTime: string # The start date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --endDateTime: string # The end date and time of the time range in the function, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -11857,5 +12238,5 @@ export def "users-events-microsoftgraphdelta delta" [
   let full_url = (build-url $base $"/users/($user_id)/events/microsoft.graph.delta()" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def interval-completer [] { ["1d" "30d" "7d"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "users list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<service: record, username: string, name: string>> {
@@ -112,7 +114,7 @@ export def "users list" [
   let full_url = (build-url $base $"/($service)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Owner detail
@@ -129,13 +131,14 @@ export def "users list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<service: record, username: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repository list
@@ -152,6 +155,7 @@ export def "repos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # whether the repository has received an upload
   --names: list # list of repository names
   --page: int # A page number within the paginated result set.
@@ -164,7 +168,7 @@ export def "repos list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repository detail
@@ -182,13 +186,14 @@ export def "repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, private: bool, updatestamp: string, author: record<service: record, username: string, name: string>, language: string, branch: string, active: bool, activated: bool, totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Branch list
@@ -206,6 +211,7 @@ export def "repos-branches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --author: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -217,7 +223,7 @@ export def "repos-branches list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/branches/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Branch detail
@@ -236,13 +242,14 @@ export def "repos-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, updatestamp: string, head_commit: record<commitid: string, message: string, timestamp: string, ci_passed: bool, author: record<service: record, username: string, name: string>, branch: string, totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: int>, state: record, parent: string, report: record<totals: record, files: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/branches/($name)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit list
@@ -260,6 +267,7 @@ export def "repos-commits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -270,7 +278,7 @@ export def "repos-commits list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/commits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit detail
@@ -289,13 +297,14 @@ export def "repos-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commitid: string, message: string, timestamp: string, ci_passed: bool, author: record<service: record, username: string, name: string>, branch: string, totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: int>, state: record, parent: string, report: record<totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, messages: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: any>, files: record<name: string, totals: record, line_coverage: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/commits/($commitid)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit uploads
@@ -314,6 +323,7 @@ export def "repos-commits-uploads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<created_at: string, updated_at: string, storage_path: string, flags: list, provider: string, build_code: string, name: string, job_code: string, build_url: string, state: string, state_id: int, state_name: any, env: any, upload_type: string, upload_extras: any, totals: record>> {
@@ -323,7 +333,7 @@ export def "repos-commits-uploads list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/commits/($commitid)/uploads/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Comparison
@@ -341,6 +351,7 @@ export def "repos-compare get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -351,7 +362,7 @@ export def "repos-compare get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Component comparison
@@ -369,6 +380,7 @@ export def "repos-compare-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -379,7 +391,7 @@ export def "repos-compare-components get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/components" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # File comparison
@@ -398,6 +410,7 @@ export def "repos-compare-file get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -408,7 +421,7 @@ export def "repos-compare-file get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/file/($file_path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Flag comparison
@@ -426,6 +439,7 @@ export def "repos-compare-flags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -436,7 +450,7 @@ export def "repos-compare-flags get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/flags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Impacted files comparison
@@ -454,6 +468,7 @@ export def "repos-compare-impacted-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -464,7 +479,7 @@ export def "repos-compare-impacted-files get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/impacted_files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Segmented file comparison
@@ -483,6 +498,7 @@ export def "repos-compare-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-base: string # base commit SHA (`head` also required)
   --head: string # head commit SHA (`base` also required)
   --pullid: int # pull ID on which to perform the comparison (alternative to specifying `base` and `head`)
@@ -493,7 +509,7 @@ export def "repos-compare-segments get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/compare/segments/($file_path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Component list
@@ -511,6 +527,7 @@ export def "repos-components list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name for which to return components (of head commit)
   --sha: string # commit SHA for which to return components
 ]: nothing -> table<component_id: string, name: string, coverage: float> {
@@ -520,7 +537,7 @@ export def "repos-components list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/components/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repository config
@@ -538,13 +555,14 @@ export def "repos-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<upload_token: string, graph_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/config/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coverage trend
@@ -562,6 +580,7 @@ export def "repos-coverage list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name
   --end-date: string # end datetime (inclusive) (format: date-time)
   --interval: string@interval-completer # * `1d` - 1 day * `7d` - 7 day * `30d` - 30 day
@@ -575,7 +594,7 @@ export def "repos-coverage list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/coverage/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Evaluation compare
@@ -593,6 +612,7 @@ export def "repos-evals-compare get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --base-sha: string # base commit SHA to compare from
   --head-sha: string # head commit SHA to compare to
 ]: nothing -> any {
@@ -602,7 +622,7 @@ export def "repos-evals-compare get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/evals/compare/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Evaluation summary
@@ -620,6 +640,7 @@ export def "repos-evals-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --classname: string # class name the test belongs to, or `describe` block in vitest, or run name in langfuse
   --commit: string # commit SHA for which to return evaluation summary
 ]: nothing -> any {
@@ -629,7 +650,7 @@ export def "repos-evals-summary get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/evals/summary/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # File coverage report
@@ -648,6 +669,7 @@ export def "repos-file-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name for which to return report (of head commit)
   --sha: string # commit SHA for which to return report
 ]: nothing -> record<name: string, totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, messages: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: any>, line_coverage: list<any>, commit_sha: string, commit_file_url: string> {
@@ -657,7 +679,7 @@ export def "repos-file-report get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/file_report/($path)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Flag list
@@ -675,6 +697,7 @@ export def "repos-flags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<flag_name: string, coverage: float>> {
@@ -684,7 +707,7 @@ export def "repos-flags list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/flags/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coverage trend
@@ -703,6 +726,7 @@ export def "repos-flags-coverage list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name
   --end-date: string # end datetime (inclusive) (format: date-time)
   --interval: string@interval-completer # * `1d` - 1 day * `7d` - 7 day * `30d` - 30 day
@@ -716,7 +740,7 @@ export def "repos-flags-coverage list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/flags/($flag_name)/coverage/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pull list
@@ -734,6 +758,7 @@ export def "repos-pulls list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -746,7 +771,7 @@ export def "repos-pulls list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/pulls/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pull detail
@@ -765,13 +790,14 @@ export def "repos-pulls get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pullid: int, title: string, base_totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: int>, head_totals: record<files: int, lines: int, hits: int, misses: int, partials: int, coverage: float, branches: int, methods: int, sessions: int, complexity: float, complexity_total: float, complexity_ratio: float, diff: int>, updatestamp: string, state: record, ci_passed: bool, author: record<service: record, username: string, name: string>, patch: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/pulls/($pullid)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit coverage report
@@ -789,6 +815,7 @@ export def "repos-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name for which to return report (of head commit)
   --component-id: string # filter report to only include info pertaining to given component id
   --flag: string # filter report to only include info pertaining to given flag name
@@ -801,7 +828,7 @@ export def "repos-report get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/report/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coverage report tree
@@ -819,6 +846,7 @@ export def "repos-report-tree get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name for which to return report (of head commit)
   --component-id: string # filter report to only include info pertaining to given component id
   --depth: string # depth of the traversal (default=1)
@@ -832,7 +860,7 @@ export def "repos-report-tree get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/report/tree" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test analytics list
@@ -850,6 +878,7 @@ export def "repos-test-analytics list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Branch name for which to return test analytics
   --commit-sha: string # Commit SHA for which to return test analytics
   --duration-max: int # Maximum duration of the test in seconds
@@ -864,7 +893,7 @@ export def "repos-test-analytics list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/test-analytics/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve test results
@@ -882,6 +911,7 @@ export def "repos-test-results list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Branch name for which to return test results
   --commit-id: string # Commit SHA for which to return test results
   --duration-max: int # Maximum duration of the test in seconds
@@ -896,7 +926,7 @@ export def "repos-test-results list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/test-results/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve test results
@@ -915,6 +945,7 @@ export def "repos-test-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Branch name for which to return test results
   --commit-id: string # Commit SHA for which to return test results
   --duration-max: int # Maximum duration of the test in seconds
@@ -927,7 +958,7 @@ export def "repos-test-results get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/test-results/($id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Commit coverage totals
@@ -945,6 +976,7 @@ export def "repos-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # branch name for which to return report (of head commit)
   --component-id: string # filter report to only include info pertaining to given component id
   --flag: string # filter report to only include info pertaining to given flag name
@@ -957,7 +989,7 @@ export def "repos-totals get" [
   let full_url = (build-url $base $"/($service)/($owner_username)/repos/($repo_name)/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # User session list
@@ -974,6 +1006,7 @@ export def "user-sessions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<username: string, name: string, has_active_session: bool, expiry_date: string>> {
@@ -983,7 +1016,7 @@ export def "user-sessions list" [
   let full_url = (build-url $base $"/($service)/($owner_username)/user-sessions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # User list
@@ -1000,6 +1033,7 @@ export def "users list-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --activated: oneof<nothing, bool>
   --is-admin: oneof<nothing, bool>
   --page: int # A page number within the paginated result set.
@@ -1012,7 +1046,7 @@ export def "users list-2" [
   let full_url = (build-url $base $"/($service)/($owner_username)/users/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # User detail
@@ -1030,13 +1064,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<service: string, username: string, name: string, activated: bool, is_admin: bool, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/($service)/($owner_username)/users/($user_username_or_ownerid)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -1054,6 +1089,7 @@ export def "users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --activated: oneof<nothing, bool>
 ]: any -> record<service: string, username: string, name: string, activated: bool, is_admin: bool, email: string> {
   let input = $in
@@ -1064,5 +1100,5 @@ export def "users patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

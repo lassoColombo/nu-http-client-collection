@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def type-completer [] { ["request_signature" "send_document"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-create accountCreate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "account-create accountCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Used when creating a new account with OAuth authorization.  See [OAuth 2.0 Authorization](https://app.hellosign.com/api/oauthWalkthrough#OAuthAuthorization)
   --client-secret: string # Used when creating a new account with OAuth authorization.  See [OAuth 2.0 Authorization](https://app.hellosign.com/api/oauthWalkthrough#OAuthAuthorization)
   email_address: string # The email address which will be associated with the new Account. (format: email)
@@ -123,7 +125,7 @@ export def "account-create accountCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Account
@@ -138,6 +140,7 @@ export def "account accountGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # `account_id` or `email_address` is required. If both are provided, the account id prevails.  The ID of the Account.
   --email-address: string # `account_id` or `email_address` is required, If both are provided, the account id prevails.  The email address of the Account.
 ]: nothing -> record<account: record<account_id: string, email_address: string, is_locked: bool, is_paid_hs: bool, is_paid_hf: bool, quotas: record<api_signature_requests_left: int, documents_left: int, templates_total: int, templates_left: int, sms_verifications_left: int, num_fax_pages_left: int>, callback_url: string, role_code: string, team_id: string, locale: string, usage: record<fax_pages_sent: int>, settings: record<signer_access_codes: bool, sms_delivery: bool, sms_authentication: bool>>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -147,7 +150,7 @@ export def "account accountGet" [
   let full_url = (build-url $base "/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Account
@@ -162,6 +165,7 @@ export def "account accountUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The ID of the Account (nullable)
   --callback-url: string # The URL that Dropbox Sign should POST events to.
   --locale: string # The locale used in this Account. Check out the list of [supported locales](/api/reference/constants/#supported-locales) to learn more about the possible values.
@@ -174,7 +178,7 @@ export def "account accountUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Account
@@ -189,6 +193,7 @@ export def "account-verify accountVerify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # Email address to run the verification for. (format: email)
 ]: any -> record<account: record<email_address: string>, warnings: table<warning_msg: string, warning_name: string>> {
   let input = $in
@@ -199,7 +204,7 @@ export def "account-verify accountVerify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create API App
@@ -217,6 +222,7 @@ export def "api-app apiAppCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # The URL at which the ApiApp should receive event callbacks.
   --custom-logo-file: string # An image file to use as a custom logo in embedded contexts. (Only applies to some API plans) (format: binary)
   domains: list # The domain names the ApiApp will be associated with.
@@ -233,7 +239,7 @@ export def "api-app apiAppCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get API App
@@ -249,13 +255,14 @@ export def "api-app apiAppGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<api_app: record<callback_url: string, client_id: string, created_at: int, domains: list<string>, name: string, is_approved: bool, oauth: record<callback_url: string, secret: string, scopes: list, charges_users: bool>, options: record<can_insert_everywhere: bool>, owner_account: record<account_id: string, email_address: string>, white_labeling_options: record<header_background_color: string, legal_version: string, link_color: string, page_background_color: string, primary_button_color: string, primary_button_color_hover: string, primary_button_text_color: string, primary_button_text_color_hover: string, secondary_button_color: string, secondary_button_color_hover: string, secondary_button_text_color: string, secondary_button_text_color_hover: string, text_color1: string, text_color2: string>>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api_app/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update API App
@@ -274,6 +281,7 @@ export def "api-app apiAppUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # The URL at which the API App should receive event callbacks.
   --custom-logo-file: string # An image file to use as a custom logo in embedded contexts. (Only applies to some API plans) (format: binary)
   --domains: list # The domain names the ApiApp will be associated with.
@@ -290,7 +298,7 @@ export def "api-app apiAppUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete API App
@@ -306,13 +314,14 @@ export def "api-app apiAppDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api_app/($client_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List API Apps
@@ -327,6 +336,7 @@ export def "api-app-list apiAppList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the API App List to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20)
 ]: nothing -> record<api_apps: table<callback_url: string, client_id: string, created_at: int, domains: list, name: string, is_approved: bool, oauth: record, options: record, owner_account: record, white_labeling_options: record>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -336,7 +346,7 @@ export def "api-app-list apiAppList" [
   let full_url = (build-url $base "/api_app/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Send Job
@@ -352,6 +362,7 @@ export def "bulk-send-job bulkSendJobGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the BulkSendJob list to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is 20. (default: 20)
 ]: nothing -> record<bulk_send_job: record<bulk_send_job_id: string, total: int, is_creator: bool, created_at: int>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>, signature_requests: list<record>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -361,7 +372,7 @@ export def "bulk-send-job bulkSendJobGet" [
   let full_url = (build-url $base $"/bulk_send_job/($bulk_send_job_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Bulk Send Jobs
@@ -376,6 +387,7 @@ export def "bulk-send-job-list bulkSendJobList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the BulkSendJob List to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is 20. (default: 20)
 ]: nothing -> record<bulk_send_jobs: table<bulk_send_job_id: string, total: int, is_creator: bool, created_at: int>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -385,7 +397,7 @@ export def "bulk-send-job-list bulkSendJobList" [
   let full_url = (build-url $base "/bulk_send_job/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Embedded Template Edit URL
@@ -403,6 +415,7 @@ export def "embedded-edit-url embeddedEditUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-edit-ccs: oneof<nothing, bool> # This allows the requester to enable/disable to add or change CC roles when editing the template. (default: false)
   --cc-roles: list # The CC roles that must be assigned when using the template to send a signature request. To remove all CC roles, pass in a single role with no name. For use in a POST request.
   --editor-options: record # This allows the requester to specify editor options when a preparing a document — shape: {allow_edit_signers?: bool, allow_edit_documents?: bool}
@@ -422,7 +435,7 @@ export def "embedded-edit-url embeddedEditUrl" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Embedded Sign URL
@@ -438,13 +451,14 @@ export def "embedded-sign-url embeddedSignUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<embedded: record<sign_url: string, expires_at: int>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/embedded/sign_url/($signature_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Fax
@@ -460,13 +474,14 @@ export def "fax faxGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fax: record<fax_id: string, title: string, original_title: string, subject: string, message: string, metadata: record, created_at: int, sender: string, files_url: string, final_copy_uri: string, transmissions: list<record>>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fax/($fax_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Fax
@@ -482,13 +497,14 @@ export def "fax faxDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fax/($fax_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Fax Files
@@ -504,13 +520,14 @@ export def "fax-files faxFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/fax/files/($fax_id)")
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Fax Line User
@@ -525,6 +542,7 @@ export def "fax-line-add-user faxLineAddUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   number: string # The Fax Line number
   --account-id: string # Account ID (e.g. ab55cd14a97219e36b5ff5fe23f2f9329b0c1e97)
   --email-address: string # Email address (format: email)
@@ -537,7 +555,7 @@ export def "fax-line-add-user faxLineAddUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Available Fax Line Area Codes
@@ -552,6 +570,7 @@ export def "fax-line-area-codes faxLineAreaCodeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string@country-completer # Filter area codes by country (e.g. US)
   --state: string@state-completer # Filter area codes by state
   --province: string@province-completer # Filter area codes by province
@@ -563,7 +582,7 @@ export def "fax-line-area-codes faxLineAreaCodeGet" [
   let full_url = (build-url $base "/fax_line/area_codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purchase Fax Line
@@ -578,6 +597,7 @@ export def "fax-line-create faxLineCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   area_code: int # Area code of the new Fax Line
   country: string@country-completer # Country of the area code
   --city: string # City of the area code
@@ -591,7 +611,7 @@ export def "fax-line-create faxLineCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Fax Line
@@ -606,6 +626,7 @@ export def "fax-line faxLineGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --number: string # The Fax Line number (e.g. 123-123-1234)
 ]: nothing -> record<fax_line: record<number: string, created_at: int, updated_at: int, accounts: list<record>>, warnings: record<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -614,7 +635,7 @@ export def "fax-line faxLineGet" [
   let full_url = (build-url $base "/fax_line" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Fax Line
@@ -629,6 +650,7 @@ export def "fax-line faxLineDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   number: string # The Fax Line number
 ]: any -> any {
   let input = $in
@@ -639,7 +661,7 @@ export def "fax-line faxLineDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Fax Lines
@@ -654,6 +676,7 @@ export def "fax-line-list faxLineList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # Account ID (e.g. ab55cd14a97219e36b5ff5fe23f2f9329b0c1e97)
   --page: int # Which page number of the Fax Line List to return. Defaults to `1`. (default: 1, e.g. 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20, e.g. 20)
@@ -665,7 +688,7 @@ export def "fax-line-list faxLineList" [
   let full_url = (build-url $base "/fax_line/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Fax Line Access
@@ -680,6 +703,7 @@ export def "fax-line-remove-user faxLineRemoveUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   number: string # The Fax Line number
   --account-id: string # Account ID of the user to remove access (e.g. ab55cd14a97219e36b5ff5fe23f2f9329b0c1e97)
   --email-address: string # Email address of the user to remove access (format: email)
@@ -692,7 +716,7 @@ export def "fax-line-remove-user faxLineRemoveUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists Faxes
@@ -707,6 +731,7 @@ export def "fax-list faxList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the Fax List to return. Defaults to `1`. (default: 1, e.g. 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20, e.g. 20)
 ]: nothing -> record<faxes: table<fax_id: string, title: string, original_title: string, subject: string, message: string, metadata: record, created_at: int, sender: string, files_url: string, final_copy_uri: string, transmissions: list>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>> {
@@ -716,7 +741,7 @@ export def "fax-list faxList" [
   let full_url = (build-url $base "/fax/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Fax
@@ -731,6 +756,7 @@ export def "fax-send faxSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   recipient: string # Recipient of the fax  Can be a phone number in E.164 format or email address (e.g. recipient@example.com)
   --sender: string # Fax Send From Sender (used only with fax number) (e.g. sender@example.com)
   --files: list # Use `files[]` to indicate the uploaded file(s) to fax  This endpoint requires either **files** or **file_urls[]**, but not both.
@@ -749,7 +775,7 @@ export def "fax-send faxSend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # OAuth Token Generate
@@ -764,6 +790,7 @@ export def "oauth-token oauthTokenGenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The client id of the app requesting authorization.
   client_secret: string # The secret token of your app.
   code: string # The code passed to your callback when the user granted access.
@@ -778,7 +805,7 @@ export def "oauth-token oauthTokenGenerate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # OAuth Token Refresh
@@ -793,6 +820,7 @@ export def "oauth-token-refresh oauthTokenRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   grant_type: string # When refreshing an existing token use `refresh_token`. (default: refresh_token)
   refresh_token: string # The token provided when you got the expired access token.
   --client-id: string # The client ID for your API app. Required for new API apps. To enhance security, we recommend making it required for existing apps in your app settings.
@@ -806,7 +834,7 @@ export def "oauth-token-refresh oauthTokenRefresh" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Report
@@ -821,6 +849,7 @@ export def "report-create reportCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   end_date: string # The (inclusive) end date for the report data in `MM/DD/YYYY` format.
   report_type: list # The type(s) of the report you are requesting. Allowed values are `user_activity` and `document_status`. User activity reports contain list of all users and their activity during the specified date range. Document status report contain a list of signature requests created in the specified time range (and their status).
   start_date: string # The (inclusive) start date for the report data in `MM/DD/YYYY` format.
@@ -833,7 +862,7 @@ export def "report-create reportCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Embedded Bulk Send with Template
@@ -851,6 +880,7 @@ export def "signature-request-bulk-create-embedded-with-template signatureReques
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --signer-file: string # `signer_file` is a CSV file defining values and options for signer fields. Required unless a `signer_list` is used, you may not use both. The CSV can have the following columns:  - `name`: the name of the signer filling the role of RoleName - `email_address`: email address of the signer filling the role of RoleName - `pin`: the 4- to 12-character access code that will secure this signer's signature page (optional) - `sms_phone_number`: An E.164 formatted phone number that will receive a code via SMS to access this signer's signature page. (optional)      By using the feature, you agree you are responsible for obtaining a signer's consent to receive text messages from Dropbox Sign related to this signature request and confirm you have obtained such consent from all signers prior to enabling SMS delivery for this signature request. [Learn more](https://faq.hellosign.com/hc/en-us/articles/15815316468877-Dropbox-Sign-SMS-tools-add-on).      **NOTE:** Not available in test mode and requires a Standard plan or higher. - `*_field`: any column with a _field" suffix will be treated as a custom field (optional)      You may only specify field values here, any other options should be set in the custom_fields request parameter.  Example CSV:  ``` name, email_address, pin, company_field George, george@example.com, d79a3td, ABC Corp Mary, mary@example.com, gd9as5b, 123 LLC ``` (format: binary)
   --signer-list: list # `signer_list` is an array defining values and options for signer fields. Required unless a `signer_file` is used, you may not use both. — item shape: {custom_fields?: list, signers?: list}
@@ -873,7 +903,7 @@ export def "signature-request-bulk-create-embedded-with-template signatureReques
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Send with Template
@@ -891,6 +921,7 @@ export def "signature-request-bulk-send-with-template signatureRequestBulkSendWi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --signer-file: string # `signer_file` is a CSV file defining values and options for signer fields. Required unless a `signer_list` is used, you may not use both. The CSV can have the following columns:  - `name`: the name of the signer filling the role of RoleName - `email_address`: email address of the signer filling the role of RoleName - `pin`: the 4- to 12-character access code that will secure this signer's signature page (optional) - `sms_phone_number`: An E.164 formatted phone number that will receive a code via SMS to access this signer's signature page. (optional)      By using the feature, you agree you are responsible for obtaining a signer's consent to receive text messages from Dropbox Sign related to this signature request and confirm you have obtained such consent from all signers prior to enabling SMS delivery for this signature request. [Learn more](https://faq.hellosign.com/hc/en-us/articles/15815316468877-Dropbox-Sign-SMS-tools-add-on).      **NOTE:** Not available in test mode and requires a Standard plan or higher. - `*_field`: any column with a _field" suffix will be treated as a custom field (optional)      You may only specify field values here, any other options should be set in the custom_fields request parameter.  Example CSV:  ``` name, email_address, pin, company_field George, george@example.com, d79a3td, ABC Corp Mary, mary@example.com, gd9as5b, 123 LLC ``` (format: binary)
   --signer-list: list # `signer_list` is an array defining values and options for signer fields. Required unless a `signer_file` is used, you may not use both. — item shape: {custom_fields?: list, signers?: list}
@@ -913,7 +944,7 @@ export def "signature-request-bulk-send-with-template signatureRequestBulkSendWi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Incomplete Signature Request
@@ -929,13 +960,14 @@ export def "signature-request-cancel signatureRequestCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/signature_request/cancel/($signature_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Embedded Signature Request
@@ -959,6 +991,7 @@ export def "signature-request-create-embedded signatureRequestCreateEmbedded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --signers: list # Add Signers to your Signature Request.  This endpoint requires either **signers** or **grouped_signers**, but not both. — item shape: {name: string, email_address: string, order?: int, pin?: string, sms_phone_number?: string, sms_phone_number_type?: "authentication"|"delivery"}
@@ -992,7 +1025,7 @@ export def "signature-request-create-embedded signatureRequestCreateEmbedded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Embedded Signature Request with Template
@@ -1011,6 +1044,7 @@ export def "signature-request-create-embedded-with-template signatureRequestCrea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
   --ccs: list # Add CC email recipients. Required when a CC role exists for the Template. — item shape: {role: string, email_address: string}
@@ -1035,7 +1069,7 @@ export def "signature-request-create-embedded-with-template signatureRequestCrea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Signature Request
@@ -1060,6 +1094,7 @@ export def "signature-request-edit signatureRequestEdit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --signers: list # Add Signers to your Signature Request.  This endpoint requires either **signers** or **grouped_signers**, but not both. — item shape: {name: string, email_address: string, order?: int, pin?: string, sms_phone_number?: string, sms_phone_number_type?: "authentication"|"delivery"}
@@ -1094,7 +1129,7 @@ export def "signature-request-edit signatureRequestEdit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Embedded Signature Request
@@ -1119,6 +1154,7 @@ export def "signature-request-edit-embedded signatureRequestEditEmbedded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --signers: list # Add Signers to your Signature Request.  This endpoint requires either **signers** or **grouped_signers**, but not both. — item shape: {name: string, email_address: string, order?: int, pin?: string, sms_phone_number?: string, sms_phone_number_type?: "authentication"|"delivery"}
@@ -1152,7 +1188,7 @@ export def "signature-request-edit-embedded signatureRequestEditEmbedded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Embedded Signature Request with Template
@@ -1172,6 +1208,7 @@ export def "signature-request-edit-embedded-with-template signatureRequestEditEm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
   --ccs: list # Add CC email recipients. Required when a CC role exists for the Template. — item shape: {role: string, email_address: string}
@@ -1196,7 +1233,7 @@ export def "signature-request-edit-embedded-with-template signatureRequestEditEm
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Signature Request With Template
@@ -1216,6 +1253,7 @@ export def "signature-request-edit-with-template signatureRequestEditWithTemplat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
   --ccs: list # Add CC email recipients. Required when a CC role exists for the Template. — item shape: {role: string, email_address: string}
@@ -1241,7 +1279,7 @@ export def "signature-request-edit-with-template signatureRequestEditWithTemplat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download Files
@@ -1257,6 +1295,7 @@ export def "signature-request-files signatureRequestFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file-type: string@file-type-completer # Set to `pdf` for a single merged document or `zip` for a collection of individual documents. (default: pdf)
 ]: nothing -> any {
@@ -1266,7 +1305,7 @@ export def "signature-request-files signatureRequestFiles" [
   let full_url = (build-url $base $"/signature_request/files/($signature_request_id)" $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Files as Data Uri
@@ -1282,13 +1321,14 @@ export def "signature-request-files-as-data-uri signatureRequestFilesAsDataUri" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/signature_request/files_as_data_uri/($signature_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Files as File Url
@@ -1304,6 +1344,7 @@ export def "signature-request-files-as-file-url signatureRequestFilesAsFileUrl" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force-download: int # By default when opening the `file_url` a browser will download the PDF and save it locally. When set to `0` the PDF file will be displayed in the browser. (default: 1)
 ]: nothing -> record<file_url: string, expires_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1312,7 +1353,7 @@ export def "signature-request-files-as-file-url signatureRequestFilesAsFileUrl" 
   let full_url = (build-url $base $"/signature_request/files_as_file_url/($signature_request_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Signature Request
@@ -1328,13 +1369,14 @@ export def "signature-request signatureRequestGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<signature_request: record<test_mode: bool, signature_request_id: string, requester_email_address: string, title: string, original_title: string, subject: string, message: string, metadata: record, created_at: int, expires_at: int, is_complete: bool, is_declined: bool, has_error: bool, files_url: string, signing_url: string, details_url: string, cc_email_addresses: list<string>, signing_redirect_url: string, final_copy_uri: string, template_ids: list<string>, custom_fields: list<record>, attachments: list<record>, response_data: list<record>, signatures: list<record>, bulk_send_job_id: string>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/signature_request/($signature_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Signature Requests
@@ -1349,6 +1391,7 @@ export def "signature-request-list signatureRequestList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # Which account to return SignatureRequests for. Must be a team member. Use `all` to indicate all team members. Defaults to your account.
   --page: int # Which page number of the SignatureRequest List to return. Defaults to `1`. (default: 1, e.g. 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20)
@@ -1360,7 +1403,7 @@ export def "signature-request-list signatureRequestList" [
   let full_url = (build-url $base "/signature_request/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Release On-Hold Signature Request
@@ -1376,13 +1419,14 @@ export def "signature-request-release-hold signatureRequestReleaseHold" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<signature_request: record<test_mode: bool, signature_request_id: string, requester_email_address: string, title: string, original_title: string, subject: string, message: string, metadata: record, created_at: int, expires_at: int, is_complete: bool, is_declined: bool, has_error: bool, files_url: string, signing_url: string, details_url: string, cc_email_addresses: list<string>, signing_redirect_url: string, final_copy_uri: string, template_ids: list<string>, custom_fields: list<record>, attachments: list<record>, response_data: list<record>, signatures: list<record>, bulk_send_job_id: string>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/signature_request/release_hold/($signature_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Request Reminder
@@ -1398,6 +1442,7 @@ export def "signature-request-remind signatureRequestRemind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # The email address of the signer to send a reminder to. (format: email)
   --name: string # The name of the signer to send a reminder to. Include if two or more signers share an email address.
 ]: any -> record<signature_request: record<test_mode: bool, signature_request_id: string, requester_email_address: string, title: string, original_title: string, subject: string, message: string, metadata: record, created_at: int, expires_at: int, is_complete: bool, is_declined: bool, has_error: bool, files_url: string, signing_url: string, details_url: string, cc_email_addresses: list<string>, signing_redirect_url: string, final_copy_uri: string, template_ids: list<string>, custom_fields: list<record>, attachments: list<record>, response_data: list<record>, signatures: list<record>, bulk_send_job_id: string>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -1409,7 +1454,7 @@ export def "signature-request-remind signatureRequestRemind" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Signature Request Access
@@ -1425,13 +1470,14 @@ export def "signature-request-remove signatureRequestRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/signature_request/remove/($signature_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Signature Request
@@ -1455,6 +1501,7 @@ export def "signature-request-send signatureRequestSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --signers: list # Add Signers to your Signature Request.  This endpoint requires either **signers** or **grouped_signers**, but not both. — item shape: {name: string, email_address: string, order?: int, pin?: string, sms_phone_number?: string, sms_phone_number_type?: "authentication"|"delivery"}
@@ -1489,7 +1536,7 @@ export def "signature-request-send signatureRequestSend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send with Template
@@ -1508,6 +1555,7 @@ export def "signature-request-send-with-template signatureRequestSendWithTemplat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # Use `template_ids` to create a SignatureRequest from one or more templates, in the order in which the template will be used.
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
   --ccs: list # Add CC email recipients. Required when a CC role exists for the Template. — item shape: {role: string, email_address: string}
@@ -1533,7 +1581,7 @@ export def "signature-request-send-with-template signatureRequestSendWithTemplat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Signature Request
@@ -1549,6 +1597,7 @@ export def "signature-request-update signatureRequestUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # The new email address for the recipient.  This will generate a new `signature_id` value.  **NOTE:** Optional if `name` is provided. (format: email)
   --name: string # The new name for the recipient.  **NOTE:** Optional if `email_address` is provided.
   signature_id: string # The signature ID for the recipient.
@@ -1562,7 +1611,7 @@ export def "signature-request-update signatureRequestUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add User to Team
@@ -1577,6 +1626,7 @@ export def "team-add-member teamAddMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The id of the team. (e.g. 4fea99bfcf2b26bfccf6cea3e127fb8bb74d8d9c)
   --account-id: string # `account_id` or `email_address` is required. If both are provided, the account id prevails.  Account id of the user to invite to your Team.
   --email-address: string # `account_id` or `email_address` is required, If both are provided, the account id prevails.  Email address of the user to invite to your Team. (format: email)
@@ -1591,7 +1641,7 @@ export def "team-add-member teamAddMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Team
@@ -1606,6 +1656,7 @@ export def "team-create teamCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of your Team. (default: Untitled Team)
 ]: any -> record<team: record<name: string, accounts: list<record>, invited_accounts: list<record>, invited_emails: list<string>>, warnings: table<warning_msg: string, warning_name: string>> {
   let input = $in
@@ -1616,7 +1667,7 @@ export def "team-create teamCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Team
@@ -1631,13 +1682,14 @@ export def "team-destroy teamDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/team/destroy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Team
@@ -1652,13 +1704,14 @@ export def "team teamGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<team: record<name: string, accounts: list<record>, invited_accounts: list<record>, invited_emails: list<string>>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/team")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Team
@@ -1673,6 +1726,7 @@ export def "team teamUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of your Team.
 ]: any -> record<team: record<name: string, accounts: list<record>, invited_accounts: list<record>, invited_emails: list<string>>, warnings: table<warning_msg: string, warning_name: string>> {
   let input = $in
@@ -1683,7 +1737,7 @@ export def "team teamUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Team Info
@@ -1698,6 +1752,7 @@ export def "team-info teamInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The id of the team. (e.g. 4fea99bfcf2b26bfccf6cea3e127fb8bb74d8d9c)
 ]: nothing -> record<team: record<team_id: string, team_parent: record<team_id: string, name: string>, name: string, num_members: int, num_sub_teams: int>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1706,7 +1761,7 @@ export def "team-info teamInfo" [
   let full_url = (build-url $base "/team/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Team Invites
@@ -1721,6 +1776,7 @@ export def "team-invites teamInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # The email address for which to display the team invites.
 ]: nothing -> record<team_invites: table<email_address: string, team_id: string, role: string, sent_at: int, redeemed_at: int, expires_at: int>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1729,7 +1785,7 @@ export def "team-invites teamInvites" [
   let full_url = (build-url $base "/team/invites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Team Members
@@ -1745,6 +1801,7 @@ export def "team-members teamMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the team member list to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20)
 ]: nothing -> record<team_members: table<account_id: string, email_address: string, role: string>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -1754,7 +1811,7 @@ export def "team-members teamMembers" [
   let full_url = (build-url $base $"/team/members/($team_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove User from Team
@@ -1769,6 +1826,7 @@ export def "team-remove-member teamRemoveMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # **account_id** or **email_address** is required. If both are provided, the account id prevails.  Account id to remove from your Team.
   --email-address: string # **account_id** or **email_address** is required. If both are provided, the account id prevails.  Email address of the Account to remove from your Team. (format: email)
   --new-owner-email-address: string # The email address of an Account on this Team to receive all documents, templates, and API apps (if applicable) from the removed Account. If not provided, and on an Enterprise plan, this data will remain with the removed Account.  **NOTE:** Only available for Enterprise plans. (format: email)
@@ -1783,7 +1841,7 @@ export def "team-remove-member teamRemoveMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Sub Teams
@@ -1799,6 +1857,7 @@ export def "team-sub-teams teamSubTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page number of the SubTeam List to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20)
 ]: nothing -> record<sub_teams: table<team_id: string, name: string>, list_info: record<num_pages: int, num_results: int, page: int, page_size: int>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -1808,7 +1867,7 @@ export def "team-sub-teams teamSubTeams" [
   let full_url = (build-url $base $"/team/sub_teams/($team_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add User to Template
@@ -1824,6 +1883,7 @@ export def "template-add-user templateAddUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The id of the Account to give access to the Template. **NOTE:** The account id prevails if email address is also provided.
   --email-address: string # The email address of the Account to give access to the Template. **NOTE:** The account id prevails if it is also provided. (format: email)
   --skip-notification: oneof<nothing, bool> # If set to `true`, the user does not receive an email notification when a template has been shared with them. Defaults to `false`. (default: false)
@@ -1836,7 +1896,7 @@ export def "template-add-user templateAddUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Template
@@ -1858,6 +1918,7 @@ export def "template-create templateCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --allow-reassign: oneof<nothing, bool> # Allows signers to reassign their signature requests to other signers if set to `true`. Defaults to `false`.  **NOTE:** Only available for Premium plan and higher. (default: false)
@@ -1885,7 +1946,7 @@ export def "template-create templateCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Embedded Template Draft
@@ -1908,6 +1969,7 @@ export def "template-create-embedded-draft templateCreateEmbeddedDraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --allow-ccs: oneof<nothing, bool> # This allows the requester to specify whether the user is allowed to provide email addresses to CC when creating a template. (default: true)
@@ -1942,7 +2004,7 @@ export def "template-create-embedded-draft templateCreateEmbeddedDraft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Template
@@ -1958,13 +2020,14 @@ export def "template-delete templateDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/template/delete/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template Files
@@ -1980,6 +2043,7 @@ export def "template-files templateFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file-type: string@file-type-completer # Set to `pdf` for a single merged document or `zip` for a collection of individual documents.
 ]: nothing -> any {
@@ -1989,7 +2053,7 @@ export def "template-files templateFiles" [
   let full_url = (build-url $base $"/template/files/($template_id)" $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template Files as Data Uri
@@ -2005,13 +2069,14 @@ export def "template-files-as-data-uri templateFilesAsDataUri" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/template/files_as_data_uri/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template Files as File Url
@@ -2027,6 +2092,7 @@ export def "template-files-as-file-url templateFilesAsFileUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force-download: int # By default when opening the `file_url` a browser will download the PDF and save it locally. When set to `0` the PDF file will be displayed in the browser. (default: 1)
 ]: nothing -> record<file_url: string, expires_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2035,7 +2101,7 @@ export def "template-files-as-file-url templateFilesAsFileUrl" [
   let full_url = (build-url $base $"/template/files_as_file_url/($template_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template
@@ -2051,13 +2117,14 @@ export def "template templateGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<template: record<template_id: string, title: string, message: string, updated_at: int, is_embedded: bool, is_creator: bool, can_edit: bool, is_locked: bool, metadata: record, signer_roles: list<record>, cc_roles: list<record>, documents: list<record>, custom_fields: list<record>, named_form_fields: list<record>, accounts: list<record>, attachments: list<record>>, warnings: table<warning_msg: string, warning_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/template/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Templates
@@ -2072,6 +2139,7 @@ export def "template-list templateList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # Which account to return Templates for. Must be a team member. Use `all` to indicate all team members. Defaults to your account.
   --page: int # Which page number of the Template List to return. Defaults to `1`. (default: 1)
   --page-size: int # Number of objects to be returned per page. Must be between `1` and `100`. Default is `20`. (default: 20)
@@ -2083,7 +2151,7 @@ export def "template-list templateList" [
   let full_url = (build-url $base "/template/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove User from Template
@@ -2099,6 +2167,7 @@ export def "template-remove-user templateRemoveUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The id or email address of the Account to remove access to the Template. The account id prevails if both are provided.
   --email-address: string # The id or email address of the Account to remove access to the Template. The account id prevails if both are provided. (format: email)
 ]: any -> record<template: record<template_id: string, title: string, message: string, updated_at: int, is_embedded: bool, is_creator: bool, can_edit: bool, is_locked: bool, metadata: record, signer_roles: list<record>, cc_roles: list<record>, documents: list<record>, custom_fields: list<record>, named_form_fields: list<record>, accounts: list<record>, attachments: list<record>>, warnings: table<warning_msg: string, warning_name: string>> {
@@ -2110,7 +2179,7 @@ export def "template-remove-user templateRemoveUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Template Files
@@ -2126,6 +2195,7 @@ export def "template-update-files templateUpdateFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Client id of the app you're using to update this template.
   --files: list # Use `files[]` to indicate the uploaded file(s) to use for the template.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to use for the template.  This endpoint requires either **files** or **file_urls[]**, but not both.
@@ -2141,7 +2211,7 @@ export def "template-update-files templateUpdateFiles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Unclaimed Draft
@@ -2164,6 +2234,7 @@ export def "unclaimed-draft-create unclaimedDraftCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
@@ -2197,7 +2268,7 @@ export def "unclaimed-draft-create unclaimedDraftCreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Embedded Unclaimed Draft
@@ -2221,6 +2292,7 @@ export def "unclaimed-draft-create-embedded unclaimedDraftCreateEmbedded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --files: list # Use `files[]` to indicate the uploaded file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --file-urls: list # Use `file_urls[]` to have Dropbox Sign download the file(s) to send for signature.  This endpoint requires either **files** or **file_urls[]**, but not both.
   --allow-ccs: oneof<nothing, bool> # This allows the requester to specify whether the user is allowed to provide email addresses to CC when claiming the draft. (default: true)
@@ -2266,7 +2338,7 @@ export def "unclaimed-draft-create-embedded unclaimedDraftCreateEmbedded" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Embedded Unclaimed Draft with Template
@@ -2287,6 +2359,7 @@ export def "unclaimed-draft-create-embedded-with-template unclaimedDraftCreateEm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-decline: oneof<nothing, bool> # Allows signers to decline to sign a document if `true`. Defaults to `false`. (default: false)
   --allow-reassign: oneof<nothing, bool> # Allows signers to reassign their signature requests to other signers if set to `true`. Defaults to `false`.  **NOTE:** Only available for Premium plan and higher. (default: false)
   --ccs: list # Add CC email recipients. Required when a CC role exists for the Template. — item shape: {role: string, email_address: string}
@@ -2326,7 +2399,7 @@ export def "unclaimed-draft-create-embedded-with-template unclaimedDraftCreateEm
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit and Resend Unclaimed Draft
@@ -2343,6 +2416,7 @@ export def "unclaimed-draft-edit-and-resend unclaimedDraftEditAndResend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # Client id of the app used to create the draft. Used to apply the branding and callback url defined for the app.
   --editor-options: record # This allows the requester to specify editor options when a preparing a document — shape: {allow_edit_signers?: bool, allow_edit_documents?: bool}
   --is-for-embedded-signing: oneof<nothing, bool> # The request created from this draft will also be signable in embedded mode if set to `true`.
@@ -2360,5 +2434,5 @@ export def "unclaimed-draft-edit-and-resend unclaimedDraftEditAndResend" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

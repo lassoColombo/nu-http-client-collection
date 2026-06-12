@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -115,7 +116,7 @@ def where-column-completer-13 [] { ["CREATED_AT" "EPISODES" "ID" "NOTES" "NSFW" 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -147,6 +148,7 @@ export def "query search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   search: string
@@ -160,13 +162,13 @@ export def "query search" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($search: String!, $first: Int, $page: Int) { search(search: $search, first: $first, page: $page) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "search" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "search" }
 }
 
 # Returns the first featured theme where the current date is between start_at and end_at dates.
@@ -180,6 +182,7 @@ export def "query currentfeaturedtheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -190,13 +193,13 @@ export def "query currentfeaturedtheme" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id startAt endAt createdAt updatedAt" }
     let body = {query: ("query { currentfeaturedtheme { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "currentfeaturedtheme" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "currentfeaturedtheme" }
 }
 
 # Returns the data of the currently authenticated user.
@@ -210,6 +213,7 @@ export def "query me" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> record {
@@ -220,13 +224,13 @@ export def "query me" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name email emailVerifiedAt twoFactorConfirmedAt createdAt updatedAt" }
     let body = {query: ("query { me { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "me" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "me" }
 }
 
 # Returns a page resource.
@@ -240,6 +244,7 @@ export def "query page" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   slug: string
@@ -251,13 +256,13 @@ export def "query page" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name slug body createdAt updatedAt" }
     let body = {query: ("query($slug: String!) { page(slug: $slug) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "page" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "page" }
 }
 
 # Returns a playlist resource.
@@ -271,6 +276,7 @@ export def "query playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -282,13 +288,13 @@ export def "query playlist" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description visibility visibilityLocalized tracksCount tracksExists likesCount createdAt updatedAt" }
     let body = {query: ("query($id: String!) { playlist(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "playlist" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "playlist" }
 }
 
 # Returns a playlist track resource.
@@ -302,6 +308,7 @@ export def "query playlisttrack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -314,13 +321,13 @@ export def "query playlisttrack" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id position createdAt updatedAt" }
     let body = {query: ("query($id: String!, $playlist: String!) { playlisttrack(id: $id, playlist: $playlist) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "playlisttrack" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "playlisttrack" }
 }
 
 # Returns an anime resource.
@@ -334,6 +341,7 @@ export def "query anime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   slug: string
@@ -345,13 +353,13 @@ export def "query anime" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name format formatLocalized season seasonLocalized slug synopsis year createdAt updatedAt" }
     let body = {query: ("query($slug: String!) { anime(slug: $slug) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "anime" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "anime" }
 }
 
 # Filter anime by its external id on given site.
@@ -365,6 +373,7 @@ export def "query find-anime-by-external-site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   site: string@site-completer
@@ -378,13 +387,13 @@ export def "query find-anime-by-external-site" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name format formatLocalized season seasonLocalized slug synopsis year createdAt updatedAt" }
     let body = {query: ("query($site: ResourceSite!, $id: [Int!], $link: String) { findAnimeByExternalSite(site: $site, id: $id, link: $link) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "findAnimeByExternalSite" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "findAnimeByExternalSite" }
 }
 
 # Returns a list of years grouped by its seasons.
@@ -398,6 +407,7 @@ export def "query animeyears" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --year: int
@@ -409,13 +419,13 @@ export def "query animeyears" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "year" }
     let body = {query: ("query($year: [Int!]) { animeyears(year: $year) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "animeyears" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "animeyears" }
 }
 
 # Returns an artist resource.
@@ -429,6 +439,7 @@ export def "query artist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   slug: string
@@ -440,13 +451,13 @@ export def "query artist" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name slug information createdAt updatedAt" }
     let body = {query: ("query($slug: String!) { artist(slug: $slug) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "artist" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "artist" }
 }
 
 # Returns a series resource.
@@ -460,6 +471,7 @@ export def "query series" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   slug: string
@@ -471,13 +483,13 @@ export def "query series" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name slug createdAt updatedAt" }
     let body = {query: ("query($slug: String!) { series(slug: $slug) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "series" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "series" }
 }
 
 # Returns a studio resource.
@@ -491,6 +503,7 @@ export def "query studio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   slug: string
@@ -502,13 +515,13 @@ export def "query studio" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name slug createdAt updatedAt" }
     let body = {query: ("query($slug: String!) { studio(slug: $slug) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "studio" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "studio" }
 }
 
 # Returns a video resource.
@@ -522,6 +535,7 @@ export def "query video" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -533,13 +547,13 @@ export def "query video" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id basename filename lyrics mimetype nc overlap overlapLocalized path priority resolution size source sourceLocalized subbed uncen tags link createdAt updatedAt" }
     let body = {query: ("query($id: Int!) { video(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "video" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "video" }
 }
 
 # Shuffle themes.
@@ -553,6 +567,7 @@ export def "query animetheme-shuffle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --type: string@type-completer
@@ -570,13 +585,13 @@ export def "query animetheme-shuffle" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id type typeLocalized sequence slug createdAt updatedAt" }
     let body = {query: ("query($type: [ThemeType!], $format: [AnimeFormat!], $year_lte: Int, $year_gte: Int, $spoiler: Boolean, $first: Int, $page: Int) { animethemeShuffle(type: $type, format: $format, year_lte: $year_lte, year_gte: $year_gte, spoiler: $spoiler, first: $first, page: $page) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemeShuffle" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemeShuffle" }
 }
 
 # Returns a listing of announcement resources given fields.
@@ -590,6 +605,7 @@ export def "query announcement-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-sort: string@sort-completer
@@ -603,13 +619,13 @@ export def "query announcement-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($sort: [AnnouncementSort!], $first: Int!, $page: Int) { announcementPagination(sort: $sort, first: $first, page: $page) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "announcementPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "announcementPagination" }
 }
 
 # Returns a listing of dump resources given fields.
@@ -626,6 +642,7 @@ export def "query dump-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-sort: string@sort-completer
@@ -646,13 +663,13 @@ export def "query dump-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($where: QueryDumpPaginationWhereWhereConditions, $sort: [DumpSort!], $first: Int!, $page: Int) { dumpPagination(sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "dumpPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "dumpPagination" }
 }
 
 # Returns a listing of page resources given fields.
@@ -669,6 +686,7 @@ export def "query page-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -693,13 +711,13 @@ export def "query page-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $name: String, $name_like: String, $path_like: String, $where: QueryPagePaginationWhereWhereConditions, $sort: [PageSort!], $first: Int!, $page: Int) { pagePagination(id: $id, name: $name, name_like: $name_like, path_like: $path_like, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pagePagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pagePagination" }
 }
 
 # Returns a listing of external profile resources given fields.
@@ -716,6 +734,7 @@ export def "query externalprofile-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Limits number of fetched items. Maximum allowed value: 100.
@@ -735,13 +754,13 @@ export def "query externalprofile-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($where: QueryExternalprofilePaginationWhereWhereConditions, $first: Int!, $page: Int) { externalprofilePagination(first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "externalprofilePagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "externalprofilePagination" }
 }
 
 # Returns a listing of playlist resources given fields.
@@ -758,6 +777,7 @@ export def "query playlist-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --name: string
@@ -782,13 +802,13 @@ export def "query playlist-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($name: String, $name_like: String, $search: String, $visibility: PlaylistVisibility, $where: QueryPlaylistPaginationWhereWhereConditions, $sort: [PlaylistSort!], $first: Int!, $page: Int) { playlistPagination(name: $name, name_like: $name_like, search: $search, visibility: $visibility, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "playlistPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "playlistPagination" }
 }
 
 # Returns a listing of playlist track resources given fields.
@@ -805,6 +825,7 @@ export def "query playlisttrack-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   playlist: string
@@ -827,13 +848,13 @@ export def "query playlisttrack-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($playlist: String!, $position: Int, $where: QueryPlaylisttrackPaginationWhereWhereConditions, $sort: [PlaylistTrackSort!], $first: Int!, $page: Int) { playlisttrackPagination(playlist: $playlist, position: $position, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "playlisttrackPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "playlisttrackPagination" }
 }
 
 # Returns a listing of anime resources given fields.
@@ -850,6 +871,7 @@ export def "query anime-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -882,13 +904,13 @@ export def "query anime-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $search: String, $name: String, $name_like: String, $format: AnimeFormat, $format_in: [AnimeFormat!], $season: AnimeSeason, $season_in: [AnimeSeason!], $slug: String, $year: Int, $year_lesser: Int, $year_greater: Int, $where: QueryAnimePaginationWhereWhereConditions, $sort: [AnimeSort!], $first: Int!, $page: Int) { animePagination(id: $id, search: $search, name: $name, name_like: $name_like, format: $format, format_in: $format_in, season: $season, season_in: $season_in, slug: $slug, year: $year, year_lesser: $year_lesser, year_greater: $year_greater, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "animePagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "animePagination" }
 }
 
 # Returns a listing of artist resources given fields.
@@ -905,6 +927,7 @@ export def "query artist-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -930,13 +953,13 @@ export def "query artist-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $name: String, $name_like: String, $search: String, $slug: String, $where: QueryArtistPaginationWhereWhereConditions, $sort: [ArtistSort!], $first: Int!, $page: Int) { artistPagination(id: $id, name: $name, name_like: $name_like, search: $search, slug: $slug, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "artistPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "artistPagination" }
 }
 
 # Returns a listing of audio resources given fields.
@@ -953,6 +976,7 @@ export def "query audio-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -981,13 +1005,13 @@ export def "query audio-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $basename: String, $filename: String, $mimetype: String, $path: String, $path_like: String, $size_lesser: Int, $size_greater: Int, $where: QueryAudioPaginationWhereWhereConditions, $sort: [AudioSort!], $first: Int!, $page: Int) { audioPagination(id: $id, basename: $basename, filename: $filename, mimetype: $mimetype, path: $path, path_like: $path_like, size_lesser: $size_lesser, size_greater: $size_greater, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "audioPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "audioPagination" }
 }
 
 # Returns a listing of images resources given fields.
@@ -1004,6 +1028,7 @@ export def "query image-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1028,13 +1053,13 @@ export def "query image-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $facet: ImageFacet, $path: String, $path_like: String, $where: QueryImagePaginationWhereWhereConditions, $sort: [ImageSort!], $first: Int!, $page: Int) { imagePagination(id: $id, facet: $facet, path: $path, path_like: $path_like, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "imagePagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "imagePagination" }
 }
 
 # Returns a listing of series resources given fields.
@@ -1051,6 +1076,7 @@ export def "query series-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1076,13 +1102,13 @@ export def "query series-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $search: String, $name: String, $name_like: String, $slug: String, $where: QuerySeriesPaginationWhereWhereConditions, $sort: [SeriesSort!], $first: Int!, $page: Int) { seriesPagination(id: $id, search: $search, name: $name, name_like: $name_like, slug: $slug, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "seriesPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "seriesPagination" }
 }
 
 # Returns a listing of song resources given fields.
@@ -1099,6 +1125,7 @@ export def "query song-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1122,13 +1149,13 @@ export def "query song-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $title: String, $titleNative: String, $where: QuerySongPaginationWhereWhereConditions, $sort: [SongSort!], $first: Int!, $page: Int) { songPagination(id: $id, title: $title, titleNative: $titleNative, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "songPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "songPagination" }
 }
 
 # Returns a listing of studio resources given fields.
@@ -1145,6 +1172,7 @@ export def "query studio-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1170,13 +1198,13 @@ export def "query studio-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $search: String, $name: String, $name_like: String, $slug: String, $where: QueryStudioPaginationWhereWhereConditions, $sort: [StudioSort!], $first: Int!, $page: Int) { studioPagination(id: $id, search: $search, name: $name, name_like: $name_like, slug: $slug, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "studioPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "studioPagination" }
 }
 
 # Returns a listing of theme group resources given fields.
@@ -1193,6 +1221,7 @@ export def "query themegroup-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1216,13 +1245,13 @@ export def "query themegroup-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $name: String, $slug: String, $where: QueryThemegroupPaginationWhereWhereConditions, $sort: [ThemeGroupSort!], $first: Int!, $page: Int) { themegroupPagination(id: $id, name: $name, slug: $slug, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "themegroupPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "themegroupPagination" }
 }
 
 # Returns a listing of video resources given fields.
@@ -1239,6 +1268,7 @@ export def "query video-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1276,13 +1306,13 @@ export def "query video-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $basename: String, $filename: String, $lyrics: Boolean, $mimetype: String, $nc: Boolean, $overlap: VideoOverlap, $path: String, $path_like: String, $resolution: Int, $resolution_lesser: Int, $resolution_greater: Int, $size_lesser: Int, $size_greater: Int, $source: VideoSource, $subbed: Boolean, $uncen: Boolean, $where: QueryVideoPaginationWhereWhereConditions, $sort: [VideoSort!], $first: Int!, $page: Int) { videoPagination(id: $id, basename: $basename, filename: $filename, lyrics: $lyrics, mimetype: $mimetype, nc: $nc, overlap: $overlap, path: $path, path_like: $path_like, resolution: $resolution, resolution_lesser: $resolution_lesser, resolution_greater: $resolution_greater, size_lesser: $size_lesser, size_greater: $size_greater, source: $source, subbed: $subbed, uncen: $uncen, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "videoPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "videoPagination" }
 }
 
 # Returns a listing of anime themes resources given fields.
@@ -1299,6 +1329,7 @@ export def "query animetheme-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
@@ -1327,13 +1358,13 @@ export def "query animetheme-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($id: Int, $search: String, $type: ThemeType, $type_in: [ThemeType!], $sequence: Int, $sequence_lesser: Int, $sequence_greater: Int, $slug: String, $where: QueryAnimethemePaginationWhereWhereConditions, $sort: [AnimeThemeSort!], $first: Int!, $page: Int) { animethemePagination(id: $id, search: $search, type: $type, type_in: $type_in, sequence: $sequence, sequence_lesser: $sequence_lesser, sequence_greater: $sequence_greater, slug: $slug, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemePagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemePagination" }
 }
 
 # GraphQL query: animethemeentryPagination
@@ -1350,6 +1381,7 @@ export def "query animethemeentry-pagination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --episodes: string
@@ -1377,13 +1409,13 @@ export def "query animethemeentry-pagination" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($episodes: String, $episodes_like: String, $nsfw: Boolean, $spoiler: Boolean, $version: Int, $version_lesser: Int, $version_greater: Int, $where: QueryAnimethemeentryPaginationWhereWhereConditions, $sort: [AnimeThemeEntrySort!], $first: Int!, $page: Int) { animethemeentryPagination(episodes: $episodes, episodes_like: $episodes_like, nsfw: $nsfw, spoiler: $spoiler, version: $version, version_lesser: $version_lesser, version_greater: $version_greater, sort: $sort, first: $first, page: $page, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemeentryPagination" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "animethemeentryPagination" }
 }
 
 # GraphQL mutation: ToggleLike
@@ -1397,6 +1429,7 @@ export def "mutation toggle-like" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --entry-id: int
@@ -1409,13 +1442,13 @@ export def "mutation toggle-like" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($entryId: Int, $playlistId: String) { ToggleLike(entryId: $entryId, playlistId: $playlistId) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "ToggleLike" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "ToggleLike" }
 }
 
 # Mark a video as watched.
@@ -1429,6 +1462,7 @@ export def "mutation watch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   entry_id: int
@@ -1441,13 +1475,13 @@ export def "mutation watch" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("mutation($entryId: Int!, $videoId: Int!) { Watch(entryId: $entryId, videoId: $videoId) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "Watch" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "Watch" }
 }
 
 # GraphQL mutation: CreatePlaylist
@@ -1461,6 +1495,7 @@ export def "mutation create-playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string
@@ -1474,13 +1509,13 @@ export def "mutation create-playlist" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description visibility visibilityLocalized tracksCount tracksExists likesCount createdAt updatedAt" }
     let body = {query: ("mutation($name: String!, $visibility: PlaylistVisibility!, $description: String) { CreatePlaylist(name: $name, visibility: $visibility, description: $description) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "CreatePlaylist" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "CreatePlaylist" }
 }
 
 # GraphQL mutation: UpdatePlaylist
@@ -1494,6 +1529,7 @@ export def "mutation update-playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -1508,13 +1544,13 @@ export def "mutation update-playlist" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id name description visibility visibilityLocalized tracksCount tracksExists likesCount createdAt updatedAt" }
     let body = {query: ("mutation($id: String!, $name: String, $visibility: PlaylistVisibility, $description: String) { UpdatePlaylist(id: $id, name: $name, visibility: $visibility, description: $description) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "UpdatePlaylist" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "UpdatePlaylist" }
 }
 
 # GraphQL mutation: DeletePlaylist
@@ -1528,6 +1564,7 @@ export def "mutation delete-playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -1539,13 +1576,13 @@ export def "mutation delete-playlist" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "message" }
     let body = {query: ("mutation($id: String!) { DeletePlaylist(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "DeletePlaylist" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "DeletePlaylist" }
 }
 
 # GraphQL mutation: CreatePlaylistTrack
@@ -1559,6 +1596,7 @@ export def "mutation create-playlist-track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   playlist: string
@@ -1573,13 +1611,13 @@ export def "mutation create-playlist-track" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id position createdAt updatedAt" }
     let body = {query: ("mutation($playlist: String!, $entryId: Int!, $videoId: Int!, $position: Int) { CreatePlaylistTrack(playlist: $playlist, entryId: $entryId, videoId: $videoId, position: $position) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "CreatePlaylistTrack" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "CreatePlaylistTrack" }
 }
 
 # GraphQL mutation: UpdatePlaylistTrack
@@ -1593,6 +1631,7 @@ export def "mutation update-playlist-track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -1608,13 +1647,13 @@ export def "mutation update-playlist-track" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id position createdAt updatedAt" }
     let body = {query: ("mutation($id: String!, $playlist: String!, $entryId: Int, $videoId: Int, $position: Int) { UpdatePlaylistTrack(id: $id, playlist: $playlist, entryId: $entryId, videoId: $videoId, position: $position) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "UpdatePlaylistTrack" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "UpdatePlaylistTrack" }
 }
 
 # GraphQL mutation: DeletePlaylistTrack
@@ -1628,6 +1667,7 @@ export def "mutation delete-playlist-track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
@@ -1640,11 +1680,11 @@ export def "mutation delete-playlist-track" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "message" }
     let body = {query: ("mutation($id: String!, $playlist: String!) { DeletePlaylistTrack(id: $id, playlist: $playlist) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "DeletePlaylistTrack" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "DeletePlaylistTrack" }
 }

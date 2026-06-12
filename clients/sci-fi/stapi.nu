@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-animal v1GetAnimal" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "rest-animal v1GetAnimal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Animal unique ID
 ]: nothing -> record<animal: record<uid: string, name: string, earthAnimal: bool, earthInsect: bool, avian: bool, canine: bool, feline: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -107,7 +109,7 @@ export def "rest-animal v1GetAnimal" [
   let full_url = (build-url $base "/v1/rest/animal" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over animals
@@ -122,6 +124,7 @@ export def "rest-animal-search v1PageAnimals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, animals: table<uid: string, name: string, earthAnimal: bool, earthInsect: bool, avian: bool, canine: bool, feline: bool>> {
@@ -131,7 +134,7 @@ export def "rest-animal-search v1PageAnimals" [
   let full_url = (build-url $base "/v1/rest/animal/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching animals
@@ -146,6 +149,7 @@ export def "rest-animal-search v1SearchAnimals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -165,7 +169,7 @@ export def "rest-animal-search v1SearchAnimals" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single astronomical object
@@ -182,6 +186,7 @@ export def "rest-astronomical-object v1GetAstronomicalObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Astronomical object's unique ID
 ]: nothing -> record<astronomicalObject: record<uid: string, name: string, astronomicalObjectType: string, location: record<uid: string, name: string, astronomicalObjectType: string, location: record>, astronomicalObjects: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -190,7 +195,7 @@ export def "rest-astronomical-object v1GetAstronomicalObject" [
   let full_url = (build-url $base "/v1/rest/astronomicalObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over astronomical objects
@@ -207,6 +212,7 @@ export def "rest-astronomical-object-search v1PageAstronomicalObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, astronomicalObjects: table<uid: string, name: string, astronomicalObjectType: string, location: record>> {
@@ -216,7 +222,7 @@ export def "rest-astronomical-object-search v1PageAstronomicalObjects" [
   let full_url = (build-url $base "/v1/rest/astronomicalObject/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching astronomical objects
@@ -233,6 +239,7 @@ export def "rest-astronomical-object-search v1SearchAstronomicalObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -249,7 +256,7 @@ export def "rest-astronomical-object-search v1SearchAstronomicalObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single astronomical object (V2)
@@ -264,6 +271,7 @@ export def "rest-astronomical-object v2GetAstronomicalObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Astronomical object's unique ID
 ]: nothing -> record<astronomicalObject: record<uid: string, name: string, astronomicalObjectType: string, location: record<uid: string, name: string, astronomicalObjectType: string, location: record>, astronomicalObjects: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -272,7 +280,7 @@ export def "rest-astronomical-object v2GetAstronomicalObject" [
   let full_url = (build-url $base "/v2/rest/astronomicalObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over astronomical objects (V2)
@@ -287,6 +295,7 @@ export def "rest-astronomical-object-search v2PageAstronomicalObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, astronomicalObjects: table<uid: string, name: string, astronomicalObjectType: string, location: record>> {
@@ -296,7 +305,7 @@ export def "rest-astronomical-object-search v2PageAstronomicalObjects" [
   let full_url = (build-url $base "/v2/rest/astronomicalObject/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching astronomical objects (v2)
@@ -311,6 +320,7 @@ export def "rest-astronomical-object-search v2SearchAstronomicalObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -327,7 +337,7 @@ export def "rest-astronomical-object-search v2SearchAstronomicalObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single book
@@ -344,6 +354,7 @@ export def "rest-book v1GetBook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Book unique ID
 ]: nothing -> record<book: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, novel: bool, referenceBook: bool, biographyBook: bool, rolePlayingBook: bool, ebook: bool, anthology: bool, novelization: bool, audiobook: bool, audiobookAbridged: bool, audiobookPublishedYear: int, audiobookPublishedMonth: int, audiobookPublishedDay: int, audiobookRunTime: int, productionNumber: string, bookSeries: list<record>, authors: list<record>, artists: list<record>, editors: list<record>, audiobookNarrators: list<record>, publishers: list<record>, audiobookPublishers: list<record>, characters: list<record>, references: list<record>, audiobookReferences: list<record>, bookCollections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -352,7 +363,7 @@ export def "rest-book v1GetBook" [
   let full_url = (build-url $base "/v1/rest/book" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over books
@@ -369,6 +380,7 @@ export def "rest-book-search v1PageBooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, books: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, novel: bool, referenceBook: bool, biographyBook: bool, rolePlayingBook: bool, ebook: bool, anthology: bool, novelization: bool, audiobook: bool, audiobookAbridged: bool, audiobookPublishedYear: int, audiobookPublishedMonth: int, audiobookPublishedDay: int, audiobookRunTime: int, productionNumber: string>> {
@@ -378,7 +390,7 @@ export def "rest-book-search v1PageBooks" [
   let full_url = (build-url $base "/v1/rest/book/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching books
@@ -395,6 +407,7 @@ export def "rest-book-search v1SearchBooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -430,7 +443,7 @@ export def "rest-book-search v1SearchBooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single book (V2)
@@ -445,6 +458,7 @@ export def "rest-book v2GetBook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Book unique ID
 ]: nothing -> record<book: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, novel: bool, referenceBook: bool, biographyBook: bool, rolePlayingBook: bool, ebook: bool, anthology: bool, novelization: bool, unauthorizedPublication: bool, audiobook: bool, audiobookAbridged: bool, audiobookPublishedYear: int, audiobookPublishedMonth: int, audiobookPublishedDay: int, audiobookRunTime: int, productionNumber: string, bookSeries: list<record>, authors: list<record>, artists: list<record>, editors: list<record>, audiobookNarrators: list<record>, publishers: list<record>, audiobookPublishers: list<record>, characters: list<record>, references: list<record>, audiobookReferences: list<record>, bookCollections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -453,7 +467,7 @@ export def "rest-book v2GetBook" [
   let full_url = (build-url $base "/v2/rest/book" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over books (V2)
@@ -468,6 +482,7 @@ export def "rest-book-search v2PageBooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, books: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, novel: bool, referenceBook: bool, biographyBook: bool, rolePlayingBook: bool, ebook: bool, anthology: bool, novelization: bool, unauthorizedPublication: bool, audiobook: bool, audiobookAbridged: bool, audiobookPublishedYear: int, audiobookPublishedMonth: int, audiobookPublishedDay: int, audiobookRunTime: int, productionNumber: string>> {
@@ -477,7 +492,7 @@ export def "rest-book-search v2PageBooks" [
   let full_url = (build-url $base "/v2/rest/book/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching books (V2)
@@ -492,6 +507,7 @@ export def "rest-book-search v2SearchBooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -528,7 +544,7 @@ export def "rest-book-search v2SearchBooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single book collection
@@ -543,6 +559,7 @@ export def "rest-book-collection v1GetBookCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Book collection unique ID
 ]: nothing -> record<bookCollection: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, bookSeries: list<record>, authors: list<record>, artists: list<record>, editors: list<record>, publishers: list<record>, characters: list<record>, references: list<record>, books: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -551,7 +568,7 @@ export def "rest-book-collection v1GetBookCollection" [
   let full_url = (build-url $base "/v1/rest/bookCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over book collections
@@ -566,6 +583,7 @@ export def "rest-book-collection-search v1PageBookCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, bookCollections: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int>> {
@@ -575,7 +593,7 @@ export def "rest-book-collection-search v1PageBookCollections" [
   let full_url = (build-url $base "/v1/rest/bookCollection/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching book collections
@@ -590,6 +608,7 @@ export def "rest-book-collection-search v1SearchBookCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -612,7 +631,7 @@ export def "rest-book-collection-search v1SearchBookCollections" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single book series
@@ -627,6 +646,7 @@ export def "rest-book-series v1GetBookSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Book series unique ID
 ]: nothing -> record<bookSeries: record<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedYearTo: int, publishedMonthTo: int, numberOfBooks: int, yearFrom: int, yearTo: int, miniseries: bool, ebookSeries: bool, parentSeries: list<record>, childSeries: list<record>, publishers: list<record>, books: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -635,7 +655,7 @@ export def "rest-book-series v1GetBookSeries" [
   let full_url = (build-url $base "/v1/rest/bookSeries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over book series
@@ -650,6 +670,7 @@ export def "rest-book-series-search v1PageBookSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, bookSeries: table<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedYearTo: int, publishedMonthTo: int, numberOfBooks: int, yearFrom: int, yearTo: int, miniseries: bool, ebookSeries: bool>> {
@@ -659,7 +680,7 @@ export def "rest-book-series-search v1PageBookSeries" [
   let full_url = (build-url $base "/v1/rest/bookSeries/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching book series
@@ -674,6 +695,7 @@ export def "rest-book-series-search v1SearchBookSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -696,7 +718,7 @@ export def "rest-book-series-search v1SearchBookSeries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single character
@@ -711,6 +733,7 @@ export def "rest-character v1GetCharacter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Character unique ID
 ]: nothing -> record<character: record<uid: string, name: string, gender: string, yearOfBirth: int, monthOfBirth: int, dayOfBirth: int, placeOfBirth: string, yearOfDeath: int, monthOfDeath: int, dayOfDeath: int, placeOfDeath: string, height: int, weight: int, deceased: bool, bloodType: string, maritalStatus: string, serialNumber: string, hologramActivationDate: string, hologramStatus: string, hologramDateStatus: string, hologram: bool, fictionalCharacter: bool, mirror: bool, alternateReality: bool, performers: list<record>, episodes: list<record>, movies: list<record>, characterSpecies: list<record>, characterRelations: list<record>, titles: list<record>, occupations: list<record>, organizations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -719,7 +742,7 @@ export def "rest-character v1GetCharacter" [
   let full_url = (build-url $base "/v1/rest/character" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over characters
@@ -734,6 +757,7 @@ export def "rest-character-search v1PageCharacter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, characters: table<uid: string, name: string, gender: string, yearOfBirth: int, monthOfBirth: int, dayOfBirth: int, placeOfBirth: string, yearOfDeath: int, monthOfDeath: int, dayOfDeath: int, placeOfDeath: string, height: int, weight: int, deceased: bool, bloodType: string, maritalStatus: string, serialNumber: string, hologramActivationDate: string, hologramStatus: string, hologramDateStatus: string, hologram: bool, fictionalCharacter: bool, mirror: bool, alternateReality: bool>> {
@@ -743,7 +767,7 @@ export def "rest-character-search v1PageCharacter" [
   let full_url = (build-url $base "/v1/rest/character/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching characters
@@ -758,6 +782,7 @@ export def "rest-character-search v1SearchCharacters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -778,7 +803,7 @@ export def "rest-character-search v1SearchCharacters" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single comics
@@ -793,6 +818,7 @@ export def "rest-comics v1GetComics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Comics unique ID
 ]: nothing -> record<comics: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool, adaptation: bool, comicSeries: list<record>, writers: list<record>, artists: list<record>, editors: list<record>, staff: list<record>, publishers: list<record>, characters: list<record>, references: list<record>, comicCollections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -801,7 +827,7 @@ export def "rest-comics v1GetComics" [
   let full_url = (build-url $base "/v1/rest/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over comics
@@ -816,6 +842,7 @@ export def "rest-comics-search v1PageComics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comics: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool, adaptation: bool>> {
@@ -825,7 +852,7 @@ export def "rest-comics-search v1PageComics" [
   let full_url = (build-url $base "/v1/rest/comics/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching comics
@@ -840,6 +867,7 @@ export def "rest-comics-search v1SearchComics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -864,7 +892,7 @@ export def "rest-comics-search v1SearchComics" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single comic collection
@@ -881,6 +909,7 @@ export def "rest-comic-collection v1GetComicCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Comic collection unique ID
 ]: nothing -> record<comicCollection: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool, comicSeries: list<record>, writers: list<record>, artists: list<record>, editors: list<record>, staff: list<record>, publishers: list<record>, characters: list<record>, references: list<record>, comics: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -889,7 +918,7 @@ export def "rest-comic-collection v1GetComicCollection" [
   let full_url = (build-url $base "/v1/rest/comicCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over comic collections
@@ -904,6 +933,7 @@ export def "rest-comic-collection-search v1PageComicCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comicCollections: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool>> {
@@ -913,7 +943,7 @@ export def "rest-comic-collection-search v1PageComicCollections" [
   let full_url = (build-url $base "/v1/rest/comicCollection/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching comic collections
@@ -928,6 +958,7 @@ export def "rest-comic-collection-search v1SearchComicCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -951,7 +982,7 @@ export def "rest-comic-collection-search v1SearchComicCollections" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single comic collection (V2)
@@ -966,6 +997,7 @@ export def "rest-comic-collection v2GetComicCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Comic collection unique ID
 ]: nothing -> record<comicCollection: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool, comicSeries: list<record>, childComicSeries: list<record>, writers: list<record>, artists: list<record>, editors: list<record>, staff: list<record>, publishers: list<record>, characters: list<record>, references: list<record>, comics: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -974,7 +1006,7 @@ export def "rest-comic-collection v2GetComicCollection" [
   let full_url = (build-url $base "/v2/rest/comicCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieval of a single comic series
@@ -989,6 +1021,7 @@ export def "rest-comic-series v1GetComicSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Comic series unique ID
 ]: nothing -> record<comicSeries: record<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedDayFrom: int, publishedYearTo: int, publishedMonthTo: int, publishedDayTo: int, numberOfIssues: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, miniseries: bool, photonovelSeries: bool, parentSeries: list<record>, childSeries: list<record>, publishers: list<record>, comics: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -997,7 +1030,7 @@ export def "rest-comic-series v1GetComicSeries" [
   let full_url = (build-url $base "/v1/rest/comicSeries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over comic series
@@ -1012,6 +1045,7 @@ export def "rest-comic-series-search v1PageComicSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comicSeries: table<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedDayFrom: int, publishedYearTo: int, publishedMonthTo: int, publishedDayTo: int, numberOfIssues: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, miniseries: bool, photonovelSeries: bool>> {
@@ -1021,7 +1055,7 @@ export def "rest-comic-series-search v1PageComicSeries" [
   let full_url = (build-url $base "/v1/rest/comicSeries/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching comic series
@@ -1036,6 +1070,7 @@ export def "rest-comic-series-search v1SearchComicSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1060,7 +1095,7 @@ export def "rest-comic-series-search v1SearchComicSeries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single comic strip
@@ -1075,6 +1110,7 @@ export def "rest-comic-strip v1GetComicStrip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Comic strip unique ID
 ]: nothing -> record<comicStrip: record<uid: string, title: string, periodical: string, publishedYearFrom: int, publishedMonthFrom: int, publishedDayFrom: int, publishedYearTo: int, publishedMonthTo: int, publishedDayTo: int, numberOfPages: int, yearFrom: int, yearTo: int, comicSeries: list<record>, writers: list<record>, artists: list<record>, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1083,7 +1119,7 @@ export def "rest-comic-strip v1GetComicStrip" [
   let full_url = (build-url $base "/v1/rest/comicStrip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over comic strips
@@ -1098,6 +1134,7 @@ export def "rest-comic-strip-search v1PageComicStrips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comicStrips: table<uid: string, title: string, periodical: string, publishedYearFrom: int, publishedMonthFrom: int, publishedDayFrom: int, publishedYearTo: int, publishedMonthTo: int, publishedDayTo: int, numberOfPages: int, yearFrom: int, yearTo: int>> {
@@ -1107,7 +1144,7 @@ export def "rest-comic-strip-search v1PageComicStrips" [
   let full_url = (build-url $base "/v1/rest/comicStrip/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching comic strips
@@ -1122,6 +1159,7 @@ export def "rest-comic-strip-search v1SearchComicStrips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1142,7 +1180,7 @@ export def "rest-comic-strip-search v1SearchComicStrips" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single company
@@ -1159,6 +1197,7 @@ export def "rest-company v1GetCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Company unique ID
 ]: nothing -> record<company: record<uid: string, name: string, broadcaster: bool, collectibleCompany: bool, conglomerate: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1167,7 +1206,7 @@ export def "rest-company v1GetCompany" [
   let full_url = (build-url $base "/v1/rest/company" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over companies
@@ -1184,6 +1223,7 @@ export def "rest-company-search v1PageCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, companies: table<uid: string, name: string, broadcaster: bool, collectibleCompany: bool, conglomerate: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool>> {
@@ -1193,7 +1233,7 @@ export def "rest-company-search v1PageCompanies" [
   let full_url = (build-url $base "/v1/rest/company/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching companies
@@ -1210,6 +1250,7 @@ export def "rest-company-search v1SearchCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1241,7 +1282,7 @@ export def "rest-company-search v1SearchCompanies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single company (V2)
@@ -1256,6 +1297,7 @@ export def "rest-company v2GetCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Company unique ID
 ]: nothing -> record<company: record<uid: string, name: string, broadcaster: bool, streamingService: bool, collectibleCompany: bool, conglomerate: bool, visualEffectsCompany: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool, publisher: bool, publicationArtStudio: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1264,7 +1306,7 @@ export def "rest-company v2GetCompany" [
   let full_url = (build-url $base "/v2/rest/company" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over companies (V2)
@@ -1279,6 +1321,7 @@ export def "rest-company-search v2PageCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, companies: table<uid: string, name: string, broadcaster: bool, streamingService: bool, collectibleCompany: bool, conglomerate: bool, visualEffectsCompany: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool, publisher: bool, publicationArtStudio: bool>> {
@@ -1288,7 +1331,7 @@ export def "rest-company-search v2PageCompanies" [
   let full_url = (build-url $base "/v2/rest/company/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching companies (V2)
@@ -1303,6 +1346,7 @@ export def "rest-company-search v2SearchCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1338,7 +1382,7 @@ export def "rest-company-search v2SearchCompanies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single conflict
@@ -1355,6 +1399,7 @@ export def "rest-conflict v1GetConflict" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Conflict unique ID
 ]: nothing -> record<conflict: record<uid: string, name: string, yearFrom: int, yearTo: int, earthConflict: bool, federationWar: bool, klingonWar: bool, dominionWarBattle: bool, alternateReality: bool, locations: list<record>, firstSideBelligerents: list<record>, firstSideCommanders: list<record>, secondSideBelligerents: list<record>, secondSideCommanders: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1363,7 +1408,7 @@ export def "rest-conflict v1GetConflict" [
   let full_url = (build-url $base "/v1/rest/conflict" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over conflicts
@@ -1378,6 +1423,7 @@ export def "rest-conflict-search v1PageConflicts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, conflicts: table<uid: string, name: string, yearFrom: int, yearTo: int, earthConflict: bool, federationWar: bool, klingonWar: bool, dominionWarBattle: bool, alternateReality: bool>> {
@@ -1387,7 +1433,7 @@ export def "rest-conflict-search v1PageConflicts" [
   let full_url = (build-url $base "/v1/rest/conflict/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching conflicts
@@ -1402,6 +1448,7 @@ export def "rest-conflict-search v1SearchConflicts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1423,7 +1470,7 @@ export def "rest-conflict-search v1SearchConflicts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single conflict (V2)
@@ -1438,6 +1485,7 @@ export def "rest-conflict v2GetConflict" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Conflict unique ID
 ]: nothing -> record<conflict: record<uid: string, name: string, yearFrom: int, yearTo: int, earthConflict: bool, federationWar: bool, klingonWar: bool, dominionWarBattle: bool, alternateReality: bool, locations: list<record>, firstSideBelligerents: list<record>, firstSideLocations: list<record>, firstSideCommanders: list<record>, secondSideBelligerents: list<record>, secondSideLocations: list<record>, secondSideCommanders: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1446,7 +1494,7 @@ export def "rest-conflict v2GetConflict" [
   let full_url = (build-url $base "/v2/rest/conflict" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieval of a data version
@@ -1461,13 +1509,14 @@ export def "rest-common-data-version v1GetDataVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dataVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rest/common/dataVersion")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieval of a single element
@@ -1484,6 +1533,7 @@ export def "rest-element v1GetElement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Element unique ID
 ]: nothing -> record<element: record<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranium: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1492,7 +1542,7 @@ export def "rest-element v1GetElement" [
   let full_url = (build-url $base "/v1/rest/element" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over elements
@@ -1509,6 +1559,7 @@ export def "rest-element-search v1PageElements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, elements: table<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranium: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
@@ -1518,7 +1569,7 @@ export def "rest-element-search v1PageElements" [
   let full_url = (build-url $base "/v1/rest/element/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching elements
@@ -1535,6 +1586,7 @@ export def "rest-element-search v1SearchElements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1557,7 +1609,7 @@ export def "rest-element-search v1SearchElements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single element (V2)
@@ -1572,6 +1624,7 @@ export def "rest-element v2GetElement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Element unique ID
 ]: nothing -> record<element: record<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranic: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1580,7 +1633,7 @@ export def "rest-element v2GetElement" [
   let full_url = (build-url $base "/v2/rest/element" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over elements (V2)
@@ -1595,6 +1648,7 @@ export def "rest-element-search v2PageElements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, elements: table<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranic: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
@@ -1604,7 +1658,7 @@ export def "rest-element-search v2PageElements" [
   let full_url = (build-url $base "/v2/rest/element/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching elements (V2)
@@ -1619,6 +1673,7 @@ export def "rest-element-search v2SearchElements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1641,7 +1696,7 @@ export def "rest-element-search v2SearchElements" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single episode
@@ -1656,6 +1711,7 @@ export def "rest-episode v1GetEpisode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Episode unique ID
 ]: nothing -> record<episode: record<uid: string, title: string, titleGerman: string, titleItalian: string, titleJapanese: string, series: record<uid: string, title: string, abbreviation: string, productionStartYear: int, productionEndYear: int, originalRunStartDate: string, originalRunEndDate: string, seasonsCount: int, episodesCount: int, featureLengthEpisodesCount: int, productionCompany: record, originalBroadcaster: record>, season: record<uid: string, title: string, series: record, seasonNumber: int, numberOfEpisodes: int>, seasonNumber: int, episodeNumber: int, productionSerialNumber: string, featureLength: bool, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, usAirDate: string, finalScriptDate: string, writers: list<record>, teleplayAuthors: list<record>, storyAuthors: list<record>, directors: list<record>, performers: list<record>, stuntPerformers: list<record>, standInPerformers: list<record>, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1664,7 +1720,7 @@ export def "rest-episode v1GetEpisode" [
   let full_url = (build-url $base "/v1/rest/episode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over episodes
@@ -1679,6 +1735,7 @@ export def "rest-episode-search v1PageEpisodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, episodes: table<uid: string, title: string, titleGerman: string, titleItalian: string, titleJapanese: string, series: record, season: record, seasonNumber: int, episodeNumber: int, productionSerialNumber: string, featureLength: bool, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, usAirDate: string, finalScriptDate: string>> {
@@ -1688,7 +1745,7 @@ export def "rest-episode-search v1PageEpisodes" [
   let full_url = (build-url $base "/v1/rest/episode/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching episodes
@@ -1703,6 +1760,7 @@ export def "rest-episode-search v1SearchEpisodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1731,7 +1789,7 @@ export def "rest-episode-search v1SearchEpisodes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single food
@@ -1746,6 +1804,7 @@ export def "rest-food v1GetFood" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Food unique ID
 ]: nothing -> record<food: record<uid: string, name: string, earthlyOrigin: bool, dessert: bool, fruit: bool, herbOrSpice: bool, sauce: bool, soup: bool, beverage: bool, alcoholicBeverage: bool, juice: bool, tea: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1754,7 +1813,7 @@ export def "rest-food v1GetFood" [
   let full_url = (build-url $base "/v1/rest/food" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over foods
@@ -1769,6 +1828,7 @@ export def "rest-food-search v1PageFoods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, foods: table<uid: string, name: string, earthlyOrigin: bool, dessert: bool, fruit: bool, herbOrSpice: bool, sauce: bool, soup: bool, beverage: bool, alcoholicBeverage: bool, juice: bool, tea: bool>> {
@@ -1778,7 +1838,7 @@ export def "rest-food-search v1PageFoods" [
   let full_url = (build-url $base "/v1/rest/food/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching foods
@@ -1793,6 +1853,7 @@ export def "rest-food-search v1SearchFoods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1817,7 +1878,7 @@ export def "rest-food-search v1SearchFoods" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single literature
@@ -1832,6 +1893,7 @@ export def "rest-literature v1GetLiterature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Literature unique ID
 ]: nothing -> record<literature: record<uid: string, title: string, earthlyOrigin: bool, shakespeareanWork: bool, report: bool, scientificLiterature: bool, technicalManual: bool, religiousLiterature: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1840,7 +1902,7 @@ export def "rest-literature v1GetLiterature" [
   let full_url = (build-url $base "/v1/rest/literature" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over literature
@@ -1855,6 +1917,7 @@ export def "rest-literature-search v1PageLiterature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, literature: table<uid: string, title: string, earthlyOrigin: bool, shakespeareanWork: bool, report: bool, scientificLiterature: bool, technicalManual: bool, religiousLiterature: bool>> {
@@ -1864,7 +1927,7 @@ export def "rest-literature-search v1PageLiterature" [
   let full_url = (build-url $base "/v1/rest/literature/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching literature
@@ -1879,6 +1942,7 @@ export def "rest-literature-search v1SearchLiterature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -1899,7 +1963,7 @@ export def "rest-literature-search v1SearchLiterature" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single location
@@ -1916,6 +1980,7 @@ export def "rest-location v1GetLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Location unique ID
 ]: nothing -> record<location: record<uid: string, name: string, earthlyLocation: bool, fictionalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, landmark: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, mirror: bool, alternateReality: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1924,7 +1989,7 @@ export def "rest-location v1GetLocation" [
   let full_url = (build-url $base "/v1/rest/location" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over locations
@@ -1941,6 +2006,7 @@ export def "rest-location-search v1PageLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, locations: table<uid: string, name: string, earthlyLocation: bool, fictionalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, landmark: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, mirror: bool, alternateReality: bool>> {
@@ -1950,7 +2016,7 @@ export def "rest-location-search v1PageLocations" [
   let full_url = (build-url $base "/v1/rest/location/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching locations
@@ -1967,6 +2033,7 @@ export def "rest-location-search v1SearchLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2004,7 +2071,7 @@ export def "rest-location-search v1SearchLocations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single location (V2)
@@ -2019,6 +2086,7 @@ export def "rest-location v2GetLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Location unique ID
 ]: nothing -> record<location: record<uid: string, name: string, earthlyLocation: bool, qonosLocation: bool, fictionalLocation: bool, mythologicalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, restaurant: bool, residence: bool, mirror: bool, alternateReality: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2027,7 +2095,7 @@ export def "rest-location v2GetLocation" [
   let full_url = (build-url $base "/v2/rest/location" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over locations (V2)
@@ -2042,6 +2110,7 @@ export def "rest-location-search v2PageLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, locations: table<uid: string, name: string, earthlyLocation: bool, qonosLocation: bool, fictionalLocation: bool, mythologicalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, restaurant: bool, residence: bool, mirror: bool, alternateReality: bool>> {
@@ -2051,7 +2120,7 @@ export def "rest-location-search v2PageLocations" [
   let full_url = (build-url $base "/v2/rest/location/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching locations (V2)
@@ -2066,6 +2135,7 @@ export def "rest-location-search v2SearchLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2106,7 +2176,7 @@ export def "rest-location-search v2SearchLocations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single magazine
@@ -2121,6 +2191,7 @@ export def "rest-magazine v1GetMagazine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Magazine unique ID
 ]: nothing -> record<magazine: record<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, issueNumber: string, magazineSeries: list<record>, editors: list<record>, publishers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2129,7 +2200,7 @@ export def "rest-magazine v1GetMagazine" [
   let full_url = (build-url $base "/v1/rest/magazine" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over magazines
@@ -2144,6 +2215,7 @@ export def "rest-magazine-search v1PageMagazines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, magazines: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, issueNumber: string>> {
@@ -2153,7 +2225,7 @@ export def "rest-magazine-search v1PageMagazines" [
   let full_url = (build-url $base "/v1/rest/magazine/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching magazines
@@ -2168,6 +2240,7 @@ export def "rest-magazine-search v1SearchMagazines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2186,7 +2259,7 @@ export def "rest-magazine-search v1SearchMagazines" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single magazine series
@@ -2201,6 +2274,7 @@ export def "rest-magazine-series v1GetMagazineSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Magazine series unique ID
 ]: nothing -> record<magazineSeries: record<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedYearTo: int, publishedMonthTo: int, numberOfIssues: int, publishers: list<record>, editors: list<record>, magazines: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2209,7 +2283,7 @@ export def "rest-magazine-series v1GetMagazineSeries" [
   let full_url = (build-url $base "/v1/rest/magazineSeries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over magazine series
@@ -2224,6 +2298,7 @@ export def "rest-magazine-series-search v1PageMagazineSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, magazineSeries: table<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedYearTo: int, publishedMonthTo: int, numberOfIssues: int>> {
@@ -2233,7 +2308,7 @@ export def "rest-magazine-series-search v1PageMagazineSeries" [
   let full_url = (build-url $base "/v1/rest/magazineSeries/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching magazine series
@@ -2248,6 +2323,7 @@ export def "rest-magazine-series-search v1SearchMagazineSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2266,7 +2342,7 @@ export def "rest-magazine-series-search v1SearchMagazineSeries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single material
@@ -2281,6 +2357,7 @@ export def "rest-material v1GetMaterial" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Material unique ID
 ]: nothing -> record<material: record<uid: string, name: string, chemicalCompound: bool, biochemicalCompound: bool, drug: bool, poisonousSubstance: bool, explosive: bool, gemstone: bool, alloyOrComposite: bool, fuel: bool, mineral: bool, preciousMaterial: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2289,7 +2366,7 @@ export def "rest-material v1GetMaterial" [
   let full_url = (build-url $base "/v1/rest/material" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over materials
@@ -2304,6 +2381,7 @@ export def "rest-material-search v1PageMaterials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, materials: table<uid: string, name: string, chemicalCompound: bool, biochemicalCompound: bool, drug: bool, poisonousSubstance: bool, explosive: bool, gemstone: bool, alloyOrComposite: bool, fuel: bool, mineral: bool, preciousMaterial: bool>> {
@@ -2313,7 +2391,7 @@ export def "rest-material-search v1PageMaterials" [
   let full_url = (build-url $base "/v1/rest/material/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching materials
@@ -2328,6 +2406,7 @@ export def "rest-material-search v1SearchMaterials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2352,7 +2431,7 @@ export def "rest-material-search v1SearchMaterials" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single medical condition
@@ -2367,6 +2446,7 @@ export def "rest-medical-condition v1GetMedicalCondition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Medical condition unique ID
 ]: nothing -> record<medicalCondition: record<uid: string, name: string, psychologicalCondition: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2375,7 +2455,7 @@ export def "rest-medical-condition v1GetMedicalCondition" [
   let full_url = (build-url $base "/v1/rest/medicalCondition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over medical conditions
@@ -2390,6 +2470,7 @@ export def "rest-medical-condition-search v1PageMedicalConditions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, medicalConditions: table<uid: string, name: string, psychologicalCondition: bool>> {
@@ -2399,7 +2480,7 @@ export def "rest-medical-condition-search v1PageMedicalConditions" [
   let full_url = (build-url $base "/v1/rest/medicalCondition/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching medical conditions
@@ -2414,6 +2495,7 @@ export def "rest-medical-condition-search v1SearchMedicalConditions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2429,7 +2511,7 @@ export def "rest-medical-condition-search v1SearchMedicalConditions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single movie
@@ -2444,6 +2526,7 @@ export def "rest-movie v1GetMovie" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Movie unique ID
 ]: nothing -> record<movie: record<uid: string, title: string, mainDirector: record<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool>, titleBulgarian: string, titleCatalan: string, titleChineseTraditional: string, titleGerman: string, titleItalian: string, titleJapanese: string, titlePolish: string, titleRussian: string, titleSerbian: string, titleSpanish: string, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, usReleaseDate: string, writers: list<record>, screenplayAuthors: list<record>, storyAuthors: list<record>, directors: list<record>, producers: list<record>, staff: list<record>, performers: list<record>, stuntPerformers: list<record>, standInPerformers: list<record>, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2452,7 +2535,7 @@ export def "rest-movie v1GetMovie" [
   let full_url = (build-url $base "/v1/rest/movie" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over movies
@@ -2467,6 +2550,7 @@ export def "rest-movie-search v1PageMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, movies: table<uid: string, title: string, mainDirector: record, titleBulgarian: string, titleCatalan: string, titleChineseTraditional: string, titleGerman: string, titleItalian: string, titleJapanese: string, titlePolish: string, titleRussian: string, titleSerbian: string, titleSpanish: string, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, usReleaseDate: string>> {
@@ -2476,7 +2560,7 @@ export def "rest-movie-search v1PageMovies" [
   let full_url = (build-url $base "/v1/rest/movie/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching movies
@@ -2491,6 +2575,7 @@ export def "rest-movie-search v1SearchMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2511,7 +2596,7 @@ export def "rest-movie-search v1SearchMovies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single occupation
@@ -2528,6 +2613,7 @@ export def "rest-occupation v1GetOccupation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Occupation unique ID
 ]: nothing -> record<occupation: record<uid: string, name: string, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2536,7 +2622,7 @@ export def "rest-occupation v1GetOccupation" [
   let full_url = (build-url $base "/v1/rest/occupation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over occupations
@@ -2553,6 +2639,7 @@ export def "rest-occupation-search v1PageOccupations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, occupations: table<uid: string, name: string, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool>> {
@@ -2562,7 +2649,7 @@ export def "rest-occupation-search v1PageOccupations" [
   let full_url = (build-url $base "/v1/rest/occupation/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching occupations
@@ -2579,6 +2666,7 @@ export def "rest-occupation-search v1SearchOccupations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2596,7 +2684,7 @@ export def "rest-occupation-search v1SearchOccupations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single occupation (V2)
@@ -2611,6 +2699,7 @@ export def "rest-occupation v2GetOccupation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Occupation unique ID
 ]: nothing -> record<occupation: record<uid: string, name: string, artsOccupation: bool, communicationOccupation: bool, economicOccupation: bool, educationOccupation: bool, entertainmentOccupation: bool, illegalOccupation: bool, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool, sportsOccupation: bool, victualOccupation: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2619,7 +2708,7 @@ export def "rest-occupation v2GetOccupation" [
   let full_url = (build-url $base "/v2/rest/occupation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over occupations (V2)
@@ -2634,6 +2723,7 @@ export def "rest-occupation-search v2PageOccupations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, occupations: table<uid: string, name: string, artsOccupation: bool, communicationOccupation: bool, economicOccupation: bool, educationOccupation: bool, entertainmentOccupation: bool, illegalOccupation: bool, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool, sportsOccupation: bool, victualOccupation: bool>> {
@@ -2643,7 +2733,7 @@ export def "rest-occupation-search v2PageOccupations" [
   let full_url = (build-url $base "/v2/rest/occupation/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching occupations (V2)
@@ -2658,6 +2748,7 @@ export def "rest-occupation-search v2SearchOccupations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2683,7 +2774,7 @@ export def "rest-occupation-search v2SearchOccupations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single organization
@@ -2698,6 +2789,7 @@ export def "rest-organization v1GetOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Organization unique ID
 ]: nothing -> record<organization: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2706,7 +2798,7 @@ export def "rest-organization v1GetOrganization" [
   let full_url = (build-url $base "/v1/rest/organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over organizations
@@ -2721,6 +2813,7 @@ export def "rest-organization-search v1PageOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, organizations: table<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>> {
@@ -2730,7 +2823,7 @@ export def "rest-organization-search v1PageOrganizations" [
   let full_url = (build-url $base "/v1/rest/organization/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching organizations
@@ -2745,6 +2838,7 @@ export def "rest-organization-search v1SearchOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2771,7 +2865,7 @@ export def "rest-organization-search v1SearchOrganizations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single performer
@@ -2788,6 +2882,7 @@ export def "rest-performer v1GetPerformer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Performer unique ID
 ]: nothing -> record<performer: record<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, standInPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool, episodesPerformances: list<record>, episodesStuntPerformances: list<record>, episodesStandInPerformances: list<record>, moviesPerformances: list<record>, moviesStuntPerformances: list<record>, moviesStandInPerformances: list<record>, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2796,7 +2891,7 @@ export def "rest-performer v1GetPerformer" [
   let full_url = (build-url $base "/v1/rest/performer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over performers
@@ -2813,6 +2908,7 @@ export def "rest-performer-search v1PagePerformers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, performers: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, standInPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool>> {
@@ -2822,7 +2918,7 @@ export def "rest-performer-search v1PagePerformers" [
   let full_url = (build-url $base "/v1/rest/performer/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching performers
@@ -2839,6 +2935,7 @@ export def "rest-performer-search v1SearchPerformers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2874,7 +2971,7 @@ export def "rest-performer-search v1SearchPerformers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single performer (V2)
@@ -2889,6 +2986,7 @@ export def "rest-performer v2GetPerformer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Performer unique ID
 ]: nothing -> record<performer: record<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, audiobookPerformer: bool, cutPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, ldPerformer: bool, picPerformer: bool, proPerformer: bool, puppeteer: bool, snwPerformer: bool, standInPerformer: bool, stPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool, episodesPerformances: list<record>, episodesStuntPerformances: list<record>, episodesStandInPerformances: list<record>, moviesPerformances: list<record>, moviesStuntPerformances: list<record>, moviesStandInPerformances: list<record>, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2897,7 +2995,7 @@ export def "rest-performer v2GetPerformer" [
   let full_url = (build-url $base "/v2/rest/performer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over performers (V2)
@@ -2912,6 +3010,7 @@ export def "rest-performer-search v2PagePerformers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, performers: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, audiobookPerformer: bool, cutPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, ldPerformer: bool, picPerformer: bool, proPerformer: bool, puppeteer: bool, snwPerformer: bool, standInPerformer: bool, stPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool>> {
@@ -2921,7 +3020,7 @@ export def "rest-performer-search v2PagePerformers" [
   let full_url = (build-url $base "/v2/rest/performer/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching performers (V2)
@@ -2936,6 +3035,7 @@ export def "rest-performer-search v2SearchPerformers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -2979,7 +3079,7 @@ export def "rest-performer-search v2SearchPerformers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single season
@@ -2994,6 +3094,7 @@ export def "rest-season v1GetSeason" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Season unique ID
 ]: nothing -> record<season: record<uid: string, title: string, series: record<uid: string, title: string, abbreviation: string, productionStartYear: int, productionEndYear: int, originalRunStartDate: string, originalRunEndDate: string, seasonsCount: int, episodesCount: int, featureLengthEpisodesCount: int, productionCompany: record, originalBroadcaster: record>, seasonNumber: int, numberOfEpisodes: int, episodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3002,7 +3103,7 @@ export def "rest-season v1GetSeason" [
   let full_url = (build-url $base "/v1/rest/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over seasons
@@ -3017,6 +3118,7 @@ export def "rest-season-search v1PageSeasons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, seasons: table<uid: string, title: string, series: record, seasonNumber: int, numberOfEpisodes: int>> {
@@ -3026,7 +3128,7 @@ export def "rest-season-search v1PageSeasons" [
   let full_url = (build-url $base "/v1/rest/season/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching seasons
@@ -3041,6 +3143,7 @@ export def "rest-season-search v1SearchSeasons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3059,7 +3162,7 @@ export def "rest-season-search v1SearchSeasons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single series
@@ -3074,6 +3177,7 @@ export def "rest-series v1GetSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Series unique ID
 ]: nothing -> record<series: record<uid: string, title: string, abbreviation: string, productionStartYear: int, productionEndYear: int, originalRunStartDate: string, originalRunEndDate: string, seasonsCount: int, episodesCount: int, featureLengthEpisodesCount: int, productionCompany: record<uid: string, name: string, broadcaster: bool, collectibleCompany: bool, conglomerate: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool>, originalBroadcaster: record<uid: string, name: string, broadcaster: bool, collectibleCompany: bool, conglomerate: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool>, episodes: list<record>, seasons: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3082,7 +3186,7 @@ export def "rest-series v1GetSeries" [
   let full_url = (build-url $base "/v1/rest/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over series
@@ -3097,6 +3201,7 @@ export def "rest-series-search v1PageSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, series: table<uid: string, title: string, abbreviation: string, productionStartYear: int, productionEndYear: int, originalRunStartDate: string, originalRunEndDate: string, seasonsCount: int, episodesCount: int, featureLengthEpisodesCount: int, productionCompany: record, originalBroadcaster: record>> {
@@ -3106,7 +3211,7 @@ export def "rest-series-search v1PageSeries" [
   let full_url = (build-url $base "/v1/rest/series/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching series
@@ -3121,6 +3226,7 @@ export def "rest-series-search v1SearchSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3144,7 +3250,7 @@ export def "rest-series-search v1SearchSeries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single soundtrack
@@ -3159,6 +3265,7 @@ export def "rest-soundtrack v1GetSoundtrack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Soundtrack unique ID
 ]: nothing -> record<soundtrack: record<uid: string, title: string, releaseDate: string, length: int, labels: list<record>, composers: list<record>, contributors: list<record>, orchestrators: list<record>, references: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3167,7 +3274,7 @@ export def "rest-soundtrack v1GetSoundtrack" [
   let full_url = (build-url $base "/v1/rest/soundtrack" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over soundtracks
@@ -3182,6 +3289,7 @@ export def "rest-soundtrack-search v1PageSoundtracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, soundtracks: table<uid: string, title: string, releaseDate: string, length: int>> {
@@ -3191,7 +3299,7 @@ export def "rest-soundtrack-search v1PageSoundtracks" [
   let full_url = (build-url $base "/v1/rest/soundtrack/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching soundtracks
@@ -3206,6 +3314,7 @@ export def "rest-soundtrack-search v1SearchSoundtracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3224,7 +3333,7 @@ export def "rest-soundtrack-search v1SearchSoundtracks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single spacecraft
@@ -3241,6 +3350,7 @@ export def "rest-spacecraft v1GetSpacecraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Spacecraft unique ID
 ]: nothing -> record<spacecraft: record<uid: string, name: string, registry: string, status: string, dateStatus: string, spacecraftClass: record<uid: string, name: string, numberOfDecks: int, warpCapable: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record, owner: record, operator: record, affiliation: record>, owner: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, operator: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, spacecraftTypes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3249,7 +3359,7 @@ export def "rest-spacecraft v1GetSpacecraft" [
   let full_url = (build-url $base "/v1/rest/spacecraft" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over spacecrafts
@@ -3266,6 +3376,7 @@ export def "rest-spacecraft-search v1PageSpacecrafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecrafts: table<uid: string, name: string, registry: string, status: string, dateStatus: string, spacecraftClass: record, owner: record, operator: record>> {
@@ -3275,7 +3386,7 @@ export def "rest-spacecraft-search v1PageSpacecrafts" [
   let full_url = (build-url $base "/v1/rest/spacecraft/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching spacecrafts
@@ -3292,6 +3403,7 @@ export def "rest-spacecraft-search v1SearchSpacecrafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3306,7 +3418,7 @@ export def "rest-spacecraft-search v1SearchSpacecrafts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single spacecraft (V2)
@@ -3321,6 +3433,7 @@ export def "rest-spacecraft v2GetSpacecraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Spacecraft unique ID
 ]: nothing -> record<spacecraft: record<uid: string, name: string, registry: string, status: string, dateStatus: string, spacecraftClass: record<uid: string, name: string, numberOfDecks: int, crew: string, warpCapable: bool, mirror: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record>, owner: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, operator: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, affiliation: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, spacecraftTypes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3329,7 +3442,7 @@ export def "rest-spacecraft v2GetSpacecraft" [
   let full_url = (build-url $base "/v2/rest/spacecraft" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over spacecrafts (V2)
@@ -3344,6 +3457,7 @@ export def "rest-spacecraft-search v2PageSpacecrafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecrafts: table<uid: string, name: string, registry: string, status: string, dateStatus: string, spacecraftClass: record, owner: record, operator: record, affiliation: record>> {
@@ -3353,7 +3467,7 @@ export def "rest-spacecraft-search v2PageSpacecrafts" [
   let full_url = (build-url $base "/v2/rest/spacecraft/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching spacecrafts (V2)
@@ -3368,6 +3482,7 @@ export def "rest-spacecraft-search v2SearchSpacecrafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3384,7 +3499,7 @@ export def "rest-spacecraft-search v2SearchSpacecrafts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single spacecraft class
@@ -3401,6 +3516,7 @@ export def "rest-spacecraft-class v1GetSpacecraftClass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # SpacecraftClass unique ID
 ]: nothing -> record<spacecraftClass: record<uid: string, name: string, numberOfDecks: int, warpCapable: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record<uid: string, name: string>, owner: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, operator: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, affiliation: record<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>, spacecraftTypes: list<record>, spacecrafts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3409,7 +3525,7 @@ export def "rest-spacecraft-class v1GetSpacecraftClass" [
   let full_url = (build-url $base "/v1/rest/spacecraftClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over spacecraft classes
@@ -3426,6 +3542,7 @@ export def "rest-spacecraft-class-search v1PageSpacecraftClasses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecraftClasses: table<uid: string, name: string, numberOfDecks: int, warpCapable: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record, owner: record, operator: record, affiliation: record>> {
@@ -3435,7 +3552,7 @@ export def "rest-spacecraft-class-search v1PageSpacecraftClasses" [
   let full_url = (build-url $base "/v1/rest/spacecraftClass/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching spacecraft classes
@@ -3452,6 +3569,7 @@ export def "rest-spacecraft-class-search v1SearchSpacecraftClasses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3468,7 +3586,7 @@ export def "rest-spacecraft-class-search v1SearchSpacecraftClasses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single spacecraft class (V2)
@@ -3485,6 +3603,7 @@ export def "rest-spacecraft-class v2GetSpacecraftClass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # SpacecraftClass unique ID
 ]: nothing -> record<spacecraftClass: record<uid: string, name: string, numberOfDecks: int, crew: string, warpCapable: bool, mirror: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>, owners: list<record>, operators: list<record>, affiliations: list<record>, spacecraftTypes: list<record>, armaments: list<record>, spacecrafts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3493,7 +3612,7 @@ export def "rest-spacecraft-class v2GetSpacecraftClass" [
   let full_url = (build-url $base "/v2/rest/spacecraftClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over spacecraft classes (V2)
@@ -3508,6 +3627,7 @@ export def "rest-spacecraft-class-search v2PageSpacecraftClasses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecraftClasses: table<uid: string, name: string, numberOfDecks: int, crew: string, warpCapable: bool, mirror: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record>> {
@@ -3517,7 +3637,7 @@ export def "rest-spacecraft-class-search v2PageSpacecraftClasses" [
   let full_url = (build-url $base "/v2/rest/spacecraftClass/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching spacecraft classes (V2)
@@ -3532,6 +3652,7 @@ export def "rest-spacecraft-class-search v2SearchSpacecraftClasses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3549,7 +3670,7 @@ export def "rest-spacecraft-class-search v2SearchSpacecraftClasses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single spacecraft class (V3)
@@ -3564,6 +3685,7 @@ export def "rest-spacecraft-class v3GetSpacecraftClass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Spacecraft class unique ID
 ]: nothing -> record<spacecraftClass: record<uid: string, name: string, numberOfDecks: int, crew: string, warpCapable: bool, mirror: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>, owners: list<record>, operators: list<record>, affiliations: list<record>, spacecraftTypes: list<record>, armaments: list<record>, defenses: list<record>, spacecrafts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3572,7 +3694,7 @@ export def "rest-spacecraft-class v3GetSpacecraftClass" [
   let full_url = (build-url $base "/v3/rest/spacecraftClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieval of a single species
@@ -3589,6 +3711,7 @@ export def "rest-species v1GetSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Species unique ID
 ]: nothing -> record<species: record<uid: string, name: string, homeworld: record<uid: string, name: string, astronomicalObjectType: string, location: record>, quadrant: record<uid: string, name: string, astronomicalObjectType: string, location: record>, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3597,7 +3720,7 @@ export def "rest-species v1GetSpecies" [
   let full_url = (build-url $base "/v1/rest/species" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over species
@@ -3614,6 +3737,7 @@ export def "rest-species-search v1PageSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, species: table<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>> {
@@ -3623,7 +3747,7 @@ export def "rest-species-search v1PageSpecies" [
   let full_url = (build-url $base "/v1/rest/species/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching species
@@ -3640,6 +3764,7 @@ export def "rest-species-search v1SearchSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3666,7 +3791,7 @@ export def "rest-species-search v1SearchSpecies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single species (V2)
@@ -3681,6 +3806,7 @@ export def "rest-species v2GetSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Species unique ID
 ]: nothing -> record<species: record<uid: string, name: string, homeworld: record<uid: string, name: string, astronomicalObjectType: string, location: record>, quadrant: record<uid: string, name: string, astronomicalObjectType: string, location: record>, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, avianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3689,7 +3815,7 @@ export def "rest-species v2GetSpecies" [
   let full_url = (build-url $base "/v2/rest/species" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over species (V2)
@@ -3704,6 +3830,7 @@ export def "rest-species-search v2PageSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, species: table<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, avianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>> {
@@ -3713,7 +3840,7 @@ export def "rest-species-search v2PageSpecies" [
   let full_url = (build-url $base "/v2/rest/species/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching species (V2)
@@ -3728,6 +3855,7 @@ export def "rest-species-search v2SearchSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3755,7 +3883,7 @@ export def "rest-species-search v2SearchSpecies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single staff member
@@ -3772,6 +3900,7 @@ export def "rest-staff v1GetStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Staff unique ID
 ]: nothing -> record<staff: record<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool, writtenEpisodes: list<record>, teleplayAuthoredEpisodes: list<record>, storyAuthoredEpisodes: list<record>, directedEpisodes: list<record>, episodes: list<record>, writtenMovies: list<record>, screenplayAuthoredMovies: list<record>, storyAuthoredMovies: list<record>, directedMovies: list<record>, producedMovies: list<record>, movies: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3780,7 +3909,7 @@ export def "rest-staff v1GetStaff" [
   let full_url = (build-url $base "/v1/rest/staff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over staff members
@@ -3797,6 +3926,7 @@ export def "rest-staff-search v1PageStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, staff: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool>> {
@@ -3806,7 +3936,7 @@ export def "rest-staff-search v1PageStaff" [
   let full_url = (build-url $base "/v1/rest/staff/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching staff members
@@ -3823,6 +3953,7 @@ export def "rest-staff-search v1SearchStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -3900,7 +4031,7 @@ export def "rest-staff-search v1SearchStaff" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single staff member (V2)
@@ -3915,6 +4046,7 @@ export def "rest-staff v2GetStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Staff unique ID
 ]: nothing -> record<staff: record<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, filmationProductionStaff: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, merchandiseStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicCoverArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool, writtenEpisodes: list<record>, teleplayAuthoredEpisodes: list<record>, storyAuthoredEpisodes: list<record>, directedEpisodes: list<record>, episodes: list<record>, writtenMovies: list<record>, screenplayAuthoredMovies: list<record>, storyAuthoredMovies: list<record>, directedMovies: list<record>, producedMovies: list<record>, movies: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3923,7 +4055,7 @@ export def "rest-staff v2GetStaff" [
   let full_url = (build-url $base "/v2/rest/staff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over staff members (V2)
@@ -3938,6 +4070,7 @@ export def "rest-staff-search v2PageStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, staff: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, filmationProductionStaff: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, merchandiseStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicCoverArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool>> {
@@ -3947,7 +4080,7 @@ export def "rest-staff-search v2PageStaff" [
   let full_url = (build-url $base "/v2/rest/staff/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching staff members (v2)
@@ -3962,6 +4095,7 @@ export def "rest-staff-search v2SearchStaff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4042,7 +4176,7 @@ export def "rest-staff-search v2SearchStaff" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single technology piece
@@ -4059,6 +4193,7 @@ export def "rest-technology v1GetTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Technology unique ID
 ]: nothing -> record<technology: record<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4067,7 +4202,7 @@ export def "rest-technology v1GetTechnology" [
   let full_url = (build-url $base "/v1/rest/technology" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over technology pieces
@@ -4084,6 +4219,7 @@ export def "rest-technology-search v1PageTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, technology: table<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool>> {
@@ -4093,7 +4229,7 @@ export def "rest-technology-search v1PageTechnology" [
   let full_url = (build-url $base "/v1/rest/technology/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching technology pieces
@@ -4110,6 +4246,7 @@ export def "rest-technology-search v1SearchTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4144,7 +4281,7 @@ export def "rest-technology-search v1SearchTechnology" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single technology piece (V2)
@@ -4159,6 +4296,7 @@ export def "rest-technology v2GetTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Technology unique ID
 ]: nothing -> record<technology: record<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, securityTechnology: bool, propulsionTechnology: bool, spacecraftComponent: bool, warpTechnology: bool, transwarpTechnology: bool, timeTravelTechnology: bool, militaryTechnology: bool, victualTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool, transportationTechnology: bool, weaponComponent: bool, artificialLifeformComponent: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4167,7 +4305,7 @@ export def "rest-technology v2GetTechnology" [
   let full_url = (build-url $base "/v2/rest/technology" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over technology pieces (V2)
@@ -4182,6 +4320,7 @@ export def "rest-technology-search v2PageTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, technology: table<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, securityTechnology: bool, propulsionTechnology: bool, spacecraftComponent: bool, warpTechnology: bool, transwarpTechnology: bool, timeTravelTechnology: bool, militaryTechnology: bool, victualTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool, transportationTechnology: bool, weaponComponent: bool, artificialLifeformComponent: bool>> {
@@ -4191,7 +4330,7 @@ export def "rest-technology-search v2PageTechnology" [
   let full_url = (build-url $base "/v2/rest/technology/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching technology pieces (V2)
@@ -4206,6 +4345,7 @@ export def "rest-technology-search v2SearchTechnology" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4251,7 +4391,7 @@ export def "rest-technology-search v2SearchTechnology" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single title
@@ -4268,6 +4408,7 @@ export def "rest-title v1GetTitle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Title unique ID
 ]: nothing -> record<title: record<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, position: bool, mirror: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4276,7 +4417,7 @@ export def "rest-title v1GetTitle" [
   let full_url = (build-url $base "/v1/rest/title" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over titles
@@ -4293,6 +4434,7 @@ export def "rest-title-search v1PageTitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, titles: table<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, position: bool, mirror: bool>> {
@@ -4302,7 +4444,7 @@ export def "rest-title-search v1PageTitles" [
   let full_url = (build-url $base "/v1/rest/title/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching titles
@@ -4319,6 +4461,7 @@ export def "rest-title-search v1SearchTitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4338,7 +4481,7 @@ export def "rest-title-search v1SearchTitles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single title (V2)
@@ -4353,6 +4496,7 @@ export def "rest-title v2GetTitle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Title unique ID
 ]: nothing -> record<title: record<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, educationTitle: bool, mirror: bool, characters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4361,7 +4505,7 @@ export def "rest-title v2GetTitle" [
   let full_url = (build-url $base "/v2/rest/title" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over titles (V2)
@@ -4376,6 +4520,7 @@ export def "rest-title-search v2PageTitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, titles: table<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, educationTitle: bool, mirror: bool>> {
@@ -4385,7 +4530,7 @@ export def "rest-title-search v2PageTitles" [
   let full_url = (build-url $base "/v2/rest/title/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching titles (V2)
@@ -4400,6 +4545,7 @@ export def "rest-title-search v2SearchTitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4419,7 +4565,7 @@ export def "rest-title-search v2SearchTitles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single trading card
@@ -4434,6 +4580,7 @@ export def "rest-trading-card v1GetTradingCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Trading card unique ID
 ]: nothing -> record<tradingCard: record<uid: string, name: string, tradingCardSet: record<uid: string, name: string, releaseYear: int, releaseMonth: int, releaseDay: int, cardsPerPack: int, packsPerBox: int, boxesPerCase: int, productionRun: int, productionRunUnit: string, cardWidth: float, cardHeight: float>, tradingCardDeck: record<uid: string, name: string, frequency: string, tradingCardSet: record>, number: string, releaseYear: int, productionRun: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4442,7 +4589,7 @@ export def "rest-trading-card v1GetTradingCard" [
   let full_url = (build-url $base "/v1/rest/tradingCard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over trading cards
@@ -4457,6 +4604,7 @@ export def "rest-trading-card-search v1PageTradingCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, tradingCards: table<uid: string, name: string, number: string, releaseYear: int, productionRun: int, tradingCardSet: record, tradingCardDeck: record>> {
@@ -4466,7 +4614,7 @@ export def "rest-trading-card-search v1PageTradingCards" [
   let full_url = (build-url $base "/v1/rest/tradingCard/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching trading cards
@@ -4481,6 +4629,7 @@ export def "rest-trading-card-search v1SearchTradingCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4497,7 +4646,7 @@ export def "rest-trading-card-search v1SearchTradingCards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single trading card deck
@@ -4512,6 +4661,7 @@ export def "rest-trading-card-deck v1GetTradingCardDeck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # trading card deck unique ID
 ]: nothing -> record<tradingCardDeck: record<uid: string, name: string, frequency: string, tradingCardSet: record<uid: string, name: string>, tradingCards: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4520,7 +4670,7 @@ export def "rest-trading-card-deck v1GetTradingCardDeck" [
   let full_url = (build-url $base "/v1/rest/tradingCardDeck" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over trading card decks
@@ -4535,6 +4685,7 @@ export def "rest-trading-card-deck-search v1PageTradingCardDecks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, tradingCardDecks: table<uid: string, name: string, frequency: string, tradingCardSet: record>> {
@@ -4544,7 +4695,7 @@ export def "rest-trading-card-deck-search v1PageTradingCardDecks" [
   let full_url = (build-url $base "/v1/rest/tradingCardDeck/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching trading card decks
@@ -4559,6 +4710,7 @@ export def "rest-trading-card-deck-search v1SearchTradingCardDecks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4574,7 +4726,7 @@ export def "rest-trading-card-deck-search v1SearchTradingCardDecks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single trading card set
@@ -4589,6 +4741,7 @@ export def "rest-trading-card-set v1GetTradingCardSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Trading card set unique ID
 ]: nothing -> record<tradingCardSet: record<uid: string, name: string, releaseYear: int, releaseMonth: int, releaseDay: int, cardsPerPack: int, packsPerBox: int, boxesPerCase: int, productionRun: int, productionRunUnit: string, cardWidth: float, cardHeight: float, manufacturers: list<record>, tradingCardDecks: list<record>, tradingCards: list<record>, countriesOfOrigin: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4597,7 +4750,7 @@ export def "rest-trading-card-set v1GetTradingCardSet" [
   let full_url = (build-url $base "/v1/rest/tradingCardSet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over trading card sets
@@ -4612,6 +4765,7 @@ export def "rest-trading-card-set-search v1PageTradingCardSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, tradingCardSets: table<uid: string, name: string, releaseYear: int, releaseMonth: int, releaseDay: int, cardsPerPack: int, packsPerBox: int, boxesPerCase: int, productionRun: int, productionRunUnit: string, cardWidth: float, cardHeight: float>> {
@@ -4621,7 +4775,7 @@ export def "rest-trading-card-set-search v1PageTradingCardSets" [
   let full_url = (build-url $base "/v1/rest/tradingCardSet/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching trading card sets
@@ -4636,6 +4790,7 @@ export def "rest-trading-card-set-search v1SearchTradingCardSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4665,7 +4820,7 @@ export def "rest-trading-card-set-search v1SearchTradingCardSets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single video game
@@ -4680,6 +4835,7 @@ export def "rest-video-game v1GetVideoGame" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # VideoGame unique ID
 ]: nothing -> record<videoGame: record<uid: string, title: string, releaseDate: string, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, systemRequirements: string, publishers: list<record>, developers: list<record>, platforms: list<record>, genres: list<record>, ratings: list<record>, references: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4688,7 +4844,7 @@ export def "rest-video-game v1GetVideoGame" [
   let full_url = (build-url $base "/v1/rest/videoGame" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over video games
@@ -4703,6 +4859,7 @@ export def "rest-video-game-search v1PageVideoGames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, videoGames: table<uid: string, title: string, releaseDate: string, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, systemRequirements: string>> {
@@ -4712,7 +4869,7 @@ export def "rest-video-game-search v1PageVideoGames" [
   let full_url = (build-url $base "/v1/rest/videoGame/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching video games
@@ -4727,6 +4884,7 @@ export def "rest-video-game-search v1SearchVideoGames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4743,7 +4901,7 @@ export def "rest-video-game-search v1SearchVideoGames" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single video release
@@ -4760,6 +4918,7 @@ export def "rest-video-release v1GetVideoRelease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Video release unique ID
 ]: nothing -> record<videoRelease: record<uid: string, title: string, series: record<uid: string, title: string, abbreviation: string, productionStartYear: int, productionEndYear: int, originalRunStartDate: string, originalRunEndDate: string, seasonsCount: int, episodesCount: int, featureLengthEpisodesCount: int, productionCompany: record, originalBroadcaster: record>, season: record<uid: string, title: string, series: record, seasonNumber: int, numberOfEpisodes: int>, format: string, numberOfEpisodes: int, numberOfFeatureLengthEpisodes: int, numberOfDataCarriers: int, runTime: int, yearFrom: int, yearTo: int, regionFreeReleaseDate: string, region1AReleaseDate: string, region1SlimlineReleaseDate: string, region2BReleaseDate: string, region2SlimlineReleaseDate: string, region4AReleaseDate: string, region4SlimlineReleaseDate: string, amazonDigitalRelease: bool, dailymotionDigitalRelease: bool, googlePlayDigitalRelease: bool, itunesDigitalRelease: bool, ultraVioletDigitalRelease: bool, vimeoDigitalRelease: bool, vuduDigitalRelease: bool, xboxSmartGlassDigitalRelease: bool, youTubeDigitalRelease: bool, netflixDigitalRelease: bool, references: list<record>, ratings: list<record>, languages: list<record>, languagesSubtitles: list<record>, languagesDubbed: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4768,7 +4927,7 @@ export def "rest-video-release v1GetVideoRelease" [
   let full_url = (build-url $base "/v1/rest/videoRelease" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over video releases
@@ -4785,6 +4944,7 @@ export def "rest-video-release-search v1PageVideoReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, videoReleases: table<uid: string, title: string, series: record, season: record, format: string, numberOfEpisodes: int, numberOfFeatureLengthEpisodes: int, numberOfDataCarriers: int, runTime: int, yearFrom: int, yearTo: int, regionFreeReleaseDate: string, region1AReleaseDate: string, region1SlimlineReleaseDate: string, region2BReleaseDate: string, region2SlimlineReleaseDate: string, region4AReleaseDate: string, region4SlimlineReleaseDate: string, amazonDigitalRelease: bool, dailymotionDigitalRelease: bool, googlePlayDigitalRelease: bool, itunesDigitalRelease: bool, ultraVioletDigitalRelease: bool, vimeoDigitalRelease: bool, vuduDigitalRelease: bool, xboxSmartGlassDigitalRelease: bool, youTubeDigitalRelease: bool, netflixDigitalRelease: bool>> {
@@ -4794,7 +4954,7 @@ export def "rest-video-release-search v1PageVideoReleases" [
   let full_url = (build-url $base "/v1/rest/videoRelease/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching video releases
@@ -4811,6 +4971,7 @@ export def "rest-video-release-search v1SearchVideoReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4829,7 +4990,7 @@ export def "rest-video-release-search v1SearchVideoReleases" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single video release (V2)
@@ -4844,6 +5005,7 @@ export def "rest-video-release v2GetVideoRelease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Video release unique ID
 ]: nothing -> record<videoRelease: record<uid: string, title: string, series: list<record>, seasons: list<record>, movies: list<record>, format: string, numberOfEpisodes: int, numberOfFeatureLengthEpisodes: int, numberOfDataCarriers: int, runTime: int, yearFrom: int, yearTo: int, regionFreeReleaseDate: string, region1AReleaseDate: string, region1SlimlineReleaseDate: string, region2BReleaseDate: string, region2SlimlineReleaseDate: string, region4AReleaseDate: string, region4SlimlineReleaseDate: string, amazonDigitalRelease: bool, dailymotionDigitalRelease: bool, googlePlayDigitalRelease: bool, itunesDigitalRelease: bool, ultraVioletDigitalRelease: bool, vimeoDigitalRelease: bool, vuduDigitalRelease: bool, xboxSmartGlassDigitalRelease: bool, youTubeDigitalRelease: bool, netflixDigitalRelease: bool, documentary: bool, specialFeatures: bool, references: list<record>, ratings: list<record>, languages: list<record>, languagesSubtitles: list<record>, languagesDubbed: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4852,7 +5014,7 @@ export def "rest-video-release v2GetVideoRelease" [
   let full_url = (build-url $base "/v2/rest/videoRelease" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over video releases (V2)
@@ -4867,6 +5029,7 @@ export def "rest-video-release-search v2PageVideoReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, videoReleases: table<uid: string, title: string, series: record, season: record, format: string, numberOfEpisodes: int, numberOfFeatureLengthEpisodes: int, numberOfDataCarriers: int, runTime: int, yearFrom: int, yearTo: int, regionFreeReleaseDate: string, region1AReleaseDate: string, region1SlimlineReleaseDate: string, region2BReleaseDate: string, region2SlimlineReleaseDate: string, region4AReleaseDate: string, region4SlimlineReleaseDate: string, amazonDigitalRelease: bool, dailymotionDigitalRelease: bool, googlePlayDigitalRelease: bool, itunesDigitalRelease: bool, ultraVioletDigitalRelease: bool, vimeoDigitalRelease: bool, vuduDigitalRelease: bool, xboxSmartGlassDigitalRelease: bool, youTubeDigitalRelease: bool, netflixDigitalRelease: bool>> {
@@ -4876,7 +5039,7 @@ export def "rest-video-release-search v2PageVideoReleases" [
   let full_url = (build-url $base "/v2/rest/videoRelease/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching video releases (V2)
@@ -4891,6 +5054,7 @@ export def "rest-video-release-search v2SearchVideoReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -4911,7 +5075,7 @@ export def "rest-video-release-search v2SearchVideoReleases" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single weapon
@@ -4928,6 +5092,7 @@ export def "rest-weapon v1GetWeapon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Weapon unique ID
 ]: nothing -> record<weapon: record<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, mirror: bool, alternateReality: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4936,7 +5101,7 @@ export def "rest-weapon v1GetWeapon" [
   let full_url = (build-url $base "/v1/rest/weapon" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over weapons
@@ -4953,6 +5118,7 @@ export def "rest-weapon-search v1PageWeapons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, weapons: table<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, mirror: bool, alternateReality: bool>> {
@@ -4962,7 +5128,7 @@ export def "rest-weapon-search v1PageWeapons" [
   let full_url = (build-url $base "/v1/rest/weapon/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching weapons
@@ -4979,6 +5145,7 @@ export def "rest-weapon-search v1SearchWeapons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -5000,7 +5167,7 @@ export def "rest-weapon-search v1SearchWeapons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieval of a single weapon (V2)
@@ -5015,6 +5182,7 @@ export def "rest-weapon v2GetWeapon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # Weapon unique ID
 ]: nothing -> record<weapon: record<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, directedEnergyWeapon: bool, explosiveWeapon: bool, projectileWeapon: bool, fictionalWeapon: bool, mirror: bool, alternateReality: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5023,7 +5191,7 @@ export def "rest-weapon v2GetWeapon" [
   let full_url = (build-url $base "/v2/rest/weapon" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pagination over weapons (V2)
@@ -5038,6 +5206,7 @@ export def "rest-weapon-search v2PageWeapons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
 ]: nothing -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, weapons: table<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, directedEnergyWeapon: bool, explosiveWeapon: bool, projectileWeapon: bool, fictionalWeapon: bool, mirror: bool, alternateReality: bool>> {
@@ -5047,7 +5216,7 @@ export def "rest-weapon-search v2PageWeapons" [
   let full_url = (build-url $base "/v2/rest/weapon/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searching weapons (V2)
@@ -5062,6 +5231,7 @@ export def "rest-weapon-search v2SearchWeapons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNumber: int # Zero-based page number (format: int32)
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
@@ -5087,5 +5257,5 @@ export def "rest-weapon-search v2SearchWeapons" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }

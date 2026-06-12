@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def taker-completer [] { ["BUYER" "SELLER"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-nf-ts-for-owner get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "get-nf-ts-for-owner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # String - Address for NFT owner (can be in ENS format for Eth Mainnet). (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --contractAddresses: list # Array of contract addresses to filter the responses with. Max limit 45 contracts.
   --withMetadata: oneof<nothing, bool> # Boolean - if set to `true`, returns NFT metadata. Setting this to false will reduce payload size and may result in a faster API call. Defaults to `true`. (default: true)
@@ -123,7 +125,7 @@ export def "get-nf-ts-for-owner get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getNFTsForOwner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFTs By Contract
@@ -139,6 +141,7 @@ export def "get-nf-ts-for-contract get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --withMetadata: oneof<nothing, bool> # Boolean - if set to `true`, returns NFT metadata. Setting this to false will reduce payload size and may result in a faster API call. Defaults to `true`. (default: true)
   --startToken: string # String - A tokenID offset used for pagination. Can be a hex string, or a decimal. Users can specify the offset themselves to start from a custom offset, or to fetch multiple token ranges in parallel.
@@ -151,7 +154,7 @@ export def "get-nf-ts-for-contract get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getNFTsForContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFTs By Collection
@@ -167,6 +170,7 @@ export def "get-nf-ts-for-collection get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --collectionSlug: string # String - OpenSea slug for the NFT collection. (default: boredapeyachtclub)
   --withMetadata: oneof<nothing, bool> # Boolean - if set to `true`, returns NFT metadata. Setting this to false will reduce payload size and may result in a faster API call. Defaults to `true`. (default: true)
@@ -180,7 +184,7 @@ export def "get-nf-ts-for-collection get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getNFTsForCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFT Metadata By Token ID
@@ -196,6 +200,7 @@ export def "get-nft-metadata get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
   --tokenType: string # String - 'ERC721' or 'ERC1155'; specifies type of token to query for. API requests will perform faster if this is specified.
@@ -208,7 +213,7 @@ export def "get-nft-metadata get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getNFTMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFT Metadata By Token ID [Batch]
@@ -225,6 +230,7 @@ export def "get-nft-metadata-batch post-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: list # List of token objects to batch request NFT metadata for. Maximum 100. (default: [{contractAddress: 0xe785E82358879F061BC3dcAC6f0444462D4b5330, tokenId: 44, tokenType: ERC721}, {contractAddress: 0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d, tokenId: 888, tokenType: ERC721}]) — item shape: {contractAddress?: any, tokenId?: any, tokenType?: any}
   --tokenUriTimeoutInMs: any # No set timeout by default - When metadata is requested, this parameter is the timeout (in milliseconds) for the website hosting the metadata to respond. If you want to _only_ access the cache and not live fetch any metadata for cache misses then set this value to 0.
   --refreshCache: any # Defaults to false for faster response times.  If true will refresh metadata for given token. If false will check the cache and use it or refresh if cache doesn't exist.
@@ -237,7 +243,7 @@ export def "get-nft-metadata-batch post-by-apiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Contract Metadata By Address
@@ -253,6 +259,7 @@ export def "get-contract-metadata get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<address: string, name: string, symbol: string, totalSupply: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, openseaMetadata: record<floorPrice: float, collectionName: string, safelistRequestStatus: string, imageUrl: string, description: string, externalUrl: string, twitterUsername: string, discordUrl: string, lastIngestedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -261,7 +268,7 @@ export def "get-contract-metadata get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getContractMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collection Metadata By Slug
@@ -277,6 +284,7 @@ export def "get-collection-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionSlug: string # String - OpenSea slug for the NFT collection. (default: boredapeyachtclub)
 ]: nothing -> record<name: string, slug: string, floorPrice: record<marketplace: string, floorPrice: float, priceCurrency: string>, description: string, externalUrl: string, twitterUsername: string, discordUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -285,7 +293,7 @@ export def "get-collection-metadata get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getCollectionMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invalidate Contract Cache
@@ -301,6 +309,7 @@ export def "invalidate-contract invalidateContract-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<success: string, numTokensInvalidated: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -309,7 +318,7 @@ export def "invalidate-contract invalidateContract-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/invalidateContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Contract Metadata By Address [Batch]
@@ -325,6 +334,7 @@ export def "get-contract-metadata-batch post-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddresses: list # List of contract addresses to batch metadata requests for. (default: [0xe785E82358879F061BC3dcAC6f0444462D4b5330, 0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d])
 ]: any -> table<address: string, name: string, symbol: string, totalSupply: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, openseaMetadata: record<floorPrice: float, collectionName: string, safelistRequestStatus: string, imageUrl: string, description: string, externalUrl: string, twitterUsername: string, discordUrl: string, lastIngestedAt: string>> {
   let input = $in
@@ -335,7 +345,7 @@ export def "get-contract-metadata-batch post-by-apiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Owners By NFT
@@ -351,6 +361,7 @@ export def "get-owners-for-nft get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
 ]: nothing -> record<owners: list<string>, pageKey: any> {
@@ -360,7 +371,7 @@ export def "get-owners-for-nft get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getOwnersForNFT" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Owners By Contract
@@ -376,6 +387,7 @@ export def "get-owners-for-contract get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --withTokenBalances: oneof<nothing, bool> # Boolean - If set to `true` the query will include the token balances per token id for each owner. `false` by default. (default: false)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
@@ -386,7 +398,7 @@ export def "get-owners-for-contract get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getOwnersForContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Spam Contracts
@@ -402,13 +414,14 @@ export def "get-spam-contracts get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contractAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://{network}.g.alchemy.com/nft")
   let full_url = (build-url $base $"/v3/($apiKey)/getSpamContracts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Is Spam Contract
@@ -424,6 +437,7 @@ export def "is-spam-contract isSpamContract-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<isSpamContract: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -432,7 +446,7 @@ export def "is-spam-contract isSpamContract-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/isSpamContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Is Airdrop NFT
@@ -448,6 +462,7 @@ export def "is-airdrop-nft isAirdropNFT-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
 ]: nothing -> record<isAirdrop: bool> {
@@ -457,7 +472,7 @@ export def "is-airdrop-nft isAirdropNFT-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/isAirdropNFT" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attributes Summary By Contract
@@ -473,6 +488,7 @@ export def "summarize-nft-attributes summarizeNFTAttributes-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<totalSupply: string, summary: record, contractAddress: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -481,7 +497,7 @@ export def "summarize-nft-attributes summarizeNFTAttributes-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/summarizeNFTAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Floor Prices By Slug
@@ -497,6 +513,7 @@ export def "get-floor-price get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --collectionSlug: string # String - OpenSea slug for the NFT collection. (default: boredapeyachtclub)
 ]: nothing -> record<nftMarketplaceName: record<floorPrice: float, priceCurrency: string, collectionUrl: string, retrievedAt: string, error: string>> {
@@ -506,7 +523,7 @@ export def "get-floor-price get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getFloorPrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Contract Metadata
@@ -522,6 +539,7 @@ export def "search-contract-metadata searchContractMetadata-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # String - The search string that you want to search for in contract metadata (default: bored)
 ]: nothing -> table<address: string, name: string, symbol: string, totalSupply: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, openseaMetadata: record<floorPrice: float, collectionName: string, safelistRequestStatus: string, imageUrl: string, description: string, externalUrl: string, twitterUsername: string, discordUrl: string, lastIngestedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -530,7 +548,7 @@ export def "search-contract-metadata searchContractMetadata-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/searchContractMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Is Holder Of Contract
@@ -546,6 +564,7 @@ export def "is-holder-of-contract isHolderOfContract-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wallet: string # String - Wallet address to check for contract ownership. (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<isHolderOfContract: bool> {
@@ -555,7 +574,7 @@ export def "is-holder-of-contract isHolderOfContract-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/isHolderOfContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attribute Rarity By NFT
@@ -571,6 +590,7 @@ export def "compute-rarity computeRarity-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
 ]: nothing -> record<rarities: table<trait_type: string, value: string, prevalence: float>> {
@@ -580,7 +600,7 @@ export def "compute-rarity computeRarity-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/computeRarity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFT Sales
@@ -596,6 +616,7 @@ export def "get-nft-sales get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromBlock: string # String - The block number to start fetching NFT sales data from. Allowed values are decimal and hex integers, and "latest". Defaults to "0". (default: 0)
   --toBlock: string # String - The block number to start fetching NFT sales data from. Allowed values are decimal and hex integers, and "latest". Defaults to "latest". (default: latest)
   --order: string@order-completer # Enum - Whether to return the results ascending from startBlock or descending from startBlock. Defaults to descending (false). (default: asc)
@@ -614,7 +635,7 @@ export def "get-nft-sales get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getNFTSales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Contracts By Owner
@@ -630,6 +651,7 @@ export def "get-contracts-for-owner get-by-apiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # String - Address for NFT owner (can be in ENS format for Eth Mainnet). (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
   --pageSize: int # Number of NFTs to be returned per page. Defaults to 100. Max is 100. (default: 100)
@@ -645,7 +667,7 @@ export def "get-contracts-for-owner get-by-apiKey" [
   let full_url = (build-url $base $"/v3/($apiKey)/getContractsForOwner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collections By Owner
@@ -661,6 +683,7 @@ export def "get-collections-for-owner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # String - Address for NFT owner (can be in ENS format for Eth Mainnet). (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
   --pageSize: int # Number of NFTs to be returned per page. Defaults to 100. Max is 100. (default: 100)
@@ -674,7 +697,7 @@ export def "get-collections-for-owner get" [
   let full_url = (build-url $base $"/v3/($apiKey)/getCollectionsForOwner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Report Spam Address
@@ -690,6 +713,7 @@ export def "report-spam reportSpam-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # String - any valid blockchain address for NFT collections, contracts, mints, etc. (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -698,7 +722,7 @@ export def "report-spam reportSpam-v3" [
   let full_url = (build-url $base $"/v3/($apiKey)/reportSpam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh NFT Metadata
@@ -714,6 +738,7 @@ export def "refresh-nft-metadata refreshNftMetadata-v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: any # String - Contract address for the NFT contract (ERC721 and ERC1155 supported).
   --tokenId: any # String - The ID of the token. Can be in hex or decimal format.
 ]: any -> record<status: string, estimatedMsToRefresh: string> {
@@ -725,7 +750,7 @@ export def "refresh-nft-metadata refreshNftMetadata-v3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # getNFTs
@@ -741,6 +766,7 @@ export def "get-nf-ts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # String - Address for NFT owner (can be in ENS format for Eth Mainnet). (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --contractAddresses: list # Array of contract addresses to filter the responses with. Max limit 45 contracts.
   --withMetadata: oneof<nothing, bool> # Boolean - if set to `true`, returns NFT metadata. Setting this to false will reduce payload size and may result in a faster API call. Defaults to `true`. (default: true)
@@ -758,7 +784,7 @@ export def "get-nf-ts get" [
   let full_url = (build-url $base $"/v2/($apiKey)/getNFTs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getNFTMetadata
@@ -774,6 +800,7 @@ export def "get-nft-metadata get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
   --tokenType: string # String - 'ERC721' or 'ERC1155'; specifies type of token to query for. API requests will perform faster if this is specified.
@@ -786,7 +813,7 @@ export def "get-nft-metadata get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getNFTMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getNFTMetadataBatch
@@ -803,6 +830,7 @@ export def "get-nft-metadata-batch post-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: list # List of token objects to batch request NFT metadata for. Maximum 100. — item shape: {contractAddress?: any, tokenId?: any, tokenType?: any}
   --tokenUriTimeoutInMs: any # No set timeout by default - When metadata is requested, this parameter is the timeout (in milliseconds) for the website hosting the metadata to respond. If you want to _only_ access the cache and not live fetch any metadata for cache misses then set this value to 0.
   --refreshCache: any # Defaults to false for faster response times.  If true will refresh metadata for given token. If false will check the cache and use it or refresh if cache doesn't exist.
@@ -815,7 +843,7 @@ export def "get-nft-metadata-batch post-by-apiKey-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # getContractMetadata
@@ -831,6 +859,7 @@ export def "get-contract-metadata get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<address: string, contractMetadata: record<name: string, symbol: string, totalSupply: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, opensea: record<floorPrice: float, collectionName: string, safelistRequestStatus: string, imageUrl: string, description: string, externalUrl: string, twitterUsername: string, discordUrl: string, lastIngestedAt: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -839,7 +868,7 @@ export def "get-contract-metadata get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getContractMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getContractMetadataBatch
@@ -855,6 +884,7 @@ export def "get-contract-metadata-batch post-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddresses: list # list of contract addresses to batch metadata requests for (default: [0xe785E82358879F061BC3dcAC6f0444462D4b5330, 0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d])
 ]: any -> table<address: any, contractMetadata: record<address: string, totalBalance: float, numDistinctTokensOwned: float, isSpam: bool, tokenId: string, name: string, title: string, symbol: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, media: list, opensea: record>> {
   let input = $in
@@ -865,7 +895,7 @@ export def "get-contract-metadata-batch post-by-apiKey-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # getNFTsForCollection
@@ -881,6 +911,7 @@ export def "get-nf-ts-for-collection get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --collectionSlug: string # String - OpenSea slug for the NFT collection. (default: boredapeyachtclub)
   --withMetadata: oneof<nothing, bool> # Boolean - if set to `true`, returns NFT metadata. Setting this to false will reduce payload size and may result in a faster API call. Defaults to `true`. (default: true)
@@ -894,7 +925,7 @@ export def "get-nf-ts-for-collection get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getNFTsForCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getOwnersForToken
@@ -910,6 +941,7 @@ export def "get-owners-for-token get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
@@ -921,7 +953,7 @@ export def "get-owners-for-token get" [
   let full_url = (build-url $base $"/v2/($apiKey)/getOwnersForToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getOwnersForCollection
@@ -937,6 +969,7 @@ export def "get-owners-for-collection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --withTokenBalances: oneof<nothing, bool> # Boolean - If set to `true` the query will include the token balances per token id for each owner. `false` by default. (default: false)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
@@ -947,7 +980,7 @@ export def "get-owners-for-collection get" [
   let full_url = (build-url $base $"/v2/($apiKey)/getOwnersForCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getSpamContracts
@@ -963,13 +996,14 @@ export def "get-spam-contracts get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contractAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://{network}.g.alchemy.com/nft")
   let full_url = (build-url $base $"/v2/($apiKey)/getSpamContracts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # isSpamContract
@@ -985,6 +1019,7 @@ export def "is-spam-contract isSpamContract" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -993,7 +1028,7 @@ export def "is-spam-contract isSpamContract" [
   let full_url = (build-url $base $"/v2/($apiKey)/isSpamContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # isAirdrop
@@ -1009,6 +1044,7 @@ export def "is-airdrop isAirdrop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
 ]: nothing -> bool {
@@ -1018,7 +1054,7 @@ export def "is-airdrop isAirdrop" [
   let full_url = (build-url $base $"/v2/($apiKey)/isAirdrop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # invalidateContract
@@ -1034,6 +1070,7 @@ export def "invalidate-contract invalidateContract" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<success: string, numTokensInvalidated: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1042,7 +1079,7 @@ export def "invalidate-contract invalidateContract" [
   let full_url = (build-url $base $"/v2/($apiKey)/invalidateContract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getFloorPrice
@@ -1058,6 +1095,7 @@ export def "get-floor-price get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<nftMarketplace: record<floorPrice: float, priceCurrency: string, collectionUrl: string, retrievedAt: string, error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1066,7 +1104,7 @@ export def "get-floor-price get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getFloorPrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # computeRarity
@@ -1082,6 +1120,7 @@ export def "compute-rarity computeRarity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
   --tokenId: string # String - The ID of the token. Can be in hex or decimal format. (default: 44)
 ]: nothing -> record<rarities: table<trait_type: string, value: string, prevalence: float>> {
@@ -1091,7 +1130,7 @@ export def "compute-rarity computeRarity" [
   let full_url = (build-url $base $"/v2/($apiKey)/computeRarity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # searchContractMetadata
@@ -1107,6 +1146,7 @@ export def "search-contract-metadata searchContractMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # String - The search string that you want to search for in contract metadata (default: bored)
 ]: nothing -> table<address: any, contractMetadata: record<name: string, symbol: string, totalSupply: string, tokenType: string, contractDeployer: string, deployedBlockNumber: float, opensea: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1115,7 +1155,7 @@ export def "search-contract-metadata searchContractMetadata" [
   let full_url = (build-url $base $"/v2/($apiKey)/searchContractMetadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # summarizeNFTAttributes
@@ -1131,6 +1171,7 @@ export def "summarize-nft-attributes summarizeNFTAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<totalSupply: string, summary: record, contractAddress: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1139,7 +1180,7 @@ export def "summarize-nft-attributes summarizeNFTAttributes" [
   let full_url = (build-url $base $"/v2/($apiKey)/summarizeNFTAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # isHolderOfCollection
@@ -1155,6 +1196,7 @@ export def "is-holder-of-collection isHolderOfCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wallet: string # String - Wallet address to check for contract ownership. (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --contractAddress: string # String - Contract address for the NFT contract (ERC721 and ERC1155 supported). (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> record<isHolderOfCollection: bool> {
@@ -1164,7 +1206,7 @@ export def "is-holder-of-collection isHolderOfCollection" [
   let full_url = (build-url $base $"/v2/($apiKey)/isHolderOfCollection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getNFTSales
@@ -1180,6 +1222,7 @@ export def "get-nft-sales get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromBlock: string # String - The block number to start fetching NFT sales data from. Allowed values are decimal and hex integers, and "latest". Defaults to "0". (default: 0)
   --toBlock: string # String - The block number to start fetching NFT sales data from. Allowed values are decimal and hex integers, and "latest". Defaults to "latest". (default: latest)
   --order: string@order-completer # Enum - Whether to return the results ascending from startBlock or descending from startBlock. Defaults to descending (false). (default: asc)
@@ -1198,7 +1241,7 @@ export def "get-nft-sales get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getNFTSales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # getContractsForOwner
@@ -1214,6 +1257,7 @@ export def "get-contracts-for-owner get-by-apiKey-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string # String - Address for NFT owner (can be in ENS format for Eth Mainnet). (default: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
   --pageKey: string # String - key for pagination. If more results are available, a pageKey will be returned in the response. Pass back the pageKey as a param to fetch the next page of results.
   --pageSize: int # Number of NFTs to be returned per page. Defaults to 100. Max is 100. (default: 100)
@@ -1229,7 +1273,7 @@ export def "get-contracts-for-owner get-by-apiKey-1" [
   let full_url = (build-url $base $"/v2/($apiKey)/getContractsForOwner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # reportSpam
@@ -1245,6 +1289,7 @@ export def "report-spam reportSpam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # String - any valid blockchain address for NFT collections, contracts, mints, etc. (default: 0xe785E82358879F061BC3dcAC6f0444462D4b5330)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1253,5 +1298,5 @@ export def "report-spam reportSpam" [
   let full_url = (build-url $base $"/v2/($apiKey)/reportSpam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

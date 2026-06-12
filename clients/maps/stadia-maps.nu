@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -75,7 +76,7 @@ def shape-format-completer [] { ["polyline5" "polyline6"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "route route" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "route route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An identifier to disambiguate requests (echoed by the server). (e.g. kesklinn)
   locations: list # item shape: {heading?: int, heading_tolerance?: int, minimum_reachability?: int, radius?: int, rank_candidates?: bool, preferred_side?: "same"|"opposite"|"either", node_snap_tolerance?: int, street_side_tolerance?: int, street_side_max_distance?: int, search_filter?: record, search_cutoff?: int}
   costing: string@costing-completer # A routing profile that determines which roads you can access, and how desirable they are based on the type of travel and other parameters. Profiles with a `_traffic` suffix use heuristically-selected traffic data sources to improve ETA and time-dependent route quality while balancing the credit cost. The `_traffic_premium` profiles leverage multiple types of data for maximum accuracy. Traffic-influenced profiles use the same costing options as their base profile (e.g., use the `auto` key in `costing_options` for `auto_traffic`).
@@ -139,7 +141,7 @@ export def "route route" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find the nearest roads to the set of input locations.
@@ -156,6 +158,7 @@ export def "nearest-roads nearest-roads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   locations: list # item shape: {lat: float, lon: float}
   --costing: string@costing-completer-1 # A routing profile that determines which roads are eligible for matching (e.g. trucks probably aren't on sidewalks, so the search will snap to the nearest truck-accessible road).
   --costing-options: record # shape: {auto?: any, bus?: any, taxi?: any, truck?: any, bicycle?: any, motor_scooter?: any, motorcycle?: any, pedestrian?: record, low_speed_vehicle?: any}
@@ -169,7 +172,7 @@ export def "nearest-roads nearest-roads" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Calculate a time distance matrix for use in an optimizer.
@@ -187,6 +190,7 @@ export def "matrix time-distance-matrix" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An identifier to disambiguate requests (echoed by the server). (e.g. kesklinn)
   sources: list # The list of starting locations — item shape: {lat: float, lon: float, search_cutoff?: int, date_time?: string}
   targets: list # The list of ending locations — item shape: {lat: float, lon: float, search_cutoff?: int, date_time?: string}
@@ -206,7 +210,7 @@ export def "matrix time-distance-matrix" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Calculate areas of equal travel time from a location.
@@ -225,6 +229,7 @@ export def "isochrone isochrone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An identifier to disambiguate requests (echoed by the server). (e.g. kesklinn)
   locations: list # item shape: {lat: float, lon: float}
   costing: string@costing-completer
@@ -244,7 +249,7 @@ export def "isochrone isochrone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Calculate an optimized route between a known start and end point.
@@ -263,6 +268,7 @@ export def "optimized-route optimized-route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An identifier to disambiguate requests (echoed by the server). (e.g. kesklinn)
   locations: list # The list of locations. The first and last are assumed to be the start and end points, and all intermediate points are locations that you want to visit along the way. — item shape: {lat: float, lon: float}
   costing: string@costing-completer
@@ -285,7 +291,7 @@ export def "optimized-route optimized-route" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Match a recorded route to the road network.
@@ -302,6 +308,7 @@ export def "map-match map-match" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # default: km
   --language: string@language-completer # default: en-US
   --directions-type: string@directions-type-completer # The level of directional narrative to include. Locations and times will always be returned, but narrative generation verbosity can be controlled with this parameter. (default: instructions)
@@ -324,7 +331,7 @@ export def "map-match map-match" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trace the attributes of roads visited on a route.
@@ -339,6 +346,7 @@ export def "trace-attributes trace-attributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: any # If present, provides either a whitelist or a blacklist of keys to include/exclude in the response. This key is optional, and if omitted from the request, all available info will be returned.
   --elevation-interval: float # If greater than zero, attempts to include elevation along the route at regular intervals. The "native" internal resolution is 30m, so we recommend you use this when possible. This number is interpreted as either meters or feet depending on the unit parameter. Elevation for route sections containing a bridge or tunnel is interpolated linearly. This doesn't always match the true elevation of the bridge/tunnel, but it prevents sharp artifacts from the surrounding terrain. This functionality is unique to the routing endpoints and is not available via the elevation API. NOTE: This has no effect on the OSRM response format. (format: float, default: 0.0)
   --units: string@units-completer # default: km
@@ -351,7 +359,7 @@ export def "trace-attributes trace-attributes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search and geocode quickly based on partial input.
@@ -366,6 +374,7 @@ export def "geocoding-autocomplete autocomplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The place name (address, venue name, etc.) to search for. (e.g. 1600 Pennsylvania Ave NW)
   --focuspointlat: float # The latitude of the point to focus the search on. This will bias results toward the focus point. Requires `focus.point.lon`. (format: double)
   --focuspointlon: float # The longitude of the point to focus the search on. This will bias results toward the focus point. Requires `focus.point.lat`. (format: double)
@@ -389,7 +398,7 @@ export def "geocoding-autocomplete autocomplete" [
   let full_url = (build-url $base "/geocoding/v1/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for location and other info using a place name or address (forward geocoding).
@@ -404,6 +413,7 @@ export def "geocoding-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The place name (address, venue name, etc.) to search for. (e.g. 1600 Pennsylvania Ave NW)
   --focuspointlat: float # The latitude of the point to focus the search on. This will bias results toward the focus point. Requires `focus.point.lon`. (format: double)
   --focuspointlon: float # The longitude of the point to focus the search on. This will bias results toward the focus point. Requires `focus.point.lat`. (format: double)
@@ -427,7 +437,7 @@ export def "geocoding-search search" [
   let full_url = (build-url $base "/geocoding/v1/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find locations matching components (structured forward geocoding).
@@ -442,6 +452,7 @@ export def "geocoding-search-structured search-structured" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # A street name and optional house number together, e.g. `11 Wall St`. If you have the data available separately, you should provide the house number and street separately.
   --house-number: string # A house or building number. Mutually exclusive with the `address` field. Requires `street` to also be specified. (e.g. 11)
   --street: string # A street name. Mutually exclusive with the `address` field. (e.g. Wall St)
@@ -475,7 +486,7 @@ export def "geocoding-search-structured search-structured" [
   let full_url = (build-url $base "/geocoding/v1/search/structured" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Quickly run a batch of geocoding queries against the search, structured search, or reverse endpoints.
@@ -490,6 +501,7 @@ export def "geocoding-search-bulk search-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<status: int, response: record<geocoding: record, bbox: list, features: list>, msg: string> {
   let input = $in
@@ -499,7 +511,7 @@ export def "geocoding-search-bulk search-bulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find places and addresses near geographic coordinates (reverse geocoding).
@@ -514,6 +526,7 @@ export def "geocoding-reverse reverse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pointlat: float # The latitude of the point at which to perform the search. (format: double, e.g. 48.848268)
   --pointlon: float # The longitude of the point at which to perform the search. (format: double, e.g. 2.294471)
   --boundarycircleradius: float # The radius of the circle (in kilometers) to limit the search to. Defaults to 50km (search) or 1km (reverse) if unspecified. (format: double)
@@ -530,7 +543,7 @@ export def "geocoding-reverse reverse" [
   let full_url = (build-url $base "/geocoding/v1/reverse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve details of a place using its GID.
@@ -545,6 +558,7 @@ export def "geocoding-place place-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # A list of GIDs to search for.
   --lang: string # A BCP47 language tag which specifies a preference for localization of results. By default, results are in the default locale of the source data, but specifying a language will attempt to localize the results. Note that while a `langtag` (in RFC 5646 terms) can contain script, region, etc., only the `language` portion, an ISO 639 code, will be considered. So `en-US` and `en-GB` will both be treated as English.
 ]: nothing -> record<geocoding: record<attribution: string, query: record, warnings: list<string>, errors: list<string>>, bbox: list<float>, features: table<type: string, geometry: record, properties: record, bbox: list>> {
@@ -554,7 +568,7 @@ export def "geocoding-place place-details" [
   let full_url = (build-url $base "/geocoding/v1/place" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time zone information for any point on earth.
@@ -569,6 +583,7 @@ export def "tz-lookup tz-lookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lat: float # The latitude of the point you are interested in. (format: double, e.g. 58.5953)
   --lng: float # The longitude of the point you are interested in. (format: double, e.g. 25.0136)
   --timestamp: int # The UNIX timestamp at which the UTC and DST offsets will be calculated. This defaults to the present time. This endpoint is not necessarily guaranteed to be accurate for timestamps that occurred in the past. Time zone geographic boundaries change over time, so if the point you are querying for was previously in a different time zone, historical results will not be accurate. If, however, the point has been in the same geographic time zone for a very long time (ex: `America/New_York`), the historical data may be accurate for 100+ years in the past (depending on how far back the IANA TZDB rules have been specified). (format: int64)
@@ -579,7 +594,7 @@ export def "tz-lookup tz-lookup" [
   let full_url = (build-url $base "/tz/lookup/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time zone information for any point on earth.
@@ -594,6 +609,7 @@ export def "tz-lookup tz-lookup-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lat: float # The latitude of the point you are interested in. (format: double, e.g. 58.5953)
   --lng: float # The longitude of the point you are interested in. (format: double, e.g. 25.0136)
   --timestamp: int # The UNIX timestamp at which the UTC and DST offsets will be calculated. This defaults to the present time. This endpoint is not necessarily guaranteed to be accurate for timestamps that occurred in the past. Time zone geographic boundaries change over time, so if the point you are querying for was previously in a different time zone, historical results will not be accurate. If, however, the point has been in the same geographic time zone for a very long time (ex: `America/New_York`), the historical data may be accurate for 100+ years in the past (depending on how far back the IANA TZDB rules have been specified). (format: int64)
@@ -604,7 +620,7 @@ export def "tz-lookup tz-lookup-v2" [
   let full_url = (build-url $base "/tz/lookup/v2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the elevation profile along a polyline or at a point.
@@ -620,6 +636,7 @@ export def "elevation elevation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An identifier to disambiguate requests (echoed by the server). (nullable, e.g. kesklinn)
   --shape: list # The path to get the height along, expressed as a sequence of coordinates.  REQUIRED if `encoded_polyline` is not present. (nullable) — item shape: {lat: float, lon: float}
   --encoded-polyline: any
@@ -636,7 +653,7 @@ export def "elevation elevation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search and geocode quickly based on partial input.
@@ -651,6 +668,7 @@ export def "geocoding-autocomplete autocomplete-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The text to search for (the start of an address, place name, etc.). (e.g. 1600 Pennsylvania Ave NW)
   --focuspointlat: float # The latitude of a focus point.  If provided (along with longitude), the search results should be more locally relevant. (format: double)
   --focuspointlon: float # The longitude of a focus point.  If provided (along with longitude), the search results should be more locally relevant. (format: double)
@@ -674,7 +692,7 @@ export def "geocoding-autocomplete autocomplete-v2" [
   let full_url = (build-url $base "/geocoding/v2/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for location and other info using a place name or address (forward geocoding).
@@ -689,6 +707,7 @@ export def "geocoding-search search-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The text to search for (the start of an address, place name, etc.). (e.g. 1600 Pennsylvania Ave NW)
   --focuspointlat: float # The latitude of a focus point.  If provided (along with longitude), the search results should be more locally relevant. (format: double)
   --focuspointlon: float # The longitude of a focus point.  If provided (along with longitude), the search results should be more locally relevant. (format: double)
@@ -712,7 +731,7 @@ export def "geocoding-search search-v2" [
   let full_url = (build-url $base "/geocoding/v2/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find places and addresses near a location point (reverse geocoding).
@@ -727,6 +746,7 @@ export def "geocoding-reverse reverse-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pointlat: float # The latitude of the point at which to perform the search. (format: double, e.g. 48.848268)
   --pointlon: float # The longitude of the point at which to perform the search. (format: double, e.g. 2.294471)
   --layers: list # A list of layers to limit the search to.
@@ -743,7 +763,7 @@ export def "geocoding-reverse reverse-v2" [
   let full_url = (build-url $base "/geocoding/v2/reverse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve detailed information about a place by its GID.
@@ -758,6 +778,7 @@ export def "geocoding-place-details place-details-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # e.g. [whosonfirst:locality:102026327]
   --lang: string # A BCP47 language tag which specifies a preference for localization of results. There is no default value, so place names will be returned as-is, which is usually in the local language. NOTE: The Accept-Language header is also respected, and many user agents will set it automatically.
 ]: nothing -> record<bbox: list<float>, features: table<bbox: list, geometry: any, properties: record, type: string>, geocoding: record<attribution: string, error: string, query: record>, type: string> {
@@ -767,5 +788,5 @@ export def "geocoding-place-details place-details-v2" [
   let full_url = (build-url $base "/geocoding/v2/place_details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "service-information GetServiceInformation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,13 +100,14 @@ export def "service-information GetServiceInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<buildBranch: string, buildBranchDeployedDateTime: string, buildSHA: string, buildVersion: string, linkedSites: list<string>, serviceVersions: table<version: string, versionUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service_information")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the clickwraps for an account.
@@ -121,6 +123,7 @@ export def "accounts-clickwraps GetClickwraps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-date: string # Optional. The earliest date to return agreements from.
   --ownerUserId: string # Optional. The user ID of the owner.
   --page-number: string # Optional. The page number to return.
@@ -134,7 +137,7 @@ export def "accounts-clickwraps GetClickwraps" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a clickwrap for an account.
@@ -153,6 +156,7 @@ export def "accounts-clickwraps PostClickwrap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapName: string # The name of the clickwrap.
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
@@ -175,7 +179,7 @@ export def "accounts-clickwraps PostClickwrap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes clickwraps for an account.
@@ -191,6 +195,7 @@ export def "accounts-clickwraps DeleteClickwraps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapIds: string # A comma-separated list of clickwrap IDs to delete.
 ]: nothing -> record<clickwraps: table<clickwrapId: string, clickwrapName: string, deletionMessage: string, deletionSuccess: bool, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -199,7 +204,7 @@ export def "accounts-clickwraps DeleteClickwraps" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a  single clickwrap object.
@@ -216,13 +221,14 @@ export def "accounts-clickwraps GetClickwrap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountId: string, clickwrapId: string, clickwrapName: string, clickwrapVersionId: string, createdTime: record, displaySettings: record<actionButtonAlignment: string, allowClientOnly: bool, allowedHosts: list<string>, brandId: string, consentButtonText: string, consentText: string, declineButtonText: string, displayName: string, documentDisplay: string, downloadable: bool, format: string, hasDeclineButton: bool, hostOrigin: string, mustRead: bool, mustView: bool, recordDeclineResponses: bool, requireAccept: bool, sendToEmail: bool>, documents: table<documentBase64: string, documentHtml: string, documentName: string, fileExtension: string, order: int>, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the user ID of a clickwrap.
@@ -239,6 +245,7 @@ export def "accounts-clickwraps PutClickwrap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transferFromUserId: string # ID of the user to transfer from.
   --transferToUserId: string # ID of the user to transfer to.
 ]: any -> record<accountId: string, clickwrapId: string, clickwrapName: string, clickwrapVersionId: string, createdTime: record, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
@@ -250,7 +257,7 @@ export def "accounts-clickwraps PutClickwrap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a clickwrap and all of its versions.
@@ -267,6 +274,7 @@ export def "accounts-clickwraps DeleteClickwrap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --versions: string # A comma-separated list of versions to delete.
 ]: nothing -> record<clickwrapId: string, clickwrapName: string, versions: table<clickwrapVersionId: string, createdTime: record, deletionMessage: string, deletionSuccess: bool, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record, status: string, versionId: string, versionNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -275,7 +283,7 @@ export def "accounts-clickwraps DeleteClickwrap" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks if a user has agreed to a clickwrap.
@@ -292,6 +300,7 @@ export def "accounts-clickwraps-agreements PostHasAgreed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientUserId: string # The user ID of the client.
   --hostOrigin: string # The host origin.
   --metadata: string # A customer-defined string you can use in requests. This string will appear in the corresponding response.
@@ -304,7 +313,7 @@ export def "accounts-clickwraps-agreements PostHasAgreed" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a specific agreement for a specified clickwrap.
@@ -322,13 +331,14 @@ export def "accounts-clickwraps-agreements GetAgreement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountId: string, agreedOn: record, agreementId: string, agreementUrl: string, clickwrapId: string, clientUserId: string, consumerDisclosureHtml: string, createdOn: record, declinedOn: record, documents: table<documentBase64: string, documentHtml: string, documentName: string, fileExtension: string, order: int>, metadata: string, settings: record<actionButtonAlignment: string, allowClientOnly: bool, allowedHosts: list<string>, brandId: string, consentButtonText: string, consentText: string, declineButtonText: string, displayName: string, documentDisplay: string, downloadable: bool, format: string, hasDeclineButton: bool, hostOrigin: string, mustRead: bool, mustView: bool, recordDeclineResponses: bool, requireAccept: bool, sendToEmail: bool>, status: string, version: string, versionId: string, versionNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/agreements/($agreementId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the completed user agreement PDF.
@@ -346,13 +356,14 @@ export def "accounts-clickwraps-agreements-download GetAgreementPdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/agreements/($agreementId)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user agreements
@@ -369,6 +380,7 @@ export def "accounts-clickwraps-users GetClickwrapAgreements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-user-id: string # The client ID.
   --from-date: string # Optional. The earliest date to return agreements from.
   --page-number: string # Optional. The page number to return.
@@ -381,7 +393,7 @@ export def "accounts-clickwraps-users GetClickwrapAgreements" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new clickwrap version.
@@ -401,6 +413,7 @@ export def "accounts-clickwraps-versions PostClickwrapVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapName: string # The name of the clickwrap.
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
@@ -423,7 +436,7 @@ export def "accounts-clickwraps-versions PostClickwrapVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the versions of a clickwrap.
@@ -440,6 +453,7 @@ export def "accounts-clickwraps-versions DeleteClickwrapVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapVersionIds: string # A comma-separated list of clickwrap version IDs to delete.
 ]: nothing -> record<clickwrapId: string, clickwrapName: string, versions: table<clickwrapVersionId: string, createdTime: record, deletionMessage: string, deletionSuccess: bool, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record, status: string, versionId: string, versionNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -448,7 +462,7 @@ export def "accounts-clickwraps-versions DeleteClickwrapVersions" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a specific version from a clickwrap.
@@ -466,13 +480,14 @@ export def "accounts-clickwraps-versions GetClickwrapVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountId: string, clickwrapId: string, clickwrapName: string, clickwrapVersionId: string, createdTime: record, displaySettings: record<actionButtonAlignment: string, allowClientOnly: bool, allowedHosts: list<string>, brandId: string, consentButtonText: string, consentText: string, declineButtonText: string, displayName: string, documentDisplay: string, downloadable: bool, format: string, hasDeclineButton: bool, hostOrigin: string, mustRead: bool, mustView: bool, recordDeclineResponses: bool, requireAccept: bool, sendToEmail: bool>, documents: table<documentBase64: string, documentHtml: string, documentName: string, fileExtension: string, order: int>, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a specific version of a clickwrap.
@@ -493,6 +508,7 @@ export def "accounts-clickwraps-versions PutClickwrapVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapName: string # The name of the clickwrap.
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
@@ -515,7 +531,7 @@ export def "accounts-clickwraps-versions PutClickwrapVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a specific version of a clickwrap.
@@ -533,13 +549,14 @@ export def "accounts-clickwraps-versions DeleteClickwrapVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<clickwrapVersionId: string, createdTime: record, deletionMessage: string, deletionSuccess: bool, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the agreement responses for a clickwrap version.
@@ -557,6 +574,7 @@ export def "accounts-clickwraps-versions-users GetClickwrapVersionAgreements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-user-id: string
   --from-date: string # Optional. The earliest date to return agreements from.
   --page-number: string # Optional. The page number to return.
@@ -569,7 +587,7 @@ export def "accounts-clickwraps-versions-users GetClickwrapVersionAgreements" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a clickwrap version by specifying its version number.
@@ -587,13 +605,14 @@ export def "accounts-clickwraps-versions GetClickwrapVersionByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountId: string, clickwrapId: string, clickwrapName: string, clickwrapVersionId: string, createdTime: record, displaySettings: record<actionButtonAlignment: string, allowClientOnly: bool, allowedHosts: list<string>, brandId: string, consentButtonText: string, consentText: string, declineButtonText: string, displayName: string, documentDisplay: string, downloadable: bool, format: string, hasDeclineButton: bool, hostOrigin: string, mustRead: bool, mustView: bool, recordDeclineResponses: bool, requireAccept: bool, sendToEmail: bool>, documents: table<documentBase64: string, documentHtml: string, documentName: string, fileExtension: string, order: int>, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a clickwrap version by specifying its version number.
@@ -614,6 +633,7 @@ export def "accounts-clickwraps-versions PutClickwrapVersionByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickwrapName: string # The name of the clickwrap.
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
@@ -636,7 +656,7 @@ export def "accounts-clickwraps-versions PutClickwrapVersionByNumber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a clickwrap version from a clickwrap by specifying its version number.
@@ -654,13 +674,14 @@ export def "accounts-clickwraps-versions DeleteClickwrapVersionByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountId: string, clickwrapId: string, clickwrapName: string, clickwrapVersionId: string, createdTime: record, lastModified: record, lastModifiedBy: string, ownerUserId: string, requireReacceptance: bool, scheduledDate: record, scheduledReacceptance: record<recurrenceInterval: int, recurrenceIntervalType: string, startDateTime: record>, status: string, versionId: string, versionNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the agreement responses for a clickwrap version
@@ -678,6 +699,7 @@ export def "accounts-clickwraps-versions-users GetClickwrapVersionAgreementsByNu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-user-id: string # The client user ID.
   --from-date: string # Optional. The earliest date to return agreements from.
   --page-number: string # Optional. The page number to return.
@@ -690,5 +712,5 @@ export def "accounts-clickwraps-versions-users GetClickwrapVersionAgreementsByNu
   let full_url = (build-url $base $"/v1/accounts/($accountId)/clickwraps/($clickwrapId)/versions/($versionNumber)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

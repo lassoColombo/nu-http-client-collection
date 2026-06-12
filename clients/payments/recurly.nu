@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -129,7 +130,7 @@ def state-completer-5 [] { ["active" "canceled" "expired" "future"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "sites sites" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -162,6 +163,7 @@ export def "sites sites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -174,7 +176,7 @@ export def "sites sites" [
   let full_url = (build-url $base "/sites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a site
@@ -190,13 +192,14 @@ export def "sites site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, subdomain: string, public_api_key: string, mode: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, settings: record<billing_address_requirement: string, accepted_currencies: list<string>, default_currency: string>, features: list<string>, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sites/($site_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's accounts
@@ -211,6 +214,7 @@ export def "accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -227,7 +231,7 @@ export def "accounts accounts" [
   let full_url = (build-url $base "/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an account
@@ -248,6 +252,7 @@ export def "accounts account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # The unique identifier of the account. This cannot be changed once the account is created.
   --acquisition: record # shape: {cost?: record, channel?: "advertising"|"blog"|"direct_traffic"|"email"|"events"|"marketing_content"|"organic_search"|"other"|"outbound_sales"|"paid_search"|"public_relations"|"referral"|"social_media", subchannel?: string, campaign?: string, acquired_at?: string}
   --external-accounts: list # item shape: {external_account_code: string, external_connection_type: string}
@@ -284,7 +289,7 @@ export def "accounts account" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an account
@@ -300,13 +305,14 @@ export def "accounts account-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, state: string, hosted_login_token: string, shipping_addresses: table<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, has_live_subscription: bool, has_active_subscription: bool, has_future_subscription: bool, has_canceled_subscription: bool, has_paused_subscription: bool, has_past_due_invoice: bool, created_at: string, updated_at: string, deleted_at: string, code: string, username: string, email: string, override_business_entity_id: string, preferred_locale: string, preferred_time_zone: string, cc_emails: string, first_name: string, last_name: string, company: string, vat_number: string, tax_exempt: bool, exemption_certificate: string, external_accounts: table<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string>, parent_account_id: string, bill_to: string, dunning_campaign_id: string, invoice_template_id: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, billing_info: record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: list<record>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>>, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, entity_use_code: string, bill_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account
@@ -325,6 +331,7 @@ export def "accounts account-by-account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # A secondary value for the account.
   --email: string # The email address used for communicating with this customer. The customer will also use this email address to log into your hosted account management pages. This value does not need to be unique. (format: email)
   --preferred-locale: string@preferred-locale-completer
@@ -357,7 +364,7 @@ export def "accounts account-by-account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate an account
@@ -373,13 +380,14 @@ export def "accounts account-by-account_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, state: string, hosted_login_token: string, shipping_addresses: table<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, has_live_subscription: bool, has_active_subscription: bool, has_future_subscription: bool, has_canceled_subscription: bool, has_paused_subscription: bool, has_past_due_invoice: bool, created_at: string, updated_at: string, deleted_at: string, code: string, username: string, email: string, override_business_entity_id: string, preferred_locale: string, preferred_time_zone: string, cc_emails: string, first_name: string, last_name: string, company: string, vat_number: string, tax_exempt: bool, exemption_certificate: string, external_accounts: table<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string>, parent_account_id: string, bill_to: string, dunning_campaign_id: string, invoice_template_id: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, billing_info: record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: list<record>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>>, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, entity_use_code: string, bill_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redact an account (GDPR Right to Erasure)
@@ -395,13 +403,14 @@ export def "accounts-redact account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, state: string, hosted_login_token: string, shipping_addresses: table<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, has_live_subscription: bool, has_active_subscription: bool, has_future_subscription: bool, has_canceled_subscription: bool, has_paused_subscription: bool, has_past_due_invoice: bool, created_at: string, updated_at: string, deleted_at: string, code: string, username: string, email: string, override_business_entity_id: string, preferred_locale: string, preferred_time_zone: string, cc_emails: string, first_name: string, last_name: string, company: string, vat_number: string, tax_exempt: bool, exemption_certificate: string, external_accounts: table<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string>, parent_account_id: string, bill_to: string, dunning_campaign_id: string, invoice_template_id: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, billing_info: record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: list<record>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>>, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, entity_use_code: string, bill_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/redact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an account's acquisition data
@@ -417,13 +426,14 @@ export def "accounts-acquisition acquisition-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cost: record<currency: string, amount: float>, channel: string, subchannel: string, campaign: string, acquired_at: string, id: string, object: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/acquisition")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account's acquisition data
@@ -440,6 +450,7 @@ export def "accounts-acquisition acquisition-by-account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cost: record # shape: {currency?: string, amount?: float}
   --channel: string@channel-completer
   --subchannel: string # An arbitrary subchannel string representing a distinction/subcategory within a broader channel.
@@ -454,7 +465,7 @@ export def "accounts-acquisition acquisition-by-account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an account's acquisition data
@@ -470,13 +481,14 @@ export def "accounts-acquisition acquisition-by-account_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/acquisition")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate an inactive account
@@ -492,13 +504,14 @@ export def "accounts-reactivate account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, state: string, hosted_login_token: string, shipping_addresses: table<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, has_live_subscription: bool, has_active_subscription: bool, has_future_subscription: bool, has_canceled_subscription: bool, has_paused_subscription: bool, has_past_due_invoice: bool, created_at: string, updated_at: string, deleted_at: string, code: string, username: string, email: string, override_business_entity_id: string, preferred_locale: string, preferred_time_zone: string, cc_emails: string, first_name: string, last_name: string, company: string, vat_number: string, tax_exempt: bool, exemption_certificate: string, external_accounts: table<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string>, parent_account_id: string, bill_to: string, dunning_campaign_id: string, invoice_template_id: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, billing_info: record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: list<record>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>>, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, entity_use_code: string, bill_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/reactivate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an account's balance and past due status
@@ -514,13 +527,14 @@ export def "accounts-balance balance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, past_due: bool, balances: table<currency: string, amount: float, processing_prepayment_amount: float, available_credit_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an account's billing information
@@ -536,13 +550,14 @@ export def "accounts-billing-info info-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record<account_reference: string>, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: table<token: string, reference_type: string>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/billing_info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set an account's billing information
@@ -561,6 +576,7 @@ export def "accounts-billing-info info-by-account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --token-id: string # A token [generated by Recurly.js](https://recurly.com/developers/reference/recurly-js/#getting-a-token).
   --first-name: string
   --last-name: string
@@ -609,7 +625,7 @@ export def "accounts-billing-info info-by-account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an account's billing information
@@ -625,13 +641,14 @@ export def "accounts-billing-info info-by-account_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/billing_info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify an account's credit card billing information
@@ -647,6 +664,7 @@ export def "accounts-billing-info-verify info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gateway-code: string # An identifier for a specific payment gateway.
   --three-d-secure-action-result-token-id: string # A token generated by Recurly.js after completing a 3-D Secure device fingerprinting or authentication challenge.
 ]: any -> record<id: string, object: string, uuid: string, original_transaction_id: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, initiator: string, invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, merchant_reason_code: string, voided_by_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, subscription_ids: list<string>, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record<first_name: string, last_name: string>, collection_method: string, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record<account_reference: string>, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record<id: string, object: string, type: string, name: string>, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record<object: string, score: int, decision: string, reference: string, risk_rules_triggered: list<record>>, next_action: record<type: string, value: string>> {
@@ -658,7 +676,7 @@ export def "accounts-billing-info-verify info" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify an account's credit card billing cvv
@@ -674,6 +692,7 @@ export def "accounts-billing-info-verify-cvv cvv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verification-value: string # Unique security code for a credit card.
   --gateway-code: string # An identifier for a specific payment gateway.
   --three-d-secure-action-result-token-id: string # A token generated by Recurly.js after completing a 3-D Secure device fingerprinting or authentication challenge.
@@ -687,7 +706,7 @@ export def "accounts-billing-info-verify-cvv cvv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of billing information associated with an account
@@ -703,6 +722,7 @@ export def "accounts-billing-infos infos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --begin-time: string # Inclusively filter by begin_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
@@ -714,7 +734,7 @@ export def "accounts-billing-infos infos" [
   let full_url = (build-url $base $"/accounts/($account_id)/billing_infos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new billing information on an account
@@ -733,6 +753,7 @@ export def "accounts-billing-infos info-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --token-id: string # A token [generated by Recurly.js](https://recurly.com/developers/reference/recurly-js/#getting-a-token).
   --first-name: string
   --last-name: string
@@ -781,7 +802,7 @@ export def "accounts-billing-infos info-by-account_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a billing info
@@ -798,13 +819,14 @@ export def "accounts-billing-infos info-by-account_id-billing_info_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account_id: string, first_name: string, last_name: string, company: string, address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, vat_number: string, valid: bool, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record<account_reference: string>, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, fraud: record<score: int, decision: string, risk_rules_triggered: record>, primary_payment_method: bool, backup_payment_method: bool, payment_gateway_references: table<token: string, reference_type: string>, created_at: string, updated_at: string, updated_by: record<ip: string, country: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/billing_infos/($billing_info_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account's billing information
@@ -824,6 +846,7 @@ export def "accounts-billing-infos info-by-account_id-billing_info_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --token-id: string # A token [generated by Recurly.js](https://recurly.com/developers/reference/recurly-js/#getting-a-token).
   --first-name: string
   --last-name: string
@@ -872,7 +895,7 @@ export def "accounts-billing-infos info-by-account_id-billing_info_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an account's billing information
@@ -889,13 +912,14 @@ export def "accounts-billing-infos info-by-account_id-billing_info_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/billing_infos/($billing_info_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify a billing information's credit card
@@ -912,6 +936,7 @@ export def "accounts-billing-infos-verify infos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gateway-code: string # An identifier for a specific payment gateway.
   --three-d-secure-action-result-token-id: string # A token generated by Recurly.js after completing a 3-D Secure device fingerprinting or authentication challenge.
 ]: any -> record<id: string, object: string, uuid: string, original_transaction_id: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, initiator: string, invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, merchant_reason_code: string, voided_by_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, subscription_ids: list<string>, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record<first_name: string, last_name: string>, collection_method: string, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record<account_reference: string>, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record<id: string, object: string, type: string, name: string>, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record<object: string, score: int, decision: string, reference: string, risk_rules_triggered: list<record>>, next_action: record<type: string, value: string>> {
@@ -923,7 +948,7 @@ export def "accounts-billing-infos-verify infos" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify a billing information's credit card cvv
@@ -940,6 +965,7 @@ export def "accounts-billing-infos-verify-cvv cvv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verification-value: string # Unique security code for a credit card.
   --gateway-code: string # An identifier for a specific payment gateway.
   --three-d-secure-action-result-token-id: string # A token generated by Recurly.js after completing a 3-D Secure device fingerprinting or authentication challenge.
@@ -953,7 +979,7 @@ export def "accounts-billing-infos-verify-cvv cvv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the coupon redemptions for an account
@@ -969,6 +995,7 @@ export def "accounts-coupon-redemptions redemptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --begin-time: string # Inclusively filter by begin_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
@@ -981,7 +1008,7 @@ export def "accounts-coupon-redemptions redemptions" [
   let full_url = (build-url $base $"/accounts/($account_id)/coupon_redemptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the coupon redemptions that are active on an account
@@ -997,13 +1024,14 @@ export def "accounts-coupon-redemptions-active redemptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, uuid: string, account: record, subscription_id: string, coupon: record, state: string, remaining_duration: record, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/coupon_redemptions/active")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate an active coupon redemption on an account or subscription
@@ -1019,6 +1047,7 @@ export def "accounts-coupon-redemptions-active redemption-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   coupon_id: string
   --currency: string # 3-letter ISO 4217 currency code.
   --subscription-id: string
@@ -1031,7 +1060,7 @@ export def "accounts-coupon-redemptions-active redemption-by-account_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the active coupon redemption from an account
@@ -1047,13 +1076,14 @@ export def "accounts-coupon-redemptions-active redemption-by-account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, subscription_id: string, coupon: record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: list<record>, items: list<record>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list, trial: record>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string>, state: string, remaining_duration: record<type: string, expires_at: string>, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/coupon_redemptions/active")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the coupon redemption
@@ -1070,13 +1100,14 @@ export def "accounts-coupon-redemptions redemption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, subscription_id: string, coupon: record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: list<record>, items: list<record>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list, trial: record>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string>, state: string, remaining_duration: record<type: string, expires_at: string>, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/coupon_redemptions/($coupon_redemption_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the coupon redemption
@@ -1093,13 +1124,14 @@ export def "accounts-coupon-redemptions id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, subscription_id: string, coupon: record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: list<record>, items: list<record>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list, trial: record>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string>, state: string, remaining_duration: record<type: string, expires_at: string>, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/coupon_redemptions/($coupon_redemption_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's credit payments
@@ -1115,6 +1147,7 @@ export def "accounts-credit-payments payments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
@@ -1127,7 +1160,7 @@ export def "accounts-credit-payments payments" [
   let full_url = (build-url $base $"/accounts/($account_id)/credit_payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List external accounts for an account
@@ -1143,13 +1176,14 @@ export def "accounts-external-accounts account-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/external_accounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an external account
@@ -1165,6 +1199,7 @@ export def "accounts-external-accounts account-by-account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   external_account_code: string # Represents the account code for the external account.
   external_connection_type: string # Represents the connection type. One of the connection types of your enabled App Connectors
 ]: any -> record<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string> {
@@ -1176,7 +1211,7 @@ export def "accounts-external-accounts account-by-account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an external account for an account
@@ -1193,13 +1228,14 @@ export def "accounts-external-accounts account-by-account_id-external_account_id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/external_accounts/($external_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an external account
@@ -1216,6 +1252,7 @@ export def "accounts-external-accounts account-by-account_id-external_account_id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --external-account-code: string # Represents the account code for the external account.
   --external-connection-type: string # Represents the connection type. One of the connection types of your enabled App Connectors
 ]: any -> record<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string> {
@@ -1227,7 +1264,7 @@ export def "accounts-external-accounts account-by-account_id-external_account_id
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an external account for an account
@@ -1244,13 +1281,14 @@ export def "accounts-external-accounts account-by-account_id-external_account_id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, id: string, external_account_code: string, external_connection_type: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/external_accounts/($external_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the external invoices on an account
@@ -1266,6 +1304,7 @@ export def "accounts-external-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1276,7 +1315,7 @@ export def "accounts-external-invoices invoices" [
   let full_url = (build-url $base $"/accounts/($account_id)/external_invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's invoices
@@ -1292,6 +1331,7 @@ export def "accounts-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --state: string@state-completer-1 # Invoice state. (default: all)
   --limit: int # Limit number of records 1-200. (default: 20)
@@ -1307,7 +1347,7 @@ export def "accounts-invoices invoices" [
   let full_url = (build-url $base $"/accounts/($account_id)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an invoice for pending line items
@@ -1324,6 +1364,7 @@ export def "accounts-invoices invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   --business-entity-id: string # The `business_entity_id` is the value that represents a specific business entity for an end customer which will be assigned to the invoice. Available when the `Multiple Business Entities` feature is enabled. If both `business_entity_id` and `business_entity_code` are present, `business_entity_id` will be used.
   --business-entity-code: string # The `business_entity_code` is the value that represents a specific business entity for an end customer which will be assigned to the invoice. Available when the `Multiple Business Entities` feature is enabled. If both `business_entity_id` and `business_entity_code` are present, `business_entity_id` will be used.
@@ -1346,7 +1387,7 @@ export def "accounts-invoices invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview new invoice for pending line items
@@ -1363,6 +1404,7 @@ export def "accounts-invoices-preview invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   --business-entity-id: string # The `business_entity_id` is the value that represents a specific business entity for an end customer which will be assigned to the invoice. Available when the `Multiple Business Entities` feature is enabled. If both `business_entity_id` and `business_entity_code` are present, `business_entity_id` will be used.
   --business-entity-code: string # The `business_entity_code` is the value that represents a specific business entity for an end customer which will be assigned to the invoice. Available when the `Multiple Business Entities` feature is enabled. If both `business_entity_id` and `business_entity_code` are present, `business_entity_id` will be used.
@@ -1385,7 +1427,7 @@ export def "accounts-invoices-preview invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List an account's line items
@@ -1401,6 +1443,7 @@ export def "accounts-line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1417,7 +1460,7 @@ export def "accounts-line-items items" [
   let full_url = (build-url $base $"/accounts/($account_id)/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new line item for the account
@@ -1434,6 +1477,7 @@ export def "accounts-line-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code. If `item_code`/`item_id` is part of the request then `currency` is optional, if the site has a single default currency. `currency` is required if `item_code`/`item_id` is present, and there are multiple currencies defined on the site. If `item_code`/`item_id` is not present `currency` is required.
   unit_amount: float # A positive or negative amount with `type=charge` will result in a positive `unit_amount`. A positive or negative amount with `type=credit` will result in a negative `unit_amount`. If `item_code`/`item_id` is present, `unit_amount` can be passed in, to override the `Item`'s `unit_amount`. If `item_code`/`item_id` is not present then `unit_amount` is required.  (format: float)
   --tax-inclusive: oneof<nothing, bool> # Determines whether or not tax is included in the unit amount. The Tax Inclusive Pricing feature (separate from the Mixed Tax Pricing feature) must be enabled to use this flag. (default: false)
@@ -1470,7 +1514,7 @@ export def "accounts-line-items item" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List an account's notes
@@ -1486,6 +1530,7 @@ export def "accounts-notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, account_id: string, user: record, message: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1494,7 +1539,7 @@ export def "accounts-notes notes" [
   let full_url = (build-url $base $"/accounts/($account_id)/notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an account note
@@ -1510,6 +1555,7 @@ export def "accounts-notes note-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   message: string # The content of the account note.
 ]: any -> record<id: string, object: string, account_id: string, user: record<id: string, object: string, email: string, first_name: string, last_name: string, time_zone: string, created_at: string, deleted_at: string>, message: string, created_at: string> {
   let input = $in
@@ -1520,7 +1566,7 @@ export def "accounts-notes note-by-account_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an account note
@@ -1537,13 +1583,14 @@ export def "accounts-notes note-by-account_id-account_note_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account_id: string, user: record<id: string, object: string, email: string, first_name: string, last_name: string, time_zone: string, created_at: string, deleted_at: string>, message: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/notes/($account_note_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an account note
@@ -1560,13 +1607,14 @@ export def "accounts-notes note-by-account_id-account_note_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, message: string, params: table<param: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/notes/($account_note_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a list of an account's shipping addresses
@@ -1582,6 +1630,7 @@ export def "accounts-shipping-addresses addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1595,7 +1644,7 @@ export def "accounts-shipping-addresses addresses" [
   let full_url = (build-url $base $"/accounts/($account_id)/shipping_addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new shipping address for the account
@@ -1611,6 +1660,7 @@ export def "accounts-shipping-addresses address-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nickname: string
   first_name: string
   last_name: string
@@ -1634,7 +1684,7 @@ export def "accounts-shipping-addresses address-by-account_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an account's shipping address
@@ -1651,13 +1701,14 @@ export def "accounts-shipping-addresses address-by-account_id-shipping_address_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/shipping_addresses/($shipping_address_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account's shipping address
@@ -1674,6 +1725,7 @@ export def "accounts-shipping-addresses address-by-account_id-shipping_address_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nickname: string
   --first-name: string
   --last-name: string
@@ -1697,7 +1749,7 @@ export def "accounts-shipping-addresses address-by-account_id-shipping_address_i
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an account's shipping address
@@ -1714,13 +1766,14 @@ export def "accounts-shipping-addresses address-by-account_id-shipping_address_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/shipping_addresses/($shipping_address_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's subscriptions
@@ -1736,6 +1789,7 @@ export def "accounts-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1750,7 +1804,7 @@ export def "accounts-subscriptions subscriptions" [
   let full_url = (build-url $base $"/accounts/($account_id)/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's transactions
@@ -1766,6 +1820,7 @@ export def "accounts-transactions transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1781,7 +1836,7 @@ export def "accounts-transactions transactions" [
   let full_url = (build-url $base $"/accounts/($account_id)/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's child accounts
@@ -1797,6 +1852,7 @@ export def "accounts-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1813,7 +1869,7 @@ export def "accounts-accounts accounts" [
   let full_url = (build-url $base $"/accounts/($account_id)/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's account acquisition data
@@ -1828,6 +1884,7 @@ export def "acquisitions acquisition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1841,7 +1898,7 @@ export def "acquisitions acquisition" [
   let full_url = (build-url $base "/acquisitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's coupons
@@ -1856,6 +1913,7 @@ export def "coupons coupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -1869,7 +1927,7 @@ export def "coupons coupons" [
   let full_url = (build-url $base "/coupons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new coupon
@@ -1885,6 +1943,7 @@ export def "coupons coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The internal name for the coupon.
   --max-redemptions: int # A maximum number of redemptions for the coupon. The coupon will expire when it hits its maximum redemptions.
   --max-redemptions-per-account: int # Redemptions per account is the number of times a specific account can redeem the coupon. Set redemptions per account to `1` if you want to keep customers from gaming the system and getting more than one discount from the coupon campaign.
@@ -1917,7 +1976,7 @@ export def "coupons coupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a coupon
@@ -1933,13 +1992,14 @@ export def "coupons coupon-by-coupon_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: table<id: string, object: string, code: string, name: string>, items: table<id: string, object: string, code: string, state: string, name: string, description: string>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list<record>, trial: record<unit: string, length: int>>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coupons/($coupon_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an active coupon
@@ -1955,6 +2015,7 @@ export def "coupons coupon-by-coupon_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The internal name for the coupon.
   --max-redemptions: int # A maximum number of redemptions for the coupon. The coupon will expire when it hits its maximum redemptions.
   --max-redemptions-per-account: int # Redemptions per account is the number of times a specific account can redeem the coupon. Set redemptions per account to `1` if you want to keep customers from gaming the system and getting more than one discount from the coupon campaign.
@@ -1970,7 +2031,7 @@ export def "coupons coupon-by-coupon_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Expire a coupon
@@ -1986,13 +2047,14 @@ export def "coupons coupon-by-coupon_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: table<id: string, object: string, code: string, name: string>, items: table<id: string, object: string, code: string, state: string, name: string, description: string>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list<record>, trial: record<unit: string, length: int>>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coupons/($coupon_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate unique coupon codes
@@ -2008,6 +2070,7 @@ export def "coupons-generate codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --number-of-unique-codes: int # The quantity of unique coupon codes to generate. A bulk coupon can have up to 100,000 unique codes (or your site's configured limit).
 ]: any -> record<limit: int, order: string, sort: string, begin_time: string> {
   let input = $in
@@ -2018,7 +2081,7 @@ export def "coupons-generate codes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate unique coupon codes synchronously
@@ -2034,6 +2097,7 @@ export def "coupons-generate-sync sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   number_of_unique_codes: int # The quantity of unique coupon codes to generate. A bulk coupon can have up to 100,000 unique codes (or your site's configured limit).
 ]: any -> record<object: string, unique_coupon_codes: table<id: string, object: string, code: string, state: string, bulk_coupon_id: string, bulk_coupon_code: string, created_at: string, updated_at: string, redeemed_at: string, expired_at: string>> {
   let input = $in
@@ -2044,7 +2108,7 @@ export def "coupons-generate-sync sync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restore an inactive coupon
@@ -2060,6 +2124,7 @@ export def "coupons-restore coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The internal name for the coupon.
   --max-redemptions: int # A maximum number of redemptions for the coupon. The coupon will expire when it hits its maximum redemptions.
   --max-redemptions-per-account: int # Redemptions per account is the number of times a specific account can redeem the coupon. Set redemptions per account to `1` if you want to keep customers from gaming the system and getting more than one discount from the coupon campaign.
@@ -2075,7 +2140,7 @@ export def "coupons-restore coupon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List unique coupon codes associated with a bulk coupon
@@ -2091,6 +2156,7 @@ export def "coupons-unique-coupon-codes codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2105,7 +2171,7 @@ export def "coupons-unique-coupon-codes codes" [
   let full_url = (build-url $base $"/coupons/($coupon_id)/unique_coupon_codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's credit payments
@@ -2120,6 +2186,7 @@ export def "credit-payments payments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
@@ -2132,7 +2199,7 @@ export def "credit-payments payments" [
   let full_url = (build-url $base "/credit_payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a credit payment
@@ -2148,13 +2215,14 @@ export def "credit-payments payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, action: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, applied_to_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, original_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record<id: string, object: string, uuid: string, original_transaction_id: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, initiator: string, invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, merchant_reason_code: string, voided_by_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, subscription_ids: list<string>, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record<first_name: string, last_name: string>, collection_method: string, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record<id: string, object: string, type: string, name: string>, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record<object: string, score: int, decision: string, reference: string, risk_rules_triggered: list>, next_action: record<type: string, value: string>>, created_at: string, updated_at: string, voided_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/credit_payments/($credit_payment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's custom field definitions
@@ -2169,6 +2237,7 @@ export def "custom-field-definitions definitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2183,7 +2252,7 @@ export def "custom-field-definitions definitions" [
   let full_url = (build-url $base "/custom_field_definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an custom field definition
@@ -2199,13 +2268,14 @@ export def "custom-field-definitions definition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, related_type: string, name: string, user_access: string, display_name: string, tooltip: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/custom_field_definitions/($custom_field_definition_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new general ledger account
@@ -2220,6 +2290,7 @@ export def "general-ledger-accounts account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Unique code to identify the ledger account. Each code must start with a letter or number. The following special characters are allowed: `-_.,:`
   --description: string # Optional description.
   --account-type: string@account-type-completer-1
@@ -2232,7 +2303,7 @@ export def "general-ledger-accounts account" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a site's general ledger accounts
@@ -2247,6 +2318,7 @@ export def "general-ledger-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2259,7 +2331,7 @@ export def "general-ledger-accounts accounts" [
   let full_url = (build-url $base "/general_ledger_accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a general ledger account
@@ -2275,13 +2347,14 @@ export def "general-ledger-accounts account-by-general_ledger_account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, description: string, account_type: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/general_ledger_accounts/($general_ledger_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a general ledger account
@@ -2297,6 +2370,7 @@ export def "general-ledger-accounts account-by-general_ledger_account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Unique code to identify the ledger account. Each code must start with a letter or number. The following special characters are allowed: `-_.,:`
   --description: string # Optional description.
 ]: any -> record<id: string, object: string, code: string, description: string, account_type: string, created_at: string, updated_at: string> {
@@ -2308,7 +2382,7 @@ export def "general-ledger-accounts account-by-general_ledger_account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a single Performance Obligation.
@@ -2324,13 +2398,14 @@ export def "performance-obligations obligation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/performance_obligations/($performance_obligation_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a site's Performance Obligations
@@ -2345,13 +2420,14 @@ export def "performance-obligations obligations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, name: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/performance_obligations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an invoice template's associated accounts
@@ -2367,6 +2443,7 @@ export def "invoice-templates-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2383,7 +2460,7 @@ export def "invoice-templates-accounts accounts" [
   let full_url = (build-url $base $"/invoice_templates/($invoice_template_id)/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's items
@@ -2398,6 +2475,7 @@ export def "items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2412,7 +2490,7 @@ export def "items items" [
   let full_url = (build-url $base "/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new item
@@ -2429,6 +2507,7 @@ export def "items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # Unique code to identify the item.
   name: string # This name describes your item and will appear on the invoice when it's purchased on a one time basis.
   --description: string # Optional, description.
@@ -2454,7 +2533,7 @@ export def "items item" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an item
@@ -2470,13 +2549,14 @@ export def "items item-by-item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, name: string, description: string, external_sku: string, accounting_code: string, revenue_schedule_type: string, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, tax_exempt: bool, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, currencies: table<currency: string, unit_amount: float, tax_inclusive: bool>, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/items/($item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an active item
@@ -2494,6 +2574,7 @@ export def "items item-by-item_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Unique code to identify the item.
   --name: string # This name describes your item and will appear on the invoice when it's purchased on a one time basis.
   --description: string # Optional, description.
@@ -2519,7 +2600,7 @@ export def "items item-by-item_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate an item
@@ -2535,13 +2616,14 @@ export def "items item-by-item_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, name: string, description: string, external_sku: string, accounting_code: string, revenue_schedule_type: string, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, tax_exempt: bool, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, currencies: table<currency: string, unit_amount: float, tax_inclusive: bool>, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/items/($item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate an inactive item
@@ -2557,13 +2639,14 @@ export def "items-reactivate item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, name: string, description: string, external_sku: string, accounting_code: string, revenue_schedule_type: string, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, tax_exempt: bool, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, currencies: table<currency: string, unit_amount: float, tax_inclusive: bool>, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/items/($item_id)/reactivate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's measured units
@@ -2578,6 +2661,7 @@ export def "measured-units unit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -2592,7 +2676,7 @@ export def "measured-units unit" [
   let full_url = (build-url $base "/measured_units" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new measured unit
@@ -2607,6 +2691,7 @@ export def "measured-units unit-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Unique internal name of the measured unit on your site.
   display_name: string # Display name for the measured unit.
   --description: string # Optional internal description.
@@ -2619,7 +2704,7 @@ export def "measured-units unit-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a measured unit
@@ -2635,13 +2720,14 @@ export def "measured-units unit-by-measured_unit_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, name: string, display_name: string, state: string, description: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/measured_units/($measured_unit_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a measured unit
@@ -2657,6 +2743,7 @@ export def "measured-units unit-by-measured_unit_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Unique internal name of the measured unit on your site.
   --display-name: string # Display name for the measured unit.
   --description: string # Optional internal description.
@@ -2669,7 +2756,7 @@ export def "measured-units unit-by-measured_unit_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a measured unit
@@ -2685,13 +2772,14 @@ export def "measured-units unit-by-measured_unit_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, name: string, display_name: string, state: string, description: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/measured_units/($measured_unit_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's external products
@@ -2706,6 +2794,7 @@ export def "external-products products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, name: string, plan: record, created_at: string, updated_at: string, external_product_references: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2714,7 +2803,7 @@ export def "external-products products" [
   let full_url = (build-url $base "/external_products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an external product
@@ -2730,6 +2819,7 @@ export def "external-products product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # External product name.
   --plan-id: string # Recurly plan UUID.
   --external-product-references: list # List of external product references of the external product. — item shape: {reference_code?: string, external_connection_type?: string}
@@ -2742,7 +2832,7 @@ export def "external-products product" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an external product
@@ -2758,13 +2848,14 @@ export def "external-products product-by-external_product_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, name: string, plan: record<id: string, object: string, code: string, name: string>, created_at: string, updated_at: string, external_product_references: table<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_products/($external_product_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an external product
@@ -2780,6 +2871,7 @@ export def "external-products product-by-external_product_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan_id: string # Recurly plan UUID.
 ]: any -> record<id: string, object: string, name: string, plan: record<id: string, object: string, code: string, name: string>, created_at: string, updated_at: string, external_product_references: table<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -2790,7 +2882,7 @@ export def "external-products product-by-external_product_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate an external product
@@ -2806,13 +2898,14 @@ export def "external-products products-by-external_product_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, name: string, plan: record<id: string, object: string, code: string, name: string>, created_at: string, updated_at: string, external_product_references: table<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_products/($external_product_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the external product references for an external product
@@ -2828,6 +2921,7 @@ export def "external-products-external-product-references references" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2836,7 +2930,7 @@ export def "external-products-external-product-references references" [
   let full_url = (build-url $base $"/external_products/($external_product_id)/external_product_references" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an external product reference on an external product
@@ -2852,6 +2946,7 @@ export def "external-products-external-product-references reference-by-external_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reference_code: string # A code which associates the external product to a corresponding object or resource in an external platform like the Apple App Store or Google Play Store.
   external_connection_type: string # Represents the connection type. One of the connection types of your enabled App Connectors
 ]: any -> record<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string> {
@@ -2863,7 +2958,7 @@ export def "external-products-external-product-references reference-by-external_
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an external product reference
@@ -2880,13 +2975,14 @@ export def "external-products-external-product-references reference-by-external_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_products/($external_product_id)/external_product_references/($external_product_reference_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate an external product reference
@@ -2903,13 +2999,14 @@ export def "external-products-external-product-references reference-by-external_
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_products/($external_product_id)/external_product_references/($external_product_reference_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an external subscription
@@ -2924,6 +3021,7 @@ export def "external-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --account: any
   --external-product-reference: any
   external_id: string # Id of the subscription in the external system, i.e. Apple App Store or Google Play Store.
@@ -2946,7 +3044,7 @@ export def "external-subscriptions subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the external subscriptions on a site
@@ -2961,6 +3059,7 @@ export def "external-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, account: record, external_product_reference: record, external_payment_phases: list, external_id: string, uuid: string, last_purchased: string, auto_renew: bool, in_grace_period: bool, app_identifier: string, quantity: int, state: string, activated_at: string, canceled_at: string, expires_at: string, trial_started_at: string, trial_ends_at: string, test: bool, imported: bool, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2969,7 +3068,7 @@ export def "external-subscriptions subscriptions" [
   let full_url = (build-url $base "/external_subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an external subscription
@@ -2985,13 +3084,14 @@ export def "external-subscriptions subscription-by-external_subscription_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, external_product_reference: record<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>, external_payment_phases: table<id: string, object: string, started_at: string, ends_at: string, starting_billing_period_index: int, ending_billing_period_index: int, offer_type: string, offer_name: string, period_count: int, period_length: string, amount: string, currency: string, created_at: string, updated_at: string>, external_id: string, uuid: string, last_purchased: string, auto_renew: bool, in_grace_period: bool, app_identifier: string, quantity: int, state: string, activated_at: string, canceled_at: string, expires_at: string, trial_started_at: string, trial_ends_at: string, test: bool, imported: bool, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_subscriptions/($external_subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an external subscription
@@ -3007,6 +3107,7 @@ export def "external-subscriptions subscription-by-external_subscription_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --external-product-reference: any
   --external-id: string # Id of the subscription in the external system, i.e. Apple App Store or Google Play Store.
   --last-purchased: string # When a new billing event occurred on the external subscription in conjunction with a recent billing period, reactivation or upgrade/downgrade. (format: date-time)
@@ -3028,7 +3129,7 @@ export def "external-subscriptions subscription-by-external_subscription_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the external invoices on an external subscription
@@ -3044,6 +3145,7 @@ export def "external-subscriptions-external-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3054,7 +3156,7 @@ export def "external-subscriptions-external-invoices invoices" [
   let full_url = (build-url $base $"/external_subscriptions/($external_subscription_id)/external_invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an external invoice
@@ -3072,6 +3174,7 @@ export def "external-subscriptions-external-invoices invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   external_id: string # An identifier which associates the external invoice to a corresponding object in an external platform.
   state: string@state-completer-4
   total: string # format: decimal
@@ -3089,7 +3192,7 @@ export def "external-subscriptions-external-invoices invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a site's invoices
@@ -3104,6 +3207,7 @@ export def "invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --state: string@state-completer-1 # Invoice state. (default: all)
   --limit: int # Limit number of records 1-200. (default: 20)
@@ -3119,7 +3223,7 @@ export def "invoices invoices" [
   let full_url = (build-url $base "/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an invoice
@@ -3135,13 +3239,14 @@ export def "invoices invoice-by-invoice_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an invoice
@@ -3158,6 +3263,7 @@ export def "invoices invoice-by-invoice_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --po-number: string # This identifies the PO number associated with the invoice. Not editable for credit invoices.
   --vat-reverse-charge-notes: string # VAT Reverse Charge Notes are editable only if there was a VAT reverse charge applied to the invoice.
   --terms-and-conditions: string # Terms and conditions are an optional note field. Not editable for credit invoices.
@@ -3174,7 +3280,7 @@ export def "invoices invoice-by-invoice_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch an invoice as a PDF
@@ -3190,6 +3296,7 @@ export def "invoices pdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, message: string, params: table<param: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3197,7 +3304,7 @@ export def "invoices pdf" [
   let full_url = (build-url $base $"/invoices/($invoice_id).pdf")
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply available credit to a pending or past due charge invoice
@@ -3213,13 +3320,14 @@ export def "invoices-apply-credit-balance balance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/apply_credit_balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collect a pending or past due, automatic invoice
@@ -3235,6 +3343,7 @@ export def "invoices-collect invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --three-d-secure-action-result-token-id: string # A token generated by Recurly.js after completing a 3-D Secure device fingerprinting or authentication challenge.
   --transaction-type: string@transaction-type-completer
   --billing-info-id: string # The `billing_info_id` is the value that represents a specific billing info for an end customer. When `billing_info_id` is used to assign billing info to the subscription, all future billing events for the subscription will bill to the specified billing info. `billing_info_id` can ONLY be used for sites utilizing the Wallet feature.
@@ -3247,7 +3356,7 @@ export def "invoices-collect invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark an open invoice as failed
@@ -3263,13 +3372,14 @@ export def "invoices-mark-failed failed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/mark_failed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark an open invoice as successful
@@ -3285,13 +3395,14 @@ export def "invoices-mark-successful successful" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/mark_successful")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reopen a closed, manual invoice
@@ -3307,13 +3418,14 @@ export def "invoices-reopen invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/reopen")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Void a credit invoice.
@@ -3329,13 +3441,14 @@ export def "invoices-void invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: table<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: list, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record, start_date: string, end_date: string, custom_fields: list, created_at: string, updated_at: string>, has_more_line_items: bool, transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>, credit_payments: table<id: string, object: string, uuid: string, action: string, account: record, applied_to_invoice: record, original_invoice: record, currency: string, amount: float, original_credit_payment_id: string, refund_transaction: record, created_at: string, updated_at: string, voided_at: string>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/void")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Record an external payment for a manual invoices.
@@ -3351,6 +3464,7 @@ export def "invoices-transactions transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method: string@payment-method-completer
   --description: string # Used as the transaction's description.
   --amount: float # The total amount of the transcaction. Cannot excceed the invoice total. (format: float)
@@ -3364,7 +3478,7 @@ export def "invoices-transactions transaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List an invoice's line items
@@ -3380,6 +3494,7 @@ export def "invoices-line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3396,7 +3511,7 @@ export def "invoices-line-items items" [
   let full_url = (build-url $base $"/invoices/($invoice_id)/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the coupon redemptions applied to an invoice
@@ -3412,6 +3527,7 @@ export def "invoices-coupon-redemptions redemptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --begin-time: string # Inclusively filter by begin_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
@@ -3423,7 +3539,7 @@ export def "invoices-coupon-redemptions redemptions" [
   let full_url = (build-url $base $"/invoices/($invoice_id)/coupon_redemptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an invoice's related credit or charge invoices
@@ -3439,13 +3555,14 @@ export def "invoices-related-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record, billing_info_id: string, subscription_ids: list, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record, shipping_address: record, currency: string, discount: float, coupon_redemptions: list, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list, has_more_line_items: bool, transactions: list, credit_payments: list, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoices/($invoice_id)/related_invoices")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund an invoice
@@ -3463,6 +3580,7 @@ export def "invoices-refund invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-4
   --amount: float # The amount to be refunded. The amount will be split between the line items. If `type` is "amount" and no amount is specified, it will default to refunding the total refundable amount on the invoice. Can only be present if `type` is "amount".  (format: float)
   --percentage: int # The percentage of the remaining balance to be refunded. The percentage will be split between the line items. If `type` is "percentage" and no percentage is specified, it will default to refunding 100% of the refundable amount on the invoice. Can only be present if `type` is "percentage".
@@ -3479,7 +3597,7 @@ export def "invoices-refund invoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an invoice for revenue recovery
@@ -3496,6 +3614,7 @@ export def "invoices-recovery retry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   due_at: string # Date invoice was originally due. Must be in the past. (format: date-time)
   --po-number: string # This identifies the PO number associated with the subscription.
@@ -3511,7 +3630,7 @@ export def "invoices-recovery retry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a site's line items
@@ -3526,6 +3645,7 @@ export def "line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3542,7 +3662,7 @@ export def "line-items items" [
   let full_url = (build-url $base "/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a line item
@@ -3558,13 +3678,14 @@ export def "line-items item-by-line_item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, type: string, item_code: string, item_id: string, external_sku: string, revenue_schedule_type: string, state: string, legacy_category: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, bill_for_account_id: string, subscription_id: string, plan_id: string, plan_code: string, add_on_id: string, add_on_code: string, invoice_id: string, invoice_number: string, previous_line_item_id: string, original_line_item_invoice_id: string, origin: string, accounting_code: string, product_code: string, credit_reason_code: string, currency: string, amount: float, description: string, quantity: int, quantity_decimal: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool, subtotal: float, discount: float, discounts: table<object: string, coupon_id: string, coupon_redemption_id: string, order_applied: int, discount_amount: float, currency: string>, liability_gl_account_code: string, revenue_gl_account_code: string, performance_obligation_id: string, tax: float, taxable: bool, tax_exempt: bool, avalara_transaction_type: int, avalara_service_type: int, vertex_transaction_type: string, tax_code: string, harmonized_system_code: string, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, origin_tax_address_source: string, destination_tax_address_source: string, proration_rate: float, refund: bool, refunded_quantity: int, refunded_quantity_decimal: string, credit_applied: float, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, start_date: string, end_date: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/line_items/($line_item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an uninvoiced line item
@@ -3580,13 +3701,14 @@ export def "line-items item-by-line_item_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, message: string, params: table<param: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/line_items/($line_item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's plans
@@ -3601,6 +3723,7 @@ export def "plans plans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3615,7 +3738,7 @@ export def "plans plans" [
   let full_url = (build-url $base "/plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a plan
@@ -3636,6 +3759,7 @@ export def "plans plan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # Unique code to identify the plan. This is used in Hosted Payment Page URLs and in the invoice exports.
   name: string # This name describes your plan and will appear on the Hosted Payment Page and the subscriber's invoice.
   --pricing-model: string@pricing-model-completer # A fixed pricing model has the same price for each billing period. A ramp pricing model defines a set of Ramp Intervals, where a subscription changes price on a specified cadence of billing periods. The price change could be an increase or decrease.  (default: fixed)
@@ -3680,7 +3804,7 @@ export def "plans plan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a plan
@@ -3696,13 +3820,14 @@ export def "plans plan-by-plan_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($plan_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a plan
@@ -3723,6 +3848,7 @@ export def "plans plan-by-plan_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Unique code to identify the plan. This is used in Hosted Payment Page URLs and in the invoice exports.
   --name: string # This name describes your plan and will appear on the Hosted Payment Page and the subscriber's invoice.
   --currencies: list # Required only when `pricing_model` is `'fixed'`. — item shape: {currency?: string, setup_fee?: float, unit_amount?: float, price_segment_id?: string, tax_inclusive?: bool}
@@ -3763,7 +3889,7 @@ export def "plans plan-by-plan_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a plan
@@ -3779,13 +3905,14 @@ export def "plans plan-by-plan_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($plan_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a plan's add-ons
@@ -3801,6 +3928,7 @@ export def "plans-add-ons ons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3815,7 +3943,7 @@ export def "plans-add-ons ons" [
   let full_url = (build-url $base $"/plans/($plan_id)/add_ons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an add-on
@@ -3834,6 +3962,7 @@ export def "plans-add-ons on-by-plan_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --item-code: string # Unique code to identify an item. Available when the `Credit Invoices` feature is enabled. If `item_id` and `item_code` are both present, `item_id` will be used.
   --item-id: string # System-generated unique identifier for an item. Available when the `Credit Invoices` feature is enabled. If `item_id` and `item_code` are both present, `item_id` will be used.
   code: string # The unique identifier for the add-on within its plan. If `item_code`/`item_id` is part of the request then `code` must be absent. If `item_code`/`item_id` is not present `code` is required.
@@ -3870,7 +3999,7 @@ export def "plans-add-ons on-by-plan_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a plan's add-on
@@ -3887,13 +4016,14 @@ export def "plans-add-ons on-by-plan_id-add_on_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, plan_id: string, code: string, state: string, name: string, add_on_type: string, usage_type: string, usage_calculation_type: string, usage_percentage: float, measured_unit_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, performance_obligation_id: string, accounting_code: string, revenue_schedule_type: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, display_quantity: bool, default_quantity: int, optional: bool, currencies: table<currency: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool>, item: record<id: string, object: string, code: string, state: string, name: string, description: string>, tier_type: string, usage_timeframe: string, tiers: table<ending_quantity: int, usage_percentage: string, currencies: list>, percentage_tiers: table<currency: string, tiers: list>, external_sku: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($plan_id)/add_ons/($add_on_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an add-on
@@ -3913,6 +4043,7 @@ export def "plans-add-ons on-by-plan_id-add_on_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # The unique identifier for the add-on within its plan. If an `Item` is associated to the `AddOn` then `code` must be absent.
   --name: string # Describes your add-on and will appear in subscribers' invoices. If an `Item` is associated to the `AddOn` then `name` must be absent.
   --usage-percentage: float # The percentage taken of the monetary amount of usage tracked. This can be up to 4 decimal places. A value between 0.0 and 100.0. Required if `add_on_type` is usage, `tier_type` is `flat` and `usage_type` is percentage. Must be omitted otherwise. (format: float)
@@ -3943,7 +4074,7 @@ export def "plans-add-ons on-by-plan_id-add_on_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an add-on
@@ -3960,13 +4091,14 @@ export def "plans-add-ons on-by-plan_id-add_on_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, plan_id: string, code: string, state: string, name: string, add_on_type: string, usage_type: string, usage_calculation_type: string, usage_percentage: float, measured_unit_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, performance_obligation_id: string, accounting_code: string, revenue_schedule_type: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, display_quantity: bool, default_quantity: int, optional: bool, currencies: table<currency: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool>, item: record<id: string, object: string, code: string, state: string, name: string, description: string>, tier_type: string, usage_timeframe: string, tiers: table<ending_quantity: int, usage_percentage: string, currencies: list>, percentage_tiers: table<currency: string, tiers: list>, external_sku: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/plans/($plan_id)/add_ons/($add_on_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's price segments
@@ -3981,6 +4113,7 @@ export def "price-segments segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -3991,7 +4124,7 @@ export def "price-segments segments" [
   let full_url = (build-url $base "/price_segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a price segment
@@ -4007,13 +4140,14 @@ export def "price-segments segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, id: string, code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/price_segments/($price_segment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's add-ons
@@ -4028,6 +4162,7 @@ export def "add-ons ons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4042,7 +4177,7 @@ export def "add-ons ons" [
   let full_url = (build-url $base "/add_ons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an add-on
@@ -4058,13 +4193,14 @@ export def "add-ons on" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, plan_id: string, code: string, state: string, name: string, add_on_type: string, usage_type: string, usage_calculation_type: string, usage_percentage: float, measured_unit_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, performance_obligation_id: string, accounting_code: string, revenue_schedule_type: string, avalara_transaction_type: int, avalara_service_type: int, tax_code: string, harmonized_system_code: string, display_quantity: bool, default_quantity: int, optional: bool, currencies: table<currency: string, unit_amount: float, unit_amount_decimal: string, tax_inclusive: bool>, item: record<id: string, object: string, code: string, state: string, name: string, description: string>, tier_type: string, usage_timeframe: string, tiers: table<ending_quantity: int, usage_percentage: string, currencies: list>, percentage_tiers: table<currency: string, tiers: list>, external_sku: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/add_ons/($add_on_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's shipping methods
@@ -4079,6 +4215,7 @@ export def "shipping-methods methods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4092,7 +4229,7 @@ export def "shipping-methods methods" [
   let full_url = (build-url $base "/shipping_methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new shipping method
@@ -4107,6 +4244,7 @@ export def "shipping-methods method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # The internal name used identify the shipping method.
   name: string # The name of the shipping method displayed to customers.
   --accounting-code: string # Accounting code for shipping method.
@@ -4123,7 +4261,7 @@ export def "shipping-methods method" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a shipping method
@@ -4139,13 +4277,14 @@ export def "shipping-methods method-by-shipping_method_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, accounting_code: string, tax_code: string, liability_gl_account_id: string, revenue_gl_account_id: string, performance_obligation_id: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipping_methods/($shipping_method_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an active Shipping Method
@@ -4161,6 +4300,7 @@ export def "shipping-methods method-by-shipping_method_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # The internal name used identify the shipping method.
   --name: string # The name of the shipping method displayed to customers.
   --accounting-code: string # Accounting code for shipping method.
@@ -4177,7 +4317,7 @@ export def "shipping-methods method-by-shipping_method_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate a shipping method
@@ -4193,13 +4333,14 @@ export def "shipping-methods method-by-shipping_method_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, accounting_code: string, tax_code: string, liability_gl_account_id: string, revenue_gl_account_id: string, performance_obligation_id: string, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipping_methods/($shipping_method_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's subscriptions
@@ -4214,6 +4355,7 @@ export def "subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4228,7 +4370,7 @@ export def "subscriptions subscriptions" [
   let full_url = (build-url $base "/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new subscription
@@ -4249,6 +4391,7 @@ export def "subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   plan_code: string # You must provide either a `plan_code` or `plan_id`. If both are provided the `plan_id` will be used.
   --plan-id: string # You must provide either a `plan_code` or `plan_id`. If both are provided the `plan_id` will be used.
   --business-entity-id: string # The `business_entity_id` is the value that represents a specific business entity for an end customer. When `business_entity_id` is used to assign a business entity to the subscription, all future billing events for the subscription will bill to the specified business entity. Available when the `Multiple Business Entities` feature is enabled. If both `business_entity_id` and `business_entity_code` are present, `business_entity_id` will be used.
@@ -4294,7 +4437,7 @@ export def "subscriptions subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a subscription
@@ -4310,13 +4453,14 @@ export def "subscriptions subscription-by-subscription_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription
@@ -4336,6 +4480,7 @@ export def "subscriptions subscription-by-subscription_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collection-method: string@collection-method-completer
   --custom-fields: list # The custom fields will only be altered when they are included in a request. Sending an empty array will not remove any existing values. To remove a field send the name with a null or empty value. — item shape: {name: string, value: string, source_record_type?: "account"|"plan"|"product"|"subscription"}
   --remaining-billing-cycles: int # The remaining billing cycles in the current term.
@@ -4363,7 +4508,7 @@ export def "subscriptions subscription-by-subscription_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Terminate a subscription
@@ -4379,6 +4524,7 @@ export def "subscriptions subscription-by-subscription_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refund: string@refund-completer # The type of refund to perform:  * `full` - Performs a full refund of the last invoice for the current subscription term. * `partial` - Prorates a refund based on the amount of time remaining in the current bill cycle. * `none` - Terminates the subscription without a refund.  In the event that the most recent invoice is a $0 invoice paid entirely by credit, Recurly will apply the credit back to the customer’s account.  You may also terminate a subscription with no refund and then manually refund specific invoices.
   --charge: oneof<nothing, bool> # Applicable only if the subscription has usage based add-ons and unbilled usage logged for the current billing cycle. If true, current billing cycle unbilled usage is billed on the final invoice. If false, Recurly will create a negative usage record for current billing cycle usage that will zero out the final invoice line items. (default: true)
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
@@ -4388,7 +4534,7 @@ export def "subscriptions subscription-by-subscription_id-2" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a subscription
@@ -4404,6 +4550,7 @@ export def "subscriptions-cancel subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe: string@timeframe-completer
 ]: any -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let input = $in
@@ -4414,7 +4561,7 @@ export def "subscriptions-cancel subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reactivate a canceled subscription
@@ -4430,13 +4577,14 @@ export def "subscriptions-reactivate subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/reactivate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause subscription
@@ -4452,6 +4600,7 @@ export def "subscriptions-pause subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   remaining_pause_cycles: int # Number of billing cycles to pause the subscriptions. A value of 0 will cancel any pending pauses on the subscription.
 ]: any -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let input = $in
@@ -4462,7 +4611,7 @@ export def "subscriptions-pause subscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resume subscription
@@ -4478,13 +4627,14 @@ export def "subscriptions-resume subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/resume")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Convert trial subscription
@@ -4500,13 +4650,14 @@ export def "subscriptions-convert-trial trial" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/convert_trial")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a preview of a subscription's renewal invoice(s)
@@ -4522,13 +4673,14 @@ export def "subscriptions-preview-renewal renewal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, charge_invoice: record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: list<record>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list<record>, has_more_line_items: bool, transactions: list<record>, credit_payments: list<record>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list<record>>, credit_invoices: table<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record, billing_info_id: string, subscription_ids: list, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record, shipping_address: record, currency: string, discount: float, coupon_redemptions: list, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list, has_more_line_items: bool, transactions: list, credit_payments: list, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list>, verification_transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/preview_renewal")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a subscription's pending change
@@ -4544,13 +4696,14 @@ export def "subscriptions-change change-by-subscription_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record, billing_info_id: string, subscription_ids: list, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record, shipping_address: record, currency: string, discount: float, coupon_redemptions: list, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list, has_more_line_items: bool, transactions: list, credit_payments: list, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list>, credit_invoices: list<record>, verification_transactions: list<record>>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, next_bill_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/change")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new subscription change
@@ -4572,6 +4725,7 @@ export def "subscriptions-change change-by-subscription_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe: string@timeframe-completer-1
   --plan-id: string # If you want to change to a new plan, you can provide the plan's code or id. If both are provided the `plan_id` will be used.
   --plan-code: string # If you want to change to a new plan, you can provide the plan's code or id. If both are provided the `plan_id` will be used.
@@ -4604,7 +4758,7 @@ export def "subscriptions-change change-by-subscription_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the pending subscription change
@@ -4620,13 +4774,14 @@ export def "subscriptions-change change-by-subscription_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, message: string, params: table<param: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/change")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview a new subscription change
@@ -4648,6 +4803,7 @@ export def "subscriptions-change-preview change" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe: string@timeframe-completer-1
   --plan-id: string # If you want to change to a new plan, you can provide the plan's code or id. If both are provided the `plan_id` will be used.
   --plan-code: string # If you want to change to a new plan, you can provide the plan's code or id. If both are provided the `plan_id` will be used.
@@ -4680,7 +4836,7 @@ export def "subscriptions-change-preview change" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a subscription's invoices
@@ -4696,6 +4852,7 @@ export def "subscriptions-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --state: string@state-completer-1 # Invoice state. (default: all)
   --limit: int # Limit number of records 1-200. (default: 20)
@@ -4711,7 +4868,7 @@ export def "subscriptions-invoices invoices" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a subscription's line items
@@ -4727,6 +4884,7 @@ export def "subscriptions-line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4743,7 +4901,7 @@ export def "subscriptions-line-items items" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the coupon redemptions for a subscription
@@ -4759,6 +4917,7 @@ export def "subscriptions-coupon-redemptions redemptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --begin-time: string # Inclusively filter by begin_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
@@ -4770,7 +4929,7 @@ export def "subscriptions-coupon-redemptions redemptions" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/coupon_redemptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the coupon redemption for a subscription
@@ -4787,13 +4946,14 @@ export def "subscriptions-coupon-redemptions redemption-by-subscription_id-coupo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, subscription_id: string, coupon: record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: list<record>, items: list<record>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list, trial: record>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string>, state: string, remaining_duration: record<type: string, expires_at: string>, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/coupon_redemptions/($coupon_redemption_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the coupon redemption from a subscription
@@ -4810,13 +4970,14 @@ export def "subscriptions-coupon-redemptions redemption-by-subscription_id-coupo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, subscription_id: string, coupon: record<id: string, object: string, code: string, name: string, state: string, max_redemptions: int, max_redemptions_per_account: int, unique_coupon_codes_count: int, unique_code_template: string, unique_coupon_code: record, duration: string, temporal_amount: int, temporal_unit: string, free_trial_unit: string, free_trial_amount: int, applies_to_all_plans: bool, applies_to_all_items: bool, applies_to_non_plan_charges: bool, plans: list<record>, items: list<record>, redemption_resource: string, discount: record<type: string, percent: int, currencies: list, trial: record>, coupon_type: string, hosted_page_description: string, invoice_description: string, redeem_by: string, created_at: string, updated_at: string, expired_at: string>, state: string, remaining_duration: record<type: string, expires_at: string>, currency: string, discounted: float, created_at: string, updated_at: string, removed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/coupon_redemptions/($coupon_redemption_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a subscription add-on's usage records
@@ -4833,6 +4994,7 @@ export def "subscriptions-add-ons-usage usage-by-subscription_id-add_on_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4847,7 +5009,7 @@ export def "subscriptions-add-ons-usage usage-by-subscription_id-add_on_id" [
   let full_url = (build-url $base $"/subscriptions/($subscription_id)/add_ons/($add_on_id)/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Log a usage record on this subscription add-on
@@ -4864,6 +5026,7 @@ export def "subscriptions-add-ons-usage usage-by-subscription_id-add_on_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merchant-tag: string # Custom field for recording the id in your own system associated with the usage, so you can provide auditable usage displays to your customers using a GET on this endpoint.
   --amount: float # The amount of usage. Can be positive, negative, or 0. If the Decimal Quantity feature is enabled, this value will be rounded to nine decimal places.  Otherwise, all digits after the decimal will be stripped. If the usage-based add-on is billed with a percentage, your usage should be a monetary amount formatted in cents (e.g., $5.00 is "500"). (format: float)
   --recording-timestamp: string # When the usage was recorded in your system. (format: date-time)
@@ -4877,7 +5040,7 @@ export def "subscriptions-add-ons-usage usage-by-subscription_id-add_on_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a usage record
@@ -4893,13 +5056,14 @@ export def "usage usage-by-usage_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, merchant_tag: string, amount: float, usage_type: string, tier_type: string, tiers: table<ending_quantity: int, unit_amount: float, unit_amount_decimal: string, usage_percentage: string>, percentage_tiers: table<ending_amount: float, usage_percentage: string>, measured_unit_id: string, recording_timestamp: string, usage_timestamp: string, usage_percentage: float, unit_amount: float, unit_amount_decimal: string, billed_at: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/usage/($usage_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a usage record
@@ -4915,6 +5079,7 @@ export def "usage usage-by-usage_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merchant-tag: string # Custom field for recording the id in your own system associated with the usage, so you can provide auditable usage displays to your customers using a GET on this endpoint.
   --amount: float # The amount of usage. Can be positive, negative, or 0. If the Decimal Quantity feature is enabled, this value will be rounded to nine decimal places.  Otherwise, all digits after the decimal will be stripped. If the usage-based add-on is billed with a percentage, your usage should be a monetary amount formatted in cents (e.g., $5.00 is "500"). (format: float)
   --recording-timestamp: string # When the usage was recorded in your system. (format: date-time)
@@ -4928,7 +5093,7 @@ export def "usage usage-by-usage_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a usage record.
@@ -4944,13 +5109,14 @@ export def "usage usage-by-usage_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, message: string, params: table<param: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/usage/($usage_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a site's transactions
@@ -4965,6 +5131,7 @@ export def "transactions transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -4980,7 +5147,7 @@ export def "transactions transactions" [
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a transaction
@@ -4996,13 +5163,14 @@ export def "transactions transaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, uuid: string, original_transaction_id: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, initiator: string, invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, merchant_reason_code: string, voided_by_invoice: record<id: string, object: string, number: string, business_entity_id: string, type: string, state: string>, subscription_ids: list<string>, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record<first_name: string, last_name: string>, collection_method: string, payment_method: record<object: string, card_type: string, first_six: string, last_four: string, last_two: string, exp_month: int, exp_year: int, gateway_token: string, cc_bin_country: string, funding_source: string, gateway_code: string, gateway_attributes: record<account_reference: string>, card_network_preference: string, billing_agreement_id: string, name_on_account: string, account_type: string, routing_number: string, routing_number_bank: string, username: string>, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record<id: string, object: string, type: string, name: string>, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record<object: string, score: int, decision: string, reference: string, risk_rules_triggered: list<record>>, next_action: record<type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/transactions/($transaction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a unique coupon code
@@ -5018,13 +5186,14 @@ export def "unique-coupon-codes code-by-unique_coupon_code_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, bulk_coupon_id: string, bulk_coupon_code: string, created_at: string, updated_at: string, redeemed_at: string, expired_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/unique_coupon_codes/($unique_coupon_code_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate a unique coupon code
@@ -5040,13 +5209,14 @@ export def "unique-coupon-codes code-by-unique_coupon_code_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, bulk_coupon_id: string, bulk_coupon_code: string, created_at: string, updated_at: string, redeemed_at: string, expired_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/unique_coupon_codes/($unique_coupon_code_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore a unique coupon code
@@ -5062,13 +5232,14 @@ export def "unique-coupon-codes-restore code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, state: string, bulk_coupon_id: string, bulk_coupon_code: string, created_at: string, updated_at: string, redeemed_at: string, expired_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/unique_coupon_codes/($unique_coupon_code_id)/restore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new purchase
@@ -5088,6 +5259,7 @@ export def "purchases purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   account: any
   --billing-info-id: string # The `billing_info_id` is the value that represents a specific billing info for an end customer. When `billing_info_id` is used to assign billing info to the subscription, all future billing events for the subscription will bill to the specified billing info. `billing_info_id` can ONLY be used for sites utilizing the Wallet feature.
@@ -5120,7 +5292,7 @@ export def "purchases purchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview a new purchase
@@ -5140,6 +5312,7 @@ export def "purchases-preview purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   account: any
   --billing-info-id: string # The `billing_info_id` is the value that represents a specific billing info for an end customer. When `billing_info_id` is used to assign billing info to the subscription, all future billing events for the subscription will bill to the specified billing info. `billing_info_id` can ONLY be used for sites utilizing the Wallet feature.
@@ -5172,7 +5345,7 @@ export def "purchases-preview purchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a pending purchase
@@ -5192,6 +5365,7 @@ export def "purchases-pending purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   account: any
   --billing-info-id: string # The `billing_info_id` is the value that represents a specific billing info for an end customer. When `billing_info_id` is used to assign billing info to the subscription, all future billing events for the subscription will bill to the specified billing info. `billing_info_id` can ONLY be used for sites utilizing the Wallet feature.
@@ -5224,7 +5398,7 @@ export def "purchases-pending purchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorize a purchase
@@ -5244,6 +5418,7 @@ export def "purchases-authorize purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   currency: string # 3-letter ISO 4217 currency code.
   account: any
   --billing-info-id: string # The `billing_info_id` is the value that represents a specific billing info for an end customer. When `billing_info_id` is used to assign billing info to the subscription, all future billing events for the subscription will bill to the specified billing info. `billing_info_id` can ONLY be used for sites utilizing the Wallet feature.
@@ -5276,7 +5451,7 @@ export def "purchases-authorize purchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Capture a purchase
@@ -5292,13 +5467,14 @@ export def "purchases-capture purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, charge_invoice: record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: list<record>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list<record>, has_more_line_items: bool, transactions: list<record>, credit_payments: list<record>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list<record>>, credit_invoices: table<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record, billing_info_id: string, subscription_ids: list, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record, shipping_address: record, currency: string, discount: float, coupon_redemptions: list, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list, has_more_line_items: bool, transactions: list, credit_payments: list, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list>, verification_transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/purchases/($transaction_id)/capture")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Purchase
@@ -5314,13 +5490,14 @@ export def "purchases-cancel cancelPurchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, charge_invoice: record<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, billing_info_id: string, subscription_ids: list<string>, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record<name_on_account: string, company: string>, shipping_address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, currency: string, discount: float, coupon_redemptions: list<record>, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record<currency: string, subtotal_in_cents: float, tax_in_cents: float, rate: string, source: string, date: string>, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record<type: string, region: string, rate: float, tax_details: list>, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list<record>, has_more_line_items: bool, transactions: list<record>, credit_payments: list<record>, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list<record>>, credit_invoices: table<id: string, uuid: string, object: string, type: string, origin: string, state: string, account: record, billing_info_id: string, subscription_ids: list, previous_invoice_id: string, number: string, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, address: record, shipping_address: record, currency: string, discount: float, coupon_redemptions: list, subtotal: float, subtotal_after_discount: float, tax: float, reference_only_currency_conversion: record, total: float, refundable_amount: float, paid: float, balance: float, tax_info: record, used_tax_service: bool, vat_number: string, vat_reverse_charge_notes: string, terms_and_conditions: string, customer_notes: string, line_items: list, has_more_line_items: bool, transactions: list, credit_payments: list, created_at: string, updated_at: string, due_at: string, closed_at: string, dunning_campaign_id: string, dunning_events_sent: int, final_dunning_event: bool, business_entity_id: string, custom_fields: list>, verification_transactions: table<id: string, object: string, uuid: string, original_transaction_id: string, account: record, initiator: string, invoice: record, merchant_reason_code: string, voided_by_invoice: record, subscription_ids: list, type: string, origin: string, currency: string, amount: float, status: string, success: bool, backup_payment_method_used: bool, refunded: bool, billing_address: record, collection_method: string, payment_method: record, ip_address_v4: string, ip_address_country: string, status_code: string, status_message: string, customer_message: string, customer_message_locale: string, payment_gateway: record, gateway_message: string, gateway_reference: string, gateway_approval_code: string, gateway_response_code: string, gateway_response_time: float, gateway_response_values: record, cvv_check: string, avs_check: string, created_at: string, updated_at: string, voided_at: string, collected_at: string, action_result: record, vat_number: string, fraud_info: record, next_action: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/purchases/($transaction_id)/cancel/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the dates that have an available export to download.
@@ -5335,13 +5512,14 @@ export def "export-dates dates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, dates: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export_dates")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of the export files that are available to download.
@@ -5357,13 +5535,14 @@ export def "export-dates-export-files files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, files: table<name: string, md5sum: string, href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/export_dates/($export_date)/export_files")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the dunning campaigns for a site
@@ -5378,6 +5557,7 @@ export def "dunning-campaigns campaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, code: string, name: string, description: string, default_campaign: bool, dunning_cycles: list, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5386,7 +5566,7 @@ export def "dunning-campaigns campaigns" [
   let full_url = (build-url $base "/dunning_campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a dunning campaign
@@ -5402,13 +5582,14 @@ export def "dunning-campaigns campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, description: string, default_campaign: bool, dunning_cycles: table<type: string, applies_to_manual_trial: bool, first_communication_interval: int, send_immediately_on_hard_decline: bool, intervals: list, expire_subscription: bool, fail_invoice: bool, total_dunning_days: int, total_recycling_days: int, version: int, created_at: string, updated_at: string>, created_at: string, updated_at: string, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dunning_campaigns/($dunning_campaign_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign a dunning campaign to multiple plans
@@ -5424,6 +5605,7 @@ export def "dunning-campaigns-bulk-update update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --plan-codes: list # List of `plan_codes` associated with the Plans for which the dunning campaign should be updated. Required unless `plan_ids` is present.
   --plan-ids: list # List of `plan_ids` associated with the Plans for which the dunning campaign should be updated. Required unless `plan_codes` is present.
 ]: any -> record<object: string, plans: list<record>> {
@@ -5435,7 +5617,7 @@ export def "dunning-campaigns-bulk-update update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show the invoice templates for a site
@@ -5450,6 +5632,7 @@ export def "invoice-templates templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, code: string, name: string, description: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5458,7 +5641,7 @@ export def "invoice-templates templates" [
   let full_url = (build-url $base "/invoice_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an invoice template
@@ -5474,13 +5657,14 @@ export def "invoice-templates template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, code: string, name: string, description: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invoice_templates/($invoice_template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the external invoices on a site
@@ -5495,6 +5679,7 @@ export def "external-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -5505,7 +5690,7 @@ export def "external-invoices invoices" [
   let full_url = (build-url $base "/external_invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an external invoice
@@ -5521,13 +5706,14 @@ export def "external-invoices invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, external_subscription: record<id: string, object: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, external_product_reference: record<id: string, object: string, reference_code: string, external_connection_type: string, created_at: string, updated_at: string>, external_payment_phases: list<record>, external_id: string, uuid: string, last_purchased: string, auto_renew: bool, in_grace_period: bool, app_identifier: string, quantity: int, state: string, activated_at: string, canceled_at: string, expires_at: string, trial_started_at: string, trial_ends_at: string, test: bool, imported: bool, created_at: string, updated_at: string>, external_id: string, state: string, total: string, currency: string, line_items: table<id: string, object: string, account: record, currency: string, unit_amount: string, quantity: int, description: string, external_product_reference: record, created_at: string, updated_at: string>, purchased_at: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_invoices/($external_invoice_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the external payment phases on an external subscription
@@ -5543,6 +5729,7 @@ export def "external-subscriptions-external-payment-phases phases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --limit: int # Limit number of records 1-200. (default: 20)
   --order: string@order-completer # Sort order.
@@ -5553,7 +5740,7 @@ export def "external-subscriptions-external-payment-phases phases" [
   let full_url = (build-url $base $"/external_subscriptions/($external_subscription_id)/external_payment_phases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an external payment phase
@@ -5570,13 +5757,14 @@ export def "external-subscriptions-external-payment-phases phase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, started_at: string, ends_at: string, starting_billing_period_index: int, ending_billing_period_index: int, offer_type: string, offer_name: string, period_count: int, period_length: string, amount: string, currency: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/external_subscriptions/($external_subscription_id)/external_payment_phases/($external_payment_phase_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List entitlements granted to an account
@@ -5592,6 +5780,7 @@ export def "accounts-entitlements entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-5 # Filter the entitlements based on the state of the applicable subscription.  - When `state=active`, `state=canceled`, `state=expired`, or `state=future`, subscriptions with states that match the query and only those subscriptions will be returned. - When no state is provided, subscriptions with active or canceled states will be returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<object: string, customer_permission: record, granted_by: list, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5600,7 +5789,7 @@ export def "accounts-entitlements entitlements" [
   let full_url = (build-url $base $"/accounts/($account_id)/entitlements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an account's external subscriptions
@@ -5616,6 +5805,7 @@ export def "accounts-external-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, account: record, external_product_reference: record, external_payment_phases: list, external_id: string, uuid: string, last_purchased: string, auto_renew: bool, in_grace_period: bool, app_identifier: string, quantity: int, state: string, activated_at: string, canceled_at: string, expires_at: string, trial_started_at: string, trial_ends_at: string, test: bool, imported: bool, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5624,7 +5814,7 @@ export def "accounts-external-subscriptions subscriptions" [
   let full_url = (build-url $base $"/accounts/($account_id)/external_subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a business entity
@@ -5640,13 +5830,14 @@ export def "business-entities entity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, code: string, name: string, invoice_display_address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, tax_address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, origin_tax_address_source: string, destination_tax_address_source: string, default_vat_number: string, default_registration_number: string, subscriber_location_countries: list<string>, default_liability_gl_account_id: string, default_revenue_gl_account_id: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/business_entities/($business_entity_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List business entities
@@ -5661,13 +5852,14 @@ export def "business-entities entities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, code: string, name: string, invoice_display_address: record, tax_address: record, origin_tax_address_source: string, destination_tax_address_source: string, default_vat_number: string, default_registration_number: string, subscriber_location_countries: list, default_liability_gl_account_id: string, default_revenue_gl_account_id: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business_entities")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List gift cards
@@ -5682,13 +5874,14 @@ export def "gift-cards cards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, gifter_account_id: string, recipient_account_id: string, purchase_invoice_id: string, redemption_invoice_id: string, redemption_code: string, balance: float, product_code: string, unit_amount: float, currency: string, delivery: record, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, created_at: string, updated_at: string, delivered_at: string, redeemed_at: string, canceled_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gift_cards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create gift card
@@ -5704,6 +5897,7 @@ export def "gift-cards card" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_code: string # The product code or SKU of the gift card product.
   unit_amount: float # The amount of the gift card, which is the amount of the charge to the gifter account and the amount of credit that is applied to the recipient account upon successful redemption. (format: float)
   currency: string # 3-letter ISO 4217 currency code.
@@ -5719,7 +5913,7 @@ export def "gift-cards card" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a gift card
@@ -5735,13 +5929,14 @@ export def "gift-cards card-by-gift_card_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, object: string, gifter_account_id: string, recipient_account_id: string, purchase_invoice_id: string, redemption_invoice_id: string, redemption_code: string, balance: float, product_code: string, unit_amount: float, currency: string, delivery: record<method: string, email_address: string, deliver_at: string, first_name: string, last_name: string, recipient_address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, gifter_name: string, personal_message: string>, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, created_at: string, updated_at: string, delivered_at: string, redeemed_at: string, canceled_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/gift_cards/($gift_card_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview gift card
@@ -5757,6 +5952,7 @@ export def "gift-cards-preview card" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_code: string # The product code or SKU of the gift card product.
   unit_amount: float # The amount of the gift card, which is the amount of the charge to the gifter account and the amount of credit that is applied to the recipient account upon successful redemption. (format: float)
   currency: string # 3-letter ISO 4217 currency code.
@@ -5772,7 +5968,7 @@ export def "gift-cards-preview card" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Redeem gift card
@@ -5789,6 +5985,7 @@ export def "gift-cards-redeem card" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   recipient_account: record # shape: {id?: string, code?: string}
 ]: any -> record<id: string, object: string, gifter_account_id: string, recipient_account_id: string, purchase_invoice_id: string, redemption_invoice_id: string, redemption_code: string, balance: float, product_code: string, unit_amount: float, currency: string, delivery: record<method: string, email_address: string, deliver_at: string, first_name: string, last_name: string, recipient_address: record<phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string>, gifter_name: string, personal_message: string>, performance_obligation_id: string, liability_gl_account_id: string, revenue_gl_account_id: string, created_at: string, updated_at: string, delivered_at: string, redeemed_at: string, canceled_at: string> {
   let input = $in
@@ -5799,7 +5996,7 @@ export def "gift-cards-redeem card" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a business entity's invoices
@@ -5815,6 +6012,7 @@ export def "business-entities-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Filter results by their IDs. Up to 200 IDs can be passed at once using commas as separators, e.g. `ids=h1at4d57xlmy,gyqgg0d3v9n1,jrsm5b4yefg6`.  **Important notes:**  * The `ids` parameter cannot be used with any other ordering or filtering   parameters (`limit`, `order`, `sort`, `begin_time`, `end_time`, etc) * Invalid or unknown IDs will be ignored, so you should check that the   results correspond to your request. * Records are returned in an arbitrary order. Since results are all   returned at once you can sort the records yourself.
   --state: string@state-completer-1 # Invoice state. (default: all)
   --limit: int # Limit number of records 1-200. (default: 20)
@@ -5830,5 +6028,5 @@ export def "business-entities-invoices invoices" [
   let full_url = (build-url $base $"/business_entities/($business_entity_id)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

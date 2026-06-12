@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "visual-crossing-web-services-rest-services-timeline get-by-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string # data format of the output either json or CSV (e.g. json)
   --unitGroup: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
@@ -111,7 +113,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location"
   let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Historical and Forecast Weather API
@@ -127,6 +129,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string # data format of the output either json or CSV (e.g. json)
   --unitGroup: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
@@ -139,7 +142,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)/($startdate)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Historical and Forecast Weather API
@@ -156,6 +159,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string # data format of the output either json or CSV (e.g. json)
   --unitGroup: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
@@ -168,7 +172,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)/($startdate)/($enddate)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Weather Forecast API
@@ -182,6 +186,7 @@ export def "visual-crossing-web-services-rest-services-weatherdata-forecast get"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sendAsDatasource: oneof<nothing, bool> # e.g. false
   --allowAsynch: oneof<nothing, bool> # e.g. false
   --shortColumnNames: oneof<nothing, bool> # e.g. false
@@ -197,7 +202,7 @@ export def "visual-crossing-web-services-rest-services-weatherdata-forecast get"
   let full_url = (build-url $base "/VisualCrossingWebServices/rest/services/weatherdata/forecast" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves hourly or daily historical weather records.
@@ -211,6 +216,7 @@ export def "visual-crossing-web-services-rest-services-weatherdata-history get" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxDistance: string # e.g. -1
   --shortColumnNames: oneof<nothing, bool> # e.g. false
   --endDateTime: string # e.g. 2020-02-04T00%3A00%3A00
@@ -231,5 +237,5 @@ export def "visual-crossing-web-services-rest-services-weatherdata-history get" 
   let full_url = (build-url $base "/VisualCrossingWebServices/rest/services/weatherdata/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

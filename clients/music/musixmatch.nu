@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "albumget get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -97,6 +98,7 @@ export def "albumget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --album-id: string # The musiXmatch album id
@@ -107,7 +109,7 @@ export def "albumget get" [
   let full_url = (build-url $base "/album.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /album.tracks.get
@@ -119,6 +121,7 @@ export def "albumtracksget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --album-id: string # The musiXmatch album id
@@ -132,7 +135,7 @@ export def "albumtracksget get" [
   let full_url = (build-url $base "/album.tracks.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /artist.albums.get
@@ -144,6 +147,7 @@ export def "artistalbumsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --artist-id: string # The musiXmatch artist id
@@ -158,7 +162,7 @@ export def "artistalbumsget get" [
   let full_url = (build-url $base "/artist.albums.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /artist.get
@@ -170,6 +174,7 @@ export def "artistget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --artist-id: string # 	The musiXmatch artist id
@@ -180,7 +185,7 @@ export def "artistget get" [
   let full_url = (build-url $base "/artist.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /artist.related.get
@@ -192,6 +197,7 @@ export def "artistrelatedget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --artist-id: string # The musiXmatch artist id
@@ -204,7 +210,7 @@ export def "artistrelatedget get" [
   let full_url = (build-url $base "/artist.related.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /artist.search
@@ -216,6 +222,7 @@ export def "artistsearch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --q-artist: string # The song artist
@@ -229,7 +236,7 @@ export def "artistsearch get" [
   let full_url = (build-url $base "/artist.search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /chart.artists.get
@@ -241,6 +248,7 @@ export def "chartartistsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --page: float # Define the page number for paginated results
@@ -253,7 +261,7 @@ export def "chartartistsget get" [
   let full_url = (build-url $base "/chart.artists.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /chart.tracks.get
@@ -265,6 +273,7 @@ export def "charttracksget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --page: float # Define the page number for paginated results
@@ -278,7 +287,7 @@ export def "charttracksget get" [
   let full_url = (build-url $base "/chart.tracks.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /matcher.lyrics.get
@@ -290,6 +299,7 @@ export def "matcherlyricsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --q-track: string # The song title
@@ -301,7 +311,7 @@ export def "matcherlyricsget get" [
   let full_url = (build-url $base "/matcher.lyrics.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /matcher.subtitle.get
@@ -313,6 +323,7 @@ export def "matchersubtitleget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --q-track: string # The song title
@@ -326,7 +337,7 @@ export def "matchersubtitleget get" [
   let full_url = (build-url $base "/matcher.subtitle.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /matcher.track.get
@@ -338,6 +349,7 @@ export def "matchertrackget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --q-artist: string # The song artist
@@ -351,7 +363,7 @@ export def "matchertrackget get" [
   let full_url = (build-url $base "/matcher.track.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /track.get
@@ -363,6 +375,7 @@ export def "trackget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --track-id: string # The musiXmatch track id
@@ -373,7 +386,7 @@ export def "trackget get" [
   let full_url = (build-url $base "/track.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /track.lyrics.get
@@ -385,6 +398,7 @@ export def "tracklyricsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --track-id: string # The musiXmatch track id
@@ -395,7 +409,7 @@ export def "tracklyricsget get" [
   let full_url = (build-url $base "/track.lyrics.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /track.search
@@ -407,6 +421,7 @@ export def "tracksearch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --q-track: string # The song title
@@ -428,7 +443,7 @@ export def "tracksearch get" [
   let full_url = (build-url $base "/track.search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /track.snippet.get
@@ -440,6 +455,7 @@ export def "tracksnippetget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --track-id: string # The musiXmatch track id
@@ -450,7 +466,7 @@ export def "tracksnippetget get" [
   let full_url = (build-url $base "/track.snippet.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /track.subtitle.get
@@ -462,6 +478,7 @@ export def "tracksubtitleget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
   --track-id: string # The musiXmatch track id
@@ -472,5 +489,5 @@ export def "tracksubtitleget get" [
   let full_url = (build-url $base "/track.subtitle.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

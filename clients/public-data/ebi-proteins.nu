@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def accept-completer-4 [] { ["application/json" "application/xml" "text/x-gff" "
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "antigen get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,13 +107,14 @@ export def "antigen get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/antigen/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search antigens in UniProt
@@ -127,6 +129,7 @@ export def "antigen search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --accession: string # UniProt accession(s). Comma separated values accepted up to 100.
@@ -141,7 +144,7 @@ export def "antigen search" [
   let full_url = (build-url $base "/antigen" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genomic coordinates for a UniProt accession
@@ -157,13 +160,14 @@ export def "coordinates get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accession: string, name: string, taxid: int, sequence: string, protein: record<accession: string, entryType: string>, gene: table<value: string, evidence: list, type: string>, gnCoordinate: table<genomicLocation: record, feature: list, ensemblGeneId: string, ensemblTranscriptId: string, ensemblTranslationId: string, refseqNucleotideId: string, refseqProteinId: string, nucleotideId: string, proteinId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coordinates/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniProt entries by genomic database cross reference IDs: Ensembl, CCDS, HGNC or RefSeq
@@ -180,6 +184,7 @@ export def "coordinates get-by-dbtype-dbid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -190,7 +195,7 @@ export def "coordinates get-by-dbtype-dbid" [
   let full_url = (build-url $base $"/coordinates/($dbtype):($dbid)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniProt entries by taxonomy and genomic coordinates
@@ -207,6 +212,7 @@ export def "coordinates get-by-taxonomy-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -218,7 +224,7 @@ export def "coordinates get-by-taxonomy-locations" [
   let full_url = (build-url $base $"/coordinates/($taxonomy)/($locations)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniProt entries by taxonomy and genomic coordinates
@@ -235,6 +241,7 @@ export def "coordinates-feature get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -246,7 +253,7 @@ export def "coordinates-feature get" [
   let full_url = (build-url $base $"/coordinates/($taxonomy)/($locations)/feature" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genome coordinate by protein sequence position range
@@ -264,13 +271,14 @@ export def "coordinates-location get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<locations: table<accession: string, entryType: string, taxid: int, ensemblGeneId: string, ensemblTranscriptId: string, ensemblTranslationId: string, proteinStart: int, proteinEnd: int, aminoAcids: string, chromosome: string, geneStart: int, geneEnd: int, reverseStrand: bool, nucleotideId: string, assemblyName: string, refseqNucleotideId: string, refseqProteinId: string, features: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coordinates/location/($accession):($pStart)-($pEnd)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genome coordinate by protein sequence position
@@ -287,13 +295,14 @@ export def "coordinates-location list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<locations: table<accession: string, entryType: string, taxid: int, ensemblGeneId: string, ensemblTranscriptId: string, ensemblTranslationId: string, proteinStart: int, proteinEnd: int, aminoAcids: string, chromosome: string, geneStart: int, geneEnd: int, reverseStrand: bool, nucleotideId: string, assemblyName: string, refseqNucleotideId: string, refseqProteinId: string, features: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coordinates/location/($accession):($pPosition)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genome coordinate by protein sequence position
@@ -311,6 +320,7 @@ export def "coordinates-glocation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> table<locations: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -318,7 +328,7 @@ export def "coordinates-glocation list" [
   let full_url = (build-url $base $"/coordinates/glocation/($taxonomy)/($chromosome):($gPosition)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genome coordinate by protein sequence position
@@ -337,6 +347,7 @@ export def "coordinates-glocation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> table<locations: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -344,7 +355,7 @@ export def "coordinates-glocation get" [
   let full_url = (build-url $base $"/coordinates/glocation/($taxonomy)/($chromosome):($gstart)-($gend)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search genomic coordinates for UniProt entries
@@ -359,6 +370,7 @@ export def "coordinates search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -376,7 +388,7 @@ export def "coordinates search-by-" [
   let full_url = (build-url $base "/coordinates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniProt interactions by accession
@@ -392,6 +404,7 @@ export def "proteins-interaction get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> table<accession: string, name: string, proteinExistence: string, taxonomy: int, interactions: list<record>, diseases: list<record>, subcellularLocations: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -399,7 +412,7 @@ export def "proteins-interaction get" [
   let full_url = (build-url $base $"/proteins/interaction/($accession)")
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniProt entry by accession
@@ -415,13 +428,14 @@ export def "proteins get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, property: table<type: string, value: string>, representativeMember: record<dbReference: record<property: list, id: string, type: string>, sequence: record<value: string, length: int, checksum: string>>, member: table<dbReference: record, sequence: record>, id: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteins/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniProt entries by UniProt cross reference and its ID
@@ -438,6 +452,7 @@ export def "proteins get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -450,7 +465,7 @@ export def "proteins get" [
   let full_url = (build-url $base $"/proteins/($dbtype):($dbid)" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniProt isoform entries from parent entry accession
@@ -466,6 +481,7 @@ export def "proteins-isoforms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> table<name: string, property: list<record>, representativeMember: record<dbReference: record, sequence: record>, member: list<record>, id: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -473,7 +489,7 @@ export def "proteins-isoforms get" [
   let full_url = (build-url $base $"/proteins/($accession)/isoforms")
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniProt entries
@@ -488,6 +504,7 @@ export def "proteins search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -512,7 +529,7 @@ export def "proteins search-by-" [
   let full_url = (build-url $base "/proteins" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get epitope by UniProt accession
@@ -528,13 +545,14 @@ export def "epitope get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/epitope/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search epitope in UniProt
@@ -549,6 +567,7 @@ export def "epitope search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -563,7 +582,7 @@ export def "epitope search-by-" [
   let full_url = (build-url $base "/epitope" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniProt protein sequence features by accession 
@@ -579,6 +598,7 @@ export def "features get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category types: MOLECULE-PROCESSING, TOPOLOGY, SEQUENCE-INFORMATION, STRUCTURAL, DOMAINS-AND-SITES, PTM, VARIANTS, MUTAGENESIS Comma separated values accepted up to 20: string
   --Feature types: INIT-MET, SIGNAL, PROPEP, TRANSIT, CHAIN, PEPTIDE, TOPO-DOM, TRANSMEM, DOMAIN, REPEAT, ZN-FING, DNA-BIND, REGION, COILED, MOTIF, COMPBIAS, ACT-SITE, BINDING, SITE, NON-STD, MOD-RES, LIPID, CARBOHYD, DISULFID, CROSSLNK, VAR-SEQ, VARIANT, MUTAGEN, UNSURE, CONFLICT, NON-CONS, NON-TER, HELIX, TURN, STRAND, INTRAMEM Comma separated values accepted up to 20: string
   --location: string # Filter by the amino acid range position in the sequence(s). Any valid amino acid range position within the length of the protein sequence such as 10-60 (start position to end position)
@@ -589,7 +609,7 @@ export def "features get-by-accession" [
   let full_url = (build-url $base $"/features/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search protein sequence features in UniProt
@@ -604,6 +624,7 @@ export def "features search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -623,7 +644,7 @@ export def "features search-by-" [
   let full_url = (build-url $base "/features" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search protein sequence features of a given type in UniProt
@@ -639,6 +660,7 @@ export def "features-type searchFeatureType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -652,7 +674,7 @@ export def "features-type searchFeatureType" [
   let full_url = (build-url $base $"/features/type/($type)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gene centric proteins by Uniprot accession
@@ -668,13 +690,14 @@ export def "genecentric get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gene: record<accession: string, entryType: string, length: int, geneName: string, geneNameType: string>, relatedGene: table<accession: string, entryType: string, length: int, geneName: string, geneNameType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/genecentric/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search gene centric proteins
@@ -689,6 +712,7 @@ export def "genecentric list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --upid: string # UniProt proteome UPID(s). Comma separated values accepted up to 100.
@@ -701,7 +725,7 @@ export def "genecentric list" [
   let full_url = (build-url $base "/genecentric" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hpp peptides mapped to UniProt by accession
@@ -719,13 +743,14 @@ export def "hpp get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/hpp/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search hpp peptides in UniProt
@@ -742,6 +767,7 @@ export def "hpp search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -758,7 +784,7 @@ export def "hpp search-by-" [
   let full_url = (build-url $base "/hpp" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hpp peptides mapped to UniProt by accession
@@ -774,13 +800,14 @@ export def "proteomics-hpp get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteomics/hpp/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search hpp peptides in UniProt
@@ -795,6 +822,7 @@ export def "proteomics-hpp search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -811,7 +839,7 @@ export def "proteomics-hpp search-by-" [
   let full_url = (build-url $base "/proteomics/hpp" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /info
@@ -825,6 +853,7 @@ export def "info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -833,7 +862,7 @@ export def "info get" [
   let full_url = (build-url $base "/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mutagenesis mapped to UniProt by accession
@@ -849,6 +878,7 @@ export def "mutagenesis get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # Filter by the amino acid range position in the sequence(s). Any valid amino acid range position within the length of the protein sequence such as 10-60 (start position to end position)
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -857,7 +887,7 @@ export def "mutagenesis get-by-accession" [
   let full_url = (build-url $base $"/mutagenesis/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search mutagensis in UniProt
@@ -872,6 +902,7 @@ export def "mutagenesis search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -885,7 +916,7 @@ export def "mutagenesis search-by-" [
   let full_url = (build-url $base "/mutagenesis" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteome by proteome UPID
@@ -901,13 +932,14 @@ export def "proteomes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, description: string, isReferenceProteome: bool, isRepresentativeProteome: bool, redundantTo: string, strain: string, isolate: string, genomeAssembly: record<genomeAssemblySource: string, genomeAssembly: string, genomeAssemblyUrl: string, genomeRepresentation: string>, dbReference: table<property: list, id: string, type: string>, component: table<description: string, biosampleId: string, genomeAccession: list, protein: list, name: string, count: int>, reference: table<citation: record>, redundantProteome: table<upid: string, similarity: float>, canonicalGene: table<gene: record, relatedGene: list>, panproteome: string, annotationScore: record<normalizedAnnotationScore: int>, excluded: record<exclusionReason: list<string>>, scores: table<property: list, name: string>, upid: string, modified: string, taxonomy: int, source: string, superregnum: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteomes/($upid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gene centric proteins by proteome UPID is deprecated, please use new /genecentric?upid= endpoint
@@ -925,13 +957,14 @@ export def "proteomes-genecentric get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, description: string, isReferenceProteome: bool, isRepresentativeProteome: bool, redundantTo: string, strain: string, isolate: string, genomeAssembly: record<genomeAssemblySource: string, genomeAssembly: string, genomeAssemblyUrl: string, genomeRepresentation: string>, dbReference: table<property: list, id: string, type: string>, component: table<description: string, biosampleId: string, genomeAccession: list, protein: list, name: string, count: int>, reference: table<citation: record>, redundantProteome: table<upid: string, similarity: float>, canonicalGene: table<gene: record, relatedGene: list>, panproteome: string, annotationScore: record<normalizedAnnotationScore: int>, excluded: record<exclusionReason: list<string>>, scores: table<property: list, name: string>, upid: string, modified: string, taxonomy: int, source: string, superregnum: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteomes/genecentric/($upid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteins by proteome UPID
@@ -947,6 +980,7 @@ export def "proteomes-proteins get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reviewed: string # Reviewed(true) or not Reviewed (false)
 ]: nothing -> record<name: string, description: string, isReferenceProteome: bool, isRepresentativeProteome: bool, redundantTo: string, strain: string, isolate: string, genomeAssembly: record<genomeAssemblySource: string, genomeAssembly: string, genomeAssemblyUrl: string, genomeRepresentation: string>, dbReference: table<property: list, id: string, type: string>, component: table<description: string, biosampleId: string, genomeAccession: list, protein: list, name: string, count: int>, reference: table<citation: record>, redundantProteome: table<upid: string, similarity: float>, canonicalGene: table<gene: record, relatedGene: list>, panproteome: string, annotationScore: record<normalizedAnnotationScore: int>, excluded: record<exclusionReason: list<string>>, scores: table<property: list, name: string>, upid: string, modified: string, taxonomy: int, source: string, superregnum: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -955,7 +989,7 @@ export def "proteomes-proteins get" [
   let full_url = (build-url $base $"/proteomes/proteins/($upid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomes in UniProt
@@ -970,6 +1004,7 @@ export def "proteomes search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --upid: string # UniProt proteome UPID(s). Comma separated values accepted up to 100.
@@ -987,7 +1022,7 @@ export def "proteomes search-by-" [
   let full_url = (build-url $base "/proteomes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteomics peptides mapped to UniProt by accession
@@ -1005,13 +1040,14 @@ export def "proteomics get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteomics/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteomics peptides mapped to UniProt by accession
@@ -1027,13 +1063,14 @@ export def "proteomics-non-ptm get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/proteomics/nonPtm/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomics peptides in UniProt
@@ -1050,6 +1087,7 @@ export def "proteomics search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1066,7 +1104,7 @@ export def "proteomics search-by-" [
   let full_url = (build-url $base "/proteomics" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomics peptides in UniProt
@@ -1081,6 +1119,7 @@ export def "proteomics-non-ptm searchNonPtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1097,7 +1136,7 @@ export def "proteomics-non-ptm searchNonPtm" [
   let full_url = (build-url $base "/proteomics/nonPtm" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteomics metadata overview
@@ -1112,13 +1151,14 @@ export def "proteomics-species get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/proteomics/species")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomics species by datatype, taxid, or upid
@@ -1133,6 +1173,7 @@ export def "proteomics-species-search searchSpecies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --datatype: string # default: 
   --taxid: string # default: 
   --upid: string # default: 
@@ -1143,7 +1184,7 @@ export def "proteomics-species-search searchSpecies" [
   let full_url = (build-url $base "/proteomics/species/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteomics peptide ptm mapped to UniProt by accession
@@ -1161,6 +1202,7 @@ export def "proteomics-ptm get-by-accession-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PTM Confidence scores: Bronze, Silver, Gold: string
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1169,7 +1211,7 @@ export def "proteomics-ptm get-by-accession-by-accession" [
   let full_url = (build-url $base $"/proteomics-ptm/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomics peptide ptm in UniProt
@@ -1186,6 +1228,7 @@ export def "proteomics-ptm search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --accession: string # UniProt accession(s). Comma separated values accepted up to 100.
@@ -1203,7 +1246,7 @@ export def "proteomics-ptm search-by-" [
   let full_url = (build-url $base "/proteomics-ptm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get proteomics peptide ptm mapped to UniProt by accession
@@ -1219,6 +1262,7 @@ export def "proteomics-ptm get-by-accession-by-accession-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PTM Confidence scores: Bronze, Silver, Gold: string
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1227,7 +1271,7 @@ export def "proteomics-ptm get-by-accession-by-accession-1" [
   let full_url = (build-url $base $"/proteomics/ptm/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search proteomics peptide ptm in UniProt
@@ -1242,6 +1286,7 @@ export def "proteomics-ptm search-by--1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --accession: string # UniProt accession(s). Comma separated values accepted up to 100.
@@ -1259,7 +1304,7 @@ export def "proteomics-ptm search-by--1" [
   let full_url = (build-url $base "/proteomics/ptm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /
@@ -1273,13 +1318,14 @@ export def "api redirectRoot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rna editing mapped to UniProt by accession
@@ -1295,13 +1341,14 @@ export def "rna-editing get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rna-editing/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search rna editing in UniProt
@@ -1316,6 +1363,7 @@ export def "rna-editing search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1329,7 +1377,7 @@ export def "rna-editing search-by-" [
   let full_url = (build-url $base "/rna-editing" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniParc entries by Proteome UPID
@@ -1345,6 +1393,7 @@ export def "uniparc-proteome get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1359,7 +1408,7 @@ export def "uniparc-proteome get" [
   let full_url = (build-url $base $"/uniparc/proteome/($upid)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniParc entries by sequence
@@ -1374,6 +1423,7 @@ export def "uniparc-sequence post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rfDdtype: string # Response filter by Cross reference database type, e.g EMBL, RefSeq, Ensembl, etc. Comma separated values accepted.
   --rfDbid: string # Response filter by all UniParc cross reference accessions, eg. AAC02967 (EMBL) or  XP_006524055 (RefSeq). Comma separated values accepted.
   --rfActive: string # Response filter by Active(true) or not Active(false) Cross reference.
@@ -1389,7 +1439,7 @@ export def "uniparc-sequence post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get UniParc longest sequence for entries.
@@ -1404,6 +1454,7 @@ export def "uniparc-bestguess get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --upi: string # UniParc ID (UPI). Comma separated values accepted up to 100
   --accession: string # UniProt accession(s). Comma separated values accepted up to 100.
   --dbid: string # All UniParc cross reference accessions, eg. AAC02967 (EMBL) or  XP_006524055 (RefSeq). Comma separated values accepted up to 100.
@@ -1416,7 +1467,7 @@ export def "uniparc-bestguess get" [
   let full_url = (build-url $base "/uniparc/bestguess" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniParc entries by all UniParc cross reference accessions
@@ -1432,6 +1483,7 @@ export def "uniparc-dbreference get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --rfDdtype: string # Response filter by Cross reference database type, e.g EMBL, RefSeq, Ensembl, etc. Comma separated values accepted.
@@ -1445,7 +1497,7 @@ export def "uniparc-dbreference get" [
   let full_url = (build-url $base $"/uniparc/dbreference/($dbid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniParc entry only by UniProt accession
@@ -1461,6 +1513,7 @@ export def "uniparc-accession get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rfDdtype: string # Response filter by Cross reference database type, e.g EMBL, RefSeq, Ensembl, etc. Comma separated values accepted.
   --rfDbid: string # Response filter by all UniParc cross reference accessions, eg. AAC02967 (EMBL) or  XP_006524055 (RefSeq). Comma separated values accepted.
   --rfActive: string # Response filter by Active(true) or not Active(false) Cross reference.
@@ -1472,7 +1525,7 @@ export def "uniparc-accession get" [
   let full_url = (build-url $base $"/uniparc/accession/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniParc entry by UniParc UPI
@@ -1488,6 +1541,7 @@ export def "uniparc-upi get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rfDdtype: string # Response filter by Cross reference database type, e.g EMBL, RefSeq, Ensembl, etc. Comma separated values accepted.
   --rfDbid: string # Response filter by all UniParc cross reference accessions, eg. AAC02967 (EMBL) or  XP_006524055 (RefSeq). Comma separated values accepted.
   --rfActive: string # Response filter by Active(true) or not Active(false) Cross reference.
@@ -1499,7 +1553,7 @@ export def "uniparc-upi get" [
   let full_url = (build-url $base $"/uniparc/upi/($upi)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniParc entries
@@ -1514,6 +1568,7 @@ export def "uniparc searchUniParc" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1542,7 +1597,7 @@ export def "uniparc searchUniParc" [
   let full_url = (build-url $base "/uniparc" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniRef entry by UniProtKB accession
@@ -1559,13 +1614,14 @@ export def "uniref-accession-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, property: table<type: string, value: string>, representativeMember: record<dbReference: record<property: list, id: string, type: string>, sequence: record<value: string, length: int, checksum: string>>, member: table<dbReference: record, sequence: record>, id: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/uniref/accession/($accession)/dataset/($dataset)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniRef entry by UniRef cluster ID
@@ -1581,13 +1637,14 @@ export def "uniref-cluster-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, property: table<type: string, value: string>, representativeMember: record<dbReference: record<property: list, id: string, type: string>, sequence: record<value: string, length: int, checksum: string>>, member: table<dbReference: record, sequence: record>, id: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/uniref/clusterId/($clusterId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UniRef entry by UniParc ID
@@ -1604,13 +1661,14 @@ export def "uniref-upi-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, property: table<type: string, value: string>, representativeMember: record<dbReference: record<property: list, id: string, type: string>, sequence: record<value: string, length: int, checksum: string>>, member: table<dbReference: record, sequence: record>, id: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/uniref/upi/($upi)/dataset/($dataset)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search UniRef entries
@@ -1625,6 +1683,7 @@ export def "uniref searchUniRef" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1648,7 +1707,7 @@ export def "uniref searchUniRef" [
   let full_url = (build-url $base "/uniref" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get LLM protein variants by accession
@@ -1664,13 +1723,14 @@ export def "variant-summary get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/variant_summary/($accession)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Llm protein variation
@@ -1685,6 +1745,7 @@ export def "variant-summary search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
   --accession: string # UniProt accession(s). Comma separated values accepted up to 100.
@@ -1698,7 +1759,7 @@ export def "variant-summary search-by-" [
   let full_url = (build-url $base "/variant_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get natural variants by UniProt accession
@@ -1714,6 +1775,7 @@ export def "variation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourcetype: string # Filter by the sourceType for variants: uniprot, large scale study, mixed, clinvar, nci-tcga, cosmic curated, ensembl, gnomad, topmed and exac. Comma separated values accepted up to 2.
   --consequencetype: string # Filter by consequenceType for variants: missense, stop gained or stop lost. Comma separated values accepted up to 2.
   --wildtype: string # Search by specific wildType amino acid. Options: Any single letter amino acid and * for stop codon. Comma separated values accepted up to 20.
@@ -1726,7 +1788,7 @@ export def "variation get" [
   let full_url = (build-url $base $"/variation/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get natural variants by list of accession and its locations
@@ -1742,13 +1804,14 @@ export def "variation-accession-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, accession: string, entryName: string, proteinName: string, geneName: string, organismName: string, proteinExistence: string, sequence: string, sequenceChecksum: string, sequenceVersion: int, geteGeneId: string, geteProteinId: string, taxid: int, features: table<type: string, category: string, cvId: string, ftId: string, description: string, alternativeSequence: string, begin: string, end: string, molecule: string, ligand: record, ligandPart: record, xrefs: list, evidences: list, dbReferenceType: list, variantType: record, rnaEditingInfo: record, locationType: record, variant: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/variation/accession_locations/($accession_locations)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search natural variants in UniProt
@@ -1763,6 +1826,7 @@ export def "variation search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1785,7 +1849,7 @@ export def "variation search-by-" [
   let full_url = (build-url $base "/variation" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get natural variants in UniProt by NIH-NCBI SNP database identifier
@@ -1801,6 +1865,7 @@ export def "variation-dbsnp searchByDbSNP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1816,7 +1881,7 @@ export def "variation-dbsnp searchByDbSNP" [
   let full_url = (build-url $base $"/variation/dbsnp/($dbid)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get natural variants in UniProt by HGVS expression
@@ -1832,6 +1897,7 @@ export def "variation-hgvs searchByHgvs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
@@ -1847,5 +1913,5 @@ export def "variation-hgvs searchByHgvs" [
   let full_url = (build-url $base $"/variation/hgvs/($hgvs)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

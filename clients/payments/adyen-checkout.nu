@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def mode-completer [] { ["embedded" "hosted"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "apple-pay-sessions post-applePay-sessions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,6 +113,7 @@ export def "apple-pay-sessions post-applePay-sessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   displayName: string # This is the name that your shoppers will see in the Apple Pay interface.  The value returned as `configuration.merchantName` field from the [`/paymentMethods`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/paymentMethods) response.
   domainName: string # The domain name you provided when you added Apple Pay in your Customer Area.  This must match the `window.location.hostname` of the web shop.
@@ -127,7 +129,7 @@ export def "apple-pay-sessions post-applePay-sessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an authorised payment
@@ -144,6 +146,7 @@ export def "cancels post-cancels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
   --enhancedSchemeData: record # shape: {airline?: record, levelTwoThree?: record}
@@ -161,7 +164,7 @@ export def "cancels post-cancels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the brands and other details of a card
@@ -176,6 +179,7 @@ export def "card-details post-cardDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --cardNumber: string # A minimum of the first six digits of the card number. The full card number gives the best result.   You must be [fully PCI compliant](https://docs.adyen.com/development-resources/pci-dss-compliance-guide) to collect raw card data. Alternatively, you can use the `encryptedCardNumber` field.
   --countryCode: string # The shopper country code.  Format: [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) Example: NL or DE
@@ -193,7 +197,7 @@ export def "card-details post-cardDetails" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of donation campaigns.
@@ -208,6 +212,7 @@ export def "donation-campaigns post-donationCampaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   currency: string # The three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes/).
   --locale: string # Locale on the shopper interaction device.
@@ -224,7 +229,7 @@ export def "donation-campaigns post-donationCampaigns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Make a donation
@@ -253,6 +258,7 @@ export def "donations post-donations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --accountInfo: record # shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, mobilePhone?: string, passwordChangeDate?: string, passwordChangeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", pastTransactionsDay?: int, pastTransactionsYear?: int, paymentAccountAge?: string, paymentAccountIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", purchasesLast6Months?: int, suspiciousActivity?: bool, workPhone?: string}
   --additionalData: record # This field contains additional data, which may be required for a particular payment request.  The `additionalData` object consists of entries, each of which includes the key and value.
@@ -308,7 +314,7 @@ export def "donations post-donations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Forward stored payment details
@@ -327,6 +333,7 @@ export def "forward post-forward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --amount: record # shape: {currency: string, value: int}
   baseUrl: string # The base URL of the third party API, where Adyen will send the request to forward the payment details.
@@ -348,7 +355,7 @@ export def "forward post-forward" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an order
@@ -364,6 +371,7 @@ export def "orders post-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   amount: record # shape: {currency: string, value: int}
   --expiresAt: string # The date when the order should expire. If not provided, the default expiry duration is 1 day.  [ISO 8601](https://www.w3.org/TR/NOTE-datetime) format: YYYY-MM-DDThh:mm:ss+TZD, for example, **2020-12-18T10:15:30+01:00**.
@@ -380,7 +388,7 @@ export def "orders post-orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an order
@@ -396,6 +404,7 @@ export def "orders-cancel post-orders-cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   merchantAccount: string # The merchant account identifier that orderData belongs to.
   order: record # shape: {orderData: string, pspReference: string}
@@ -410,7 +419,7 @@ export def "orders-cancel post-orders-cancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create originKey values for domains
@@ -427,6 +436,7 @@ export def "origin-keys post-originKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   originDomains: list # The list of origin domains, for which origin keys are requested.
 ]: any -> record<originKeys: record> {
@@ -440,7 +450,7 @@ export def "origin-keys post-originKeys" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a payment link
@@ -467,6 +477,7 @@ export def "payment-links post-paymentLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --allowedPaymentMethods: list # List of payment methods to be presented to the shopper. To refer to payment methods, use their [payment method type](https://docs.adyen.com/payment-methods/payment-method-types).  Example: `"allowedPaymentMethods":["ideal","applepay"]`
   amount: record # shape: {currency: string, value: int}
@@ -521,7 +532,7 @@ export def "payment-links post-paymentLinks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a payment link
@@ -537,13 +548,14 @@ export def "payment-links get-paymentLinks-linkId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, fundOrigin: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, telephoneNumber: string, walletIdentifier: string>, fundRecipient: record<IBAN: string, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, paymentMethod: record<billingSequenceNumber: string, brand: string, checkoutAttemptId: string, cupsecureplus_smscode: string, cvc: string, encryptedCard: string, encryptedCardNumber: string, encryptedExpiryMonth: string, encryptedExpiryYear: string, encryptedPassword: string, encryptedSecurityCode: string, expiryMonth: string, expiryYear: string, fastlaneData: string, fundingSource: string, holderName: string, networkPaymentReference: string, number: string, recurringDetailReference: string, sdkData: string, shopperNotificationReference: string, srcCorrelationId: string, srcDigitalCardId: string, srcScheme: string, srcTokenReference: string, storedPaymentMethodId: string, threeDS2SdkVersion: string, type: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, storedPaymentMethodId: string, subMerchant: record<city: string, country: string, mcc: string, name: string, taxId: string>, telephoneNumber: string, walletIdentifier: string, walletOwnerTaxId: string, walletPurpose: string>, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, marketplaceSellerId: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, platformChargebackLogic: record<behavior: string, costAllocationAccount: string, targetAccount: string>, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, threeDS2RequestData: record<homePhone: record<cc: string, subscriber: string>, mobilePhone: record<cc: string, subscriber: string>, threeDSRequestorChallengeInd: string, workPhone: record<cc: string, subscriber: string>>, updatedAt: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/paymentLinks/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the status of a payment link
@@ -559,6 +571,7 @@ export def "payment-links patch-paymentLinks-linkId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer # Status of the payment link. Possible values: * **expired**
 ]: any -> record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, fundOrigin: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, telephoneNumber: string, walletIdentifier: string>, fundRecipient: record<IBAN: string, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, paymentMethod: record<billingSequenceNumber: string, brand: string, checkoutAttemptId: string, cupsecureplus_smscode: string, cvc: string, encryptedCard: string, encryptedCardNumber: string, encryptedExpiryMonth: string, encryptedExpiryYear: string, encryptedPassword: string, encryptedSecurityCode: string, expiryMonth: string, expiryYear: string, fastlaneData: string, fundingSource: string, holderName: string, networkPaymentReference: string, number: string, recurringDetailReference: string, sdkData: string, shopperNotificationReference: string, srcCorrelationId: string, srcDigitalCardId: string, srcScheme: string, srcTokenReference: string, storedPaymentMethodId: string, threeDS2SdkVersion: string, type: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, storedPaymentMethodId: string, subMerchant: record<city: string, country: string, mcc: string, name: string, taxId: string>, telephoneNumber: string, walletIdentifier: string, walletOwnerTaxId: string, walletPurpose: string>, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, marketplaceSellerId: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, platformChargebackLogic: record<behavior: string, costAllocationAccount: string, targetAccount: string>, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, threeDS2RequestData: record<homePhone: record<cc: string, subscriber: string>, mobilePhone: record<cc: string, subscriber: string>, threeDSRequestorChallengeInd: string, workPhone: record<cc: string, subscriber: string>>, updatedAt: string, url: string> {
   let input = $in
@@ -569,7 +582,7 @@ export def "payment-links patch-paymentLinks-linkId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of available payment methods
@@ -587,6 +600,7 @@ export def "payment-methods post-paymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --additionalData: record # This field contains additional data, which may be required for a particular payment request.  The `additionalData` object consists of entries, each of which includes the key and value.
   --allowedPaymentMethods: list # List of payment methods to be presented to the shopper. To refer to payment methods, use their [payment method type](https://docs.adyen.com/payment-methods/payment-method-types).  Example: `"allowedPaymentMethods":["ideal","applepay"]`
@@ -617,7 +631,7 @@ export def "payment-methods post-paymentMethods" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the balance of a gift card
@@ -647,6 +661,7 @@ export def "payment-methods-balance post-paymentMethods-balance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --accountInfo: record # shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, mobilePhone?: string, passwordChangeDate?: string, passwordChangeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", pastTransactionsDay?: int, pastTransactionsYear?: int, paymentAccountAge?: string, paymentAccountIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", purchasesLast6Months?: int, suspiciousActivity?: bool, workPhone?: string}
   --additionalAmount: record # shape: {currency: string, value: int}
@@ -703,7 +718,7 @@ export def "payment-methods-balance post-paymentMethods-balance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a transaction
@@ -750,6 +765,7 @@ export def "payments post-payments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --accountInfo: record # shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, mobilePhone?: string, passwordChangeDate?: string, passwordChangeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", pastTransactionsDay?: int, pastTransactionsYear?: int, paymentAccountAge?: string, paymentAccountIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", purchasesLast6Months?: int, suspiciousActivity?: bool, workPhone?: string}
   --additionalAmount: record # shape: {currency: string, value: int}
@@ -836,7 +852,7 @@ export def "payments post-payments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit details for a payment
@@ -854,6 +870,7 @@ export def "payments-details post-payments-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --authenticationData: record # shape: {authenticationOnly?: bool}
   details: record # shape: {MD?: string, PaReq?: string, PaRes?: string, authorization_token?: string, billingToken?: string, cupsecureplus.smscode?: string, facilitatorAccessToken?: string, oneTimePasscode?: string, orderID?: string, payerID?: string, payload?: string, paymentID?: string, paymentStatus?: string, redirectResult?: string, resultCode?: string, returnUrlQueryString?: string, threeDSResult?: string, threeds2.challengeResult?: string, threeds2.fingerprint?: string, vaultToken?: string}
@@ -870,7 +887,7 @@ export def "payments-details post-payments-details" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an authorised amount
@@ -891,6 +908,7 @@ export def "payments-amount-updates post-payments-paymentPspReference-amountUpda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   amount: record # shape: {currency: string, value: int}
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
@@ -911,7 +929,7 @@ export def "payments-amount-updates post-payments-paymentPspReference-amountUpda
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an authorised payment
@@ -929,6 +947,7 @@ export def "payments-cancels post-payments-paymentPspReference-cancels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
   --enhancedSchemeData: record # shape: {airline?: record, levelTwoThree?: record}
@@ -945,7 +964,7 @@ export def "payments-cancels post-payments-paymentPspReference-cancels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Capture an authorised payment
@@ -968,6 +987,7 @@ export def "payments-captures post-payments-paymentPspReference-captures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   amount: record # shape: {currency: string, value: int}
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
@@ -989,7 +1009,7 @@ export def "payments-captures post-payments-paymentPspReference-captures" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refund a captured payment
@@ -1010,6 +1030,7 @@ export def "payments-refunds post-payments-paymentPspReference-refunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   amount: record # shape: {currency: string, value: int}
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
@@ -1032,7 +1053,7 @@ export def "payments-refunds post-payments-paymentPspReference-refunds" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refund or cancel a payment
@@ -1050,6 +1071,7 @@ export def "payments-reversals post-payments-paymentPspReference-reversals" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --applicationInfo: record # shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
   --enhancedSchemeData: record # shape: {airline?: record, levelTwoThree?: record}
@@ -1066,7 +1088,7 @@ export def "payments-reversals post-payments-paymentPspReference-reversals" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the order for PayPal Express Checkout
@@ -1084,6 +1106,7 @@ export def "paypal-update-order post-paypal-updateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --amount: record # shape: {currency: string, value: int}
   --deliveryMethods: list # The list of new delivery methods and the cost of each. — item shape: {amount?: record, description?: string, reference?: string, selected?: bool, type?: "Shipping"}
@@ -1102,7 +1125,7 @@ export def "paypal-update-order post-paypal-updateOrder" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a payment session
@@ -1136,6 +1159,7 @@ export def "sessions post-sessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   --accountInfo: record # shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, mobilePhone?: string, passwordChangeDate?: string, passwordChangeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", pastTransactionsDay?: int, pastTransactionsYear?: int, paymentAccountAge?: string, paymentAccountIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", purchasesLast6Months?: int, suspiciousActivity?: bool, workPhone?: string}
   --additionalAmount: record # shape: {currency: string, value: int}
@@ -1209,7 +1233,7 @@ export def "sessions post-sessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the result of a payment session
@@ -1225,6 +1249,7 @@ export def "sessions get-sessions-sessionId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sessionResult: string # The `sessionResult` value from the Drop-in or Component.
 ]: nothing -> record<additionalData: record, id: string, payments: table<amount: record, paymentMethod: record, pspReference: string, resultCode: string>, reference: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1233,7 +1258,7 @@ export def "sessions get-sessions-sessionId" [
   let full_url = (build-url $base $"/sessions/($sessionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tokens for stored payment details
@@ -1248,6 +1273,7 @@ export def "stored-payment-methods get-storedPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shopperReference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
   --merchantAccount: string # Your merchant account.
 ]: nothing -> record<merchantAccount: string, shopperReference: string, storedPaymentMethods: table<alias: string, aliasType: string, brand: string, cardBin: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, mandate: record, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list, type: string>> {
@@ -1257,7 +1283,7 @@ export def "stored-payment-methods get-storedPaymentMethods" [
   let full_url = (build-url $base "/storedPaymentMethods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a token to store payment details
@@ -1273,6 +1299,7 @@ export def "stored-payment-methods post-storedPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
   paymentMethod: record # shape: {brand?: string, cvc?: string, encryptedCard?: string, encryptedCardNumber?: string, encryptedExpiryMonth?: string, encryptedExpiryYear?: string, encryptedSecurityCode?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, number?: string, type?: string}
@@ -1291,7 +1318,7 @@ export def "stored-payment-methods post-storedPaymentMethods" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a token for stored payment details
@@ -1307,6 +1334,7 @@ export def "stored-payment-methods delete-storedPaymentMethods-storedPaymentMeth
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shopperReference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
   --merchantAccount: string # Your merchant account.
 ]: nothing -> any {
@@ -1316,7 +1344,7 @@ export def "stored-payment-methods delete-storedPaymentMethods-storedPaymentMeth
   let full_url = (build-url $base $"/storedPaymentMethods/($storedPaymentMethodId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validates shopper Id
@@ -1332,6 +1360,7 @@ export def "validate-shopper-id post-validateShopperId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
   paymentMethod: record # shape: {type: "payTo"|"upi_collect"}
   --shopperEmail: string
@@ -1346,5 +1375,5 @@ export def "validate-shopper-id post-validateShopperId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

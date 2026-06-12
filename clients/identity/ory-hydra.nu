@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["basic" "bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-jwksjson discoverJsonWebKeys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,13 +102,14 @@ export def "well-known-jwksjson discoverJsonWebKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<alg: string, crv: string, d: string, dp: string, dq: string, e: string, k: string, kid: string, kty: string, n: string, p: string, q: string, qi: string, use: string, x: string, x5c: list, y: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/jwks.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OpenID Connect Discovery
@@ -122,13 +124,14 @@ export def "well-known-openid-configuration discoverOidcConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorization_endpoint: string, backchannel_logout_session_supported: bool, backchannel_logout_supported: bool, claims_parameter_supported: bool, claims_supported: list<string>, code_challenge_methods_supported: list<string>, credentials_endpoint_draft_00: string, credentials_supported_draft_00: table<cryptographic_binding_methods_supported: list, cryptographic_suites_supported: list, format: string, types: list>, device_authorization_endpoint: string, end_session_endpoint: string, frontchannel_logout_session_supported: bool, frontchannel_logout_supported: bool, grant_types_supported: list<string>, id_token_signed_response_alg: list<string>, id_token_signing_alg_values_supported: list<string>, issuer: string, jwks_uri: string, registration_endpoint: string, request_object_signing_alg_values_supported: list<string>, request_parameter_supported: bool, request_uri_parameter_supported: bool, require_request_uri_registration: bool, response_modes_supported: list<string>, response_types_supported: list<string>, revocation_endpoint: string, scopes_supported: list<string>, subject_types_supported: list<string>, token_endpoint: string, token_endpoint_auth_methods_supported: list<string>, userinfo_endpoint: string, userinfo_signed_response_alg: list<string>, userinfo_signing_alg_values_supported: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List OAuth 2.0 Clients
@@ -143,6 +146,7 @@ export def "admin-clients listOAuth2Clients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
   --client-name: string # The name of the clients to filter by.
@@ -154,7 +158,7 @@ export def "admin-clients listOAuth2Clients" [
   let full_url = (build-url $base "/admin/clients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create OAuth 2.0 Client
@@ -170,6 +174,7 @@ export def "admin-clients createOAuth2Client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-token-strategy: string # OAuth 2.0 Access Token Strategy  AccessTokenStrategy is the strategy used to generate access tokens. Valid options are `jwt` and `opaque`. `jwt` is a bad idea, see https://www.ory.com/docs/oauth2-oidc/jwt-access-token Setting the strategy here overrides the global setting in `strategies.access_token`.
   --allowed-cors-origins: list # OAuth 2.0 Client Allowed CORS Origins  One or more URLs (scheme://host[:port]) which are allowed to make CORS requests to the /oauth/token endpoint. If this array is empty, the server's CORS origin configuration (`CORS_ALLOWED_ORIGINS`) will be used instead. If this array is set, the allowed origins are appended to the server's CORS origin configuration. Be aware that environment variable `CORS_ENABLED` MUST be set to `true` for this to work.
   --audience: list # OAuth 2.0 Client Audience  An allow-list defining the audiences this client is allowed to request tokens for. An audience limits the applicability of an OAuth 2.0 Access Token to, for example, certain API endpoints. The value is a list of URLs. URLs MUST NOT contain whitespaces. (e.g. https://mydomain.com/api/users, https://mydomain.com/api/posts)
@@ -230,7 +235,7 @@ export def "admin-clients createOAuth2Client" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete OAuth 2.0 Client
@@ -246,13 +251,14 @@ export def "admin-clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, debug: string, details: any, id: string, message: string, reason: string, request: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/clients/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an OAuth 2.0 Client
@@ -268,13 +274,14 @@ export def "admin-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list<record>>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/clients/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch OAuth 2.0 Client
@@ -290,6 +297,7 @@ export def "admin-clients patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list<record>>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string> {
   let input = $in
@@ -299,7 +307,7 @@ export def "admin-clients patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set OAuth 2.0 Client
@@ -316,6 +324,7 @@ export def "admin-clients setOAuth2Client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-token-strategy: string # OAuth 2.0 Access Token Strategy  AccessTokenStrategy is the strategy used to generate access tokens. Valid options are `jwt` and `opaque`. `jwt` is a bad idea, see https://www.ory.com/docs/oauth2-oidc/jwt-access-token Setting the strategy here overrides the global setting in `strategies.access_token`.
   --allowed-cors-origins: list # OAuth 2.0 Client Allowed CORS Origins  One or more URLs (scheme://host[:port]) which are allowed to make CORS requests to the /oauth/token endpoint. If this array is empty, the server's CORS origin configuration (`CORS_ALLOWED_ORIGINS`) will be used instead. If this array is set, the allowed origins are appended to the server's CORS origin configuration. Be aware that environment variable `CORS_ENABLED` MUST be set to `true` for this to work.
   --audience: list # OAuth 2.0 Client Audience  An allow-list defining the audiences this client is allowed to request tokens for. An audience limits the applicability of an OAuth 2.0 Access Token to, for example, certain API endpoints. The value is a list of URLs. URLs MUST NOT contain whitespaces. (e.g. https://mydomain.com/api/users, https://mydomain.com/api/posts)
@@ -376,7 +385,7 @@ export def "admin-clients setOAuth2Client" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set OAuth2 Client Token Lifespans
@@ -392,6 +401,7 @@ export def "admin-clients-lifespans setOAuth2ClientLifespans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorization-code-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
@@ -414,7 +424,7 @@ export def "admin-clients-lifespans setOAuth2ClientLifespans" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete JSON Web Key Set
@@ -430,13 +440,14 @@ export def "admin-keys delete-by-set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/keys/($set)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a JSON Web Key Set
@@ -452,13 +463,14 @@ export def "admin-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<alg: string, crv: string, d: string, dp: string, dq: string, e: string, k: string, kid: string, kty: string, n: string, p: string, q: string, qi: string, use: string, x: string, x5c: list, y: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/keys/($set)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create JSON Web Key
@@ -474,6 +486,7 @@ export def "admin-keys createJsonWebKeySet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alg: string # JSON Web Key Algorithm  The algorithm to be used for creating the key. Supports `RS256`, `ES256`, `ES512`, `HS512`, and `HS256`.
   kid: string # JSON Web Key ID  The Key ID of the key to be created.
   --body-use: string # JSON Web Key Use  The "use" (public key use) parameter identifies the intended use of the public key. The "use" parameter is employed to indicate whether a public key is used for encrypting data or verifying the signature on data. Valid values are "enc" and "sig".
@@ -486,7 +499,7 @@ export def "admin-keys createJsonWebKeySet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a JSON Web Key Set
@@ -503,6 +516,7 @@ export def "admin-keys setJsonWebKeySet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keys: list # List of JSON Web Keys  The value of the "keys" parameter is an array of JSON Web Key (JWK) values. By default, the order of the JWK values within the array does not imply an order of preference among them, although applications of JWK Sets can choose to assign a meaning to the order for their purposes, if desired. — item shape: {alg: string, crv?: string, d?: string, dp?: string, dq?: string, e?: string, k?: string, kid: string, kty: string, n?: string, p?: string, q?: string, qi?: string, use: string, x?: string, x5c?: list, y?: string}
 ]: any -> record<keys: table<alg: string, crv: string, d: string, dp: string, dq: string, e: string, k: string, kid: string, kty: string, n: string, p: string, q: string, qi: string, use: string, x: string, x5c: list, y: string>> {
   let input = $in
@@ -513,7 +527,7 @@ export def "admin-keys setJsonWebKeySet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete JSON Web Key
@@ -530,13 +544,14 @@ export def "admin-keys delete-by-set-kid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/keys/($set)/($kid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get JSON Web Key
@@ -553,13 +568,14 @@ export def "admin-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<alg: string, crv: string, d: string, dp: string, dq: string, e: string, k: string, kid: string, kty: string, n: string, p: string, q: string, qi: string, use: string, x: string, x5c: list, y: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/keys/($set)/($kid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set JSON Web Key
@@ -576,6 +592,7 @@ export def "admin-keys setJsonWebKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alg: string # The "alg" (algorithm) parameter identifies the algorithm intended for use with the key.  The values used should either be registered in the IANA "JSON Web Signature and Encryption Algorithms" registry established by [JWA] or be a value that contains a Collision- Resistant Name. (e.g. RS256)
   --crv: string # e.g. P-256
   --d: string # e.g. T_N8I-6He3M8a7X1vWt6TGIx4xB_GP3Mb4SsZSA4v-orvJzzRiQhLlRR81naWYxfQAYt5isDI6_C2L9bdWo4FFPjGQFvNoRX-_sBJyBI_rl-TBgsZYoUlAj3J92WmY2inbA-PwyJfsaIIDceYBC-eX-xiCu6qMqkZi3MwQAFL6bMdPEM0z4JBcwFT3VdiWAIRUuACWQwrXMq672x7fMuaIaHi7XDGgt1ith23CLfaREmJku9PQcchbt_uEY-hqrFY6ntTtS4paWWQj86xLL94S-Tf6v6xkL918PfLSOTq6XCzxvlFwzBJqApnAhbwqLjpPhgUG04EDRrqrSBc5Y1BLevn6Ip5h1AhessBp3wLkQgz_roeckt-ybvzKTjESMuagnpqLvOT7Y9veIug2MwPJZI2VjczRc1vzMs25XrFQ8DpUy-bNdp89TmvAXwctUMiJdgHloJw23Cv03gIUAkDnsTqZmkpbIf-crpgNKFmQP_EDKoe8p_PXZZgfbRri3NoEVGP7Mk6yEu8LjJhClhZaBNjuWw2-KlBfOA3g79mhfBnkInee5KO9mGR50qPk1V-MorUYNTFMZIm0kFE6eYVWFBwJHLKYhHU34DoiK1VP-svZpC2uAMFNA_UJEwM9CQ2b8qe4-5e9aywMvwcuArRkAB5mBIfOaOJao3mfukKAE
@@ -602,7 +619,7 @@ export def "admin-keys setJsonWebKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get OAuth 2.0 Consent Request
@@ -617,6 +634,7 @@ export def "admin-oauth2-auth-requests-consent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consent-challenge: string # OAuth 2.0 Consent Request Challenge
 ]: nothing -> record<acr: string, amr: list<string>, challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, consent_request_id: string, context: any, login_challenge: string, login_session_id: string, oidc_context: record<acr_values: list<string>, display: string, id_token_hint_claims: record, login_hint: string, ui_locales: list<string>>, request_url: string, requested_access_token_audience: list<string>, requested_scope: list<string>, skip: bool, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -625,7 +643,7 @@ export def "admin-oauth2-auth-requests-consent get" [
   let full_url = (build-url $base "/admin/oauth2/auth/requests/consent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept OAuth 2.0 Consent Request
@@ -641,6 +659,7 @@ export def "admin-oauth2-auth-requests-consent-accept acceptOAuth2ConsentRequest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consent-challenge: string # OAuth 2.0 Consent Request Challenge
   --context: any
   --grant-access-token-audience: list # GrantedAudience sets the audience the user authorized the client to use. Should be a subset of `requested_access_token_audience`.
@@ -658,7 +677,7 @@ export def "admin-oauth2-auth-requests-consent-accept acceptOAuth2ConsentRequest
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reject OAuth 2.0 Consent Request
@@ -673,6 +692,7 @@ export def "admin-oauth2-auth-requests-consent-reject rejectOAuth2ConsentRequest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --consent-challenge: string # OAuth 2.0 Consent Request Challenge
   --body-error: string # The error should follow the OAuth2 error format (e.g. `invalid_request`, `login_required`).  Defaults to `request_denied`.
   --error-debug: string # Debug contains information to help resolve the problem as a developer. Usually not exposed to the public but only in the server logs.
@@ -689,7 +709,7 @@ export def "admin-oauth2-auth-requests-consent-reject rejectOAuth2ConsentRequest
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Accepts a device grant user_code request
@@ -704,6 +724,7 @@ export def "admin-oauth2-auth-requests-device-accept acceptUserCodeRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --device-challenge: string
   --user-code: string
 ]: any -> record<redirect_to: string> {
@@ -716,7 +737,7 @@ export def "admin-oauth2-auth-requests-device-accept acceptUserCodeRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get OAuth 2.0 Login Request
@@ -731,6 +752,7 @@ export def "admin-oauth2-auth-requests-login get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --login-challenge: string # OAuth 2.0 Login Request Challenge
 ]: nothing -> record<challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, oidc_context: record<acr_values: list<string>, display: string, id_token_hint_claims: record, login_hint: string, ui_locales: list<string>>, request_url: string, requested_access_token_audience: list<string>, requested_scope: list<string>, session_id: string, skip: bool, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -739,7 +761,7 @@ export def "admin-oauth2-auth-requests-login get" [
   let full_url = (build-url $base "/admin/oauth2/auth/requests/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept OAuth 2.0 Login Request
@@ -754,6 +776,7 @@ export def "admin-oauth2-auth-requests-login-accept acceptOAuth2LoginRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --login-challenge: string # OAuth 2.0 Login Request Challenge
   --acr: string # ACR sets the Authentication AuthorizationContext Class Reference value for this authentication session. You can use it to express that, for example, a user authenticated using two-factor authentication.
   --amr: list # AMR sets the Authentication Methods References value for this authentication session. You can use it to specify the method a user used to authenticate. For example, if the acr indicates a user used two-factor authentication, the amr can express they used a software-secured key.
@@ -774,7 +797,7 @@ export def "admin-oauth2-auth-requests-login-accept acceptOAuth2LoginRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reject OAuth 2.0 Login Request
@@ -789,6 +812,7 @@ export def "admin-oauth2-auth-requests-login-reject rejectOAuth2LoginRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --login-challenge: string # OAuth 2.0 Login Request Challenge
   --body-error: string # The error should follow the OAuth2 error format (e.g. `invalid_request`, `login_required`).  Defaults to `request_denied`.
   --error-debug: string # Debug contains information to help resolve the problem as a developer. Usually not exposed to the public but only in the server logs.
@@ -805,7 +829,7 @@ export def "admin-oauth2-auth-requests-login-reject rejectOAuth2LoginRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get OAuth 2.0 Session Logout Request
@@ -820,6 +844,7 @@ export def "admin-oauth2-auth-requests-logout get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logout-challenge: string
 ]: nothing -> record<challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, expires_at: string, request_url: string, requested_at: string, rp_initiated: bool, sid: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -828,7 +853,7 @@ export def "admin-oauth2-auth-requests-logout get" [
   let full_url = (build-url $base "/admin/oauth2/auth/requests/logout" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept OAuth 2.0 Session Logout Request
@@ -843,6 +868,7 @@ export def "admin-oauth2-auth-requests-logout-accept acceptOAuth2LogoutRequest" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logout-challenge: string # OAuth 2.0 Logout Request Challenge
 ]: nothing -> record<redirect_to: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -851,7 +877,7 @@ export def "admin-oauth2-auth-requests-logout-accept acceptOAuth2LogoutRequest" 
   let full_url = (build-url $base "/admin/oauth2/auth/requests/logout/accept" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject OAuth 2.0 Session Logout Request
@@ -866,6 +892,7 @@ export def "admin-oauth2-auth-requests-logout-reject rejectOAuth2LogoutRequest" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logout-challenge: string
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -874,7 +901,7 @@ export def "admin-oauth2-auth-requests-logout-reject rejectOAuth2LogoutRequest" 
   let full_url = (build-url $base "/admin/oauth2/auth/requests/logout/reject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke OAuth 2.0 Consent Sessions of a Subject
@@ -889,6 +916,7 @@ export def "admin-oauth2-auth-sessions-consent revokeOAuth2ConsentSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subject: string # OAuth 2.0 Consent Subject  The subject whose consent sessions should be deleted.
   --client: string # OAuth 2.0 Client ID  If set, deletes only those consent sessions that have been granted to the specified OAuth 2.0 Client ID.
   --consent-request-id: string # Consent Request ID  If set, revoke all token chains derived from this particular consent request ID.
@@ -900,7 +928,7 @@ export def "admin-oauth2-auth-sessions-consent revokeOAuth2ConsentSessions" [
   let full_url = (build-url $base "/admin/oauth2/auth/sessions/consent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List OAuth 2.0 Consent Sessions of a Subject
@@ -915,6 +943,7 @@ export def "admin-oauth2-auth-sessions-consent listOAuth2ConsentSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
   --subject: string # The subject to list the consent sessions for.
@@ -926,7 +955,7 @@ export def "admin-oauth2-auth-sessions-consent listOAuth2ConsentSessions" [
   let full_url = (build-url $base "/admin/oauth2/auth/sessions/consent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes OAuth 2.0 Login Sessions by either a Subject or a SessionID
@@ -941,6 +970,7 @@ export def "admin-oauth2-auth-sessions-login revokeOAuth2LoginSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subject: string # OAuth 2.0 Subject  The subject to revoke authentication sessions for.
   --sid: string # Login Session ID  The login session to revoke.
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
@@ -950,7 +980,7 @@ export def "admin-oauth2-auth-sessions-login revokeOAuth2LoginSessions" [
   let full_url = (build-url $base "/admin/oauth2/auth/sessions/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Introspect OAuth2 Access and Refresh Tokens
@@ -965,6 +995,7 @@ export def "admin-oauth2-introspect introspectOAuth2Token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string # An optional, space separated list of required scopes. If the access token was not granted one of the scopes, the result of active will be false.
   --body-token: string # The string value of the token. For access tokens, this is the "access_token" value returned from the token endpoint defined in OAuth 2.0. For refresh tokens, this is the "refresh_token" value returned.
 ]: any -> record<active: bool, aud: list<string>, client_id: string, exp: int, ext: record, iat: int, iss: string, nbf: int, obfuscated_subject: string, scope: string, sub: string, token_type: string, token_use: string, username: string> {
@@ -976,7 +1007,7 @@ export def "admin-oauth2-introspect introspectOAuth2Token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete OAuth 2.0 Access Tokens from specific OAuth 2.0 Client
@@ -991,6 +1022,7 @@ export def "admin-oauth2-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # OAuth 2.0 Client ID
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -999,7 +1031,7 @@ export def "admin-oauth2-tokens delete" [
   let full_url = (build-url $base "/admin/oauth2/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Trusted OAuth2 JWT Bearer Grant Type Issuers
@@ -1014,6 +1046,7 @@ export def "admin-trust-grants-jwt-bearer-issuers listTrustedOAuth2JwtGrantIssue
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
   --issuer: string # If optional "issuer" is supplied, only jwt-bearer grants with this issuer will be returned.
@@ -1024,7 +1057,7 @@ export def "admin-trust-grants-jwt-bearer-issuers listTrustedOAuth2JwtGrantIssue
   let full_url = (build-url $base "/admin/trust/grants/jwt-bearer/issuers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trust OAuth2 JWT Bearer Grant Type Issuer
@@ -1040,6 +1073,7 @@ export def "admin-trust-grants-jwt-bearer-issuers trustOAuth2JwtGrantIssuer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-any-subject: oneof<nothing, bool> # The "allow_any_subject" indicates that the issuer is allowed to have any principal as the subject of the JWT.
   expires_at: string # The "expires_at" indicates, when grant will expire, so we will reject assertion from "issuer" targeting "subject". (format: date-time)
   issuer: string # The "issuer" identifies the principal that issued the JWT assertion (same as "iss" claim in JWT). (e.g. https://jwt-idp.example.com)
@@ -1055,7 +1089,7 @@ export def "admin-trust-grants-jwt-bearer-issuers trustOAuth2JwtGrantIssuer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Trusted OAuth2 JWT Bearer Grant Type Issuer
@@ -1071,13 +1105,14 @@ export def "admin-trust-grants-jwt-bearer-issuers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, debug: string, details: any, id: string, message: string, reason: string, request: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/trust/grants/jwt-bearer/issuers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Trusted OAuth2 JWT Bearer Grant Type Issuer
@@ -1093,13 +1128,14 @@ export def "admin-trust-grants-jwt-bearer-issuers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_any_subject: bool, created_at: string, expires_at: string, id: string, issuer: string, public_key: record<kid: string, set: string>, scope: list<string>, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/trust/grants/jwt-bearer/issuers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issues a Verifiable Credential
@@ -1115,6 +1151,7 @@ export def "credentials createVerifiableCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string
   --proof: record # shape: {jwt?: string, proof_type?: string}
   --types: list
@@ -1127,7 +1164,7 @@ export def "credentials createVerifiableCredential" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check HTTP Server Status
@@ -1142,13 +1179,14 @@ export def "health-alive isAlive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health/alive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check HTTP Server and Database Status
@@ -1163,13 +1201,14 @@ export def "health-ready isReady" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health/ready")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth 2.0 Authorize Endpoint
@@ -1184,13 +1223,14 @@ export def "oauth2-auth oAuth2Authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/auth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The OAuth 2.0 Device Authorize Endpoint
@@ -1205,13 +1245,14 @@ export def "oauth2-device-auth oAuth2DeviceFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<device_code: string, expires_in: int, interval: int, user_code: string, verification_uri: string, verification_uri_complete: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device/auth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OAuth 2.0 Device Verification Endpoint
@@ -1226,13 +1267,14 @@ export def "oauth2-device-verify performOAuth2DeviceVerificationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device/verify")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register OAuth2 Client using OpenID Dynamic Client Registration
@@ -1248,6 +1290,7 @@ export def "oauth2-register createOidcDynamicClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-token-strategy: string # OAuth 2.0 Access Token Strategy  AccessTokenStrategy is the strategy used to generate access tokens. Valid options are `jwt` and `opaque`. `jwt` is a bad idea, see https://www.ory.com/docs/oauth2-oidc/jwt-access-token Setting the strategy here overrides the global setting in `strategies.access_token`.
   --allowed-cors-origins: list # OAuth 2.0 Client Allowed CORS Origins  One or more URLs (scheme://host[:port]) which are allowed to make CORS requests to the /oauth/token endpoint. If this array is empty, the server's CORS origin configuration (`CORS_ALLOWED_ORIGINS`) will be used instead. If this array is set, the allowed origins are appended to the server's CORS origin configuration. Be aware that environment variable `CORS_ENABLED` MUST be set to `true` for this to work.
   --audience: list # OAuth 2.0 Client Audience  An allow-list defining the audiences this client is allowed to request tokens for. An audience limits the applicability of an OAuth 2.0 Access Token to, for example, certain API endpoints. The value is a list of URLs. URLs MUST NOT contain whitespaces. (e.g. https://mydomain.com/api/users, https://mydomain.com/api/posts)
@@ -1308,7 +1351,7 @@ export def "oauth2-register createOidcDynamicClient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete OAuth 2.0 Client using the OpenID Dynamic Client Registration Management Protocol
@@ -1324,13 +1367,14 @@ export def "oauth2-register delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, debug: string, details: any, id: string, message: string, reason: string, request: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/oauth2/register/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OAuth2 Client using OpenID Dynamic Client Registration
@@ -1346,13 +1390,14 @@ export def "oauth2-register get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<access_token_strategy: string, allowed_cors_origins: list<string>, audience: list<string>, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list<string>, created_at: string, device_authorization_grant_access_token_lifespan: string, device_authorization_grant_id_token_lifespan: string, device_authorization_grant_refresh_token_lifespan: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list<string>, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: record<keys: list<record>>, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list<string>, redirect_uris: list<string>, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list<string>, response_types: list<string>, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/oauth2/register/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set OAuth2 Client using OpenID Dynamic Client Registration
@@ -1369,6 +1414,7 @@ export def "oauth2-register setOidcDynamicClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-token-strategy: string # OAuth 2.0 Access Token Strategy  AccessTokenStrategy is the strategy used to generate access tokens. Valid options are `jwt` and `opaque`. `jwt` is a bad idea, see https://www.ory.com/docs/oauth2-oidc/jwt-access-token Setting the strategy here overrides the global setting in `strategies.access_token`.
   --allowed-cors-origins: list # OAuth 2.0 Client Allowed CORS Origins  One or more URLs (scheme://host[:port]) which are allowed to make CORS requests to the /oauth/token endpoint. If this array is empty, the server's CORS origin configuration (`CORS_ALLOWED_ORIGINS`) will be used instead. If this array is set, the allowed origins are appended to the server's CORS origin configuration. Be aware that environment variable `CORS_ENABLED` MUST be set to `true` for this to work.
   --audience: list # OAuth 2.0 Client Audience  An allow-list defining the audiences this client is allowed to request tokens for. An audience limits the applicability of an OAuth 2.0 Access Token to, for example, certain API endpoints. The value is a list of URLs. URLs MUST NOT contain whitespaces. (e.g. https://mydomain.com/api/users, https://mydomain.com/api/posts)
@@ -1429,7 +1475,7 @@ export def "oauth2-register setOidcDynamicClient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke OAuth 2.0 Access or Refresh Token
@@ -1444,6 +1490,7 @@ export def "oauth2-revoke revokeOAuth2Token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --client-secret: string
   --body-token: string
@@ -1456,7 +1503,7 @@ export def "oauth2-revoke revokeOAuth2Token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # OpenID Connect Front- and Back-channel Enabled Logout
@@ -1471,13 +1518,14 @@ export def "oauth2-sessions-logout revokeOidcSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/sessions/logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The OAuth 2.0 Token Endpoint
@@ -1492,6 +1540,7 @@ export def "oauth2-token oauth2TokenExchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --code: string
   grant_type: string
@@ -1506,7 +1555,7 @@ export def "oauth2-token oauth2TokenExchange" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # OpenID Connect Userinfo
@@ -1521,13 +1570,14 @@ export def "userinfo get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<birthdate: string, email: string, email_verified: bool, family_name: string, gender: string, given_name: string, locale: string, middle_name: string, name: string, nickname: string, phone_number: string, phone_number_verified: bool, picture: string, preferred_username: string, profile: string, sub: string, updated_at: int, website: string, zoneinfo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Running Software Version.
@@ -1542,11 +1592,12 @@ export def "version get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

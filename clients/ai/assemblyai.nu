@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -73,7 +74,7 @@ def accept-completer [] { ["text/html" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "upload uploadFile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "upload uploadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<upload_url: string> {
   let input = $in
@@ -115,7 +117,7 @@ export def "upload uploadFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Transcribe audio
@@ -140,6 +142,7 @@ export def "transcript createTranscript" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audio_url: string # The URL of the audio or video file to transcribe. (format: url)
   --audio-end-at: int # The point in time, in milliseconds, to stop transcribing in your media file. See [Set the start and end of the transcript](https://www.assemblyai.com/docs/pre-recorded-audio/set-the-start-and-end-of-the-transcript) for more details.
   --audio-start-from: int # The point in time, in milliseconds, to begin transcribing in your media file. See [Set the start and end of the transcript](https://www.assemblyai.com/docs/pre-recorded-audio/set-the-start-and-end-of-the-transcript) for more details.
@@ -198,7 +201,7 @@ export def "transcript createTranscript" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List transcripts
@@ -214,6 +217,7 @@ export def "transcript listTranscripts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum amount of transcripts to retrieve (default: 10)
   --status: string@status-completer # Filter by transcript status
   --created-on: string # Only get transcripts created on this date (format: date)
@@ -227,7 +231,7 @@ export def "transcript listTranscripts" [
   let full_url = (build-url $base "/v2/transcript" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get transcript
@@ -243,13 +247,14 @@ export def "transcript list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<audio_channels: int, audio_duration: int, audio_end_at: int, audio_start_from: int, audio_url: string, auto_chapters: bool, auto_highlights: bool, auto_highlights_result: any, chapters: table<gist: string, headline: string, summary: string, start: int, end: int>, confidence: float, content_safety: bool, content_safety_labels: any, custom_spelling: table<from: list, to: string>, disfluencies: bool, domain: string, entities: table<entity_type: string, text: string, start: int, end: int>, entity_detection: bool, error: string, filter_profanity: bool, format_text: bool, iab_categories: bool, iab_categories_result: any, id: string, keyterms_prompt: list<string>, language_code: any, language_codes: list<string>, language_confidence: float, language_confidence_threshold: float, language_detection: bool, language_detection_options: record<expected_languages: list<string>, fallback_language: string, code_switching: bool, code_switching_confidence_threshold: float>, multichannel: bool, prompt: string, punctuate: bool, redact_pii: bool, redact_pii_audio: bool, redact_pii_audio_options: record<return_redacted_no_speech_audio: bool, override_audio_redaction_method: string>, redact_pii_audio_quality: any, redact_pii_policies: list<string>, redact_pii_sub: string, redact_pii_return_unredacted: bool, sentiment_analysis: bool, sentiment_analysis_results: table<text: string, start: int, end: int, sentiment: any, confidence: float, channel: string, speaker: string>, speaker_labels: bool, speakers_expected: int, speech_model_used: string, speech_models: list<string>, speech_threshold: float, speech_understanding: record<request: any, response: any>, status: string, summarization: bool, summary: string, summary_model: string, summary_type: string, remove_audio_tags: any, temperature: float, text: string, unredacted_text: string, throttled: bool, utterances: table<confidence: float, start: int, end: int, text: string, words: list, channel: string, speaker: string, translated_texts: record>, unredacted_utterances: table<confidence: float, start: int, end: int, text: string, words: list, channel: string, speaker: string, translated_texts: record>, webhook_auth: bool, webhook_auth_header_name: string, webhook_status_code: int, webhook_url: string, words: table<confidence: float, start: int, end: int, text: string, channel: string, speaker: string>, unredacted_words: table<confidence: float, start: int, end: int, text: string, channel: string, speaker: string>, acoustic_model: string, custom_topics: bool, language_model: string, speech_model: any, speed_boost: bool, topics: list<string>, translated_texts: record<language_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete transcript
@@ -265,13 +270,14 @@ export def "transcript delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<audio_channels: int, audio_duration: int, audio_end_at: int, audio_start_from: int, audio_url: string, auto_chapters: bool, auto_highlights: bool, auto_highlights_result: any, chapters: table<gist: string, headline: string, summary: string, start: int, end: int>, confidence: float, content_safety: bool, content_safety_labels: any, custom_spelling: table<from: list, to: string>, disfluencies: bool, domain: string, entities: table<entity_type: string, text: string, start: int, end: int>, entity_detection: bool, error: string, filter_profanity: bool, format_text: bool, iab_categories: bool, iab_categories_result: any, id: string, keyterms_prompt: list<string>, language_code: any, language_codes: list<string>, language_confidence: float, language_confidence_threshold: float, language_detection: bool, language_detection_options: record<expected_languages: list<string>, fallback_language: string, code_switching: bool, code_switching_confidence_threshold: float>, multichannel: bool, prompt: string, punctuate: bool, redact_pii: bool, redact_pii_audio: bool, redact_pii_audio_options: record<return_redacted_no_speech_audio: bool, override_audio_redaction_method: string>, redact_pii_audio_quality: any, redact_pii_policies: list<string>, redact_pii_sub: string, redact_pii_return_unredacted: bool, sentiment_analysis: bool, sentiment_analysis_results: table<text: string, start: int, end: int, sentiment: any, confidence: float, channel: string, speaker: string>, speaker_labels: bool, speakers_expected: int, speech_model_used: string, speech_models: list<string>, speech_threshold: float, speech_understanding: record<request: any, response: any>, status: string, summarization: bool, summary: string, summary_model: string, summary_type: string, remove_audio_tags: any, temperature: float, text: string, unredacted_text: string, throttled: bool, utterances: table<confidence: float, start: int, end: int, text: string, words: list, channel: string, speaker: string, translated_texts: record>, unredacted_utterances: table<confidence: float, start: int, end: int, text: string, words: list, channel: string, speaker: string, translated_texts: record>, webhook_auth: bool, webhook_auth_header_name: string, webhook_status_code: int, webhook_url: string, words: table<confidence: float, start: int, end: int, text: string, channel: string, speaker: string>, unredacted_words: table<confidence: float, start: int, end: int, text: string, channel: string, speaker: string>, acoustic_model: string, custom_topics: bool, language_model: string, speech_model: any, speed_boost: bool, topics: list<string>, translated_texts: record<language_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subtitles for transcript
@@ -288,6 +294,7 @@ export def "transcript get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --chars-per-caption: int # The maximum number of characters per caption
 ]: nothing -> any {
@@ -297,7 +304,7 @@ export def "transcript get" [
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)/($subtitle_format)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sentences in transcript
@@ -313,13 +320,14 @@ export def "transcript-sentences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, confidence: float, audio_duration: float, sentences: table<text: string, start: int, end: int, confidence: float, words: list, channel: string, speaker: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)/sentences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get paragraphs in transcript
@@ -335,13 +343,14 @@ export def "transcript-paragraphs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, confidence: float, audio_duration: float, paragraphs: table<text: string, start: int, end: int, confidence: float, words: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)/paragraphs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search words in transcript
@@ -357,6 +366,7 @@ export def "transcript-word-search wordSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --words: list # Keywords to search for
 ]: nothing -> record<id: string, total_count: int, matches: table<text: string, count: int, timestamps: list, indexes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -365,7 +375,7 @@ export def "transcript-word-search wordSearch" [
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)/word-search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get redacted audio
@@ -381,11 +391,12 @@ export def "transcript-redacted-audio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, redacted_audio_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transcript/($transcript_id)/redacted-audio")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

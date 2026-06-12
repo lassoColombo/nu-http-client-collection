@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["api-key" "bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-env-feature-configs GetFeatureConfig" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "client-env-feature-configs GetFeatureConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> table<project: string, environment: string, feature: string, state: string, kind: string, variations: list<record>, rules: list<record>, defaultServe: record<distribution: record, variation: string>, offVariation: string, prerequisites: list<record>, variationToTargetMap: list<record>, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -110,7 +112,7 @@ export def "client-env-feature-configs GetFeatureConfig" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/feature-configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get feature config
@@ -127,6 +129,7 @@ export def "client-env-feature-configs GetFeatureConfigByIdentifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> record<project: string, environment: string, feature: string, state: string, kind: string, variations: table<identifier: string, value: string, name: string, description: string>, rules: table<ruleId: string, priority: int, clauses: list, serve: record>, defaultServe: record<distribution: record<bucketBy: string, variations: list>, variation: string>, offVariation: string, prerequisites: table<feature: string, variations: list>, variationToTargetMap: table<variation: string, targets: list, targetSegments: list>, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -135,7 +138,7 @@ export def "client-env-feature-configs GetFeatureConfigByIdentifier" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/feature-configs/($identifier)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all segments.
@@ -151,6 +154,7 @@ export def "client-env-target-segments GetAllSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> table<identifier: string, name: string, environment: string, tags: list<record>, included: list<record>, excluded: list<record>, rules: list<record>, createdAt: int, modifiedAt: int, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -159,7 +163,7 @@ export def "client-env-target-segments GetAllSegments" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/target-segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a segment by identifier
@@ -176,6 +180,7 @@ export def "client-env-target-segments GetSegmentByIdentifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> record<identifier: string, name: string, environment: string, tags: table<name: string, value: string>, included: table<identifier: string, account: string, org: string, environment: string, project: string, name: string, anonymous: bool, attributes: record, createdAt: int, segments: list>, excluded: table<identifier: string, account: string, org: string, environment: string, project: string, name: string, anonymous: bool, attributes: record, createdAt: int, segments: list>, rules: table<id: string, attribute: string, op: string, values: list, negate: bool>, createdAt: int, modifiedAt: int, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -184,7 +189,7 @@ export def "client-env-target-segments GetSegmentByIdentifier" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/target-segments/($identifier)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate with the admin server.
@@ -200,6 +205,7 @@ export def "client-auth Authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   apiKey: string # e.g. 896045f3-42ee-4e73-9154-086644768b96
   --target: record # shape: {identifier: string, name?: string, anonymous?: bool, attributes?: record}
 ]: any -> record<authToken: string> {
@@ -211,7 +217,7 @@ export def "client-auth Authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get feature evaluations for target
@@ -228,6 +234,7 @@ export def "client-env-target-evaluations GetEvaluations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> table<flag: string, value: string, kind: string, identifier: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -236,7 +243,7 @@ export def "client-env-target-evaluations GetEvaluations" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/target/($target)/evaluations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get feature evaluations for target
@@ -254,6 +261,7 @@ export def "client-env-target-evaluations GetEvaluationByIdentifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
 ]: nothing -> record<flag: string, value: string, kind: string, identifier: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -262,7 +270,7 @@ export def "client-env-target-evaluations GetEvaluationByIdentifier" [
   let full_url = (build-url $base $"/client/env/($environmentUUID)/target/($target)/evaluations/($feature)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send metrics to the Analytics server.
@@ -280,6 +288,7 @@ export def "metrics post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
   --targetData: list # item shape: {identifier: string, name: string, attributes: list}
   --metricsData: list # item shape: {timestamp: int, count: int, metricsType: "FFMETRICS", attributes: list}
@@ -293,7 +302,7 @@ export def "metrics post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream endpoint.
@@ -308,6 +317,7 @@ export def "stream Stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster: string # Unique identifier for the cluster for the account
   --API-Key: string
 ]: nothing -> any {
@@ -319,5 +329,5 @@ export def "stream Stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def searchBy-completer [] { ["clientTrackerId" "trackerId"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "public-trackers create-tracker" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "public-trackers create-tracker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # application/json; charset=utf-8 (e.g. application/json; charset=utf-8)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
   trackingNumber: string # Tracking number of the shipment. (e.g. 9400115901047177598206)
@@ -133,7 +135,7 @@ export def "public-trackers create-tracker" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List existing Trackers
@@ -148,6 +150,7 @@ export def "public-trackers list-trackers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The page index, starting from 1. (e.g. 1)
   --limit: int # The maximum number of trackers returned per page. (e.g. 100)
@@ -162,7 +165,7 @@ export def "public-trackers list-trackers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create trackers
@@ -177,6 +180,7 @@ export def "public-trackers-bulk bulk-create-trackers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # application/json; charset=utf-8 (e.g. application/json; charset=utf-8)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
   --body: record
@@ -190,7 +194,7 @@ export def "public-trackers-bulk bulk-create-trackers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a tracker and get tracking results
@@ -207,6 +211,7 @@ export def "public-trackers-track create-tracker-and-get-tracking-results" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # application/json; charset=utf-8 (e.g. application/json; charset=utf-8)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
   trackingNumber: string # Tracking number of the shipment. (e.g. 9400115901047177598206)
@@ -234,7 +239,7 @@ export def "public-trackers-track create-tracker-and-get-tracking-results" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an existing tracker
@@ -250,6 +255,7 @@ export def "public-trackers get-tracker-by-trackerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchBy: string@searchBy-completer # Parameter allowing to search either by `trackerId`or `clientTrackerId`. Default behavior is by `trackerId`. (e.g. trackerId)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
 ]: nothing -> record<trackerId: string, trackingNumber: string, shipmentReference: string, courierCode: list<string>, clientTrackerId: string, isSubscribed: bool, isTracked: bool, createdAt: string> {
@@ -261,7 +267,7 @@ export def "public-trackers get-tracker-by-trackerId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing tracker
@@ -277,6 +283,7 @@ export def "public-trackers update-tracker-by-trackerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchBy: string@searchBy-completer # Parameter allowing to search either by `trackerId`or `clientTrackerId`. Default behavior is by `trackerId`. (e.g. trackerId)
   --Content-Type: string # application/json; charset=utf-8 (e.g. application/json; charset=utf-8)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
@@ -298,7 +305,7 @@ export def "public-trackers update-tracker-by-trackerId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tracking results for existing trackers by tracking number
@@ -314,6 +321,7 @@ export def "public-trackers-search-results get-tracking-results-of-trackers-by-t
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
 ]: nothing -> record<data: record<trackings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer your_api_key"))
@@ -323,7 +331,7 @@ export def "public-trackers-search-results get-tracking-results-of-trackers-by-t
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tracking results for an existing tracker
@@ -339,6 +347,7 @@ export def "public-trackers-results get-tracking-results-of-tracker-by-trackerId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchBy: string@searchBy-completer # Parameter allowing to search either by `trackerId`or `clientTrackerId`. Default behavior is by `trackerId`. (e.g. trackerId)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
 ]: nothing -> record<data: record<trackings: list<record>>> {
@@ -350,7 +359,7 @@ export def "public-trackers-results get-tracking-results-of-tracker-by-trackerId
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all couriers
@@ -365,6 +374,7 @@ export def "public-couriers get-couriers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
 ]: nothing -> record<data: record<couriers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer your_api_key"))
@@ -374,7 +384,7 @@ export def "public-couriers get-couriers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tracking results by tracking number
@@ -389,6 +399,7 @@ export def "public-tracking-search get-tracking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # e.g. application/json; charset=utf-8
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
   --trackingNumber: string # Tracking number of the shipment. (e.g. 9400115901047177598206)
@@ -408,7 +419,7 @@ export def "public-tracking-search get-tracking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend webhooks of an existing tracker
@@ -424,6 +435,7 @@ export def "public-trackers-webhook-events-resend resend-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchBy: string@searchBy-completer # Parameter allowing to search either by `trackerId`or `clientTrackerId`. Default behavior is by `trackerId`. (e.g. trackerId)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
 ]: nothing -> record<data: record<summary: record<totalResent: string>>> {
@@ -435,5 +447,5 @@ export def "public-trackers-webhook-events-resend resend-webhooks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

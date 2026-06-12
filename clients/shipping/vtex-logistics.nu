@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacityType-shippingPolicyId" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rangeStart: string # Starting date of time range (e.g. yyyy-mm-dd)
   --rangeEnd: string # End date of time range. (e.g. yyyy-mm-dd)
   --Content-Type: string # Type of the content being sent
@@ -115,7 +117,7 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get capacity reservation usage by window
@@ -134,6 +136,7 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
 ]: nothing -> any {
@@ -144,7 +147,7 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add blocked delivery windows
@@ -160,6 +163,7 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked AddBlockedD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -173,7 +177,7 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked AddBlockedD
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Retrieve blocked delivery windows
@@ -189,6 +193,7 @@ export def "logistics-pvt-configuration-carriers-getdayofweekblocked RetrieveBlo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -199,7 +204,7 @@ export def "logistics-pvt-configuration-carriers-getdayofweekblocked RetrieveBlo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove blocked delivery windows
@@ -215,6 +220,7 @@ export def "logistics-pvt-configuration-carriers-removedayofweekblocked RemoveBl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -228,7 +234,7 @@ export def "logistics-pvt-configuration-carriers-removedayofweekblocked RemoveBl
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List all  docks
@@ -243,6 +249,7 @@ export def "logistics-pvt-configuration-docks AllDocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -253,7 +260,7 @@ export def "logistics-pvt-configuration-docks AllDocks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update dock
@@ -268,6 +275,7 @@ export def "logistics-pvt-configuration-docks Create/UpdateDock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -281,7 +289,7 @@ export def "logistics-pvt-configuration-docks Create/UpdateDock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Delete dock
@@ -297,6 +305,7 @@ export def "logistics-pvt-configuration-docks Dock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -307,7 +316,7 @@ export def "logistics-pvt-configuration-docks Dock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List dock by ID
@@ -323,6 +332,7 @@ export def "logistics-pvt-configuration-docks DockById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -333,7 +343,7 @@ export def "logistics-pvt-configuration-docks DockById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate dock
@@ -349,6 +359,7 @@ export def "logistics-pvt-configuration-docks-activation ActivateDock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -359,7 +370,7 @@ export def "logistics-pvt-configuration-docks-activation ActivateDock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate dock
@@ -375,6 +386,7 @@ export def "logistics-pvt-configuration-docks-deactivation DeactivateDock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -385,7 +397,7 @@ export def "logistics-pvt-configuration-docks-deactivation DeactivateDock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update freight values
@@ -401,6 +413,7 @@ export def "logistics-pvt-configuration-freights-values-update Create/UpdateFrei
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -414,7 +427,7 @@ export def "logistics-pvt-configuration-freights-values-update Create/UpdateFrei
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List freight values
@@ -431,6 +444,7 @@ export def "logistics-pvt-configuration-freights-values FreightValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -441,7 +455,7 @@ export def "logistics-pvt-configuration-freights-values FreightValues" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List paged polygons
@@ -456,6 +470,7 @@ export def "logistics-pvt-configuration-geoshape PagedPolygons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # e.g. {{page}}
   --perPage: string # e.g. {{perPage}}
   --Content-Type: string # Type of the content being sent
@@ -469,7 +484,7 @@ export def "logistics-pvt-configuration-geoshape PagedPolygons" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update polygon
@@ -484,6 +499,7 @@ export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -497,7 +513,7 @@ export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Delete polygon
@@ -513,6 +529,7 @@ export def "logistics-pvt-configuration-geoshape DeletePolygon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -523,7 +540,7 @@ export def "logistics-pvt-configuration-geoshape DeletePolygon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List polygon by ID
@@ -539,6 +556,7 @@ export def "logistics-pvt-configuration-geoshape PolygonbyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -549,7 +567,7 @@ export def "logistics-pvt-configuration-geoshape PolygonbyId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all holidays
@@ -564,6 +582,7 @@ export def "logistics-pvt-configuration-holidays AllHolidays" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -574,7 +593,7 @@ export def "logistics-pvt-configuration-holidays AllHolidays" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete holiday
@@ -590,6 +609,7 @@ export def "logistics-pvt-configuration-holidays Holiday" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -600,7 +620,7 @@ export def "logistics-pvt-configuration-holidays Holiday" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List holiday by ID
@@ -616,6 +636,7 @@ export def "logistics-pvt-configuration-holidays HolidayById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -626,7 +647,7 @@ export def "logistics-pvt-configuration-holidays HolidayById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update holiday
@@ -642,6 +663,7 @@ export def "logistics-pvt-configuration-holidays Create/UpdateHoliday" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
   --body: record
@@ -655,7 +677,7 @@ export def "logistics-pvt-configuration-holidays Create/UpdateHoliday" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List all pickup points
@@ -670,6 +692,7 @@ export def "logistics-pvt-configuration-pickuppoints ListAllPickupPpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -680,7 +703,7 @@ export def "logistics-pvt-configuration-pickuppoints ListAllPickupPpoints" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List paged Pickup Points
@@ -695,6 +718,7 @@ export def "logistics-pvt-configuration-pickuppoints-search Getpaged" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # e.g. {{pageNumber}}
   --pageSize: string # e.g. {{pageSize}}
   --keyword: string # e.g. 
@@ -709,7 +733,7 @@ export def "logistics-pvt-configuration-pickuppoints-search Getpaged" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Pickup Point
@@ -725,6 +749,7 @@ export def "logistics-pvt-configuration-pickuppoints Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -735,7 +760,7 @@ export def "logistics-pvt-configuration-pickuppoints Delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Pickup Point By ID
@@ -751,6 +776,7 @@ export def "logistics-pvt-configuration-pickuppoints GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -761,7 +787,7 @@ export def "logistics-pvt-configuration-pickuppoints GetById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/Update Pickup Point
@@ -777,6 +803,7 @@ export def "logistics-pvt-configuration-pickuppoints CreateUpdatePickupPoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
@@ -790,7 +817,7 @@ export def "logistics-pvt-configuration-pickuppoints CreateUpdatePickupPoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List all warehouses
@@ -805,6 +832,7 @@ export def "logistics-pvt-configuration-warehouses AllWarehouses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -815,7 +843,7 @@ export def "logistics-pvt-configuration-warehouses AllWarehouses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update warehouse
@@ -830,6 +858,7 @@ export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
   --body: record
@@ -843,7 +872,7 @@ export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Remove warehouse
@@ -859,6 +888,7 @@ export def "logistics-pvt-configuration-warehouses RemoveWarehouse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -869,7 +899,7 @@ export def "logistics-pvt-configuration-warehouses RemoveWarehouse" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List warehouse by ID
@@ -885,6 +915,7 @@ export def "logistics-pvt-configuration-warehouses WarehouseById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -895,7 +926,7 @@ export def "logistics-pvt-configuration-warehouses WarehouseById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate warehouse
@@ -911,6 +942,7 @@ export def "logistics-pvt-configuration-warehouses-activation ActivateWarehouse"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -921,7 +953,7 @@ export def "logistics-pvt-configuration-warehouses-activation ActivateWarehouse"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate warehouse
@@ -937,6 +969,7 @@ export def "logistics-pvt-configuration-warehouses-deactivation DeactivateWareho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -947,7 +980,7 @@ export def "logistics-pvt-configuration-warehouses-deactivation DeactivateWareho
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List inventory with dispatched reservations
@@ -964,6 +997,7 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched Getinventorywith
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dispatchedReservationsQuantity: int, isUnlimitedQuantity: bool, quantity: int, skuId: string, totalReservedQuantity: int, warehouseId: string> {
@@ -974,7 +1008,7 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched Getinventorywith
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List inventory per dock
@@ -991,6 +1025,7 @@ export def "logistics-pvt-inventory-items-docks Inventoryperdock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
@@ -1001,7 +1036,7 @@ export def "logistics-pvt-inventory-items-docks Inventoryperdock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List inventory per dock and warehouse
@@ -1019,6 +1054,7 @@ export def "logistics-pvt-inventory-items-docks-warehouses Inventoryperdockandwa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
@@ -1029,7 +1065,7 @@ export def "logistics-pvt-inventory-items-docks-warehouses Inventoryperdockandwa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List inventory per warehouse
@@ -1046,6 +1082,7 @@ export def "logistics-pvt-inventory-items-warehouses Inventoryperwarehouse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
@@ -1056,7 +1093,7 @@ export def "logistics-pvt-inventory-items-warehouses Inventoryperwarehouse" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List supply lots
@@ -1073,6 +1110,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots GetSupplyLots" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --Content-Type: string # Type of the content being sent. (e.g. application/json; charset=utf-8)
 ]: nothing -> any {
@@ -1083,7 +1121,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots GetSupplyLots" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save supply lot
@@ -1101,6 +1139,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots SaveSupplyLot" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
   --body: record
@@ -1114,7 +1153,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots SaveSupplyLot" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Transfer supply lot
@@ -1132,6 +1171,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer Transf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
 ]: nothing -> any {
@@ -1142,7 +1182,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer Transf
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reservation
@@ -1157,6 +1197,7 @@ export def "logistics-pvt-inventory-reservations CreateReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --Content-Type: string # Type of the content being sent.
   --body: record
@@ -1170,7 +1211,7 @@ export def "logistics-pvt-inventory-reservations CreateReservation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List reservation by ID
@@ -1186,6 +1227,7 @@ export def "logistics-pvt-inventory-reservations ReservationById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1196,7 +1238,7 @@ export def "logistics-pvt-inventory-reservations ReservationById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledgment reservation
@@ -1212,6 +1254,7 @@ export def "logistics-pvt-inventory-reservations-acknowledge AcknowledgmentReser
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1222,7 +1265,7 @@ export def "logistics-pvt-inventory-reservations-acknowledge AcknowledgmentReser
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel reservation
@@ -1238,6 +1281,7 @@ export def "logistics-pvt-inventory-reservations-cancel CancelReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1248,7 +1292,7 @@ export def "logistics-pvt-inventory-reservations-cancel CancelReservation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirm reservation
@@ -1264,6 +1308,7 @@ export def "logistics-pvt-inventory-reservations-confirm ConfirmReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1274,7 +1319,7 @@ export def "logistics-pvt-inventory-reservations-confirm ConfirmReservation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List reservation by warehouse and SKU
@@ -1291,6 +1336,7 @@ export def "logistics-pvt-inventory-reservations ReservationbyWarehouseandSku" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1301,7 +1347,7 @@ export def "logistics-pvt-inventory-reservations ReservationbyWarehouseandSku" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List inventory by SKU
@@ -1317,6 +1363,7 @@ export def "logistics-pvt-inventory-skus InventoryBySku" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
@@ -1327,7 +1374,7 @@ export def "logistics-pvt-inventory-skus InventoryBySku" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update inventory by SKU and warehouse
@@ -1344,6 +1391,7 @@ export def "logistics-pvt-inventory-skus-warehouses UpdateInventoryBySkuandWareh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --Content-Type: string # Type of the content being sent.
   --body: record
@@ -1357,7 +1405,7 @@ export def "logistics-pvt-inventory-skus-warehouses UpdateInventoryBySkuandWareh
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # List shipping policies
@@ -1371,6 +1419,7 @@ export def "logistics-pvt-shipping-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Desired number of pages to retrieve information from your Shipping Policies. (e.g. page)
   --perPage: string # Desired number of items per page, to retrieve information from your Shipping Policies. (e.g. perPage)
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
@@ -1384,7 +1433,7 @@ export def "logistics-pvt-shipping-policies list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create shipping policy
@@ -1406,6 +1455,7 @@ export def "logistics-pvt-shipping-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
   businessHourSettings: record # Business hour configuration. (e.g. {carrierBusinessHours: [{closingTime: 18:59:59, dayOfWeek: 0, openingTime: 09:00:00}], isOpenOutsideBusinessHours: true}) — shape: {carrierBusinessHours: list, isOpenOutsideBusinessHours: bool}
@@ -1434,7 +1484,7 @@ export def "logistics-pvt-shipping-policies post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete shipping policies by ID
@@ -1449,6 +1499,7 @@ export def "logistics-pvt-shipping-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
 ]: nothing -> any {
@@ -1459,7 +1510,7 @@ export def "logistics-pvt-shipping-policies delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve shipping policy by ID
@@ -1474,6 +1525,7 @@ export def "logistics-pvt-shipping-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
 ]: nothing -> any {
@@ -1484,7 +1536,7 @@ export def "logistics-pvt-shipping-policies get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update shipping policy
@@ -1501,6 +1553,7 @@ export def "logistics-pvt-shipping-policies put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
   --deliveryOnWeekends: oneof<nothing, bool> # If the shipping policy (carrier) delivers on weekends (e.g. false)
@@ -1520,7 +1573,7 @@ export def "logistics-pvt-shipping-policies put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Calculate SLA
@@ -1535,6 +1588,7 @@ export def "logistics-pvt-shipping-calculate CalculateSLA" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string # Type of the content being sent.
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --body: record
@@ -1548,5 +1602,5 @@ export def "logistics-pvt-shipping-calculate CalculateSLA" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }

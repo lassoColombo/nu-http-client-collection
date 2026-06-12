@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -97,7 +98,7 @@ def action-completer-3 [] { ["access" "delete" "hello" "search" "switch"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "nodes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -132,6 +133,7 @@ export def "nodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -144,7 +146,7 @@ export def "nodes get" [
   let full_url = (build-url $base "/api/v2/nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Nodes Info v3
@@ -159,6 +161,7 @@ export def "nodes get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -171,7 +174,7 @@ export def "nodes get-1" [
   let full_url = (build-url $base "/api/v3/nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Contexts Info v2
@@ -188,6 +191,7 @@ export def "contexts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -200,7 +204,7 @@ export def "contexts get" [
   let full_url = (build-url $base "/api/v2/contexts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Contexts Info v3
@@ -215,6 +219,7 @@ export def "contexts get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -227,7 +232,7 @@ export def "contexts get-1" [
   let full_url = (build-url $base "/api/v3/contexts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Full Text Search v2
@@ -244,6 +249,7 @@ export def "q q2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The strings to search for, formatted as a simple pattern (format: simple pattern)
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -257,7 +263,7 @@ export def "q q2" [
   let full_url = (build-url $base "/api/v2/q" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Full Text Search v3
@@ -272,6 +278,7 @@ export def "q q3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The strings to search for, formatted as a simple pattern (format: simple pattern)
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -285,7 +292,7 @@ export def "q q3" [
   let full_url = (build-url $base "/api/v3/q" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Node Info v1
@@ -302,13 +309,14 @@ export def "info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, uid: string, mirrored_hosts: list<string>, mirrored_hosts_status: table<guid: string, reachable: bool, claim_id: string>, os_name: string, os_id: string, os_id_like: string, os_version: string, os_version_id: string, os_detection: string, kernel_name: string, kernel_version: string, is_k8s_node: bool, architecture: string, virtualization: string, virt_detection: string, container: string, container_detection: string, stream_compression: bool, labels: record<app: string>, collectors: table<plugin: string, module: string>, alarms: record<normal: int, warning: int, critical: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all charts v1 - EOL
@@ -325,13 +333,14 @@ export def "charts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hostname: string, version: string, release_channel: string, timezone: string, os: string, history: float, memory_mode: string, update_every: float, charts: record, charts_count: float, dimensions_count: float, alarms_count: float, rrd_memory_bytes: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/charts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get one chart v1 - EOL
@@ -348,6 +357,7 @@ export def "chart get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # The id of the chart as returned by the `/api/v1/charts` call. (format: as returned by `/api/v1/charts`)
 ]: nothing -> record<id: string, name: string, type: string, family: string, title: string, priority: float, enabled: bool, units: string, data_url: string, chart_type: string, duration: float, first_entry: float, last_entry: float, update_every: float, dimensions: record, chart_variables: record, green: float, red: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -356,7 +366,7 @@ export def "chart get" [
   let full_url = (build-url $base "/api/v1/chart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all node contexts available v1
@@ -373,6 +383,7 @@ export def "contexts get-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dimensions: string # a simple pattern matching dimensions (use comma or pipe as separator) (allows empty value)
   --chart-label-key: string # Specify the chart label keys that need to match for context queries as comma separated values. At least one matching key is needed to match the corresponding chart.  (format: key1,key2,key3)
   --chart-labels-filter: string # Specify the chart label keys and values to match for context queries. All keys/values need to match for the chart to be included in the query. The labels are specified as key1:value1,key2:value2  (format: key1:value1,key2:value2,key3:value3)
@@ -386,7 +397,7 @@ export def "contexts get-2" [
   let full_url = (build-url $base "/api/v1/contexts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get info about a specific context
@@ -403,6 +414,7 @@ export def "context get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # The context of the chart as returned by the /charts call. (format: as returned by /charts)
   --dimensions: string # a simple pattern matching dimensions (use comma or pipe as separator) (allows empty value)
   --chart-label-key: string # Specify the chart label keys that need to match for context queries as comma separated values. At least one matching key is needed to match the corresponding chart.  (format: key1,key2,key3)
@@ -417,7 +429,7 @@ export def "context get" [
   let full_url = (build-url $base "/api/v1/context" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get info about a specific context - Latest API
@@ -432,6 +444,7 @@ export def "context get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # The context identifier to query. This is a required parameter.  A context represents a type of metric collected across multiple instances. Each context groups charts that measure the same thing but for different entities.  **Common Context Examples:** - `system.cpu` - CPU utilization metrics - `system.ram` - RAM usage metrics - `disk.io` - Disk I/O operations - `disk.ops` - Disk operation counts - `net.packets` - Network packet statistics - `net.drops` - Network packet drops - `cgroup.cpu` - Container CPU usage - `nginx.requests` - Nginx request rates  **Finding Available Contexts:** Use the `/api/v3/contexts` endpoint to get a list of all available contexts.  **Alias:** Can also be specified as `ctx` for brevity.  (e.g. system.cpu)
   --dimensions: string # a simple pattern matching dimensions (use comma or pipe as separator) (allows empty value)
   --chart-label-key: string # Specify the chart label keys that need to match for context queries as comma separated values. At least one matching key is needed to match the corresponding chart.  (format: key1,key2,key3)
@@ -446,7 +459,7 @@ export def "context get-1" [
   let full_url = (build-url $base "/api/v3/context" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dynamic configuration information.  **Security & Access Control:** - 📊 **Public Data API** - Bearer token optional, IP-based ACL restrictions apply - **Default Access:** Public (no authentication required) - **Bearer Protection:** When enabled via `/api/v3/bearer_protection`, requires bearer token - **IP Restrictions:** Subject to `allow dashboard from` in netdata.conf - **Access Methods:** Direct HTTP/HTTPS, Netdata Cloud, external tools
@@ -463,6 +476,7 @@ export def "config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer # The type of information required (default: tree)
   --id: string # The ID of the dynamic configuration entity
   --path: string # Top level path of the configuration entities, used with action 'tree' (default: /)
@@ -474,7 +488,7 @@ export def "config get" [
   let full_url = (build-url $base "/api/v1/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post dynamic configuration to Netdata.
@@ -489,6 +503,7 @@ export def "config post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-1 # The type of action required.
   --id: string # The ID of the dynamic configuration entity to configure.
   --name: string # Name of the dynamic configuration entity, used with action 'add'
@@ -500,7 +515,7 @@ export def "config post" [
   let full_url = (build-url $base "/api/v1/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Data Query v2
@@ -517,6 +532,7 @@ export def "data dataQuery2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --group-by: list # A comma separated list of the groupings required. All possible values can be combined together, except `selected`. If `selected` is given in the list, all others are ignored. The order they are placed in the list is currently ignored. This parameter is also accepted as `group_by[0]` and `group_by[1]` when multiple grouping passes are required.  (default: [dimension])
   --group-by-label: string # A comma separated list of the label keys to group by their values. The order of the labels in the list is respected. This parameter is also accepted as `group_by_label[0]` and `group_by_label[1]` when multiple grouping passes are required.  (format: comma separated list of label keys to group by, default: )
@@ -553,7 +569,7 @@ export def "data dataQuery2" [
   let full_url = (build-url $base "/api/v2/data" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Data Query v3
@@ -568,6 +584,7 @@ export def "data dataQuery3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --group-by: list # A comma separated list of the groupings required. All possible values can be combined together, except `selected`. If `selected` is given in the list, all others are ignored. The order they are placed in the list is currently ignored. This parameter is also accepted as `group_by[0]` and `group_by[1]` when multiple grouping passes are required.  (default: [dimension])
   --group-by-label: string # A comma separated list of the label keys to group by their values. The order of the labels in the list is respected. This parameter is also accepted as `group_by_label[0]` and `group_by_label[1]` when multiple grouping passes are required.  (format: comma separated list of label keys to group by, default: )
@@ -604,7 +621,7 @@ export def "data dataQuery3" [
   let full_url = (build-url $base "/api/v3/data" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Data Query v1 - Single node, single chart or context queries. without group-by.
@@ -621,6 +638,7 @@ export def "data dataQuery1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --chart: string # The id of the chart as returned by the `/api/v1/charts` call. (format: as returned by `/api/v1/charts`)
   --context: string # The context of the chart as returned by the /charts call. (format: as returned by /charts)
@@ -647,7 +665,7 @@ export def "data dataQuery1" [
   let full_url = (build-url $base "/api/v1/data" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Metrics v1 - Fetch latest value for all metrics
@@ -664,6 +682,7 @@ export def "allmetrics allMetrics1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-2 # The format of the response to be returned. (default: shell)
   --filter: string # Allows to filter charts out using simple patterns. (format: any text)
   --qp-variables: string@variables-completer # When enabled, netdata will expose various system configuration variables.  (default: no)
@@ -681,7 +700,7 @@ export def "allmetrics allMetrics1" [
   let full_url = (build-url $base "/api/v1/allmetrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a badge in form of SVG image for a chart (or dimension)
@@ -698,6 +717,7 @@ export def "badgesvg badge1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # The id of the chart as returned by the `/api/v1/charts` call. (format: as returned by `/api/v1/charts`)
   --dimension: list # Zero, one or more dimension ids or names, as returned by the /chart call, separated with comma or pipe. Netdata simple patterns are supported.
   --after: int # `after` and `before` define the time-frame of a query. `after` can be a negative number of seconds, up to 3 years (-94608000), relative to `before`. If not set, it is usually assumed to be -600. When non-data endpoints support the `after` and `before`, they use the time-frame to limit their response for objects having data retention within the time-frame given.  (default: -600)
@@ -727,7 +747,7 @@ export def "badgesvg badge1" [
   let full_url = (build-url $base "/api/v1/badge.svg" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a badge in form of SVG image for a chart (or dimension) - Latest API
@@ -742,6 +762,7 @@ export def "badgesvg badge3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # The id of the chart as returned by the `/api/v1/charts` call. (format: as returned by `/api/v1/charts`)
   --dimension: list # Zero, one or more dimension ids or names, as returned by the /chart call, separated with comma or pipe. Netdata simple patterns are supported.
   --after: int # `after` and `before` define the time-frame of a query. `after` can be a negative number of seconds, up to 3 years (-94608000), relative to `before`. If not set, it is usually assumed to be -600. When non-data endpoints support the `after` and `before`, they use the time-frame to limit their response for objects having data retention within the time-frame given.  (default: -600)
@@ -771,7 +792,7 @@ export def "badgesvg badge3" [
   let full_url = (build-url $base "/api/v3/badge.svg" $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Metrics v3 - Export all metrics in various formats - Latest API
@@ -786,6 +807,7 @@ export def "allmetrics allMetrics3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-2 # The export format for the metrics. Required parameter.  **Formats:** - `shell`: Bash variables (default) - Exports as NETDATA_CHARTNAME_DIMENSIONNAME="value" - `prometheus`: Prometheus format (single host) - Compatible with Prometheus scraping - `prometheus_all_hosts`: Prometheus format (all hosts) - Includes metrics from child nodes with host labels - `json`: JSON format - Full metadata including chart names, families, contexts, units, and timestamps  **Format Details:** - Shell format includes alarm status variables (NETDATA_ALARM_CHART_ALARM_STATUS, NETDATA_ALARM_CHART_ALARM_VALUE) - Prometheus formats respect Prometheus metric naming conventions - JSON format provides complete chart and dimension information  (default: shell)
   --filter: string # Simple pattern filter to include only specific charts. Uses Netdata simple pattern matching.  **Pattern Syntax:** - Exact match: `system.cpu` - Wildcard: `system.*` (all system charts) - Multiple patterns: `system.* disk.*` (space-separated) - Negation: `!system.cpu` (exclude specific chart)  When not specified, all charts are exported.  **Examples:** - `system.*` - Export only system charts - `disk.* net.*` - Export disk and network charts - `* !*.mdstat` - Export all except mdstat charts
@@ -804,7 +826,7 @@ export def "allmetrics allMetrics3" [
   let full_url = (build-url $base "/api/v3/allmetrics" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Current Alert Status - Multi-node Alert Information - Latest API
@@ -819,6 +841,7 @@ export def "alerts alerts3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -837,7 +860,7 @@ export def "alerts alerts3" [
   let full_url = (build-url $base "/api/v3/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve alert state transition history across all nodes with advanced filtering
@@ -852,6 +875,7 @@ export def "alert-transitions v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Filter transitions to only include specific nodes using simple pattern matching.  This parameter defines which nodes to include in the search using Netdata's simple pattern syntax (not regex).  **Pattern Syntax:** - `*` matches any number of characters (including none) - `node1 node2` space-separated list matches any of the nodes - `!node3` exclude specific nodes (prefix with !) - Can combine inclusion and exclusion: `web* !web-test*`  **Examples:** - `scope_nodes=web*` - All nodes starting with "web" - `scope_nodes=web* db*` - All web and database nodes - `scope_nodes=* !test*` - All nodes except test nodes - `scope_nodes=prod-web-01` - Specific node only  **Use Cases:** - Focus on specific node groups (production vs staging) - Exclude test/development nodes from analysis - Investigate issues on specific infrastructure tiers  When not specified, transitions from all nodes are included.
   --nodes: string # Filter transitions to specific nodes by their exact names.  Unlike `scope_nodes` which supports patterns, this parameter requires exact node names. Multiple nodes are separated by comma or pipe.  **Format:** Comma or pipe-separated list of exact node names  **Examples:** - `nodes=web-server-01` - Single specific node - `nodes=web-server-01,web-server-02,db-server-01` - Multiple specific nodes - `nodes=web-server-01|web-server-02` - Pipe separator also works  **Difference from scope_nodes:** - `scope_nodes`: Pattern matching, filters at query time - `nodes`: Exact names, more efficient for known node names  **Best Practice:** Use `nodes` when you know exact node names, use `scope_nodes` for pattern-based filtering.  When not specified, transitions from all nodes matching scope_nodes (or all nodes if scope_nodes is also not specified) are included.  (e.g. web-server-01,db-server-01)
   --scope-contexts: string # Filter transitions to only include alerts from specific metric contexts using pattern matching.  Contexts group similar metrics across instances (e.g., `system.cpu` groups CPU metrics from all nodes, `disk.io` groups disk I/O from all disks).  **Pattern Syntax:** - `*` matches any number of characters - `context1 context2` space-separated list matches any of the contexts - `!context3` exclude specific contexts - Can combine: `system.* !system.io*`  **Common Context Patterns:** - `system.*` - All system-level metrics - `disk.*` - All disk-related metrics - `net.*` - All network-related metrics - `mysql.*` - All MySQL metrics - `nginx.*` - All Nginx metrics  **Examples:** - `scope_contexts=system.cpu` - Only CPU alerts - `scope_contexts=disk.* net.*` - All disk and network alerts - `scope_contexts=* !system.ip*` - All contexts except IP-related  **Use Cases:** - Focus on specific subsystem (e.g., storage, network) - Exclude noisy alert types - Component-specific incident investigation  When not specified, transitions from all contexts are included.
@@ -880,7 +904,7 @@ export def "alert-transitions v3" [
   let full_url = (build-url $base "/api/v3/alert_transitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the configuration of a specific alert by its config hash ID
@@ -895,6 +919,7 @@ export def "alert-config v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --config: string # The unique configuration hash ID (UUID) of the alert whose configuration to retrieve.  **Format:** UUID string (with or without hyphens)  **Where to Find Config Hash IDs:** 1. **From /api/v3/alerts Response:**    Each alert in the response includes a `config_hash_id` field containing the UUID  2. **From /api/v3/alert_transitions Response:**    Transition records include `config_hash_id` showing which config was active  3. **From Alert Notifications:**    Alert notifications (email, Slack, etc.) often include the config hash  4. **From Logs:**    Netdata logs may reference config hashes when loading alert configurations  **UUID Format Examples:** - With hyphens: `550e8400-e29b-41d4-a716-446655440000` - Without hyphens: `550e8400e29b41d4a716446655440000` - Both formats are accepted  **Important Notes:** - This parameter is **REQUIRED** - Must be a valid UUID format - Must reference an existing alert configuration - Case-insensitive  **Common Errors:** - Missing config parameter → 400 Bad Request with message "A config hash ID is required" - Invalid UUID format → 400 Bad Request - Non-existent UUID → 404 or empty result  **Example Usage:** ``` GET /api/v3/alert_config?config=550e8400-e29b-41d4-a716-446655440000 ```  **Tip:** To find all config hash IDs for a specific alert name, query the alerts endpoint first: ``` GET /api/v3/alerts?alert=disk_space_usage ``` Then extract the `config_hash_id` from the response.  (format: uuid, e.g. 550e8400-e29b-41d4-a716-446655440000)
 ]: nothing -> record {
@@ -904,7 +929,7 @@ export def "alert-config v3" [
   let full_url = (build-url $base "/api/v3/alert_config" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the value of a specific chart variable used in alert expressions
@@ -919,6 +944,7 @@ export def "variable v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # The chart identifier (ID or name) where the variable is defined.  **Chart Identifier Format:** Charts can be specified by either their unique ID or their name.  **Chart ID Format:** - Format: `type.name` (e.g., `system.cpu`, `disk.sda_io`, `mysql.queries`) - This is the canonical identifier shown in chart metadata - Case-sensitive - More reliable as it doesn't change  **Chart Name Format:** - Human-readable name (e.g., "System CPU") - May contain spaces - Less reliable as it can change - The API will try to find by name if ID lookup fails  **How to Find Chart IDs:** 1. **From /api/v1/charts:**    ```    GET /api/v1/charts    ```    Response includes all chart IDs in the system  2. **From /api/v3/contexts:**    ```    GET /api/v3/contexts    ```    Lists contexts and their chart instances  3. **From Alert Configuration:**    Alert configs reference charts in their `on` clause  4. **From Netdata Dashboard:**    Chart IDs are shown in chart metadata  **Examples:** - `chart=system.cpu` - System CPU chart - `chart=system.ram` - System RAM chart - `chart=disk.sda_io` - Disk sda I/O chart - `chart=mysql.queries` - MySQL queries chart  **Common Chart IDs by Category:** - **System:** `system.cpu`, `system.load`, `system.ram`, `system.io` - **Disk:** `disk.space`, `disk.io`, `disk.inodes` - **Network:** `net.eth0`, `net.packets` - **Databases:** `mysql.queries`, `postgres.connections`, `redis.memory`  **Important Notes:** - This parameter is **REQUIRED** - Must reference an existing chart on the specified host - Chart must be actively collecting data - Case-sensitive  **Error Handling:** - Missing parameter → 400 Bad Request: "A chart= and a variable= are required." - Invalid/non-existent chart → 404 Not Found: "Chart is not found: <chart>"
   --variable: string # The variable name to look up within the specified chart.  **Variable Name Format:** Variable names typically follow these conventions: - Start with `$` in alert expressions, but the `$` is optional in this parameter - Names are case-sensitive - Can reference dimensions, calculated values, or lookups  **Variable Name Categories:**  **1. Dimension Variables (most common):** Direct references to chart dimensions: - `used` - Value of "used" dimension - `free` - Value of "free" dimension - `cached` - Value of "cached" dimension - `buffers` - Value of "buffers" dimension - `read` - Read operations/bytes - `write` - Write operations/bytes  **2. Special Variables:** - `this` - The calculated/evaluated value from alert expression - `status` - Current alert status - `value` - Current metric value  **3. Lookup Variables:** Variables created via lookup operations: - Format: `<duration>_<dimension>_<method>` - Example: `1hour_cpu_avg` - Average CPU over last hour - Example: `5min_disk_used_max` - Max disk used in last 5 minutes  **4. Calculated Variables:** Custom variables defined in alert configurations: - `ram_percentage` - (used / total) * 100 - `disk_usage_ratio` - used / total - `error_rate` - errors / total_requests  **5. Chart Metadata Variables:** - `family` - Chart family/category - `units` - Chart units - `chart_type` - Chart type  **How to Discover Available Variables:** 1. **From Alert Configuration:**    Alert expressions reveal which variables are available    ```    GET /api/v3/alert_config?config=<uuid>    ```  2. **From /api/v1/alarm_variables:**    Lists all variables for a chart    ```    GET /api/v1/alarm_variables?chart=system.ram    ```  3. **From Chart Dimensions:**    Dimension names are typically available as variables    ```    GET /api/v1/chart?chart=system.ram    ```  **Common Variable Examples by Chart:**  **For system.ram:** - `used`, `free`, `cached`, `buffers`  **For system.cpu:** - `user`, `system`, `nice`, `idle`, `iowait`  **For disk.space:** - `used`, `avail` (available), `reserved`  **For disk.io:** - `read`, `write`  **For mysql.queries:** - `select`, `insert`, `update`, `delete`  **Important Notes:** - This parameter is **REQUIRED** - Variable name must exist in the chart's variable set - Case-sensitive - The `$` prefix is optional (both `$used` and `used` work)  **Error Handling:** - Missing parameter → 400 Bad Request: "A chart= and a variable= are required." - Non-existent variable → Returns trace showing variable not found
 ]: nothing -> record {
@@ -928,7 +954,7 @@ export def "variable v3" [
   let full_url = (build-url $base "/api/v3/variable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve detailed Netdata agent information across all nodes
@@ -943,6 +969,7 @@ export def "info v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Filter to specific nodes using simple pattern matching.  **Pattern Syntax:** - `*` matches any characters - Space-separated list for multiple patterns - `!` prefix to exclude - Combine with: `web* !web-test*`  **Examples:** - `scope_nodes=web*` - All web servers - `scope_nodes=prod-*` - All production nodes - `scope_nodes=* !test*` - All except test nodes  **Use Cases:** - Focus on specific infrastructure tiers - Exclude development/test environments - Group by naming conventions  When not specified, returns info for all nodes.  (e.g. prod-*)
   --nodes: string # Filter to specific nodes by exact names.  Unlike `scope_nodes`, this requires exact node names (no patterns).  **Format:** Comma or pipe-separated list  **Examples:** - `nodes=web-server-01` - Single node - `nodes=web-server-01,db-server-01` - Multiple nodes - `nodes=web-01|web-02` - Pipe separator  **Best Practice:** - Use `nodes` when you know exact names - Use `scope_nodes` for pattern-based filtering  When not specified, returns info for all nodes matching scope_nodes.  (e.g. web-server-01,db-server-01)
   --options: string # Control the level of detail and what information to include in the response.  **Available Options:** - `full` or `all` - Include all available information - `labels` - Include host labels - `uuids` - Include UUIDs and identifiers - `deleted` - Include information about deleted/offline nodes - `hidden` - Include hidden agents  **Examples:** - `options=full` - Complete information - `options=labels,uuids` - Labels and identifiers - `options=labels|uuids` - Pipe separator also works  **Default Behavior:** When not specified, returns standard information without deleted/hidden nodes and without excessive detail.  **Use Cases:** - Inventory systems need `full` detail - Label-based filtering needs `labels` - Historical analysis may need `deleted`  (e.g. full,labels)
@@ -957,7 +984,7 @@ export def "info v3" [
   let full_url = (build-url $base "/api/v3/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve chart instances organized by node across the infrastructure
@@ -972,6 +999,7 @@ export def "node-instances v3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Filter to specific nodes using pattern matching.  **Pattern Syntax:** - `*` matches any characters - Space-separated for multiple patterns - `!` prefix excludes - Example: `prod-* !prod-test*`  **Examples:** - `scope_nodes=web*` - All web servers - `scope_nodes=db-* cache-*` - Database and cache nodes - `scope_nodes=* !test*` - All except test nodes  When not specified, returns instances from all nodes.  (e.g. prod-*)
   --nodes: string # Filter to specific nodes by exact names.  **Format:** Comma or pipe-separated exact names  **Examples:** - `nodes=web-server-01` - Single node - `nodes=web-01,db-01` - Multiple nodes  **Best Practice:** Use `nodes` for exact names, `scope_nodes` for patterns.  When not specified, returns instances from all nodes.  (e.g. web-server-01,db-server-01)
   --options: string # Control response detail level and included information.  **Available Options:** - `full` or `all` - Complete instance information - `labels` - Include instance labels - `uuids` - Include UUIDs and identifiers - `deleted` - Include deleted/offline instances - `hidden` - Include hidden instances - `instances` or `charts` - Include chart instances (default) - `metrics` or `dimensions` - Include dimension details  **Examples:** - `options=full` - All information - `options=labels,dimensions` - Labels and dimension details - `options=labels|uuids` - Pipe separator  **Default:** Returns basic instance information without excessive detail.  (e.g. full,labels,dimensions)
@@ -986,7 +1014,7 @@ export def "node-instances v3" [
   let full_url = (build-url $base "/api/v3/node_instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve streaming topology path for nodes
@@ -1001,6 +1029,7 @@ export def "stream-path path" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Simple pattern to match node hostnames for scope filtering. Uses Netdata's simple pattern matching (not regex). Matched nodes define the scope for topology analysis.  **Pattern Syntax:** - `*` matches any number of characters - Use `|` to separate multiple patterns (OR logic) - Matches are case-insensitive - No regex support - only simple wildcards  **Examples:** - `prod-*` - All production nodes - `*-web-*` - All web server nodes - `db-*|cache-*` - All database or cache nodes - `*` - All nodes (default)  (default: *, e.g. prod-*)
   --nodes: string # Simple pattern to filter which nodes to include in the streaming path response. After scope is determined, this filters the results. Uses the same pattern syntax as scope_nodes.  **Difference from scope_nodes:** - `scope_nodes` defines what nodes to analyze for relationships - `nodes` filters which nodes to include in the output  **Examples:** - `web-*` - Only show web server nodes in output - `parent-*` - Only show parent nodes - Specific hostnames: `node1|node2|node3`  (default: *, e.g. web-*)
   --options: string # Comma-separated list of options to control response content and format.  **Available Options:** - `minify` - Minimize JSON output (no pretty-printing) - `debug` - Include debug information about streaming connections - `raw` - Include raw streaming metadata  **Examples:** - `minify` - Compact JSON response - `debug,raw` - Debug mode with raw metadata  (e.g. debug)
@@ -1013,7 +1042,7 @@ export def "stream-path path" [
   let full_url = (build-url $base "/api/v3/stream_path" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Netdata agent version information across nodes
@@ -1028,6 +1057,7 @@ export def "versions versions3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Simple pattern to match node hostnames for scope filtering. Uses Netdata's simple pattern matching (not regex). Matched nodes define the scope for version information retrieval.  **Pattern Syntax:** - `*` matches any number of characters - Use `|` to separate multiple patterns (OR logic) - Matches are case-insensitive - No regex support - only simple wildcards  **Examples:** - `prod-*` - All production nodes - `*-db-*` - All database nodes - `web-*|app-*` - All web or application nodes - `*` - All nodes (default)  (default: *, e.g. prod-*)
   --nodes: string # Simple pattern to filter which nodes to include in the version information response. After scope is determined, this filters the results. Uses the same pattern syntax as scope_nodes.  **Difference from scope_nodes:** - `scope_nodes` defines what nodes to analyze - `nodes` filters which nodes appear in the output  **Examples:** - `old-*` - Only show nodes matching "old-*" pattern - Specific hostnames: `node1|node2|node3`  (default: *, e.g. *)
   --options: string # Comma-separated list of options to control response content and format.  **Available Options:** - `minify` - Minimize JSON output (no pretty-printing) - `debug` - Include additional debug information - `raw` - Include raw version metadata  **Examples:** - `minify` - Compact JSON response - `debug,raw` - Debug mode with raw metadata  (e.g. debug)
@@ -1040,7 +1070,7 @@ export def "versions versions3" [
   let full_url = (build-url $base "/api/v3/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Track progress of long-running function executions
@@ -1055,6 +1085,7 @@ export def "progress progress3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: string # Transaction ID (UUID) of the function execution to track. This ID is returned when initiating a function execution via `/api/v3/function` or similar endpoints.  **UUID Format:** - Standard UUID v4 format - Example: `550e8400-e29b-41d4-a716-446655440000` - Case-insensitive  **Transaction Lifecycle:** - **Created**: When function execution starts - **Active**: While function is running - **Expired**: After completion, failure, or timeout - **Retention**: Transaction state kept briefly after completion for final status retrieval  **Invalid Transaction Handling:** - Missing transaction: Returns 400 Bad Request - Malformed UUID: Returns 400 Bad Request - Expired transaction: Returns 404 Not Found - Unknown transaction: Returns 404 Not Found  (format: uuid, e.g. 550e8400-e29b-41d4-a716-446655440000)
 ]: nothing -> record<transaction: string, status: string, percentage: int, message: string, done: int, all: int, eta_seconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1063,7 +1094,7 @@ export def "progress progress3" [
   let full_url = (build-url $base "/api/v3/progress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Execute a Netdata function on a specific node
@@ -1078,6 +1109,7 @@ export def "function function3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --function: string # Name of the function to execute. Each Netdata plugin can provide multiple functions with different capabilities.  **Function Names:** - Kebab-case naming: `function-name-here` - Provided by plugins: different plugins provide different functions - Discoverable via `/api/v3/functions` endpoint - Case-sensitive  **Common Built-in Functions:** - `systemd-list-units` - List systemd services - `processes` - Running processes with CPU/memory usage - `network-connections` - Active network connections and sockets - `mount-points` - Mounted filesystems and usage - `ipmi-sensors` - IPMI hardware sensors (if available)  **Plugin-Specific Functions:** - Docker plugin: `docker-containers`, `docker-images` - Apps plugin: `apps-processes` - Logs plugin: `logs-query` - And many more depending on enabled plugins  **Invalid Function Names:** - Missing function: Returns 400 Bad Request - Unknown function: Returns 404 Not Found or function-specific error - Disabled function: Returns 403 Forbidden  (e.g. processes)
   --timeout: int # Maximum time in seconds to wait for function execution before timing out. Different functions have different execution times.  **Timeout Guidelines by Function Type:** - **Fast queries** (< 1s): processes, mount-points   Recommended: 10-30 seconds - **Medium queries** (1-5s): systemd-list-units, network-connections   Recommended: 30-60 seconds - **Slow operations** (5-30s): docker operations, log queries   Recommended: 60-300 seconds  **Timeout Behavior:** - If execution completes before timeout: Returns results immediately - If timeout expires: Function is cancelled and error returned - For async functions: Returns transaction ID immediately, timeout applies to overall operation  **Best Practices:** - Set conservative timeouts for production systems - Consider network latency for remote nodes - Monitor timeout errors and adjust accordingly  (default: 60, e.g. 30)
@@ -1088,7 +1120,7 @@ export def "function function3" [
   let full_url = (build-url $base "/api/v3/function" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Execute a Netdata function with request body parameters
@@ -1103,6 +1135,7 @@ export def "function post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --function: string # Name of the function to execute (see GET method for details) (e.g. processes)
   --timeout: int # Maximum time in seconds to wait for function execution (see GET method for details) (default: 60, e.g. 30)
@@ -1116,7 +1149,7 @@ export def "function post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available functions across all nodes
@@ -1131,6 +1164,7 @@ export def "functions functions3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # Simple pattern to match node hostnames for scope filtering. Uses Netdata's simple pattern matching (not regex). Matched nodes define the scope for function discovery.  **Pattern Syntax:** - `*` matches any number of characters - Use `|` to separate multiple patterns (OR logic) - Matches are case-insensitive - No regex support - only simple wildcards  **Examples:** - `prod-*` - All production nodes - `*-web-*` - All web server nodes - `db-*|cache-*` - All database or cache nodes - `*` - All nodes (default)  (default: *, e.g. prod-*)
   --nodes: string # Simple pattern to filter which nodes to include in the functions list. After scope is determined, this filters the results. Uses the same pattern syntax as scope_nodes.  **Difference from scope_nodes:** - `scope_nodes` defines what nodes to query for functions - `nodes` filters which nodes appear in the output  **Examples:** - `web-*` - Only show functions from web servers - Specific hostnames: `node1|node2|node3`  (default: *, e.g. *)
   --options: string # Comma-separated list of options to control response content and format.  **Available Options:** - `minify` - Minimize JSON output (no pretty-printing) - `debug` - Include detailed function metadata and plugin information - `raw` - Include raw function definitions  **Examples:** - `minify` - Compact JSON response - `debug,raw` - Full debug information  (e.g. debug)
@@ -1143,7 +1177,7 @@ export def "functions functions3" [
   let full_url = (build-url $base "/api/v3/functions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage Netdata dynamic configuration
@@ -1158,6 +1192,7 @@ export def "config config3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-2 # Configuration action to perform. Different actions require different additional parameters.  **Available Actions:**  - **`tree`** (default): Browse configuration hierarchy   - Additional params: `path` (optional, default "/"), `id` (optional)   - Returns: Tree structure of configurable components  - **`get`**: Retrieve current configuration   - Required params: `id`   - Returns: Current active configuration  - **`schema`**: Get configuration schema/template   - Required params: `id`   - Returns: Schema defining valid configuration structure  - **`update`**: Modify existing configuration   - Required params: `id`   - Request body: JSON with configuration changes   - Returns: Success/error status  - **`add`**: Create new job/instance   - Required params: `id`, `name`   - Request body: JSON with initial configuration   - Returns: Success/error status  - **`remove`**: Delete job/instance   - Required params: `id`   - Returns: Success/error status  - **`enable`**: Activate disabled component   - Required params: `id`   - Returns: Success/error status  - **`disable`**: Deactivate component without removing   - Required params: `id`   - Returns: Success/error status  - **`test`**: Validate configuration without applying   - Required params: `id`, `name`   - Request body: JSON with configuration to test   - Returns: Validation results  - **`restart`**: Restart component with new configuration   - Required params: `id`   - Returns: Success/error status  - **`userconfig`**: Get user-editable configuration file   - Required params: `id`   - Returns: Configuration in user-editable format  (default: tree, e.g. tree)
   --path: string # Path in configuration tree when using `action=tree`. Specifies which branch of the configuration hierarchy to explore.  **Path Format:** - Root: `/` - Collectors: `/collectors` - Specific plugin: `/collectors/go.d` - Health: `/health`  **Examples:** - `/` - Root level (all categories) - `/collectors` - All collectors - `/collectors/go.d` - Go collectors  (default: /, e.g. /collectors)
   --id: string # Configuration component ID using colon-separated hierarchical notation. Required for most actions except `tree`.  **ID Format:** `category:plugin:collector[:job-name]`  **Examples:** - `collectors:go.d:prometheus` - Prometheus collector - `collectors:go.d:prometheus:local` - Specific Prometheus job "local" - `collectors:python.d:nginx` - Nginx Python collector - `health:notifications` - Health notification settings  **ID Validation:** - Alphanumeric characters, dots, underscores, hyphens - Colons separate hierarchy levels - Invalid IDs return 400 Bad Request  (e.g. collectors:go.d:prometheus)
@@ -1170,7 +1205,7 @@ export def "config config3" [
   let full_url = (build-url $base "/api/v3/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage Netdata configuration with request body data
@@ -1185,6 +1220,7 @@ export def "config post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-2 # Configuration action to perform (see GET method for details) (default: tree, e.g. update)
   --path: string # Path in configuration tree (see GET method for details) (default: /, e.g. /collectors)
   --id: string # Configuration component ID (see GET method for details) (e.g. collectors:go.d:prometheus)
@@ -1200,7 +1236,7 @@ export def "config post-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve user settings/preferences (GET)
@@ -1215,6 +1251,7 @@ export def "settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # Name of the settings file to retrieve.  **File Naming Rules:** - Alphanumeric characters only - Dashes (-) and underscores (_) allowed - No spaces or special characters - Case-sensitive  **Access Control:** - **Anonymous users**: Only `file=default` allowed - **Authenticated users (bearer token)**: Any valid file name  **Examples:** - `default` - Default settings file - `my-dashboard` - Custom dashboard settings - `prod-alerts` - Production alert preferences - `mobile-view` - Mobile UI settings  **Invalid File Names:** - Missing or empty: Returns 400 Bad Request - Special characters: Returns 400 Bad Request - Non-default for anonymous: Returns 400 Bad Request  (default: default, e.g. default)
 ]: nothing -> record<version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1223,7 +1260,7 @@ export def "settings get" [
   let full_url = (build-url $base "/api/v3/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update user settings/preferences (PUT)
@@ -1238,6 +1275,7 @@ export def "settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # Name of the settings file to create or update.  **File Naming Rules:** - Alphanumeric characters only - Dashes (-) and underscores (_) allowed - No spaces or special characters - Case-sensitive  **Access Control:** - **Anonymous users**: Only `file=default` allowed - **Authenticated users (bearer token)**: Any valid file name  **File Creation:** - If file doesn't exist: Created with initial payload - If file exists: Updated with new payload (version check applies)  (default: default, e.g. my-dashboard)
   version: int # Current version from GET request
 ]: any -> record<message: string> {
@@ -1250,7 +1288,7 @@ export def "settings put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get streaming information and statistics
@@ -1265,6 +1303,7 @@ export def "stream-info info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --machine-guid: string # Machine GUID (unique node identifier) to query streaming information for. If not specified, returns streaming information for the local agent.  **GUID Format:** - UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` - Case-insensitive - Can be obtained from `/api/v3/nodes` endpoint  **Use Cases:** - Query specific child node's streaming status - Check parent node's connection to specific child - Diagnostic queries for particular node  **Examples:** - `12345678-1234-1234-1234-123456789012` - Specific node - Empty/omitted - Local agent (default)  **Invalid GUIDs:** - Malformed UUID: May return error or empty result - Non-existent GUID: Returns empty or not-found response  (format: uuid, e.g. 12345678-1234-1234-1234-123456789012)
 ]: nothing -> record<machine_guid: string, hostname: string, streaming_mode: string, sender: record<connected: bool, parent_hostname: string, uptime_seconds: int, reconnects: int, bytes_sent: int, bytes_compressed: int, compression_ratio: float, buffer_used_bytes: int, buffer_max_bytes: int, buffer_used_percentage: float, drops: int>, receiver: record<children: list<record>>, protocol_version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1273,7 +1312,7 @@ export def "stream-info info" [
   let full_url = (build-url $base "/api/v3/stream_info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Establish WebRTC peer connection by exchanging SDP offer/answer
@@ -1288,6 +1327,7 @@ export def "rtc-offer rtcOffer3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<sdp: string, type: string> {
   let input = $in
@@ -1297,7 +1337,7 @@ export def "rtc-offer rtcOffer3" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Claim agent to Netdata Cloud
@@ -1312,6 +1352,7 @@ export def "claim claim3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # **Verification key (UUID) obtained from the server's file system.**  This is a randomly generated session ID that proves the requester has access to the server. To obtain this key: 1. Call the endpoint without parameters to get the OS-specific command 2. Run the command on the server (requires sudo/admin access) 3. Copy the UUID from the file content 4. Use it in the claim request  **Security Notes:** - Key is randomly generated on each info request - Key is regenerated after each claim attempt (prevents reuse) - Mismatched key triggers new key generation (prevents brute force) - Validates server ownership through file system access  **When to Include:** - Omit when requesting claiming info/status - Include when submitting actual claim request  Example: `12345678-1234-1234-1234-123456789abc`  (format: uuid)
   --qp-token: string # **Claiming token from Netdata Cloud.**  This token authorizes the agent to connect to a specific Netdata Cloud space. Obtained from Netdata Cloud UI: Space settings → Nodes tab → Add Nodes → Copy claim token  **Validation:** - Must contain only alphanumeric characters, dots, commas, dashes, colons, slashes, underscores - Required when key parameter is provided - Invalid token triggers error and key regeneration  **Token Characteristics:** - Space-specific (each cloud space has different tokens) - Can be regenerated in cloud UI if compromised - Does not expire (remains valid until regenerated)  Example: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
   --qp-url: string # **Netdata Cloud API base URL.**  The endpoint URL for Netdata Cloud API where the agent will connect.  **Standard Values:** - Production: `https://api.netdata.cloud` - Staging/Testing: `https://api-staging.netdata.cloud` (if applicable)  **Validation:** - Must contain only alphanumeric characters, dots, commas, dashes, colons, slashes, underscores - Required when key parameter is provided - Should be valid HTTPS URL pointing to Netdata Cloud API  **Important Notes:** - Use the URL provided in Netdata Cloud UI claim instructions - Different cloud regions may have different URLs - Invalid URL prevents successful claiming  Example: `https://api.netdata.cloud`  (format: uri)
@@ -1323,7 +1364,7 @@ export def "claim claim3" [
   let full_url = (build-url $base "/api/v3/claim" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable or disable bearer token authentication requirement
@@ -1338,6 +1379,7 @@ export def "bearer-protection bearerProtection3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bearer-protection: string@bearer-protection-completer # **Whether to enable or disable bearer token authentication requirement.**  **Valid Values:** - Enable: `on`, `true`, `yes` - Disable: `off`, `false`, `no`  **Default Behavior:** - If omitted, maintains current bearer protection state - When agent is unclaimed, defaults to disabled - When agent is claimed, typically enabled by Netdata Cloud  **Effect:** - When enabled: All API requests must include valid bearer token in Authorization header - When disabled: API requests work without bearer tokens (less secure)  Example: `bearer_protection=on`
   --claim-id: string # **Claim ID of the agent from Netdata Cloud.**  This identifies which Netdata Cloud space the agent is claimed to. Used to verify the request is for the correct agent.  **Validation:** - Must match the agent's current claim ID - Request fails with HTTP 400 if claim ID doesn't match - Prevents accidentally enabling protection on wrong agent  **Where to Find:** - Obtained from cloud when agent is claimed - Available in agent's claiming configuration - Included in cloud API responses  Example: `claim_id=1234567890abcdef`
   --machine-guid: string # **Machine GUID of the agent.**  Hardware-based unique identifier for the agent instance. Generated based on machine characteristics.  **Purpose:** - Verifies request is for the specific agent instance - Prevents applying protection to wrong node - Part of multi-factor agent identification  **Characteristics:** - Persists across agent restarts - May change if hardware changes significantly - Matches the `machine_guid` in agent info  **Where to Find:** - Available in `/api/v3/info` response - Stored in agent's state files - Shown in Netdata Cloud node details  Example: `machine_guid=12345678-1234-1234-1234-123456789abc`
@@ -1349,7 +1391,7 @@ export def "bearer-protection bearerProtection3" [
   let full_url = (build-url $base "/api/v3/bearer_protection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Obtain bearer authentication token
@@ -1364,6 +1406,7 @@ export def "bearer-get-token bearerGetToken3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --claim-id: string # **Claim ID of the agent from Netdata Cloud.**  Identifies which Netdata Cloud space the agent belongs to. Used to verify the token request is for the correct agent.  **Validation:** - Must match the agent's current claim ID - Request fails with HTTP 400 if claim ID doesn't match - Can use `claim_id_matches_any()` for multi-agent parents  **Security:** - Prevents token generation for wrong agent - Ensures cloud can only get tokens for agents it manages - Part of multi-factor agent verification  Example: `claim_id=1234567890abcdef`
   --machine-guid: string # **Machine GUID of the target agent.**  Hardware-based unique identifier for the agent instance.  **Purpose:** - Verifies request is for the specific agent instance - Prevents token generation for wrong node - Must match exactly or request fails  **Where to Find:** - Available in `/api/v3/info` response - Included in cloud agent registration - Stored in agent state files  **Validation:** - Compared against host->machine_guid - Both claim_id and machine_guid must match - node_id also verified for triple authentication  Example: `machine_guid=12345678-1234-1234-1234-123456789abc`
   --node-id: string # **Node UUID of the target agent.**  Persistent unique identifier for the agent node.  **Purpose:** - Additional verification layer beyond machine_guid - Ensures correct node identification - Used in combination with other identifiers  **Characteristics:** - More stable than machine_guid - Persists across hardware changes - Unique across all Netdata installations  **Validation:** - Must be non-zero UUID - Must match host->node_id exactly - Compared in lowercase format  Example: `node_id=23456789-2345-2345-2345-234567890abc`  (format: uuid)
@@ -1374,7 +1417,7 @@ export def "bearer-get-token bearerGetToken3" [
   let full_url = (build-url $base "/api/v3/bearer_get_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current authenticated user information
@@ -1389,13 +1432,14 @@ export def "me me3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth: string, cloud_account_id: string, client_name: string, access: list<string>, user_role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v3/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Score or weight all or some of the metrics, across all nodes, according to various algorithms.
@@ -1412,6 +1456,7 @@ export def "weights weights2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # The weighting / scoring algorithm.
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -1442,7 +1487,7 @@ export def "weights weights2" [
   let full_url = (build-url $base "/api/v2/weights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get current alert status across all nodes (use /api/v3/alerts instead)
@@ -1459,6 +1504,7 @@ export def "alerts alerts2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -1477,7 +1523,7 @@ export def "alerts alerts2" [
   let full_url = (build-url $base "/api/v2/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get alert state transition history (use /api/v3/alert_transitions instead)
@@ -1494,6 +1540,7 @@ export def "alert-transitions alertTransitions2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -1523,7 +1570,7 @@ export def "alert-transitions alertTransitions2" [
   let full_url = (build-url $base "/api/v2/alert_transitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get alert configuration by hash ID (use /api/v3/alert_config instead)
@@ -1540,6 +1587,7 @@ export def "alert-config alertConfig2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --config: string # Alert configuration hash ID (UUID) (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1548,7 +1596,7 @@ export def "alert-config alertConfig2" [
   let full_url = (build-url $base "/api/v2/alert_config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get agent information (use /api/v3/info instead)
@@ -1565,6 +1613,7 @@ export def "info info2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --options: list # Options that affect data generation. * `jsonwrap` - Wrap the output in a JSON object with metadata about the query. * `raw` - change the output so that it is aggregatable across multiple such queries. Supported by `/api/v2` data queries and `json2` format. * `minify` - Remove unnecessary spaces and newlines from the output. * `debug` - Provide additional information in `jsonwrap` output to help tracing issues. * `nonzero` - Do not return dimensions that all their values are zero, to improve the visual appearance of charts. They will still be returned if all the dimensions are entirely zero. * `null2zero` - Replace `null` values with `0`. * `absolute` or `abs` - Traditionally Netdata returns select dimensions negative to improve visual appearance. This option turns this feature off. * `display-absolute` - Only used by badges, to do color calculation using the signed value, but render the value without a sign. * `flip` or `reversed` - Order the timestamps array in reverse order (newest to oldest). * `min2max` - When flattening multi-dimensional data into a single metric format, use `max - min` instead of `sum`. This is EOL - use `/api/v2` to control aggregation across dimensions. * `percentage` - Convert all values into a percentage vs the row total. When enabled, Netdata will query all dimensions, even the ones that have not been selected or are hidden, to find the row total, in order to calculate the percentage of each dimension selected. * `seconds` - Output timestamps in seconds instead of dates. * `milliseconds` or `ms` - Output timestamps in milliseconds instead of dates. * `unaligned` - by default queries are aligned to the the view, so that as time passes past data returned do not change. When a data query will not be used for visualization, `unaligned` can be given to avoid aligning the query time-frame for visual precision. * `match-ids`, `match-names`. By default filters match both IDs and names when they are available. Setting either of the two options will disable the other. * `anomaly-bit` - query the anomaly information instead of metric values. This is EOL, use `/api/v2` and `json2` format which always returns this information and many more. * `jw-anomaly-rates` - return anomaly rates as a separate result set in the same `json` format response. This is EOL, use `/api/v2` and `json2` format which always returns information and many more.  * `details` - `/api/v2/data` returns in `jsonwrap` the full tree of dimensions that have been matched by the query. * `group-by-labels` - `/api/v2/data` returns in `jsonwrap` flattened labels per output dimension. These are used to identify the instances that have been aggregated into each dimension, making it possible to provide a map, like Netdata does for Kubernetes. * `natural-points` - return timestamps as found in the database. The result is again fixed-step, but the query engine attempts to align them with the timestamps found in the database. * `virtual-points` - return timestamps independent of the database alignment. This is needed aggregating data across multiple Netdata Agents, to ensure that their outputs do not need to be interpolated to be merged. * `selected-tier` - use data exclusively from the selected tier given with the `tier` parameter. This option is set automatically when the `tier` parameter is set. * `all-dimensions` - In `/api/v1` `jsonwrap` include metadata for all candidate metrics examined. In `/api/v2` this is standard behavior and no option is needed. * `label-quotes` - In `csv` output format, enclose each header label in quotes. * `objectrows` - Each row of value should be an object, not an array (only for `json` format). * `google_json` - Comply with google JSON/JSONP specs (only for `json` format). * `minimal-stats` or `minimal` - Reduce the amount of statistics returned in `jsonwrap` format to save bandwidth. * `long-json-keys` or `long-keys` - Use descriptive key names in JSON output instead of abbreviated ones. * `mcp-info` - Include additional metadata useful for the Model Context Protocol (MCP) integration. * `rfc3339` - Return timestamps in RFC3339 format (e.g., "2023-01-01T00:00:00Z") instead of Unix timestamps.  (default: [seconds, jsonwrap])
@@ -1579,7 +1628,7 @@ export def "info info2" [
   let full_url = (build-url $base "/api/v2/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get node instances hierarchy (use /api/v3/node_instances instead)
@@ -1596,6 +1645,7 @@ export def "node-instances nodeInstances2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --options: list # Options that affect data generation. * `jsonwrap` - Wrap the output in a JSON object with metadata about the query. * `raw` - change the output so that it is aggregatable across multiple such queries. Supported by `/api/v2` data queries and `json2` format. * `minify` - Remove unnecessary spaces and newlines from the output. * `debug` - Provide additional information in `jsonwrap` output to help tracing issues. * `nonzero` - Do not return dimensions that all their values are zero, to improve the visual appearance of charts. They will still be returned if all the dimensions are entirely zero. * `null2zero` - Replace `null` values with `0`. * `absolute` or `abs` - Traditionally Netdata returns select dimensions negative to improve visual appearance. This option turns this feature off. * `display-absolute` - Only used by badges, to do color calculation using the signed value, but render the value without a sign. * `flip` or `reversed` - Order the timestamps array in reverse order (newest to oldest). * `min2max` - When flattening multi-dimensional data into a single metric format, use `max - min` instead of `sum`. This is EOL - use `/api/v2` to control aggregation across dimensions. * `percentage` - Convert all values into a percentage vs the row total. When enabled, Netdata will query all dimensions, even the ones that have not been selected or are hidden, to find the row total, in order to calculate the percentage of each dimension selected. * `seconds` - Output timestamps in seconds instead of dates. * `milliseconds` or `ms` - Output timestamps in milliseconds instead of dates. * `unaligned` - by default queries are aligned to the the view, so that as time passes past data returned do not change. When a data query will not be used for visualization, `unaligned` can be given to avoid aligning the query time-frame for visual precision. * `match-ids`, `match-names`. By default filters match both IDs and names when they are available. Setting either of the two options will disable the other. * `anomaly-bit` - query the anomaly information instead of metric values. This is EOL, use `/api/v2` and `json2` format which always returns this information and many more. * `jw-anomaly-rates` - return anomaly rates as a separate result set in the same `json` format response. This is EOL, use `/api/v2` and `json2` format which always returns information and many more.  * `details` - `/api/v2/data` returns in `jsonwrap` the full tree of dimensions that have been matched by the query. * `group-by-labels` - `/api/v2/data` returns in `jsonwrap` flattened labels per output dimension. These are used to identify the instances that have been aggregated into each dimension, making it possible to provide a map, like Netdata does for Kubernetes. * `natural-points` - return timestamps as found in the database. The result is again fixed-step, but the query engine attempts to align them with the timestamps found in the database. * `virtual-points` - return timestamps independent of the database alignment. This is needed aggregating data across multiple Netdata Agents, to ensure that their outputs do not need to be interpolated to be merged. * `selected-tier` - use data exclusively from the selected tier given with the `tier` parameter. This option is set automatically when the `tier` parameter is set. * `all-dimensions` - In `/api/v1` `jsonwrap` include metadata for all candidate metrics examined. In `/api/v2` this is standard behavior and no option is needed. * `label-quotes` - In `csv` output format, enclose each header label in quotes. * `objectrows` - Each row of value should be an object, not an array (only for `json` format). * `google_json` - Comply with google JSON/JSONP specs (only for `json` format). * `minimal-stats` or `minimal` - Reduce the amount of statistics returned in `jsonwrap` format to save bandwidth. * `long-json-keys` or `long-keys` - Use descriptive key names in JSON output instead of abbreviated ones. * `mcp-info` - Include additional metadata useful for the Model Context Protocol (MCP) integration. * `rfc3339` - Return timestamps in RFC3339 format (e.g., "2023-01-01T00:00:00Z") instead of Unix timestamps.  (default: [seconds, jsonwrap])
@@ -1610,7 +1660,7 @@ export def "node-instances nodeInstances2" [
   let full_url = (build-url $base "/api/v2/node_instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get agent version information (use /api/v3/versions instead)
@@ -1627,6 +1677,7 @@ export def "versions versions2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --options: list # Options that affect data generation. * `jsonwrap` - Wrap the output in a JSON object with metadata about the query. * `raw` - change the output so that it is aggregatable across multiple such queries. Supported by `/api/v2` data queries and `json2` format. * `minify` - Remove unnecessary spaces and newlines from the output. * `debug` - Provide additional information in `jsonwrap` output to help tracing issues. * `nonzero` - Do not return dimensions that all their values are zero, to improve the visual appearance of charts. They will still be returned if all the dimensions are entirely zero. * `null2zero` - Replace `null` values with `0`. * `absolute` or `abs` - Traditionally Netdata returns select dimensions negative to improve visual appearance. This option turns this feature off. * `display-absolute` - Only used by badges, to do color calculation using the signed value, but render the value without a sign. * `flip` or `reversed` - Order the timestamps array in reverse order (newest to oldest). * `min2max` - When flattening multi-dimensional data into a single metric format, use `max - min` instead of `sum`. This is EOL - use `/api/v2` to control aggregation across dimensions. * `percentage` - Convert all values into a percentage vs the row total. When enabled, Netdata will query all dimensions, even the ones that have not been selected or are hidden, to find the row total, in order to calculate the percentage of each dimension selected. * `seconds` - Output timestamps in seconds instead of dates. * `milliseconds` or `ms` - Output timestamps in milliseconds instead of dates. * `unaligned` - by default queries are aligned to the the view, so that as time passes past data returned do not change. When a data query will not be used for visualization, `unaligned` can be given to avoid aligning the query time-frame for visual precision. * `match-ids`, `match-names`. By default filters match both IDs and names when they are available. Setting either of the two options will disable the other. * `anomaly-bit` - query the anomaly information instead of metric values. This is EOL, use `/api/v2` and `json2` format which always returns this information and many more. * `jw-anomaly-rates` - return anomaly rates as a separate result set in the same `json` format response. This is EOL, use `/api/v2` and `json2` format which always returns information and many more.  * `details` - `/api/v2/data` returns in `jsonwrap` the full tree of dimensions that have been matched by the query. * `group-by-labels` - `/api/v2/data` returns in `jsonwrap` flattened labels per output dimension. These are used to identify the instances that have been aggregated into each dimension, making it possible to provide a map, like Netdata does for Kubernetes. * `natural-points` - return timestamps as found in the database. The result is again fixed-step, but the query engine attempts to align them with the timestamps found in the database. * `virtual-points` - return timestamps independent of the database alignment. This is needed aggregating data across multiple Netdata Agents, to ensure that their outputs do not need to be interpolated to be merged. * `selected-tier` - use data exclusively from the selected tier given with the `tier` parameter. This option is set automatically when the `tier` parameter is set. * `all-dimensions` - In `/api/v1` `jsonwrap` include metadata for all candidate metrics examined. In `/api/v2` this is standard behavior and no option is needed. * `label-quotes` - In `csv` output format, enclose each header label in quotes. * `objectrows` - Each row of value should be an object, not an array (only for `json` format). * `google_json` - Comply with google JSON/JSONP specs (only for `json` format). * `minimal-stats` or `minimal` - Reduce the amount of statistics returned in `jsonwrap` format to save bandwidth. * `long-json-keys` or `long-keys` - Use descriptive key names in JSON output instead of abbreviated ones. * `mcp-info` - Include additional metadata useful for the Model Context Protocol (MCP) integration. * `rfc3339` - Return timestamps in RFC3339 format (e.g., "2023-01-01T00:00:00Z") instead of Unix timestamps.  (default: [seconds, jsonwrap])
@@ -1639,7 +1690,7 @@ export def "versions versions2" [
   let full_url = (build-url $base "/api/v2/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Track async operation progress (use /api/v3/progress instead)
@@ -1656,6 +1707,7 @@ export def "progress progress2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: string # Transaction UUID from async operation (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1664,7 +1716,7 @@ export def "progress progress2" [
   let full_url = (build-url $base "/api/v2/progress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: List available functions (use /api/v3/functions instead)
@@ -1681,6 +1733,7 @@ export def "functions functions2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --nodes: string # A simple pattern matching the nodes to be queried. This only controls the data response, not the metadata. The simple pattern is checked against the nodes' machine guid, node id, hostname. The default nodes selector is all the nodes matched by the nodes scope. Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --options: list # Options that affect data generation. * `jsonwrap` - Wrap the output in a JSON object with metadata about the query. * `raw` - change the output so that it is aggregatable across multiple such queries. Supported by `/api/v2` data queries and `json2` format. * `minify` - Remove unnecessary spaces and newlines from the output. * `debug` - Provide additional information in `jsonwrap` output to help tracing issues. * `nonzero` - Do not return dimensions that all their values are zero, to improve the visual appearance of charts. They will still be returned if all the dimensions are entirely zero. * `null2zero` - Replace `null` values with `0`. * `absolute` or `abs` - Traditionally Netdata returns select dimensions negative to improve visual appearance. This option turns this feature off. * `display-absolute` - Only used by badges, to do color calculation using the signed value, but render the value without a sign. * `flip` or `reversed` - Order the timestamps array in reverse order (newest to oldest). * `min2max` - When flattening multi-dimensional data into a single metric format, use `max - min` instead of `sum`. This is EOL - use `/api/v2` to control aggregation across dimensions. * `percentage` - Convert all values into a percentage vs the row total. When enabled, Netdata will query all dimensions, even the ones that have not been selected or are hidden, to find the row total, in order to calculate the percentage of each dimension selected. * `seconds` - Output timestamps in seconds instead of dates. * `milliseconds` or `ms` - Output timestamps in milliseconds instead of dates. * `unaligned` - by default queries are aligned to the the view, so that as time passes past data returned do not change. When a data query will not be used for visualization, `unaligned` can be given to avoid aligning the query time-frame for visual precision. * `match-ids`, `match-names`. By default filters match both IDs and names when they are available. Setting either of the two options will disable the other. * `anomaly-bit` - query the anomaly information instead of metric values. This is EOL, use `/api/v2` and `json2` format which always returns this information and many more. * `jw-anomaly-rates` - return anomaly rates as a separate result set in the same `json` format response. This is EOL, use `/api/v2` and `json2` format which always returns information and many more.  * `details` - `/api/v2/data` returns in `jsonwrap` the full tree of dimensions that have been matched by the query. * `group-by-labels` - `/api/v2/data` returns in `jsonwrap` flattened labels per output dimension. These are used to identify the instances that have been aggregated into each dimension, making it possible to provide a map, like Netdata does for Kubernetes. * `natural-points` - return timestamps as found in the database. The result is again fixed-step, but the query engine attempts to align them with the timestamps found in the database. * `virtual-points` - return timestamps independent of the database alignment. This is needed aggregating data across multiple Netdata Agents, to ensure that their outputs do not need to be interpolated to be merged. * `selected-tier` - use data exclusively from the selected tier given with the `tier` parameter. This option is set automatically when the `tier` parameter is set. * `all-dimensions` - In `/api/v1` `jsonwrap` include metadata for all candidate metrics examined. In `/api/v2` this is standard behavior and no option is needed. * `label-quotes` - In `csv` output format, enclose each header label in quotes. * `objectrows` - Each row of value should be an object, not an array (only for `json` format). * `google_json` - Comply with google JSON/JSONP specs (only for `json` format). * `minimal-stats` or `minimal` - Reduce the amount of statistics returned in `jsonwrap` format to save bandwidth. * `long-json-keys` or `long-keys` - Use descriptive key names in JSON output instead of abbreviated ones. * `mcp-info` - Include additional metadata useful for the Model Context Protocol (MCP) integration. * `rfc3339` - Return timestamps in RFC3339 format (e.g., "2023-01-01T00:00:00Z") instead of Unix timestamps.  (default: [seconds, jsonwrap])
@@ -1693,7 +1746,7 @@ export def "functions functions2" [
   let full_url = (build-url $base "/api/v2/functions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Establish WebRTC connection (use /api/v3/rtc_offer instead)
@@ -1710,6 +1763,7 @@ export def "rtc-offer rtcOffer2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1719,7 +1773,7 @@ export def "rtc-offer rtcOffer2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # OBSOLETE: Claim agent to Netdata Cloud (use /api/v3/claim instead)
@@ -1736,6 +1790,7 @@ export def "claim claim2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Verification key obtained from server file system (format: uuid)
   --qp-token: string # Claiming token from Netdata Cloud
   --qp-url: string # Netdata Cloud API base URL (format: uri)
@@ -1747,7 +1802,7 @@ export def "claim claim2" [
   let full_url = (build-url $base "/api/v2/claim" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Enable/disable bearer authentication (use /api/v3/bearer_protection instead)
@@ -1764,6 +1819,7 @@ export def "bearer-protection bearerProtection2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bearer-protection: string@bearer-protection-completer # Enable or disable bearer protection
   --claim-id: string # Agent's claim ID
   --machine-guid: string # Agent's machine GUID
@@ -1775,7 +1831,7 @@ export def "bearer-protection bearerProtection2" [
   let full_url = (build-url $base "/api/v2/bearer_protection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OBSOLETE: Get bearer authentication token (use /api/v3/bearer_get_token instead)
@@ -1792,6 +1848,7 @@ export def "bearer-get-token bearerGetToken2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --claim-id: string # Agent's claim ID
   --machine-guid: string # Agent's machine GUID
   --node-id: string # Agent's node UUID (format: uuid)
@@ -1802,7 +1859,7 @@ export def "bearer-get-token bearerGetToken2" [
   let full_url = (build-url $base "/api/v2/bearer_get_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Score or weight all or some of the metrics, across all nodes, according to various algorithms.
@@ -1817,6 +1874,7 @@ export def "weights weights3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # The weighting / scoring algorithm.
   --scope-nodes: string # A simple pattern limiting the nodes scope of the query. The scope controls both data and metadata response. The simple pattern is checked against the nodes' machine guid, node id and hostname. The default nodes scope is all nodes for which this Agent has data for. Usually the nodes scope is used to slice the entire dashboard (e.g. the Global Nodes Selector at the Netdata Cloud overview dashboard). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
   --scope-contexts: string # A simple pattern limiting the contexts scope of the query. The scope controls both data and metadata response. The default contexts scope is all contexts for which this Agent has data for. Usually the contexts scope is used to slice data on the dashboard (e.g. each context based chart has its own contexts scope, limiting the chart to all the instances of the selected context). Both positive and negative simple pattern expressions are supported.  (format: simple pattern, default: *)
@@ -1847,7 +1905,7 @@ export def "weights weights3" [
   let full_url = (build-url $base "/api/v3/weights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Score or weight all or some of the metrics of a single node, according to various algorithms.
@@ -1864,6 +1922,7 @@ export def "weights weights1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # The weighting / scoring algorithm.
   --context: string # The context of the chart as returned by the /charts call. (format: as returned by /charts)
   --baseline-after: int # `baseline_after` and `baseline_before` define the baseline time-frame of a comparative query. `baseline_after` can be a negative number of seconds, up to 3 years (-94608000), relative to `baseline_before`. If not set, it is usually assumed to be -300.  (default: -600)
@@ -1883,7 +1942,7 @@ export def "weights weights1" [
   let full_url = (build-url $base "/api/v1/weights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Analyze all the metrics to find their correlations - EOL
@@ -1900,6 +1959,7 @@ export def "metric-correlations metricCorrelations1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # The weighting / scoring algorithm.
   --baseline-after: int # `baseline_after` and `baseline_before` define the baseline time-frame of a comparative query. `baseline_after` can be a negative number of seconds, up to 3 years (-94608000), relative to `baseline_before`. If not set, it is usually assumed to be -300.  (default: -600)
   --baseline-before: int # `baseline_after` and `baseline_before` define the baseline time-frame of a comparative query. `baseline_before` can be a negative number of seconds, up to 3 years (-94608000), relative to current clock. If not set, it is assumed to be the current clock time. When `baseline_before` is positive, it is assumed to be a unix epoch timestamp.  (default: 0)
@@ -1918,7 +1978,7 @@ export def "metric-correlations metricCorrelations1" [
   let full_url = (build-url $base "/api/v1/metric_correlations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # |  **Security & Access Control:** - 📊 **Public Data API** - Bearer token optional, IP-based ACL restrictions apply - **Default Access:** Public (no authentication required) - **Bearer Protection:** When enabled via `/api/v3/bearer_protection`, requires bearer token - **IP Restrictions:** Subject to `allow dashboard from` in netdata.conf - **Access Methods:** Direct HTTP/HTTPS, Netdata Cloud, external tools
@@ -1935,6 +1995,7 @@ export def "function function1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --function: string # The name of the function, as returned by the collector.
   --timeout: float # Specify a timeout value in seconds after which the Agent will abort the query and return a 504 error. A value of 0 indicates no timeout, but some endpoints, like `weights`, do not accept infinite timeouts (they have a predefined default), so to disable the timeout it must be set to a really high value.  (format: integer, default: 0)
 ]: nothing -> any {
@@ -1944,7 +2005,7 @@ export def "function function1" [
   let full_url = (build-url $base "/api/v1/function" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all registered collector functions.
@@ -1961,13 +2022,14 @@ export def "functions functions1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/functions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of active or raised alarms on the server
@@ -1984,6 +2046,7 @@ export def "alarms alerts1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # If passed, all enabled alarms are returned. (allows empty value)
   --active: oneof<nothing, bool> # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
 ]: nothing -> record<hostname: string, latest_alarm_log_unique_id: int, status: bool, now: int, alarms: record<chart_name_alarm_name: record<id: int, name: string, chart: string, family: string, active: bool, disabled: bool, silenced: bool, exec: string, recipient: string, source: string, units: string, info: string, status: string, last_status_change: int, last_updated: int, next_update: int, update_every: int, delay_up_duration: int, delay_down_duration: int, delay_max_duration: int, delay_multiplier: int, delay: int, delay_up_to_timestamp: int, value_string: string, no_clear_notification: bool, lookup_dimensions: string, db_after: int, db_before: int, lookup_method: string, lookup_after: int, lookup_before: int, lookup_options: string, calc: string, calc_parsed: string, warn: string, warn_parsed: string, crit: string, crit_parsed: string, warn_repeat_every: int, crit_repeat_every: int, green: string, red: string, value: float>>> {
@@ -1993,7 +2056,7 @@ export def "alarms alerts1" [
   let full_url = (build-url $base "/api/v1/alarms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of active or raised alarms on the server
@@ -2010,6 +2073,7 @@ export def "alarms-values alertValues1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # If passed, all enabled alarms are returned. (allows empty value)
   --active: oneof<nothing, bool> # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
 ]: nothing -> record<hostname: string, alarms: record> {
@@ -2019,7 +2083,7 @@ export def "alarms-values alertValues1" [
   let full_url = (build-url $base "/api/v1/alarms_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the entries of the alarm log
@@ -2036,6 +2100,7 @@ export def "alarm-log alertsLog1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: int # Passing the parameter after=UNIQUEID returns all the events in the alarm log that occurred after UNIQUEID. An automated series of calls would call the interface once without after=, store the last UNIQUEID of the returned set, and give it back to get incrementally the next events.
 ]: nothing -> table<hostname: string, unique_id: int, alarm_id: int, alarm_event_id: int, name: string, chart: string, family: string, processed: bool, updated: bool, exec_run: int, exec_failed: bool, exec: string, recipient: string, exec_code: int, source: string, units: string, when: int, duration: int, non_clear_duration: int, status: string, old_status: string, delay: int, delay_up_to_timestamp: int, updated_by_id: int, updates_id: int, value_string: string, old_value_string: string, silenced: string, info: string, value: float, old_value: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2044,7 +2109,7 @@ export def "alarm-log alertsLog1" [
   let full_url = (build-url $base "/api/v1/alarm_log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an overall status of the chart
@@ -2061,6 +2126,7 @@ export def "alarm-count alertsCount1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # The context of the chart as returned by the /charts call. (format: as returned by /charts)
   --status: string@status-completer # Specify alarm status to count. (default: RAISED, allows empty value)
 ]: nothing -> list<float> {
@@ -2070,7 +2136,7 @@ export def "alarm-count alertsCount1" [
   let full_url = (build-url $base "/api/v1/alarm_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List variables available to configure alarms for a chart
@@ -2087,6 +2153,7 @@ export def "alarm-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # The id of the chart as returned by the /charts call. (format: as returned by /charts, default: system.cpu)
 ]: nothing -> record<chart: string, chart_name: string, cnart_context: string, family: string, host: string, chart_variables: record, family_variables: record<varname1: float, varname2: float>, host_variables: record<varname1: float, varname2: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2095,7 +2162,7 @@ export def "alarm-variables get" [
   let full_url = (build-url $base "/api/v1/alarm_variables" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accesses the health management API to control health checks and notifications at runtime.
@@ -2112,6 +2179,7 @@ export def "manage-health health1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string@cmd-completer # DISABLE ALL: No alarm criteria are evaluated, nothing is written in the alarm log. SILENCE ALL: No notifications are sent. RESET: Return to the default state. DISABLE/SILENCE: Set the mode to be used for the alarms matching the criteria of the alarm selectors. LIST: Show active configuration.
   --alarm: string # The expression provided will match both `alarm` and `template` names.
   --chart: string # Chart ids/names, as shown on the dashboard. These will match the `on` entry of a configured `alarm`.
@@ -2124,7 +2192,7 @@ export def "manage-health health1" [
   let full_url = (build-url $base "/api/v1/manage/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about current ACLK state
@@ -2141,13 +2209,14 @@ export def "aclk aclk1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<aclk_available: string, aclk_version: int, protocols_supported: list<string>, Agent_claimed: bool, claimed_id: string, online: bool, used_cloud_protocol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/aclk")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [DEPRECATED] Get a chart variable value
@@ -2164,6 +2233,7 @@ export def "variable variable1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chart: string # Chart ID for which to retrieve the variable. This is the full chart ID as shown in the dashboard.  **Examples:** - `system.cpu` - System CPU usage chart - `disk.sda.io` - Disk I/O for sda - `nginx_local.connections` - Nginx connections  (e.g. system.cpu)
   --variable: string # Variable name to retrieve. Each chart has different variables available depending on its configuration and alert definitions.  **Common Variables:** - `used` - Used value (for utilization charts) - `free` - Free value (for utilization charts) - `value` - Current value - `avg` - Average value - `sum` - Sum of all dimensions - Custom variable names defined in alert configurations  (e.g. used)
 ]: nothing -> any {
@@ -2173,7 +2243,7 @@ export def "variable variable1" [
   let full_url = (build-url $base "/api/v1/variable" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [DEPRECATED] Registry operations for tracking dashboard access
@@ -2190,6 +2260,7 @@ export def "registry registry1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer-3 # Registry action to perform.  **Available Actions:** - `hello` - Initial contact with registry - `access` - Record dashboard access to agent - `delete` - Remove agent URL from dashboard history - `search` - Find all agents accessed by dashboard - `switch` - Migrate dashboard identity to new person_guid  (e.g. access)
   --machine: string # Machine GUID of the dashboard making the request. This is typically stored in browser cookies and identifies the specific browser/client.  (format: uuid, e.g. 12345678-1234-1234-1234-123456789012)
   --name: string # Human-readable name for the dashboard/machine (typically hostname). Used for display purposes in registry listings.  (e.g. my-laptop)
@@ -2204,7 +2275,7 @@ export def "registry registry1" [
   let full_url = (build-url $base "/api/v1/registry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [DEPRECATED] Get DBEngine storage statistics
@@ -2221,13 +2292,14 @@ export def "dbengine-stats stats1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dbengine_stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [DEPRECATED] Get machine learning detection information
@@ -2244,11 +2316,12 @@ export def "ml-info info1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/ml_info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

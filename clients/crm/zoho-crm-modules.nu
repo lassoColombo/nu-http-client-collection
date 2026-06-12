@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def feature-name-completer [] { ["AI_CREDITS" "ASKZIA_MODULE_CREATION" "ASKZIA_W
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "settings-modules list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "settings-modules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Filter modules by their visibility status. Accepts comma-separated values to retrieve modules matching any of the specified statuses. Case-sensitive.
   --feature-name: string@feature-name-completer # Filter modules by feature name. Retrieves modules associated with the specified feature. Case-sensitive, follows snake_case format. Empty string returns 400 error.
   --include: string # Comma-separated list of additional fields to include in the response. Allows retrieving optional module metadata that is not returned by default.
@@ -112,7 +114,7 @@ export def "settings-modules list" [
   let full_url = (build-url $base "/settings/modules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a custom CRM module
@@ -128,6 +130,7 @@ export def "settings-modules createModules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modules: list # Array containing a single module definition to create. Only one module can be created per request. — item shape: {singular_label: string, plural_label: string, api_name: string, profiles: list, display_field?: record}
 ]: any -> record<modules: table<code: string, details: record, message: string, status: string>> {
   let input = $in
@@ -138,7 +141,7 @@ export def "settings-modules createModules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update CRM modules
@@ -154,6 +157,7 @@ export def "settings-modules updateModules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modules: list # Array of modules to update. Supports batch updates with multiple modules in a single request. Each module must have a unique ID within the request. — item shape: {singular_label?: string, plural_label?: string, id: string, profiles?: list}
 ]: any -> record<modules: table<code: string, details: record, message: string, status: string>> {
   let input = $in
@@ -164,7 +168,7 @@ export def "settings-modules updateModules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get module metadata by API name
@@ -180,13 +184,14 @@ export def "settings-modules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<modules: table<global_search_supported: bool, public_fields_configured: bool, recycle_bin_on_delete: bool, has_more_profiles: bool, sub_menu_available: bool, lookupable: bool, profile_count: int, module_type: string, cc_enabled: bool, deletable: bool, description: string, source: string, creatable: bool, inventory_template_supported: bool, modified_time: string, presence_sub_menu: bool, triggers_supported: bool, id: string, api_name: string, plural_label: string, actual_plural_label: string, actual_singular_label: string, singular_label: string, isBlueprintSupported: bool, visibility: int, convertable: bool, editable: bool, emailTemplate_support: bool, email_parser_supported: bool, filter_supported: bool, show_as_tab: bool, web_link: string, viewable: bool, api_supported: bool, quick_create: bool, generated_type: string, static_subform_properties: record, feeds_required: bool, scoring_supported: bool, webform_supported: bool, arguments: list, module_name: string, business_card_field_limit: int, access_type: string, private_profile: record, track_current_data: bool, modified_by: any, profiles: list, parent_module: record, _field_states: list, business_card_fields: list, per_page: int, _properties: list, _on_demand_properties: list, search_layout_fields: list, kanban_view_supported: bool, lookup_field_properties: record, kanban_view: bool, chart_view: bool, chart_view_supported: bool, related_lists: list, filter_status: bool, related_list_properties: record, display_field: any, layouts: list, fields: list, custom_view: record, zia_view: bool, default_mapping_fields: list, activity_badge: string, status: string, sequence_number: int, _others_awaiting: bool, territory: record, showleadchainsync: bool, show_social: bool, show_visitor: bool, show_googlesync: bool, showtiktoksync: bool, show_webform: bool, showfacebooksync: bool, show_emailparser: bool, showlinkedinsync: bool, masked_fields_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/settings/modules/($moduleIdentifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update module labels and profiles
@@ -203,6 +208,7 @@ export def "settings-modules updateModuleByApiName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   modules: list # Array containing a single module object to update. — item shape: {singular_label: string, plural_label: string, id: string, profiles: list}
 ]: any -> record<modules: table<code: string, details: record, message: string, status: string>> {
   let input = $in
@@ -213,5 +219,5 @@ export def "settings-modules updateModuleByApiName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

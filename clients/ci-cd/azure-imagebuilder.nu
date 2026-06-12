@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-virtual-machine-images-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "providers-microsoft-virtual-machine-images-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,7 +110,7 @@ export def "providers-microsoft-virtual-machine-images-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.VirtualMachineImages/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the VM image templates associated with the subscription.
@@ -124,6 +126,7 @@ export def "subscriptions-providers-microsoft-virtual-machine-images-image-templ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -132,7 +135,7 @@ export def "subscriptions-providers-microsoft-virtual-machine-images-image-templ
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VirtualMachineImages/imageTemplates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the VM image templates associated with the specified resource group.
@@ -149,6 +152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -157,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a virtual machine image template
@@ -175,6 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: record<errorDetail: string, exceptionType: string>, message: string, target: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -183,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about a virtual machine image template
@@ -201,6 +206,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<identity: record<type: string, userAssignedIdentities: record>, properties: record<buildTimeoutInMinutes: int, customize: list<record>, distribute: list<record>, lastRunStatus: record<endTime: string, message: string, runState: string, runSubState: string, startTime: string>, provisioningError: record<message: string, provisioningErrorCode: string>, provisioningState: string, source: record<type: string>, vmProfile: record<vmSize: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -209,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the tags for this Virtual Machine Image Template
@@ -228,6 +234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --identity: any # Identity for the image template. — shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
   --tags: record # The user-specified tags associated with the image template.
@@ -241,7 +248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update a virtual machine image template
@@ -261,6 +268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --identity: any # Identity for the image template. — shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # Describes the properties of an image template — shape: {buildTimeoutInMinutes?: int, customize?: list, distribute: list, lastRunStatus?: any, provisioningError?: any, provisioningState?: "Creating"|"Updating"|"Succeeded"|"Failed"|"Deleting", source: any, vmProfile?: any}
@@ -276,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create artifacts from a existing image template
@@ -294,6 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: record<errorDetail: string, exceptionType: string>, message: string, target: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -302,7 +311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/run" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all run outputs for the specified Image Template resource
@@ -320,6 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -328,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/runOutputs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the specified run output for the specified image template resource
@@ -347,6 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<artifactId: string, artifactUri: string, provisioningState: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -355,5 +366,5 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/runOutputs/($runOutputName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

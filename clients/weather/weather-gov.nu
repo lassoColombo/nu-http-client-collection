@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def units-completer [] { ["si" "us"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "alerts query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # List only active alerts (use /alerts/active endpoints instead) (DEPRECATED)
   --start: string # Start time (format: date-time)
   --end: string # End time (format: date-time)
@@ -132,7 +134,7 @@ export def "alerts query" [
   let full_url = (build-url $base "/alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns all currently active alerts
@@ -147,6 +149,7 @@ export def "alerts-active active" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list # Status (actual, exercise, system, test, draft)
   --message-type: list # Message type (alert, update, cancel)
   --event: list # Event name
@@ -166,7 +169,7 @@ export def "alerts-active active" [
   let full_url = (build-url $base "/alerts/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns info on the number of active alerts
@@ -181,13 +184,14 @@ export def "alerts-active-count count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/active/count")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns active alerts for the given NWS public zone or county
@@ -203,13 +207,14 @@ export def "alerts-active-zone zone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/active/zone/($zoneId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns active alerts for the given area (state or marine area)
@@ -225,13 +230,14 @@ export def "alerts-active-area area" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/active/area/($area)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns active alerts for the given marine region
@@ -247,13 +253,14 @@ export def "alerts-active-region region" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/active/region/($region)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of alert types
@@ -268,13 +275,14 @@ export def "alerts-types types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/types")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a specific alert
@@ -290,6 +298,7 @@ export def "alerts single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -297,7 +306,7 @@ export def "alerts single" [
   let full_url = (build-url $base $"/alerts/($id)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a Center Weather Service Unit
@@ -313,13 +322,14 @@ export def "aviation-cwsus cwsu" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aviation/cwsus/($cwsuId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of Center Weather Advisories from a CWSU
@@ -335,13 +345,14 @@ export def "aviation-cwsus-cwas cwas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aviation/cwsus/($cwsuId)/cwas")
   let accept_val = "application/geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of Center Weather Advisories from a CWSU
@@ -359,6 +370,7 @@ export def "aviation-cwsus-cwas cwa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -366,7 +378,7 @@ export def "aviation-cwsus-cwas cwa" [
   let full_url = (build-url $base $"/aviation/cwsus/($cwsuId)/cwas/($date)/($sequence)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of SIGMET/AIRMETs
@@ -381,6 +393,7 @@ export def "aviation-sigmets sigmetQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Start time (format: date-time)
   --end: string # End time (format: date-time)
   --date: string # Date (YYYY-MM-DD format) (format: date)
@@ -393,7 +406,7 @@ export def "aviation-sigmets sigmetQuery" [
   let full_url = (build-url $base "/aviation/sigmets" $qp)
   let accept_val = "application/geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of SIGMET/AIRMETs for the specified ATSU
@@ -409,13 +422,14 @@ export def "aviation-sigmets sigmetsByATSU" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aviation/sigmets/($atsu)")
   let accept_val = "application/geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of SIGMET/AIRMETs for the specified ATSU for the specified date
@@ -432,13 +446,14 @@ export def "aviation-sigmets sigmetsByATSUByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aviation/sigmets/($atsu)/($date)")
   let accept_val = "application/geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a specific SIGMET/AIRMET
@@ -456,6 +471,7 @@ export def "aviation-sigmets sigmet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -463,7 +479,7 @@ export def "aviation-sigmets sigmet" [
   let full_url = (build-url $base $"/aviation/sigmets/($atsu)/($date)/($time)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns glossary terms
@@ -478,13 +494,14 @@ export def "glossary glossary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/glossary")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns raw numerical forecast data for a 2.5km grid area
@@ -502,6 +519,7 @@ export def "gridpoints gridpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -509,7 +527,7 @@ export def "gridpoints gridpoint" [
   let full_url = (build-url $base $"/gridpoints/($wfo)/($x),($y)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a textual forecast for a 2.5km grid area
@@ -527,6 +545,7 @@ export def "gridpoints-forecast forecast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Use US customary or SI (metric) units in textual output (default: us)
   --Feature-Flags: list # Enable future and experimental features (see documentation for more info): * forecast_temperature_qv: Represent temperature as QuantitativeValue * forecast_wind_speed_qv: Represent wind speed as QuantitativeValue
 ]: nothing -> any {
@@ -538,7 +557,7 @@ export def "gridpoints-forecast forecast" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a textual hourly forecast for a 2.5km grid area
@@ -556,6 +575,7 @@ export def "gridpoints-forecast-hourly hourly" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --units: string@units-completer # Use US customary or SI (metric) units in textual output (default: us)
   --Feature-Flags: list # Enable future and experimental features (see documentation for more info): * forecast_temperature_qv: Represent temperature as QuantitativeValue * forecast_wind_speed_qv: Represent wind speed as QuantitativeValue
 ]: nothing -> any {
@@ -567,7 +587,7 @@ export def "gridpoints-forecast-hourly hourly" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observation stations usable for a given 2.5km grid area
@@ -585,6 +605,7 @@ export def "gridpoints-stations stations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit (default: 500)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -593,7 +614,7 @@ export def "gridpoints-stations stations" [
   let full_url = (build-url $base $"/gridpoints/($wfo)/($x),($y)/stations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a forecast icon. Icon services in API are deprecated.
@@ -613,6 +634,7 @@ export def "icons icons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --size: string # Font size
   --fontsize: int # Font size
 ]: nothing -> any {
@@ -622,7 +644,7 @@ export def "icons icons" [
   let full_url = (build-url $base $"/icons/($set)/($timeOfDay)/($first)" $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a forecast icon. Icon services in API are deprecated.
@@ -643,6 +665,7 @@ export def "icons iconsDualCondition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --size: string # Font size
   --fontsize: int # Font size
 ]: nothing -> any {
@@ -652,7 +675,7 @@ export def "icons iconsDualCondition" [
   let full_url = (build-url $base $"/icons/($set)/($timeOfDay)/($first)/($second)" $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of icon codes and textual descriptions. Icon services in API are deprecated.
@@ -669,13 +692,14 @@ export def "icons summary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/icons")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a thumbnail image for a satellite region. Image services in API are deprecated.
@@ -693,13 +717,14 @@ export def "thumbnails-satellite thumbnails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/thumbnails/satellite/($area)")
   let accept_val = "image/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observations for a given station
@@ -715,6 +740,7 @@ export def "stations-observations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Start time (format: date-time)
   --end: string # End time (format: date-time)
   --cursor: string # Pagination cursor
@@ -726,7 +752,7 @@ export def "stations-observations list" [
   let full_url = (build-url $base $"/stations/($stationId)/observations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the latest observation for a station
@@ -742,6 +768,7 @@ export def "stations-observations-latest latest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --require-qc: oneof<nothing, bool> # Require QC
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -750,7 +777,7 @@ export def "stations-observations-latest latest" [
   let full_url = (build-url $base $"/stations/($stationId)/observations/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a single observation.
@@ -767,13 +794,14 @@ export def "stations-observations time" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stations/($stationId)/observations/($time)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns Terminal Aerodrome Forecasts for the specified airport station.
@@ -789,13 +817,14 @@ export def "stations-tafs tafs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stations/($stationId)/tafs")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a single Terminal Aerodrome Forecast.
@@ -813,13 +842,14 @@ export def "stations-tafs taf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stations/($stationId)/tafs/($date)/($time)")
   let accept_val = "application/vnd.wmo.iwxxm+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observation stations.
@@ -834,6 +864,7 @@ export def "stations stations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Filter by observation station ID
   --state: list # Filter by state/marine area code
   --limit: int # Limit (default: 500)
@@ -845,7 +876,7 @@ export def "stations stations" [
   let full_url = (build-url $base "/stations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given observation station
@@ -861,6 +892,7 @@ export def "stations station" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -868,7 +900,7 @@ export def "stations station" [
   let full_url = (build-url $base $"/stations/($stationId)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a NWS forecast office
@@ -884,13 +916,14 @@ export def "offices office" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns active briefing for an NWS office
@@ -906,13 +939,14 @@ export def "offices-briefing briefing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/briefing")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the latest briefing for an office
@@ -928,13 +962,14 @@ export def "offices-briefing-download-latest latest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/briefing/download/latest")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a briefing for an office
@@ -951,13 +986,14 @@ export def "offices-briefing-download download" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/briefing/download/($briefingId)")
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a specific news headline for a given NWS office
@@ -974,13 +1010,14 @@ export def "offices-headlines headline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/headlines/($headlineId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of news headlines for a given NWS office
@@ -996,13 +1033,14 @@ export def "offices-headlines headlines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/headlines")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns active weather stories for an NWS office
@@ -1018,13 +1056,14 @@ export def "offices-weatherstories weatherstory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/weatherstories")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the image for a weather story
@@ -1041,13 +1080,14 @@ export def "offices-weatherstories-download image" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/offices/($officeId)/weatherstories/download/($imageId)")
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given latitude/longitude point
@@ -1064,6 +1104,7 @@ export def "points point" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -1071,7 +1112,7 @@ export def "points point" [
   let full_url = (build-url $base $"/points/($latitude),($longitude)")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns NOAA Weather Radio broadcast script for a latitude/longitude point
@@ -1089,13 +1130,14 @@ export def "points-radio radio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/points/($latitude),($longitude)/radio")
   let accept_val = "application/ssml+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observation stations for a given point
@@ -1114,13 +1156,14 @@ export def "points-stations stations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/points/($latitude),($longitude)/stations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of radar servers
@@ -1135,6 +1178,7 @@ export def "radar-servers servers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reportingHost: string # Show records from specific reporting host
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -1143,7 +1187,7 @@ export def "radar-servers servers" [
   let full_url = (build-url $base "/radar/servers" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given radar server
@@ -1159,6 +1203,7 @@ export def "radar-servers server" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reportingHost: string # Show records from specific reporting host
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -1167,7 +1212,7 @@ export def "radar-servers server" [
   let full_url = (build-url $base $"/radar/servers/($id)" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of radar spgds
@@ -1182,6 +1227,7 @@ export def "radar-spgds spgds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --published: string # Range for publish time
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -1190,7 +1236,7 @@ export def "radar-spgds spgds" [
   let full_url = (build-url $base "/radar/spgds" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of radar stations
@@ -1205,6 +1251,7 @@ export def "radar-stations stations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --stationType: list # Limit results to a specific station type or types
   --reportingHost: string # Show RDA and latency info from specific reporting host
@@ -1216,7 +1263,7 @@ export def "radar-stations stations" [
   let full_url = (build-url $base "/radar/stations" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given radar station
@@ -1232,6 +1279,7 @@ export def "radar-stations station" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --reportingHost: string # Show RDA and latency info from specific reporting host
   --host: string # Show latency info from specific LDM host
@@ -1242,7 +1290,7 @@ export def "radar-stations station" [
   let full_url = (build-url $base $"/radar/stations/($stationId)" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given radar station alarms
@@ -1258,13 +1306,14 @@ export def "radar-stations-alarms alarms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/radar/stations/($stationId)/alarms")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given radar queue
@@ -1280,6 +1329,7 @@ export def "radar-queues queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Record limit
   --arrived: string # Range for arrival time
   --created: string # Range for creation time
@@ -1295,7 +1345,7 @@ export def "radar-queues queue" [
   let full_url = (build-url $base $"/radar/queues/($host)" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given radar wind profiler
@@ -1311,6 +1361,7 @@ export def "radar-profilers profiler" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time: string # Time interval
   --interval: string # Averaging interval
 ]: nothing -> any {
@@ -1320,7 +1371,7 @@ export def "radar-profilers profiler" [
   let full_url = (build-url $base $"/radar/profilers/($stationId)" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns NOAA Weather Radio broadcast script for a transmitter
@@ -1337,13 +1388,14 @@ export def "radio-broadcast radio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/radio/($callSign)/broadcast")
   let accept_val = "application/ssml+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of text products
@@ -1358,6 +1410,7 @@ export def "products query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: list # Location id
   --start: string # Start time (format: date-time)
   --end: string # End time (format: date-time)
@@ -1372,7 +1425,7 @@ export def "products query" [
   let full_url = (build-url $base "/products" $qp)
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of valid text product issuance locations
@@ -1387,13 +1440,14 @@ export def "products-locations locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products/locations")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of valid text product types and codes
@@ -1408,13 +1462,14 @@ export def "products-types types" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products/types")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a specific text product
@@ -1430,13 +1485,14 @@ export def "products product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/($productId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of text products of a given type
@@ -1452,13 +1508,14 @@ export def "products-types type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/types/($typeId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of valid text product issuance locations for a given product type
@@ -1474,13 +1531,14 @@ export def "products-types-locations locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/types/($typeId)/locations")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of valid text product types for a given issuance location
@@ -1496,13 +1554,14 @@ export def "products-locations-types products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/locations/($locationId)/types")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of text products of a given type for a given issuance location
@@ -1519,13 +1578,14 @@ export def "products-types-locations location" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/types/($typeId)/locations/($locationId)")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns latest text products of a given type for a given issuance location with product text
@@ -1542,13 +1602,14 @@ export def "products-types-locations-latest location" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/products/types/($typeId)/locations/($locationId)/latest")
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of zones
@@ -1563,6 +1624,7 @@ export def "zones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --id: list # Zone ID (forecast or county)
   --area: list # State/marine area code
@@ -1579,7 +1641,7 @@ export def "zones list" [
   let full_url = (build-url $base "/zones" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of zones of a given type
@@ -1595,6 +1657,7 @@ export def "zones type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --id: list # Zone ID (forecast or county)
   --area: list # State/marine area code
@@ -1611,7 +1674,7 @@ export def "zones type" [
   let full_url = (build-url $base $"/zones/($type)" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns metadata about a given zone
@@ -1628,6 +1691,7 @@ export def "zones zone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --effective: string # Effective date/time (format: date-time)
 ]: nothing -> any {
@@ -1637,7 +1701,7 @@ export def "zones zone" [
   let full_url = (build-url $base $"/zones/($type)/($zoneId)" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the current zone forecast for a given zone
@@ -1654,6 +1718,7 @@ export def "zones-forecast forecast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
@@ -1661,7 +1726,7 @@ export def "zones-forecast forecast" [
   let full_url = (build-url $base $"/zones/($type)/($zoneId)/forecast")
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observations for a given zone
@@ -1677,6 +1742,7 @@ export def "zones-forecast-observations obs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --start: string # Start date/time (format: date-time)
   --end: string # End date/time (format: date-time)
@@ -1688,7 +1754,7 @@ export def "zones-forecast-observations obs" [
   let full_url = (build-url $base $"/zones/forecast/($zoneId)/observations" $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of observation stations for a given zone
@@ -1704,6 +1770,7 @@ export def "zones-forecast-stations stations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit (default: 500)
   --cursor: string # Pagination cursor
 ]: nothing -> any {
@@ -1713,5 +1780,5 @@ export def "zones-forecast-stations stations" [
   let full_url = (build-url $base $"/zones/forecast/($zoneId)/stations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

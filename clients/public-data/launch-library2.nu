@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def mode-completer-2 [] { ["list" "normal"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "230-agencies list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "230-agencies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --abbrev: string
   --abbrev-contains: string
   --attempted-landings: int
@@ -179,7 +181,7 @@ export def "230-agencies list" [
   let full_url = (build-url $base "/2.3.0/agencies/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/agencies/?mode=list](./?mode=list)  #### Filters Parameters - `abbrev`, `abbrev__contains`, `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `consecutive_successful_landings`, `consecutive_successful_landings__gt`, `consecutive_successful_landings__gte`, `consecutive_successful_landings__lt`, `consecutive_successful_landings__lte`, `consecutive_successful_launches`, `consecutive_successful_launches__gt`, `consecutive_successful_launches__gte`, `consecutive_successful_launches__lt`, `consecutive_successful_launches__lte`, `country_code`, `description`, `description__contains`, `failed_landings`, `failed_landings__gt`, `failed_landings__gte`, `failed_landings__lt`, `failed_landings__lte`, `failed_launches`, `failed_launches__gt`, `failed_launches__gte`, `failed_launches__lt`, `failed_launches__lte`, `featured`, `founding_year`, `founding_year__gt`, `founding_year__gte`, `founding_year__lt`, `founding_year__lte`, `id`, `name`, `name__contains`, `parent__id`, `pending_launches`, `pending_launches__gt`, `pending_launches__gte`, `pending_launches__lt`, `pending_launches__lte`, `spacecraft`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`, `successful_launches`, `successful_launches__gt`, `successful_launches__gte`, `successful_launches__lt`, `successful_launches__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`, `type__id`  Example - [/agencies/?abbrev=NASA](./?abbrev=NASA)  #### Search Fields searched - `abbrev`, `name`  Example - [/agencies/?search=SpaceX](./?search=SpaceX)  #### Ordering Fields - `attempted_landings`, `consecutive_successful_landings`, `consecutive_successful_launches`, `failed_landings`, `failed_launches`, `featured`, `id`, `name`, `pending_launches`, `successful_landings`, `successful_launches`, `total_launch_count`  Example - [/agencies/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/agencies/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/agencies/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -195,13 +197,14 @@ export def "230-agencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: table<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: table<id: int, social_media: record, url: string>, launcher_list: table<response_mode: string, id: int, url: string, name: string, families: list, full_name: string, variant: string, active: bool, is_placeholder: bool, program: list, reusable: bool, image: record, info_url: string, wiki_url: string, description: string, alias: string, min_stage: int, max_stage: int, length: float, diameter: float, maiden_flight: string, launch_cost: int, launch_mass: float, leo_capacity: float, gto_capacity: float, geo_capacity: float, sso_capacity: float, to_thrust: float, apogee: float, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int, fastest_turnaround: string>, spacecraft_list: table<response_mode: string, id: int, url: string, name: string, type: record, agency: record, family: list, in_use: bool, image: record, capability: string, history: string, details: string, maiden_flight: string, height: float, diameter: float, human_rated: bool, crew_capacity: int, payload_capacity: int, payload_return_capacity: int, flight_life: string, wiki_link: string, info_link: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, fastest_turnaround: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/agencies/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API endpoint that allows API Throttle information to be viewed.  GET: Returns a range of information about your API access
@@ -216,13 +219,14 @@ export def "230-api-throttle list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<your_request_limit: int, limit_frequency_secs: int, current_use: int, next_use_secs: int, ident: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2.3.0/api-throttle/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/astronauts/?mode=list](./?mode=list)  #### Filters Parameters - `age`, `age__gt`, `age__gte`, `age__lt`, `age__lte`, `agency_ids`, `date_of_birth`, `date_of_birth__gt`, `date_of_birth__gte`, `date_of_birth__lt`, `date_of_birth__lte`, `date_of_death`, `date_of_death__gt`, `date_of_death__gte`, `date_of_death__lt`, `date_of_death__lte`, `first_flight`, `first_flight__gt`, `first_flight__gte`, `first_flight__lt`, `first_flight__lte`, `flights_count`, `flights_count__gt`, `flights_count__gte`, `flights_count__lt`, `flights_count__lte`, `has_flown`, `in_space`, `is_human`, `landings_count`, `landings_count__gt`, `landings_count__gte`, `landings_count__lt`, `landings_count__lte`, `last_flight`, `last_flight__gt`, `last_flight__gte`, `last_flight__lt`, `last_flight__lte`, `nationality`, `status_ids`, `type__id`  Example - [/astronauts/?has_flown=true](./?has_flown=true)  #### Search Fields searched - `agency__abbrev`, `agency__name`, `name`, `nationality__nationality_name`  Example - [/astronauts/?search=Pesquet](./?search=Pesquet)  #### Ordering Fields - `age`, `date_of_birth`, `eva_time`, `flights_count`, `id`, `landings_count`, `last_flight`, `name`, `spacewalks_count`, `status`, `time_in_space`  Example - [/astronauts/?ordering=-time_in_space](./?ordering=-time_in_space)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/astronauts/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/astronauts/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -237,6 +241,7 @@ export def "230-astronauts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --age: int
   --age-gt: int
   --age-gte: int
@@ -291,7 +296,7 @@ export def "230-astronauts list" [
   let full_url = (build-url $base "/2.3.0/astronauts/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/astronauts/?mode=list](./?mode=list)  #### Filters Parameters - `age`, `age__gt`, `age__gte`, `age__lt`, `age__lte`, `agency_ids`, `date_of_birth`, `date_of_birth__gt`, `date_of_birth__gte`, `date_of_birth__lt`, `date_of_birth__lte`, `date_of_death`, `date_of_death__gt`, `date_of_death__gte`, `date_of_death__lt`, `date_of_death__lte`, `first_flight`, `first_flight__gt`, `first_flight__gte`, `first_flight__lt`, `first_flight__lte`, `flights_count`, `flights_count__gt`, `flights_count__gte`, `flights_count__lt`, `flights_count__lte`, `has_flown`, `in_space`, `is_human`, `landings_count`, `landings_count__gt`, `landings_count__gte`, `landings_count__lt`, `landings_count__lte`, `last_flight`, `last_flight__gt`, `last_flight__gte`, `last_flight__lt`, `last_flight__lte`, `nationality`, `status_ids`, `type__id`  Example - [/astronauts/?has_flown=true](./?has_flown=true)  #### Search Fields searched - `agency__abbrev`, `agency__name`, `name`, `nationality__nationality_name`  Example - [/astronauts/?search=Pesquet](./?search=Pesquet)  #### Ordering Fields - `age`, `date_of_birth`, `eva_time`, `flights_count`, `id`, `landings_count`, `last_flight`, `name`, `spacewalks_count`, `status`, `time_in_space`  Example - [/astronauts/?ordering=-time_in_space](./?ordering=-time_in_space)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/astronauts/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/astronauts/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -307,13 +312,14 @@ export def "230-astronauts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, status: record<id: int, name: string>, agency: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, response_mode: string, type: record<id: int, name: string>, in_space: bool, time_in_space: string, eva_time: string, age: int, date_of_birth: string, date_of_death: string, nationality: table<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, bio: string, wiki: string, last_flight: string, first_flight: string, social_media_links: table<id: int, social_media: record, url: string>, flights_count: int, landings_count: int, spacewalks_count: int, flights: table<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landings: table<id: int, url: string, destination: string, mission_end: string, spacecraft: record, launch: record, landing: record, duration: string, turn_around_time: string, response_mode: string>, spacewalks: table<response_mode: string, id: int, url: string, name: string, start: string, end: string, duration: string, location: string, crew: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/astronauts/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/celestial_bodies/?mode=list](./?mode=list)  #### Search Fields searched - `name`, `type__name`  Example - [/celestial_bodies/?search=Mars](./?search=Mars)  #### Ordering Fields - `id`, `name`  Example - [/celestial_bodies/?ordering=-name](./?ordering=-name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/celestial_bodies/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/celestial_bodies/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -328,6 +334,7 @@ export def "230-celestial-bodies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --offset: int # The initial index from which to return the results.
@@ -340,7 +347,7 @@ export def "230-celestial-bodies list" [
   let full_url = (build-url $base "/2.3.0/celestial_bodies/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/celestial_bodies/?mode=list](./?mode=list)  #### Search Fields searched - `name`, `type__name`  Example - [/celestial_bodies/?search=Mars](./?search=Mars)  #### Ordering Fields - `id`, `name`  Example - [/celestial_bodies/?ordering=-name](./?ordering=-name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/celestial_bodies/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/celestial_bodies/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -356,13 +363,14 @@ export def "230-celestial-bodies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, diameter: float, mass: float, gravity: float, length_of_day: string, atmosphere: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, description: string, wiki_url: string, total_attempted_launches: int, successful_launches: int, failed_launches: int, total_attempted_landings: int, successful_landings: int, failed_landings: int, locations: table<response_mode: string, id: int, url: string, name: string, active: bool, country: record, description: string, image: record, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/celestial_bodies/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/agency_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/agency_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -377,6 +385,7 @@ export def "230-config-agency-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -388,7 +397,7 @@ export def "230-config-agency-types list" [
   let full_url = (build-url $base "/2.3.0/config/agency_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/agency_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/agency_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -404,13 +413,14 @@ export def "230-config-agency-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/agency_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_roles/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_roles/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -425,6 +435,7 @@ export def "230-config-astronaut-roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -436,7 +447,7 @@ export def "230-config-astronaut-roles list" [
   let full_url = (build-url $base "/2.3.0/config/astronaut_roles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_roles/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_roles/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -452,13 +463,14 @@ export def "230-config-astronaut-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, role: string, priority: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/astronaut_roles/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -473,6 +485,7 @@ export def "230-config-astronaut-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -484,7 +497,7 @@ export def "230-config-astronaut-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/astronaut_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -500,13 +513,14 @@ export def "230-config-astronaut-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/astronaut_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -521,6 +535,7 @@ export def "230-config-astronaut-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -532,7 +547,7 @@ export def "230-config-astronaut-types list" [
   let full_url = (build-url $base "/2.3.0/config/astronaut_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/astronaut_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/astronaut_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -548,13 +563,14 @@ export def "230-config-astronaut-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/astronaut_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/celestial_body_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/celestial_body_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -569,6 +585,7 @@ export def "230-config-celestial-body-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -580,7 +597,7 @@ export def "230-config-celestial-body-types list" [
   let full_url = (build-url $base "/2.3.0/config/celestial_body_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/celestial_body_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/celestial_body_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -596,13 +613,14 @@ export def "230-config-celestial-body-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/celestial_body_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/countries/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/countries/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -617,6 +635,7 @@ export def "230-config-countries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -628,7 +647,7 @@ export def "230-config-countries list" [
   let full_url = (build-url $base "/2.3.0/config/countries/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/countries/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/countries/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -644,13 +663,14 @@ export def "230-config-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/countries/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/docking_locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/docking_locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -665,6 +685,7 @@ export def "230-config-docking-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -676,7 +697,7 @@ export def "230-config-docking-locations list" [
   let full_url = (build-url $base "/2.3.0/config/docking_locations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/docking_locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/docking_locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -692,13 +713,14 @@ export def "230-config-docking-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, spacestation: record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>, spacecraft: record<response_mode: string, id: int, url: string, name: string, type: record<id: int, name: string>, agency: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, family: list<record>, in_use: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>, payload: record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, operator: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/docking_locations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/event_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/event_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -713,6 +735,7 @@ export def "230-config-event-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -724,7 +747,7 @@ export def "230-config-event-types list" [
   let full_url = (build-url $base "/2.3.0/config/event_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/event_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/event_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -740,13 +763,14 @@ export def "230-config-event-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/event_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/first_stage_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/first_stage_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -761,6 +785,7 @@ export def "230-config-first-stage-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -772,7 +797,7 @@ export def "230-config-first-stage-types list" [
   let full_url = (build-url $base "/2.3.0/config/first_stage_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/first_stage_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/first_stage_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -788,13 +813,14 @@ export def "230-config-first-stage-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/first_stage_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/image_licenses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/image_licenses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -809,6 +835,7 @@ export def "230-config-image-licenses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -820,7 +847,7 @@ export def "230-config-image-licenses list" [
   let full_url = (build-url $base "/2.3.0/config/image_licenses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/image_licenses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/image_licenses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -836,13 +863,14 @@ export def "230-config-image-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, priority: int, link: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/image_licenses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/image_variant_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/image_variant_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -857,6 +885,7 @@ export def "230-config-image-variant-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -868,7 +897,7 @@ export def "230-config-image-variant-types list" [
   let full_url = (build-url $base "/2.3.0/config/image_variant_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/image_variant_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/image_variant_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -884,13 +913,14 @@ export def "230-config-image-variant-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/image_variant_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/infourl_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/infourl_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -905,6 +935,7 @@ export def "230-config-infourl-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -916,7 +947,7 @@ export def "230-config-infourl-types list" [
   let full_url = (build-url $base "/2.3.0/config/infourl_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/infourl_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/infourl_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -932,13 +963,14 @@ export def "230-config-infourl-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/infourl_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/landing_locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/landing_locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -953,6 +985,7 @@ export def "230-config-landing-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -964,7 +997,7 @@ export def "230-config-landing-locations list" [
   let full_url = (build-url $base "/2.3.0/config/landing_locations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/landing_locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/landing_locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -980,13 +1013,14 @@ export def "230-config-landing-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, active: bool, abbrev: string, description: string, location: record<response_mode: string, id: int, url: string, name: string, active: bool, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>, longitude: float, latitude: float, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, successful_landings: int, attempted_landings: int, failed_landings: int, celestial_body: record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, diameter: float, mass: float, gravity: float, length_of_day: string, atmosphere: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, description: string, wiki_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/landing_locations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/landing_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/landing_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1001,6 +1035,7 @@ export def "230-config-landing-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1012,7 +1047,7 @@ export def "230-config-landing-types list" [
   let full_url = (build-url $base "/2.3.0/config/landing_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/landing_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/landing_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1028,13 +1063,14 @@ export def "230-config-landing-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, abbrev: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/landing_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/languages/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/languages/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1049,6 +1085,7 @@ export def "230-config-languages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1060,7 +1097,7 @@ export def "230-config-languages list" [
   let full_url = (build-url $base "/2.3.0/config/languages/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/languages/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/languages/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1076,13 +1113,14 @@ export def "230-config-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, code: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/languages/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/launch_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/launch_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1097,6 +1135,7 @@ export def "230-config-launch-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1108,7 +1147,7 @@ export def "230-config-launch-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/launch_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/launch_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/launch_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1124,13 +1163,14 @@ export def "230-config-launch-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, abbrev: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/launch_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/launcher_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/launcher_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1145,6 +1185,7 @@ export def "230-config-launcher-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1156,7 +1197,7 @@ export def "230-config-launcher-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/launcher_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/launcher_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/launcher_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1172,13 +1213,14 @@ export def "230-config-launcher-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/launcher_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/mission_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/mission_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1193,6 +1235,7 @@ export def "230-config-mission-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1204,7 +1247,7 @@ export def "230-config-mission-types list" [
   let full_url = (build-url $base "/2.3.0/config/mission_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/mission_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/mission_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1220,13 +1263,14 @@ export def "230-config-mission-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/mission_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/net_precisions/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/net_precisions/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1241,6 +1285,7 @@ export def "230-config-net-precisions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1252,7 +1297,7 @@ export def "230-config-net-precisions list" [
   let full_url = (build-url $base "/2.3.0/config/net_precisions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/net_precisions/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/net_precisions/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1268,13 +1313,14 @@ export def "230-config-net-precisions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, abbrev: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/net_precisions/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/notice_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/notice_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1289,6 +1335,7 @@ export def "230-config-notice-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1300,7 +1347,7 @@ export def "230-config-notice-types list" [
   let full_url = (build-url $base "/2.3.0/config/notice_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/notice_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/notice_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1316,13 +1363,14 @@ export def "230-config-notice-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/notice_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/orbits/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/orbits/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1337,6 +1385,7 @@ export def "230-config-orbits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1348,7 +1397,7 @@ export def "230-config-orbits list" [
   let full_url = (build-url $base "/2.3.0/config/orbits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/orbits/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/orbits/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1364,13 +1413,14 @@ export def "230-config-orbits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, abbrev: string, celestial_body: record<response_mode: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/orbits/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/payload_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/payload_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1385,6 +1435,7 @@ export def "230-config-payload-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1396,7 +1447,7 @@ export def "230-config-payload-types list" [
   let full_url = (build-url $base "/2.3.0/config/payload_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/payload_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/payload_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1412,13 +1463,14 @@ export def "230-config-payload-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/payload_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/program_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/program_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1433,6 +1485,7 @@ export def "230-config-program-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1444,7 +1497,7 @@ export def "230-config-program-types list" [
   let full_url = (build-url $base "/2.3.0/config/program_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/program_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/program_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1460,13 +1513,14 @@ export def "230-config-program-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/program_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/road_closure_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/road_closure_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1481,6 +1535,7 @@ export def "230-config-road-closure-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1492,7 +1547,7 @@ export def "230-config-road-closure-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/road_closure_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/road_closure_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/road_closure_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1508,13 +1563,14 @@ export def "230-config-road-closure-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/road_closure_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/space_station_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/space_station_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1529,6 +1585,7 @@ export def "230-config-space-station-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1540,7 +1597,7 @@ export def "230-config-space-station-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/space_station_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/space_station_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/space_station_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1556,13 +1613,14 @@ export def "230-config-space-station-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/space_station_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/spacecraft_configuration_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/spacecraft_configuration_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1577,6 +1635,7 @@ export def "230-config-spacecraft-configuration-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1588,7 +1647,7 @@ export def "230-config-spacecraft-configuration-types list" [
   let full_url = (build-url $base "/2.3.0/config/spacecraft_configuration_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/spacecraft_configuration_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/spacecraft_configuration_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1604,13 +1663,14 @@ export def "230-config-spacecraft-configuration-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/spacecraft_configuration_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/spacecraft_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/spacecraft_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1625,6 +1685,7 @@ export def "230-config-spacecraft-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1636,7 +1697,7 @@ export def "230-config-spacecraft-statuses list" [
   let full_url = (build-url $base "/2.3.0/config/spacecraft_statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/spacecraft_statuses/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/spacecraft_statuses/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1652,13 +1713,14 @@ export def "230-config-spacecraft-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/spacecraft_statuses/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/timeline_event_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/timeline_event_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1673,6 +1735,7 @@ export def "230-config-timeline-event-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1684,7 +1747,7 @@ export def "230-config-timeline-event-types list" [
   let full_url = (build-url $base "/2.3.0/config/timeline_event_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/timeline_event_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/timeline_event_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1700,13 +1763,14 @@ export def "230-config-timeline-event-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, abbrev: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/timeline_event_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/vidurl_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/vidurl_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1721,6 +1785,7 @@ export def "230-config-vidurl-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
   --ordering: string # Which field to use when ordering the results.
@@ -1732,7 +1797,7 @@ export def "230-config-vidurl-types list" [
   let full_url = (build-url $base "/2.3.0/config/vidurl_types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/config/vidurl_types/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/config/vidurl_types/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1748,13 +1813,14 @@ export def "230-config-vidurl-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/config/vidurl_types/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/dashboard/starship/?mode=list](./?mode=list)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/dashboard/starship/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/dashboard/starship/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1769,13 +1835,14 @@ export def "230-dashboard-starship list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2.3.0/dashboard/starship/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/docking_events/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `docked`, `docking__gt`, `docking__gte`, `docking__lt`, `docking__lte`, `docking_location__id`, `flight_vehicle_chaser__id`, `space_station_target__id`  Example - [/docking_events/?space_station_target__id=6](./?space_station_target__id=6)  #### Search Fields searched - `docking_location__name`, `flight_vehicle_chaser__spacecraft__name`, `flight_vehicle_target__spacecraft__name`, `payload_flight_chaser__payload__name`, `payload_flight_target__payload__name`, `space_station_chaser__name`, `space_station_target__name`  Example - [/docking_events/?search=Salyut](./?search=Salyut)  #### Ordering Fields - `departure`, `docking`  Example - [/docking_events/?ordering=-docking](./?ordering=-docking)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/docking_events/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/docking_events/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1790,6 +1857,7 @@ export def "230-docking-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --docked: oneof<nothing, bool>
   --docking-gt: string # Docking is greater than (format: date-time)
   --docking-gte: string # Docking is greater than or equal to (format: date-time)
@@ -1810,7 +1878,7 @@ export def "230-docking-events list" [
   let full_url = (build-url $base "/2.3.0/docking_events/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/docking_events/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `docked`, `docking__gt`, `docking__gte`, `docking__lt`, `docking__lte`, `docking_location__id`, `flight_vehicle_chaser__id`, `space_station_target__id`  Example - [/docking_events/?space_station_target__id=6](./?space_station_target__id=6)  #### Search Fields searched - `docking_location__name`, `flight_vehicle_chaser__spacecraft__name`, `flight_vehicle_target__spacecraft__name`, `payload_flight_chaser__payload__name`, `payload_flight_target__payload__name`, `space_station_chaser__name`, `space_station_target__name`  Example - [/docking_events/?search=Salyut](./?search=Salyut)  #### Ordering Fields - `departure`, `docking`  Example - [/docking_events/?ordering=-docking](./?ordering=-docking)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/docking_events/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/docking_events/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1826,13 +1894,14 @@ export def "230-docking-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, docking: string, departure: string, docking_location: record<id: int, name: string, spacestation: record<id: int, url: string, name: string, image: record>, spacecraft: record<response_mode: string, id: int, url: string, name: string, type: record, agency: record, family: list, in_use: bool, image: record>, payload: record<response_mode: string, id: int, name: string, type: record, manufacturer: record, operator: record, image: record>>, space_station_target: record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>, flight_vehicle_target: record<id: int, url: string, destination: string, mission_end: string, spacecraft: record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record, description: string, spacecraft_config: record, fastest_turnaround: string>, launch: record<id: string, url: string, name: string>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record, type: record>, duration: string, turn_around_time: string>, payload_flight_target: record<response_mode: string, id: int, url: string, destination: string, amount: int, payload: record<response_mode: string, id: int, name: string, type: record, manufacturer: record, operator: record, image: record>, launch: record<id: string, url: string, name: string>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record, type: record>>, response_mode: string, flight_vehicle_chaser: record<id: int, url: string, destination: string, mission_end: string, spacecraft: record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record, description: string, spacecraft_config: record, fastest_turnaround: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record, type: record>, duration: string, turn_around_time: string, response_mode: string>, space_station_chaser: record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, status: record<id: int, name: string>, founded: string, deorbited: string, description: string, orbit: string, type: record<id: int, name: string>>, payload_flight_chaser: record<response_mode: string, id: int, url: string, destination: string, amount: int, payload: record<response_mode: string, id: int, name: string, type: record, manufacturer: record, operator: record, image: record, wiki_link: string, info_link: string, program: list, cost: int, mass: float, description: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record, type: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/docking_events/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1847,6 +1916,7 @@ export def "230-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-ids: list # Comma-separated agency IDs.
   --date-gt: string # Date is greater than (format: date-time)
   --date-gte: string # Date is greater than or equal to (format: date-time)
@@ -1879,7 +1949,7 @@ export def "230-events list" [
   let full_url = (build-url $base "/2.3.0/events/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1895,13 +1965,14 @@ export def "230-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, date: string, slug: string, type: record<id: int, name: string>, description: string, webcast_live: bool, location: string, date_precision: record<id: int, name: string, abbrev: string, description: string>, response_mode: string, duration: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, last_updated: string, agencies: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, launches: table<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string>, expeditions: table<id: int, url: string, name: string, start: string, end: string, response_mode: string, spacestation: record, mission_patches: list, spacewalks: list>, spacestations: table<id: int, url: string, name: string, image: record, status: record, founded: string, deorbited: string, description: string, orbit: string, type: record>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, astronauts: table<id: int, url: string, name: string, status: record, agency: record, image: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/events/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/previous/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/previous/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/previous/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/previous/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/previous/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/previous/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1916,6 +1987,7 @@ export def "230-events-previous list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-ids: list # Comma-separated agency IDs.
   --date-gt: string # Date is greater than (format: date-time)
   --date-gte: string # Date is greater than or equal to (format: date-time)
@@ -1948,7 +2020,7 @@ export def "230-events-previous list" [
   let full_url = (build-url $base "/2.3.0/events/previous/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/previous/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/previous/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/previous/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/previous/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/previous/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/previous/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1964,13 +2036,14 @@ export def "230-events-previous get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, date: string, slug: string, type: record<id: int, name: string>, description: string, webcast_live: bool, location: string, date_precision: record<id: int, name: string, abbrev: string, description: string>, response_mode: string, duration: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, last_updated: string, agencies: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, launches: table<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string>, expeditions: table<id: int, url: string, name: string, start: string, end: string, response_mode: string, spacestation: record, mission_patches: list, spacewalks: list>, spacestations: table<id: int, url: string, name: string, image: record, status: record, founded: string, deorbited: string, description: string, orbit: string, type: record>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, astronauts: table<id: int, url: string, name: string, status: record, agency: record, image: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/events/previous/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/upcoming/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `hide_recent_previous`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/upcoming/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/upcoming/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/upcoming/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/upcoming/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/upcoming/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -1985,6 +2058,7 @@ export def "230-events-upcoming list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-ids: list # Comma-separated agency IDs.
   --date-gt: string # Date is greater than (format: date-time)
   --date-gte: string # Date is greater than or equal to (format: date-time)
@@ -2018,7 +2092,7 @@ export def "230-events-upcoming list" [
   let full_url = (build-url $base "/2.3.0/events/upcoming/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/events/upcoming/?mode=list](./?mode=list)  #### Filters Parameters - `agency__ids`, `date__gt`, `date__gte`, `date__lt`, `date__lte`, `day`, `expedition__ids`, `hide_recent_previous`, `id`, `last_updated__gte`, `last_updated__lte`, `launch__ids`, `month`, `program`, `program__ids`, `slug`, `spacestation__ids`, `type`, `type__ids`, `video_url`, `year`  Example - [/events/upcoming/?type__ids=2,8](./?type__ids=2,8)  #### Search Fields searched - `name`  Example - [/events/upcoming/?search=Flyby](./?search=Flyby)  #### Ordering Fields - `date`, `last_updated`  Example - [/events/upcoming/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/events/upcoming/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/events/upcoming/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2034,13 +2108,14 @@ export def "230-events-upcoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, date: string, slug: string, type: record<id: int, name: string>, description: string, webcast_live: bool, location: string, date_precision: record<id: int, name: string, abbrev: string, description: string>, response_mode: string, duration: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, last_updated: string, agencies: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, launches: table<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string>, expeditions: table<id: int, url: string, name: string, start: string, end: string, response_mode: string, spacestation: record, mission_patches: list, spacewalks: list>, spacestations: table<id: int, url: string, name: string, image: record, status: record, founded: string, deorbited: string, description: string, orbit: string, type: record>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, astronauts: table<id: int, url: string, name: string, status: record, agency: record, image: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/events/upcoming/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/expeditions/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `crew__astronaut`, `crew__astronaut__agency`, `end__gt`, `end__gte`, `end__lt`, `end__lte`, `is_active`, `name`, `space_station`, `start__gt`, `start__gte`, `start__lt`, `start__lte`  Example - [/expeditions/?space_station=18](./?space_station=18)  #### Search Fields searched - `crew__astronaut__agency__abbrev`, `crew__astronaut__agency__name`, `crew__astronaut__name`, `crew__astronaut__nationality__nationality_name`, `name`  Example - [/expeditions/?search=Kelly](./?search=Kelly)  #### Ordering Fields - `end`, `id`, `start`  Example - [/expeditions/?ordering=-start](./?ordering=-start)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/expeditions/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/expeditions/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2055,6 +2130,7 @@ export def "230-expeditions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --crew-astronaut: int
   --crew-astronaut--agency: int
   --end-gt: string # End is greater than (format: date-time)
@@ -2080,7 +2156,7 @@ export def "230-expeditions list" [
   let full_url = (build-url $base "/2.3.0/expeditions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/expeditions/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `crew__astronaut`, `crew__astronaut__agency`, `end__gt`, `end__gte`, `end__lt`, `end__lte`, `is_active`, `name`, `space_station`, `start__gt`, `start__gte`, `start__lt`, `start__lte`  Example - [/expeditions/?space_station=18](./?space_station=18)  #### Search Fields searched - `crew__astronaut__agency__abbrev`, `crew__astronaut__agency__name`, `crew__astronaut__name`, `crew__astronaut__nationality__nationality_name`, `name`  Example - [/expeditions/?search=Kelly](./?search=Kelly)  #### Ordering Fields - `end`, `id`, `start`  Example - [/expeditions/?ordering=-start](./?ordering=-start)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/expeditions/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/expeditions/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2096,13 +2172,14 @@ export def "230-expeditions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, start: string, end: string, response_mode: string, spacestation: record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, status: record<id: int, name: string>, founded: string, deorbited: string, description: string, orbit: string, type: record<id: int, name: string>, owners: list<record>>, mission_patches: table<id: int, name: string, priority: int, image_url: string, agency: record, response_mode: string>, spacewalks: table<response_mode: string, id: int, url: string, name: string, start: string, end: string, duration: string, location: string>, crew: table<id: int, role: record, astronaut: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/expeditions/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/landings/?mode=list](./?mode=list)  #### Filters Parameters - `attempt`, `firststage_launch__ids`, `landing_location__ids`, `landing_type__ids`, `launcher__ids`, `launcher_config__ids`, `launcher_serial_numbers`, `spacecraft__ids`, `spacecraft_config__ids`, `spacecraft_launch__ids`, `success`  Example - [/landings/?spacecraft__ids=39,37](./?spacecraft__ids=39,37)  #### Search Fields searched - `firststage__launcher__launcher_config__name`, `firststage__launcher__serial_number`, `firststage__rocket__launch__name`, `landing_location__abbrev`, `landing_location__name`, `spacecraftflight__rocket__launch__name`, `spacecraftflight__spacecraft__name`, `spacecraftflight__spacecraft__serial_number`, `spacecraftflight__spacecraft__spacecraft_config__name`  Example - [/landings/?search=B1059](./?search=B1059)  #### Ordering Fields - `downrange_distance`, `id`  Example - [/landings/?ordering=downrange_distance](./?ordering=downrange_distance)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/landings/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/landings/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2117,6 +2194,7 @@ export def "230-landings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attempt: oneof<nothing, bool>
   --firststage-launch-ids: list # Multiple values may be separated by commas.
   --landing-location-ids: list # Multiple values may be separated by commas.
@@ -2140,7 +2218,7 @@ export def "230-landings list" [
   let full_url = (build-url $base "/2.3.0/landings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/landings/?mode=list](./?mode=list)  #### Filters Parameters - `attempt`, `firststage_launch__ids`, `landing_location__ids`, `landing_type__ids`, `launcher__ids`, `launcher_config__ids`, `launcher_serial_numbers`, `spacecraft__ids`, `spacecraft_config__ids`, `spacecraft_launch__ids`, `success`  Example - [/landings/?spacecraft__ids=39,37](./?spacecraft__ids=39,37)  #### Search Fields searched - `firststage__launcher__launcher_config__name`, `firststage__launcher__serial_number`, `firststage__rocket__launch__name`, `landing_location__abbrev`, `landing_location__name`, `spacecraftflight__rocket__launch__name`, `spacecraftflight__spacecraft__name`, `spacecraftflight__spacecraft__serial_number`, `spacecraftflight__spacecraft__spacecraft_config__name`  Example - [/landings/?search=B1059](./?search=B1059)  #### Ordering Fields - `downrange_distance`, `id`  Example - [/landings/?ordering=downrange_distance](./?ordering=downrange_distance)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/landings/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/landings/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2156,13 +2234,14 @@ export def "230-landings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record<id: int, name: string, active: bool, abbrev: string, description: string, location: record<response_mode: string, id: int, url: string, name: string, active: bool, country: record, description: string, image: record, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>, longitude: float, latitude: float, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, successful_landings: int, attempted_landings: int, failed_landings: int, celestial_body: record<response_mode: string, id: int, name: string, type: record, diameter: float, mass: float, gravity: float, length_of_day: string, atmosphere: bool, image: record, description: string, wiki_url: string>>, type: record<id: int, name: string, abbrev: string, description: string>, response_mode: string, firststage: record<id: int, type: string, reused: bool, launcher_flight_number: int, launcher: record<response_mode: string, id: int, url: string, flight_proven: bool, serial_number: string, is_placeholder: bool, status: record, image: record, details: string, successful_landings: int, attempted_landings: int, flights: int, last_launch_date: string, first_launch_date: string, fastest_turnaround: string>, previous_flight_date: string, turn_around_time: string, previous_flight: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>>, spacecraftflight: record<id: int, url: string, destination: string, mission_end: string, spacecraft: record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record, description: string, spacecraft_config: record, fastest_turnaround: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, duration: string, turn_around_time: string, response_mode: string, launch_crew: list<record>, onboard_crew: list<record>, landing_crew: list<record>, docking_events: list<record>>, payloadflight: record<response_mode: string, id: int, url: string, destination: string, amount: int, payload: record<response_mode: string, id: int, name: string, type: record, manufacturer: record, operator: record, image: record, wiki_link: string, info_link: string, program: list, cost: int, mass: float, description: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, docking_events: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/landings/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launcher_configuration_families/?mode=list](./?mode=list)  #### Filters Parameters - `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `consecutive_successful_landings`, `consecutive_successful_landings__gt`, `consecutive_successful_landings__gte`, `consecutive_successful_landings__lt`, `consecutive_successful_landings__lte`, `consecutive_successful_launches`, `consecutive_successful_launches__gt`, `consecutive_successful_launches__gte`, `consecutive_successful_launches__lt`, `consecutive_successful_launches__lte`, `failed_landings`, `failed_landings__gt`, `failed_landings__gte`, `failed_landings__lt`, `failed_landings__lte`, `failed_launches`, `failed_launches__gt`, `failed_launches__gte`, `failed_launches__lt`, `failed_launches__lte`, `maiden_flight`, `maiden_flight__gt`, `maiden_flight__gte`, `maiden_flight__lt`, `maiden_flight__lte`, `manufacturer__abbrev`, `manufacturer__abbrev__contains`, `manufacturer__country_code`, `manufacturer__id`, `manufacturer__id__contains`, `manufacturer__name`, `manufacturer__name__contains`, `name`, `name__contains`, `pending_launches`, `pending_launches__gt`, `pending_launches__gte`, `pending_launches__lt`, `pending_launches__lte`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`, `successful_launches`, `successful_launches__gt`, `successful_launches__gte`, `successful_launches__lt`, `successful_launches__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/launcher_configuration_families/?manufacturer__name=SpaceX](./?manufacturer__name=SpaceX)  #### Search Fields searched - `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/launcher_configuration_families/?search=Ariane](./?search=Ariane)  #### Ordering Fields - `attempted_landings`, `consecutive_successful_landings`, `consecutive_successful_launches`, `failed_landings`, `failed_launches`, `name`, `pending_launches`, `successful_landings`, `successful_launches`, `total_launch_count`  Example - [/launcher_configuration_families/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launcher_configuration_families/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launcher_configuration_families/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2177,6 +2256,7 @@ export def "230-launcher-configuration-families list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attempted-landings: int
   --attempted-landings-gt: int
   --attempted-landings-gte: int
@@ -2248,7 +2328,7 @@ export def "230-launcher-configuration-families list" [
   let full_url = (build-url $base "/2.3.0/launcher_configuration_families/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launcher_configuration_families/?mode=list](./?mode=list)  #### Filters Parameters - `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `consecutive_successful_landings`, `consecutive_successful_landings__gt`, `consecutive_successful_landings__gte`, `consecutive_successful_landings__lt`, `consecutive_successful_landings__lte`, `consecutive_successful_launches`, `consecutive_successful_launches__gt`, `consecutive_successful_launches__gte`, `consecutive_successful_launches__lt`, `consecutive_successful_launches__lte`, `failed_landings`, `failed_landings__gt`, `failed_landings__gte`, `failed_landings__lt`, `failed_landings__lte`, `failed_launches`, `failed_launches__gt`, `failed_launches__gte`, `failed_launches__lt`, `failed_launches__lte`, `maiden_flight`, `maiden_flight__gt`, `maiden_flight__gte`, `maiden_flight__lt`, `maiden_flight__lte`, `manufacturer__abbrev`, `manufacturer__abbrev__contains`, `manufacturer__country_code`, `manufacturer__id`, `manufacturer__id__contains`, `manufacturer__name`, `manufacturer__name__contains`, `name`, `name__contains`, `pending_launches`, `pending_launches__gt`, `pending_launches__gte`, `pending_launches__lt`, `pending_launches__lte`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`, `successful_launches`, `successful_launches__gt`, `successful_launches__gte`, `successful_launches__lt`, `successful_launches__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/launcher_configuration_families/?manufacturer__name=SpaceX](./?manufacturer__name=SpaceX)  #### Search Fields searched - `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/launcher_configuration_families/?search=Ariane](./?search=Ariane)  #### Ordering Fields - `attempted_landings`, `consecutive_successful_landings`, `consecutive_successful_launches`, `failed_landings`, `failed_launches`, `name`, `pending_launches`, `successful_landings`, `successful_launches`, `total_launch_count`  Example - [/launcher_configuration_families/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launcher_configuration_families/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launcher_configuration_families/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2264,13 +2344,14 @@ export def "230-launcher-configuration-families get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, name: string, manufacturer: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list>, parent: record<response_mode: string, id: int, name: string, manufacturer: list<record>, parent: record<response_mode: string, id: int, name: string>>, description: string, active: bool, maiden_flight: string, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launcher_configuration_families/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launcher_configurations/?mode=list](./?mode=list)  #### Filters Parameters - `active`, `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `consecutive_successful_landings`, `consecutive_successful_landings__gt`, `consecutive_successful_landings__gte`, `consecutive_successful_landings__lt`, `consecutive_successful_landings__lte`, `consecutive_successful_launches`, `consecutive_successful_launches__gt`, `consecutive_successful_launches__gte`, `consecutive_successful_launches__lt`, `consecutive_successful_launches__lte`, `failed_landings`, `failed_landings__gt`, `failed_landings__gte`, `failed_landings__lt`, `failed_landings__lte`, `failed_launches`, `failed_launches__gt`, `failed_launches__gte`, `failed_launches__lt`, `failed_launches__lte`, `families`, `families__contains`, `full_name`, `full_name__contains`, `is_placeholder`, `maiden_flight`, `maiden_flight__gt`, `maiden_flight__gte`, `maiden_flight__lt`, `maiden_flight__lte`, `manufacturer__name`, `manufacturer__name__contains`, `name`, `name__contains`, `pending_launches`, `pending_launches__gt`, `pending_launches__gte`, `pending_launches__lt`, `pending_launches__lte`, `program`, `program__contains`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`, `successful_launches`, `successful_launches__gt`, `successful_launches__gte`, `successful_launches__lt`, `successful_launches__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/launcher_configurations/?manufacturer__name=SpaceX](./?manufacturer__name=SpaceX)  #### Search Fields searched - `full_name`, `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/launcher_configurations/?search=Soyuz](./?search=Soyuz)  #### Ordering Fields - `attempted_landings`, `consecutive_successful_landings`, `consecutive_successful_launches`, `failed_landings`, `failed_launches`, `gto_capacity`, `launch_cost`, `launch_mass`, `leo_capacity`, `maiden_flight`, `name`, `pending_launches`, `successful_landings`, `successful_launches`, `total_launch_count`  Example - [/launcher_configurations/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launcher_configurations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launcher_configurations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2285,6 +2366,7 @@ export def "230-launcher-configurations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --attempted-landings: int
   --attempted-landings-gt: int
@@ -2359,7 +2441,7 @@ export def "230-launcher-configurations list" [
   let full_url = (build-url $base "/2.3.0/launcher_configurations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launcher_configurations/?mode=list](./?mode=list)  #### Filters Parameters - `active`, `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `consecutive_successful_landings`, `consecutive_successful_landings__gt`, `consecutive_successful_landings__gte`, `consecutive_successful_landings__lt`, `consecutive_successful_landings__lte`, `consecutive_successful_launches`, `consecutive_successful_launches__gt`, `consecutive_successful_launches__gte`, `consecutive_successful_launches__lt`, `consecutive_successful_launches__lte`, `failed_landings`, `failed_landings__gt`, `failed_landings__gte`, `failed_landings__lt`, `failed_landings__lte`, `failed_launches`, `failed_launches__gt`, `failed_launches__gte`, `failed_launches__lt`, `failed_launches__lte`, `families`, `families__contains`, `full_name`, `full_name__contains`, `is_placeholder`, `maiden_flight`, `maiden_flight__gt`, `maiden_flight__gte`, `maiden_flight__lt`, `maiden_flight__lte`, `manufacturer__name`, `manufacturer__name__contains`, `name`, `name__contains`, `pending_launches`, `pending_launches__gt`, `pending_launches__gte`, `pending_launches__lt`, `pending_launches__lte`, `program`, `program__contains`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`, `successful_launches`, `successful_launches__gt`, `successful_launches__gte`, `successful_launches__lt`, `successful_launches__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/launcher_configurations/?manufacturer__name=SpaceX](./?manufacturer__name=SpaceX)  #### Search Fields searched - `full_name`, `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/launcher_configurations/?search=Soyuz](./?search=Soyuz)  #### Ordering Fields - `attempted_landings`, `consecutive_successful_landings`, `consecutive_successful_launches`, `failed_landings`, `failed_launches`, `gto_capacity`, `launch_cost`, `launch_mass`, `leo_capacity`, `maiden_flight`, `name`, `pending_launches`, `successful_landings`, `successful_launches`, `total_launch_count`  Example - [/launcher_configurations/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launcher_configurations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launcher_configurations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2375,13 +2457,14 @@ export def "230-launcher-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, families: table<response_mode: string, id: int, name: string, manufacturer: list, parent: record, description: string, active: bool, maiden_flight: string, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int>, full_name: string, variant: string, active: bool, is_placeholder: bool, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, reusable: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, info_url: string, wiki_url: string, description: string, alias: string, min_stage: int, max_stage: int, length: float, diameter: float, maiden_flight: string, launch_cost: int, launch_mass: float, leo_capacity: float, gto_capacity: float, geo_capacity: float, sso_capacity: float, to_thrust: float, apogee: float, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int, fastest_turnaround: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launcher_configurations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launchers/?mode=list](./?mode=list)  #### Filters Parameters - `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `first_launch_date`, `flight_proven`, `flights`, `flights__gt`, `flights__gte`, `flights__lt`, `flights__lte`, `id`, `id__contains`, `is_placeholder`, `last_launch_date`, `launcher_config__ids`, `launcher_config__manufacturer__name`, `launcher_config__manufacturer__name__contains`, `serial_number`, `serial_number__contains`, `status`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`  Example - [/launchers/?is_placeholder=True](./?is_placeholder=True)  #### Search Fields searched - `serial_number`, `status__name`  Example - [/launchers/?search=B1048](./?search=B1048)  #### Ordering Fields - `attempted_landings`, `flight_proven`, `flights`, `id`, `successful_landings`  Example - [/launchers/?ordering=-flights](./?ordering=-flights)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launchers/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launchers/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2396,6 +2479,7 @@ export def "230-launchers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attempted-landings: int
   --attempted-landings-gt: int
   --attempted-landings-gte: int
@@ -2435,7 +2519,7 @@ export def "230-launchers list" [
   let full_url = (build-url $base "/2.3.0/launchers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launchers/?mode=list](./?mode=list)  #### Filters Parameters - `attempted_landings`, `attempted_landings__gt`, `attempted_landings__gte`, `attempted_landings__lt`, `attempted_landings__lte`, `first_launch_date`, `flight_proven`, `flights`, `flights__gt`, `flights__gte`, `flights__lt`, `flights__lte`, `id`, `id__contains`, `is_placeholder`, `last_launch_date`, `launcher_config__ids`, `launcher_config__manufacturer__name`, `launcher_config__manufacturer__name__contains`, `serial_number`, `serial_number__contains`, `status`, `successful_landings`, `successful_landings__gt`, `successful_landings__gte`, `successful_landings__lt`, `successful_landings__lte`  Example - [/launchers/?is_placeholder=True](./?is_placeholder=True)  #### Search Fields searched - `serial_number`, `status__name`  Example - [/launchers/?search=B1048](./?search=B1048)  #### Ordering Fields - `attempted_landings`, `flight_proven`, `flights`, `id`, `successful_landings`  Example - [/launchers/?ordering=-flights](./?ordering=-flights)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launchers/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launchers/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2451,13 +2535,14 @@ export def "230-launchers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, flight_proven: bool, serial_number: string, is_placeholder: bool, status: record<id: int, name: string>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, details: string, successful_landings: int, attempted_landings: int, flights: int, last_launch_date: string, first_launch_date: string, fastest_turnaround: string, launcher_config: record<response_mode: string, id: int, url: string, name: string, families: list<record>, full_name: string, variant: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launchers/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/?pad__location=13](./?pad__location=13)  #### Search Fields searched - `launch_designator`, `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2472,6 +2557,7 @@ export def "230-launches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-launch-attempt-count: int
   --agency-launch-attempt-count-gt: int
   --agency-launch-attempt-count-gte: int
@@ -2575,7 +2661,7 @@ export def "230-launches list" [
   let full_url = (build-url $base "/2.3.0/launches/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/?pad__location=13](./?pad__location=13)  #### Search Fields searched - `launch_designator`, `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2591,13 +2677,14 @@ export def "230-launches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record<id: int, name: string, abbrev: string, description: string>, last_updated: string, net: string, net_precision: record<id: int, name: string, abbrev: string, description: string>, window_end: string, window_start: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, rocket: record<id: int, configuration: record<response_mode: string, id: int, url: string, name: string, families: list, full_name: string, variant: string, active: bool, is_placeholder: bool, manufacturer: record, program: list, reusable: bool, image: record, info_url: string, wiki_url: string, description: string, alias: string, min_stage: int, max_stage: int, length: float, diameter: float, maiden_flight: string, launch_cost: int, launch_mass: float, leo_capacity: float, gto_capacity: float, geo_capacity: float, sso_capacity: float, to_thrust: float, apogee: float, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int, fastest_turnaround: string>, launcher_stage: list<record>, spacecraft_stage: list<record>, payloads: list<record>>, mission: record<id: int, name: string, type: string, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, orbit: record<id: int, name: string, abbrev: string, celestial_body: record>, agencies: list<record>, info_urls: list<record>, vid_urls: list<record>>, pad: record<id: int, url: string, active: bool, agencies: list<record>, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record<response_mode: string, id: int, url: string, name: string, celestial_body: record, active: bool, country: record, description: string, image: record, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>>, webcast_live: bool, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int, flightclub_url: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, timeline: table<type: record, relative_time: string>, pad_turnaround: string, mission_patches: table<id: int, name: string, priority: int, image_url: string, agency: record, response_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launches/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/previous/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/previous/?pad__location=13](./?pad__location=13)  #### Search Fields searched - `launch_designator`, `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/previous/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/previous/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/previous/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/previous/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2612,6 +2699,7 @@ export def "230-launches-previous list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-launch-attempt-count: int
   --agency-launch-attempt-count-gt: int
   --agency-launch-attempt-count-gte: int
@@ -2715,7 +2803,7 @@ export def "230-launches-previous list" [
   let full_url = (build-url $base "/2.3.0/launches/previous/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/previous/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/previous/?pad__location=13](./?pad__location=13)  #### Search Fields searched - `launch_designator`, `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/previous/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/previous/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/previous/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/previous/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2731,13 +2819,14 @@ export def "230-launches-previous get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record<id: int, name: string, abbrev: string, description: string>, last_updated: string, net: string, net_precision: record<id: int, name: string, abbrev: string, description: string>, window_end: string, window_start: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, rocket: record<id: int, configuration: record<response_mode: string, id: int, url: string, name: string, families: list, full_name: string, variant: string, active: bool, is_placeholder: bool, manufacturer: record, program: list, reusable: bool, image: record, info_url: string, wiki_url: string, description: string, alias: string, min_stage: int, max_stage: int, length: float, diameter: float, maiden_flight: string, launch_cost: int, launch_mass: float, leo_capacity: float, gto_capacity: float, geo_capacity: float, sso_capacity: float, to_thrust: float, apogee: float, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int, fastest_turnaround: string>, launcher_stage: list<record>, spacecraft_stage: list<record>, payloads: list<record>>, mission: record<id: int, name: string, type: string, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, orbit: record<id: int, name: string, abbrev: string, celestial_body: record>, agencies: list<record>, info_urls: list<record>, vid_urls: list<record>>, pad: record<id: int, url: string, active: bool, agencies: list<record>, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record<response_mode: string, id: int, url: string, name: string, celestial_body: record, active: bool, country: record, description: string, image: record, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>>, webcast_live: bool, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int, flightclub_url: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, timeline: table<type: record, relative_time: string>, pad_turnaround: string, mission_patches: table<id: int, name: string, priority: int, image_url: string, agency: record, response_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launches/previous/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/upcoming/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `hide_recent_previous`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/upcoming/?hide_recent_previous=True](./?hide_recent_previous=True)  #### Search Fields searched - `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/upcoming/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/upcoming/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/upcoming/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/upcoming/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2752,6 +2841,7 @@ export def "230-launches-upcoming list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-launch-attempt-count: int
   --agency-launch-attempt-count-gt: int
   --agency-launch-attempt-count-gte: int
@@ -2856,7 +2946,7 @@ export def "230-launches-upcoming list" [
   let full_url = (build-url $base "/2.3.0/launches/upcoming/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/launches/upcoming/?mode=list](./?mode=list)  #### Filters Parameters - `agency_launch_attempt_count`, `agency_launch_attempt_count__gt`, `agency_launch_attempt_count__gte`, `agency_launch_attempt_count__lt`, `agency_launch_attempt_count__lte`, `agency_launch_attempt_count_year`, `agency_launch_attempt_count_year__gt`, `agency_launch_attempt_count_year__gte`, `agency_launch_attempt_count_year__lt`, `agency_launch_attempt_count_year__lte`, `day`, `hide_recent_previous`, `id`, `include_suborbital`, `is_crewed`, `last_updated__gte`, `last_updated__lte`, `launch_designator`, `launcher_config__id`, `location__ids`, `location_launch_attempt_count`, `location_launch_attempt_count__gt`, `location_launch_attempt_count__gte`, `location_launch_attempt_count__lt`, `location_launch_attempt_count__lte`, `location_launch_attempt_count_year`, `location_launch_attempt_count_year__gt`, `location_launch_attempt_count_year__gte`, `location_launch_attempt_count_year__lt`, `location_launch_attempt_count_year__lte`, `lsp__id`, `lsp__name`, `mission__agency__ids`, `mission__orbit__celestial_body__id`, `mission__orbit__name`, `mission__orbit__name__icontains`, `month`, `name`, `net__gt`, `net__gte`, `net__lt`, `net__lte`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `orbital_launch_attempt_count_year`, `orbital_launch_attempt_count_year__gt`, `orbital_launch_attempt_count_year__gte`, `orbital_launch_attempt_count_year__lt`, `orbital_launch_attempt_count_year__lte`, `pad`, `pad__location`, `pad__location__celestial_body__id`, `pad_launch_attempt_count`, `pad_launch_attempt_count__gt`, `pad_launch_attempt_count__gte`, `pad_launch_attempt_count__lt`, `pad_launch_attempt_count__lte`, `pad_launch_attempt_count_year`, `pad_launch_attempt_count_year__gt`, `pad_launch_attempt_count_year__gte`, `pad_launch_attempt_count_year__lt`, `pad_launch_attempt_count_year__lte`, `program`, `related_lsp__id`, `related_lsp__name`, `rocket__configuration__full_name`, `rocket__configuration__full_name__icontains`, `rocket__configuration__id`, `rocket__configuration__manufacturer__name`, `rocket__configuration__manufacturer__name__icontains`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__id`, `rocket__spacecraftflight__spacecraft__name`, `rocket__spacecraftflight__spacecraft__name__icontains`, `serial_number`, `slug`, `spacecraft_config__ids`, `status`, `status__ids`, `video_url`, `window_end__gt`, `window_end__gte`, `window_end__lt`, `window_end__lte`, `window_start__gt`, `window_start__gte`, `window_start__lt`, `window_start__lte`, `year`  Example - [/launches/upcoming/?hide_recent_previous=True](./?hide_recent_previous=True)  #### Search Fields searched - `launch_service_provider__name`, `mission__name`, `name`, `pad__location__name`, `pad__name`, `rocket__configuration__manufacturer__abbrev`, `rocket__configuration__manufacturer__name`, `rocket__configuration__name`, `rocket__spacecraftflight__spacecraft__name`  Example - [/launches/upcoming/?search=Starlink](./?search=Starlink)  #### Ordering Fields - `id`, `last_updated`, `name`, `net`  Example - [/launches/upcoming/?ordering=-last_updated](./?ordering=-last_updated)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/launches/upcoming/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/launches/upcoming/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2872,13 +2962,14 @@ export def "230-launches-upcoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record<id: int, name: string, abbrev: string, description: string>, last_updated: string, net: string, net_precision: record<id: int, name: string, abbrev: string, description: string>, window_end: string, window_start: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, rocket: record<id: int, configuration: record<response_mode: string, id: int, url: string, name: string, families: list, full_name: string, variant: string, active: bool, is_placeholder: bool, manufacturer: record, program: list, reusable: bool, image: record, info_url: string, wiki_url: string, description: string, alias: string, min_stage: int, max_stage: int, length: float, diameter: float, maiden_flight: string, launch_cost: int, launch_mass: float, leo_capacity: float, gto_capacity: float, geo_capacity: float, sso_capacity: float, to_thrust: float, apogee: float, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, consecutive_successful_landings: int, fastest_turnaround: string>, launcher_stage: list<record>, spacecraft_stage: list<record>, payloads: list<record>>, mission: record<id: int, name: string, type: string, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, orbit: record<id: int, name: string, abbrev: string, celestial_body: record>, agencies: list<record>, info_urls: list<record>, vid_urls: list<record>>, pad: record<id: int, url: string, active: bool, agencies: list<record>, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record<response_mode: string, id: int, url: string, name: string, celestial_body: record, active: bool, country: record, description: string, image: record, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>>, webcast_live: bool, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int, flightclub_url: string, updates: table<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string>, info_urls: table<priority: int, source: string, title: string, description: string, feature_image: string, url: string, type: record, language: record>, vid_urls: table<priority: int, source: string, publisher: string, title: string, description: string, feature_image: string, url: string, type: record, language: record, start_time: string, end_time: string, live: bool>, timeline: table<type: record, relative_time: string>, pad_turnaround: string, mission_patches: table<id: int, name: string, priority: int, image_url: string, agency: record, response_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/launches/upcoming/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/locations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `active`, `country_code`, `id`, `name`, `name__contains`, `total_landing_count`, `total_landing_count__gt`, `total_landing_count__gte`, `total_landing_count__lt`, `total_landing_count__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/locations/?country_code=NZL](./?country_code=NZL)  #### Search Fields searched - `country__alpha_3_code`, `name`  Example - [/locations/?search=Cape Canaveral](./?search=Cape Canaveral)  #### Ordering Fields - `name`, `total_landing_count`, `total_launch_count`  Example - [/locations/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2893,6 +2984,7 @@ export def "230-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --country-code: string # Country Code
   --id: int
@@ -2920,7 +3012,7 @@ export def "230-locations list" [
   let full_url = (build-url $base "/2.3.0/locations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/locations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `active`, `country_code`, `id`, `name`, `name__contains`, `total_landing_count`, `total_landing_count__gt`, `total_landing_count__gte`, `total_landing_count__lt`, `total_landing_count__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/locations/?country_code=NZL](./?country_code=NZL)  #### Search Fields searched - `country__alpha_3_code`, `name`  Example - [/locations/?search=Cape Canaveral](./?search=Cape Canaveral)  #### Ordering Fields - `name`, `total_landing_count`, `total_launch_count`  Example - [/locations/?ordering=-total_launch_count](./?ordering=-total_launch_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/locations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/locations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2936,13 +3028,14 @@ export def "230-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, celestial_body: record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, diameter: float, mass: float, gravity: float, length_of_day: string, atmosphere: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, description: string, wiki_url: string, total_attempted_launches: int, successful_launches: int, failed_launches: int, total_attempted_landings: int, successful_landings: int, failed_landings: int>, active: bool, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int, pads: table<id: int, url: string, active: bool, agencies: list, name: string, image: record, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/locations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/mission_patches/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `agency__id`, `agency__name`, `agency__name__contains`, `id`, `ids`, `name`, `name__contains`  Example - [/mission_patches/?agency__id=147](./?agency__id=147)  #### Search Fields searched - `agency__name`, `name`  Example - [/mission_patches/?search=Ariane](./?search=Ariane)  #### Ordering Fields - `agency__name`, `id`, `name`, `priority`  Example - [/mission_patches/?ordering=priority](./?ordering=priority)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/mission_patches/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/mission_patches/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2957,6 +3050,7 @@ export def "230-mission-patches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency-id: int
   --agency-name: string
   --agency-name--contains: string
@@ -2976,7 +3070,7 @@ export def "230-mission-patches list" [
   let full_url = (build-url $base "/2.3.0/mission_patches/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/mission_patches/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `agency__id`, `agency__name`, `agency__name__contains`, `id`, `ids`, `name`, `name__contains`  Example - [/mission_patches/?agency__id=147](./?agency__id=147)  #### Search Fields searched - `agency__name`, `name`  Example - [/mission_patches/?search=Ariane](./?search=Ariane)  #### Ordering Fields - `agency__name`, `id`, `name`, `priority`  Example - [/mission_patches/?ordering=priority](./?ordering=priority)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/mission_patches/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/mission_patches/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -2992,13 +3086,14 @@ export def "230-mission-patches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, priority: int, image_url: string, agency: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, response_mode: string, launches: table<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, expeditions: table<id: int, url: string, name: string, start: string, end: string, response_mode: string, spacestation: record, mission_patches: list, spacewalks: list>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/mission_patches/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Filters Parameters - `active`, `agencies_ids`, `id`, `id__contains`, `latitude__gt`, `latitude__gte`, `latitude__lt`, `latitude__lte`, `location__id`, `location__name`, `location__name__contains`, `longitude__gt`, `longitude__gte`, `longitude__lt`, `longitude__lte`, `name`, `name__contains`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/pads/?location__id=11](./?location__id=11)  #### Search Fields searched - `location__name`, `name`, `orbital_launch_attempt_count`, `total_launch_count`  Example - [/pads/?search=39A](./?search=39A)  #### Ordering Fields - `id`, `location__id`, `location__name`, `name`, `orbital_launch_attempt_count`, `total_launch_count`  Example - [/pads/?ordering=-orbital_launch_attempt_count](./?ordering=-orbital_launch_attempt_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/pads/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/pads/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3013,6 +3108,7 @@ export def "230-pads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --agencies-ids: list # Multiple values may be separated by commas.
   --id: int
@@ -3051,7 +3147,7 @@ export def "230-pads list" [
   let full_url = (build-url $base "/2.3.0/pads/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Filters Parameters - `active`, `agencies_ids`, `id`, `id__contains`, `latitude__gt`, `latitude__gte`, `latitude__lt`, `latitude__lte`, `location__id`, `location__name`, `location__name__contains`, `longitude__gt`, `longitude__gte`, `longitude__lt`, `longitude__lte`, `name`, `name__contains`, `orbital_launch_attempt_count`, `orbital_launch_attempt_count__gt`, `orbital_launch_attempt_count__gte`, `orbital_launch_attempt_count__lt`, `orbital_launch_attempt_count__lte`, `total_launch_count`, `total_launch_count__gt`, `total_launch_count__gte`, `total_launch_count__lt`, `total_launch_count__lte`  Example - [/pads/?location__id=11](./?location__id=11)  #### Search Fields searched - `location__name`, `name`, `orbital_launch_attempt_count`, `total_launch_count`  Example - [/pads/?search=39A](./?search=39A)  #### Ordering Fields - `id`, `location__id`, `location__name`, `name`, `orbital_launch_attempt_count`, `total_launch_count`  Example - [/pads/?ordering=-orbital_launch_attempt_count](./?ordering=-orbital_launch_attempt_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/pads/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/pads/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3067,13 +3163,14 @@ export def "230-pads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, active: bool, agencies: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record>, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record<response_mode: string, id: int, url: string, name: string, celestial_body: record<response_mode: string, id: int, name: string, type: record, diameter: float, mass: float, gravity: float, length_of_day: string, atmosphere: bool, image: record, description: string, wiki_url: string, total_attempted_launches: int, successful_launches: int, failed_launches: int, total_attempted_landings: int, successful_landings: int, failed_landings: int>, active: bool, country: record<id: int, name: string, alpha_2_code: string, alpha_3_code: string, nationality_name: string, nationality_name_composed: string>, description: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, map_image: string, longitude: float, latitude: float, timezone_name: string, total_launch_count: int, total_landing_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/pads/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/payload_flights/?mode=list](./?mode=list)  #### Filters Parameters - `payload`  Example - [/payload_flights/?payload=2](./?payload=2)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/payload_flights/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/payload_flights/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3088,6 +3185,7 @@ export def "230-payload-flights list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --offset: int # The initial index from which to return the results.
@@ -3101,7 +3199,7 @@ export def "230-payload-flights list" [
   let full_url = (build-url $base "/2.3.0/payload_flights/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/payload_flights/?mode=list](./?mode=list)  #### Filters Parameters - `payload`  Example - [/payload_flights/?payload=2](./?payload=2)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/payload_flights/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/payload_flights/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3117,13 +3215,14 @@ export def "230-payload-flights get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, destination: string, amount: int, payload: record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list>, operator: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, wiki_link: string, info_link: string, program: list<record>, cost: int, mass: float, description: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record<id: int, name: string, abbrev: string, description: string>, last_updated: string, net: string, net_precision: record<id: int, name: string, abbrev: string, description: string>, window_end: string, window_start: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, rocket: record<id: int, configuration: record>, mission: record<id: int, name: string, type: string, description: string, image: record, orbit: record, agencies: list, info_urls: list, vid_urls: list>, pad: record<id: int, url: string, active: bool, agencies: list, name: string, image: record, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record>, webcast_live: bool, program: list<record>, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record<id: int, name: string, active: bool, abbrev: string, description: string, location: record, longitude: float, latitude: float, image: record, successful_landings: int, attempted_landings: int, failed_landings: int, celestial_body: record>, type: record<id: int, name: string, abbrev: string, description: string>>, docking_events: table<id: int, url: string, docking: string, departure: string, docking_location: record, space_station_target: record, flight_vehicle_target: record, payload_flight_target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/payload_flights/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/payloads/?mode=list](./?mode=list)  #### Filters Parameters - `manufacturer__id`, `manufacturer__name`, `name`, `operator`, `operator__id`, `operator__name`, `program__id`  Example - [/payloads/?program__id=18](./?program__id=18)  #### Search Fields searched - `manufacturer__name`, `name`, `operator__name`, `payloadflight__destination`, `payloadflight__rocket__launch__name`  Example - [/payloads/?search=EarthCare](./?search=EarthCare)  #### Ordering Fields - `id`, `name`, `payloadflight__rocket__launch__net`  Example - [/payloads/?ordering=-payloadflight__rocket__launch__net](./?ordering=-payloadflight__rocket__launch__net)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/payloads/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/payloads/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3138,6 +3237,7 @@ export def "230-payloads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --manufacturer-id: int
   --manufacturer-name: string
@@ -3157,7 +3257,7 @@ export def "230-payloads list" [
   let full_url = (build-url $base "/2.3.0/payloads/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/payloads/?mode=list](./?mode=list)  #### Filters Parameters - `manufacturer__id`, `manufacturer__name`, `name`, `operator`, `operator__id`, `operator__name`, `program__id`  Example - [/payloads/?program__id=18](./?program__id=18)  #### Search Fields searched - `manufacturer__name`, `name`, `operator__name`, `payloadflight__destination`, `payloadflight__rocket__launch__name`  Example - [/payloads/?search=EarthCare](./?search=EarthCare)  #### Ordering Fields - `id`, `name`, `payloadflight__rocket__launch__net`  Example - [/payloads/?ordering=-payloadflight__rocket__launch__net](./?ordering=-payloadflight__rocket__launch__net)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/payloads/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/payloads/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3173,13 +3273,14 @@ export def "230-payloads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, name: string, type: record<id: int, name: string>, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, operator: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, total_launch_count: int, consecutive_successful_launches: int, successful_launches: int, failed_launches: int, pending_launches: int, consecutive_successful_landings: int, successful_landings: int, failed_landings: int, attempted_landings: int, successful_landings_spacecraft: int, failed_landings_spacecraft: int, attempted_landings_spacecraft: int, successful_landings_payload: int, failed_landings_payload: int, attempted_landings_payload: int, info_url: string, wiki_url: string, social_media_links: list<record>>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, wiki_link: string, info_link: string, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>, cost: int, mass: float, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/payloads/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`  Example - [/programs/?mode=list](./?mode=list)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/programs/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/programs/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3194,6 +3295,7 @@ export def "230-programs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer-2 # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --offset: int # The initial index from which to return the results.
@@ -3206,7 +3308,7 @@ export def "230-programs list" [
   let full_url = (build-url $base "/2.3.0/programs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`  Example - [/programs/?mode=list](./?mode=list)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/programs/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/programs/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3222,13 +3324,14 @@ export def "230-programs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, info_url: string, wiki_url: string, description: string, agencies: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, start_date: string, end_date: string, mission_patches: table<id: int, name: string, priority: int, image_url: string, agency: record, response_mode: string>, type: record<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/programs/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/space_stations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `docked_vehicles`, `docked_vehicles__gt`, `docked_vehicles__gte`, `docked_vehicles__lt`, `docked_vehicles__lte`, `id`, `name`, `name__contains`, `onboard_crew`, `onboard_crew__gt`, `onboard_crew__gte`, `onboard_crew__lt`, `onboard_crew__lte`, `orbit`, `owner__ids`, `owners`, `status`, `status__ids`, `type`  Example - [/space_stations/?onboard_crew__gte=1](./?onboard_crew__gte=1)  #### Search Fields searched - `name`, `owners__abbrev`, `owners__name`  Example - [/space_stations/?search=Salyut](./?search=Salyut)  #### Ordering Fields - `docked_vehicles`, `founded`, `id`, `name`, `onboard_crew`, `status`, `type`, `volume`  Example - [/space_stations/?ordering=founded](./?ordering=founded)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/space_stations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/space_stations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3243,6 +3346,7 @@ export def "230-space-stations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --docked-vehicles: int
   --docked-vehicles-gt: int
   --docked-vehicles-gte: int
@@ -3274,7 +3378,7 @@ export def "230-space-stations list" [
   let full_url = (build-url $base "/2.3.0/space_stations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/space_stations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `docked_vehicles`, `docked_vehicles__gt`, `docked_vehicles__gte`, `docked_vehicles__lt`, `docked_vehicles__lte`, `id`, `name`, `name__contains`, `onboard_crew`, `onboard_crew__gt`, `onboard_crew__gte`, `onboard_crew__lt`, `onboard_crew__lte`, `orbit`, `owner__ids`, `owners`, `status`, `status__ids`, `type`  Example - [/space_stations/?onboard_crew__gte=1](./?onboard_crew__gte=1)  #### Search Fields searched - `name`, `owners__abbrev`, `owners__name`  Example - [/space_stations/?search=Salyut](./?search=Salyut)  #### Ordering Fields - `docked_vehicles`, `founded`, `id`, `name`, `onboard_crew`, `status`, `type`, `volume`  Example - [/space_stations/?ordering=founded](./?ordering=founded)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/space_stations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/space_stations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3290,13 +3394,14 @@ export def "230-space-stations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, status: record<id: int, name: string>, founded: string, deorbited: string, description: string, orbit: string, type: record<id: int, name: string>, owners: table<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record>, response_mode: string, active_expeditions: table<id: int, url: string, name: string, start: string, end: string>, height: float, width: float, mass: float, volume: int, onboard_crew: int, docked_vehicles: int, docking_location: table<id: int, name: string, currently_docked: record>, active_docking_events: table<id: int, url: string, docking: string, departure: string, docking_location: record, space_station_target: record, flight_vehicle_target: record, payload_flight_target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/space_stations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `in_space`, `is_placeholder`, `name`, `spacecraft_config`, `status`  Example - [/spacecraft/?is_placeholder=True](./?is_placeholder=True)  #### Search Fields searched - `name`, `spacecraft_config__name`  Example - [/spacecraft/?search=Endeavour](./?search=Endeavour)  #### Ordering Fields - `flights_count`, `id`, `mission_ends_count`, `time_docked`, `time_in_space`  Example - [/spacecraft/?ordering=-flights_count](./?ordering=-flights_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3311,6 +3416,7 @@ export def "230-spacecraft list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --in-space: oneof<nothing, bool>
   --is-placeholder: oneof<nothing, bool>
   --limit: int # Number of results to return per page.
@@ -3328,7 +3434,7 @@ export def "230-spacecraft list" [
   let full_url = (build-url $base "/2.3.0/spacecraft/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `in_space`, `is_placeholder`, `name`, `spacecraft_config`, `status`  Example - [/spacecraft/?is_placeholder=True](./?is_placeholder=True)  #### Search Fields searched - `name`, `spacecraft_config__name`  Example - [/spacecraft/?search=Endeavour](./?search=Endeavour)  #### Ordering Fields - `flights_count`, `id`, `mission_ends_count`, `time_docked`, `time_in_space`  Example - [/spacecraft/?ordering=-flights_count](./?ordering=-flights_count)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3344,13 +3450,14 @@ export def "230-spacecraft get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record<id: int, name: string>, description: string, spacecraft_config: record<response_mode: string, id: int, url: string, name: string, type: record<id: int, name: string>, agency: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record, featured: bool, country: list, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record, logo: record, social_logo: record>, family: list<record>, in_use: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, capability: string, history: string, details: string, maiden_flight: string, height: float, diameter: float, human_rated: bool, crew_capacity: int, payload_capacity: int, payload_return_capacity: int, flight_life: string, wiki_link: string, info_link: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, fastest_turnaround: string>, fastest_turnaround: string, flights: table<id: int, url: string, destination: string, mission_end: string, spacecraft: record, launch: record, landing: record, duration: string, turn_around_time: string, response_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/spacecraft/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/spacecraft_configuration_families/?mode=list](./?mode=list)  #### Filters Parameters - `manufacturer`, `name`  Example - [/spacecraft_configuration_families/?manufacturer=121](./?manufacturer=121)  #### Search Fields searched - `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/spacecraft_configuration_families/?search=Northrop](./?search=Northrop)  #### Ordering Fields - `name`  Example - [/spacecraft_configuration_families/?ordering=name](./?ordering=name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_configuration_families/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_configuration_families/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3365,6 +3472,7 @@ export def "230-spacecraft-configuration-families list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --manufacturer: int
   --mode: string@mode-completer # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
@@ -3379,7 +3487,7 @@ export def "230-spacecraft-configuration-families list" [
   let full_url = (build-url $base "/2.3.0/spacecraft_configuration_families/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/spacecraft_configuration_families/?mode=list](./?mode=list)  #### Filters Parameters - `manufacturer`, `name`  Example - [/spacecraft_configuration_families/?manufacturer=121](./?manufacturer=121)  #### Search Fields searched - `manufacturer__abbrev`, `manufacturer__name`, `name`  Example - [/spacecraft_configuration_families/?search=Northrop](./?search=Northrop)  #### Ordering Fields - `name`  Example - [/spacecraft_configuration_families/?ordering=name](./?ordering=name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_configuration_families/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_configuration_families/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3395,13 +3503,14 @@ export def "230-spacecraft-configuration-families get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, name: string, description: string, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>, parent: record<response_mode: string, id: int, name: string, description: string, manufacturer: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, parent: record<response_mode: string, id: int, name: string>, maiden_flight: string>, maiden_flight: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, spacecraft: table<response_mode: string, id: int, url: string, name: string, type: record, agency: record, family: list, in_use: bool, image: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/spacecraft_configuration_families/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft_configurations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `agency`, `human_rated`, `in_use`, `name`  Example - [/spacecraft_configurations/?human_rated=True](./?human_rated=True)  #### Search Fields searched - `agency__abbrev`, `agency__name`, `name`  Example - [/spacecraft_configurations/?search=Dragon](./?search=Dragon)  #### Ordering Fields - `name`  Example - [/spacecraft_configurations/?ordering=name](./?ordering=name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_configurations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_configurations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3416,6 +3525,7 @@ export def "230-spacecraft-configurations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agency: int
   --human-rated: oneof<nothing, bool>
   --in-use: oneof<nothing, bool>
@@ -3432,7 +3542,7 @@ export def "230-spacecraft-configurations list" [
   let full_url = (build-url $base "/2.3.0/spacecraft_configurations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft_configurations/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `agency`, `human_rated`, `in_use`, `name`  Example - [/spacecraft_configurations/?human_rated=True](./?human_rated=True)  #### Search Fields searched - `agency__abbrev`, `agency__name`, `name`  Example - [/spacecraft_configurations/?search=Dragon](./?search=Dragon)  #### Ordering Fields - `name`  Example - [/spacecraft_configurations/?ordering=name](./?ordering=name)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_configurations/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_configurations/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3448,13 +3558,14 @@ export def "230-spacecraft-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, type: record<id: int, name: string>, agency: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record<id: int, name: string>, featured: bool, country: list<record>, description: string, administrator: string, founding_year: int, launchers: string, spacecraft: string, parent: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, social_logo: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>>, family: table<response_mode: string, id: int, name: string, description: string, manufacturer: record, parent: record, maiden_flight: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int>, in_use: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record<id: int, name: string, priority: int, link: string>, single_use: bool, variants: list<record>>, capability: string, history: string, details: string, maiden_flight: string, height: float, diameter: float, human_rated: bool, crew_capacity: int, payload_capacity: int, payload_return_capacity: int, flight_life: string, wiki_link: string, info_link: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, fastest_turnaround: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/spacecraft_configurations/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft_flights/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `spacecraft`  Example - [/spacecraft_flights/?spacecraft=289](./?spacecraft=289)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_flights/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_flights/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3469,6 +3580,7 @@ export def "230-spacecraft-flights list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer-1 # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --offset: int # The initial index from which to return the results.
@@ -3482,7 +3594,7 @@ export def "230-spacecraft-flights list" [
   let full_url = (build-url $base "/2.3.0/spacecraft_flights/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `normal`, `detailed`  Example - [/spacecraft_flights/?mode=detailed](./?mode=detailed)  #### Filters Parameters - `spacecraft`  Example - [/spacecraft_flights/?spacecraft=289](./?spacecraft=289)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacecraft_flights/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacecraft_flights/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3498,13 +3610,14 @@ export def "230-spacecraft-flights get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, url: string, destination: string, mission_end: string, spacecraft: record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record<id: int, name: string>, description: string, spacecraft_config: record<response_mode: string, id: int, url: string, name: string, type: record, agency: record, family: list, in_use: bool, image: record, capability: string, history: string, details: string, maiden_flight: string, height: float, diameter: float, human_rated: bool, crew_capacity: int, payload_capacity: int, payload_return_capacity: int, flight_life: string, wiki_link: string, info_link: string, spacecraft_flown: int, total_launch_count: int, successful_launches: int, failed_launches: int, attempted_landings: int, successful_landings: int, failed_landings: int, fastest_turnaround: string>, fastest_turnaround: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record<id: int, name: string, abbrev: string, description: string>, last_updated: string, net: string, net_precision: record<id: int, name: string, abbrev: string, description: string>, window_end: string, window_start: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record<response_mode: string, id: int, url: string, name: string, abbrev: string, type: record>, rocket: record<id: int, configuration: record>, mission: record<id: int, name: string, type: string, description: string, image: record, orbit: record, agencies: list, info_urls: list, vid_urls: list>, pad: record<id: int, url: string, active: bool, agencies: list, name: string, image: record, description: string, info_url: string, wiki_url: string, map_url: string, latitude: float, longitude: float, country: record, map_image: string, total_launch_count: int, orbital_launch_attempt_count: int, fastest_turnaround: string, location: record>, webcast_live: bool, program: list<record>, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record<id: int, name: string, active: bool, abbrev: string, description: string, location: record, longitude: float, latitude: float, image: record, successful_landings: int, attempted_landings: int, failed_landings: int, celestial_body: record>, type: record<id: int, name: string, abbrev: string, description: string>>, duration: string, turn_around_time: string, response_mode: string, launch_crew: table<id: int, role: record, astronaut: record>, onboard_crew: table<id: int, role: record, astronaut: record>, landing_crew: table<id: int, role: record, astronaut: record>, docking_events: table<id: int, url: string, docking: string, departure: string, docking_location: record, space_station_target: record, flight_vehicle_target: record, payload_flight_target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/spacecraft_flights/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/spacewalks/?mode=list](./?mode=list)  #### Filters Parameters - `astronaut__ids`, `day`, `end`, `end__gt`, `end__gte`, `end__lt`, `end__lte`, `event__ids`, `id`, `ids`, `launch__ids`, `month`, `name`, `name__contains`, `owner__ids`, `program__ids`, `program__name`, `program__name__contains`, `spacestation__ids`, `start__gt`, `start__gte`, `start__lt`, `start__lte`, `year`  Example - [/spacewalks/?program__name=Apollo](./?program__name=Apollo)  #### Search Fields searched - `crew__astronaut__name`, `location`, `name`, `program__name`  Example - [/spacewalks/?search=Hubble](./?search=Hubble)  #### Ordering Fields - `duration`, `end`, `id`, `name`, `start`  Example - [/spacewalks/?ordering=-duration](./?ordering=-duration)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacewalks/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacewalks/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3519,6 +3632,7 @@ export def "230-spacewalks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --astronaut-ids: list # Multiple values may be separated by commas.
   --day: list # Multiple values may be separated by commas.
   --end: string # format: date-time
@@ -3555,7 +3669,7 @@ export def "230-spacewalks list" [
   let full_url = (build-url $base "/2.3.0/spacewalks/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Modes Levels of detail in the response - `list`, `normal`, `detailed`  Example - [/spacewalks/?mode=list](./?mode=list)  #### Filters Parameters - `astronaut__ids`, `day`, `end`, `end__gt`, `end__gte`, `end__lt`, `end__lte`, `event__ids`, `id`, `ids`, `launch__ids`, `month`, `name`, `name__contains`, `owner__ids`, `program__ids`, `program__name`, `program__name__contains`, `spacestation__ids`, `start__gt`, `start__gte`, `start__lt`, `start__lte`, `year`  Example - [/spacewalks/?program__name=Apollo](./?program__name=Apollo)  #### Search Fields searched - `crew__astronaut__name`, `location`, `name`, `program__name`  Example - [/spacewalks/?search=Hubble](./?search=Hubble)  #### Ordering Fields - `duration`, `end`, `id`, `name`, `start`  Example - [/spacewalks/?ordering=-duration](./?ordering=-duration)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/spacewalks/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/spacewalks/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3571,13 +3685,14 @@ export def "230-spacewalks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<response_mode: string, id: int, url: string, name: string, start: string, end: string, duration: string, location: string, crew: table<id: int, role: record, astronaut: record>, spacestation: record<id: int, url: string, name: string, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, status: record<id: int, name: string>, founded: string, deorbited: string, description: string, orbit: string, type: record<id: int, name: string>>, expedition: record<id: int, url: string, name: string, start: string, end: string, spacestation: record<id: int, url: string, name: string, image: record, status: record, founded: string, deorbited: string, description: string, orbit: string, type: record>, mission_patches: list<record>>, spacecraft_flight: record<id: int, url: string, destination: string, mission_end: string, spacecraft: record<response_mode: string, id: int, url: string, name: string, serial_number: string, is_placeholder: bool, image: record, in_space: bool, time_in_space: string, time_docked: string, flights_count: int, mission_ends_count: int, status: record, description: string, spacecraft_config: record, fastest_turnaround: string>, launch: record<id: string, url: string, name: string, response_mode: string, slug: string, launch_designator: string, status: record, last_updated: string, net: string, net_precision: record, window_end: string, window_start: string, image: record, infographic: string, probability: int, weather_concerns: string, failreason: string, hashtag: string, launch_service_provider: record, rocket: record, mission: record, pad: record, webcast_live: bool, program: list, orbital_launch_attempt_count: int, location_launch_attempt_count: int, pad_launch_attempt_count: int, agency_launch_attempt_count: int, orbital_launch_attempt_count_year: int, location_launch_attempt_count_year: int, pad_launch_attempt_count_year: int, agency_launch_attempt_count_year: int>, landing: record<id: int, url: string, attempt: bool, success: bool, description: string, downrange_distance: float, landing_location: record, type: record>, duration: string, turn_around_time: string, response_mode: string, launch_crew: list<record>, onboard_crew: list<record>, landing_crew: list<record>, docking_events: list<record>>, event: record<id: int, url: string, name: string, info_urls: list<record>, vid_urls: list<record>, image: record<id: int, name: string, image_url: string, thumbnail_url: string, credit: string, license: record, single_use: bool, variants: list>, date: string, slug: string, type: record<id: int, name: string>, description: string, webcast_live: bool, location: string, date_precision: record<id: int, name: string, abbrev: string, description: string>>, program: table<response_mode: string, id: int, url: string, name: string, image: record, info_url: string, wiki_url: string, description: string, agencies: list, start_date: string, end_date: string, mission_patches: list, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/spacewalks/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Filters Parameters - `created_on`, `launch`, `launch__launch_service_provider`, `program`  Example - [/updates/?launch__launch_service_provider=121](./?launch__launch_service_provider=121)  #### Ordering Fields - `created_on`  Example - [/updates/?ordering=-created_on](./?ordering=-created_on)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/updates/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/updates/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3592,6 +3707,7 @@ export def "230-updates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --created-on: string # format: date-time
   --launch: string # format: uuid
   --launch-launch-service-provider: int
@@ -3607,7 +3723,7 @@ export def "230-updates list" [
   let full_url = (build-url $base "/2.3.0/updates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # #### Filters Parameters - `created_on`, `launch`, `launch__launch_service_provider`, `program`  Example - [/updates/?launch__launch_service_provider=121](./?launch__launch_service_provider=121)  #### Ordering Fields - `created_on`  Example - [/updates/?ordering=-created_on](./?ordering=-created_on)  #### Number of results Use `limit` to control the number of objects in the response (max 100)  Example - [/updates/?limit=2](./?limit=2)  #### Format Switch to JSON output - [/updates/?format=json](./?format=json)  #### Help Find all the FAQs and support links on the documentation homepage - [ll.thespacedevs.com/docs](https://ll.thespacedevs.com/docs/)
@@ -3623,11 +3739,12 @@ export def "230-updates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, profile_image: string, comment: string, info_url: string, created_by: string, created_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2.3.0/updates/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def accept-completer [] { ["application/json" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "search search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --qp-query: string # A set of search conditions joined by logical operators (AND, OR, NOT) and bound by double quotes. If none supplied, the full result set will be returned.
   --includeAccessionType: string # The connected data type to include accessions of
@@ -125,7 +127,7 @@ export def "search search" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform a warehouse search with POST
@@ -140,6 +142,7 @@ export def "search searchPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --qp-query: string # A set of search conditions joined by logical operators (AND, OR, NOT) and bound by double quotes. If none supplied, the full result set will be returned.
   --includeAccessionType: string # The connected data type to include accessions of
@@ -164,7 +167,7 @@ export def "search searchPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Perform a search to get a script to download data files for the matched records.
@@ -179,6 +182,7 @@ export def "files post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-result: string # The result type (data set) to search against. Is mandatory.
   --body-query: string # A set of search conditions joined by logical operators (AND, OR, NOT) and bound by double quotes. If none supplied, the full result set will be returned.
@@ -198,7 +202,7 @@ export def "files post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Count rows matching search parameters
@@ -213,6 +217,7 @@ export def "count count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --qp-query: string # A set of search conditions joined by logical operators (AND, OR, NOT) and bound by double quotes. If none supplied, the full result set will be returned.
   --includeAccessionType: string # The connected data type to include accessions of
@@ -232,7 +237,7 @@ export def "count count" [
   let full_url = (build-url $base "/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Count rows matching search parameters
@@ -247,6 +252,7 @@ export def "count countPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --qp-query: string # A set of search conditions joined by logical operators (AND, OR, NOT) and bound by double quotes. If none supplied, the full result set will be returned.
   --includeAccessionType: string # The connected data type to include accessions of
@@ -269,7 +275,7 @@ export def "count countPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a list of searchable fields for a result type.
@@ -284,6 +290,7 @@ export def "search-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataPortal: string@dataPortal-completer # Data portal Id
   --qp-result: string # Result
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
@@ -294,7 +301,7 @@ export def "search-fields get" [
   let full_url = (build-url $base "/searchFields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of fields that can be returned for a result type.
@@ -309,6 +316,7 @@ export def "return-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataPortal: string@dataPortal-completer # Data portal Id
   --qp-result: string # Result
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
@@ -319,7 +327,7 @@ export def "return-fields get" [
   let full_url = (build-url $base "/returnFields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of available result types (data sets) to search against.
@@ -334,6 +342,7 @@ export def "results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -342,7 +351,7 @@ export def "results get" [
   let full_url = (build-url $base "/results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the relations for the given record to display in the UI.
@@ -359,6 +368,7 @@ export def "relations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hopCount: int # Number of nodes to be traversed. (format: int32)
 ]: nothing -> record<nodes: table<acc: string, name: string, dataClass: string, root: bool>, links: table<source: string, sourceDataClass: string, target: string, targetDataClass: string, relation: string>, totalChildren: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -367,7 +377,7 @@ export def "relations get" [
   let full_url = (build-url $base $"/relations/($dataClass)/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the relations for the given taxon to display in the UI.
@@ -383,6 +393,7 @@ export def "relations-taxon get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ancestorLevel: int # Number of levels traverses up the taxonomy hierarchy. 0 to bring all the ancestors (format: int32)
   --childCount: int # Number of children to be retrieved. Use 0 to retrieve all the the children (format: int32)
 ]: nothing -> record<nodes: table<acc: string, name: string, dataClass: string, root: bool>, links: table<source: string, sourceDataClass: string, target: string, targetDataClass: string, relation: string>, totalChildren: int> {
@@ -392,7 +403,7 @@ export def "relations-taxon get" [
   let full_url = (build-url $base $"/relations/TAXON/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the relations for the given taxon to display in the UI.
@@ -408,6 +419,7 @@ export def "relations-taxon get-by-accession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ancestorLevel: int # Number of levels traverses up the taxonomy hierarchy. 0 to bring all the ancestors (format: int32)
   --childCount: int # Number of children to be retrieved. Use 0 to retrieve all the the children (format: int32)
 ]: nothing -> record<nodes: table<acc: string, name: string, dataClass: string, root: bool>, links: table<source: string, sourceDataClass: string, target: string, targetDataClass: string, relation: string>, totalChildren: int> {
@@ -417,7 +429,7 @@ export def "relations-taxon get-by-accession" [
   let full_url = (build-url $base $"/relations/taxon/($accession)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get links
@@ -433,6 +445,7 @@ export def "links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accession: string # Accession
   --qp-result: string # The result type of links.
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
@@ -447,7 +460,7 @@ export def "links get" [
   let full_url = (build-url $base $"/links/($dataType)" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get row count for file report from warehouse search
@@ -462,6 +475,7 @@ export def "filereportcount fileReportCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --accession: string # Accession
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
@@ -472,7 +486,7 @@ export def "filereportcount fileReportCount" [
   let full_url = (build-url $base "/filereportcount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file report from warehouse search
@@ -487,6 +501,7 @@ export def "filereport fileReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # The result type (data set) to search against. Is mandatory.
   --accession: string # Accession
   --qp-fields: string # A list of fields (comma separated) to be returned in the result. If none supplied, the accession and ftp information for fastq,submitted and sra files will be returned.
@@ -500,7 +515,7 @@ export def "filereport fileReport" [
   let full_url = (build-url $base "/filereport" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download the documentation as a PDF file.
@@ -515,13 +530,14 @@ export def "doc downloadDoc" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/doc")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of available values for a controlled vocabulary field.
@@ -536,6 +552,7 @@ export def "controlled-vocab get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: string # Field name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -544,7 +561,7 @@ export def "controlled-vocab get" [
   let full_url = (build-url $base "/controlledVocab" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of accession types that can be used in the search query.
@@ -559,6 +576,7 @@ export def "accession-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-result: string # Result
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -567,5 +585,5 @@ export def "accession-types get" [
   let full_url = (build-url $base "/accessionTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

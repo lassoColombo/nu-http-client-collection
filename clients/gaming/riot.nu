@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def platformType-completer [] { ["playstation" "xbox"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "riot-account-accounts-by-puuid account-v1getByPuuid" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,13 +114,14 @@ export def "riot-account-accounts-by-puuid account-v1getByPuuid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, gameName: string, tagLine: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/riot/account/v1/accounts/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account by riot id
@@ -137,13 +139,14 @@ export def "riot-account-accounts-by-riot-id account-v1getByRiotId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, gameName: string, tagLine: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/riot/account/v1/accounts/by-riot-id/($gameName)/($tagLine)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account by access token
@@ -159,13 +162,14 @@ export def "riot-account-accounts-me account-v1getByAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, gameName: string, tagLine: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/riot/account/v1/accounts/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get active shard for a player
@@ -183,13 +187,14 @@ export def "riot-account-active-shards-by-game-by-puuid account-v1getActiveShard
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, game: string, activeShard: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/riot/account/v1/active-shards/by-game/($game)/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get active region (lol and tft)
@@ -207,13 +212,14 @@ export def "riot-account-region-by-game-by-puuid account-v1getActiveRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, game: string, region: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/riot/account/v1/region/by-game/($game)/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all champion mastery entries sorted by number of champion points descending.
@@ -230,13 +236,14 @@ export def "lol-champion-mastery-champion-masteries-by-puuid champion-mastery-v4
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<puuid: string, championPointsUntilNextLevel: int, chestGranted: bool, championId: int, lastPlayTime: int, championLevel: int, championPoints: int, championPointsSinceLastLevel: int, markRequiredForNextLevel: int, championSeasonMilestone: int, nextSeasonMilestone: record<requireGradeCounts: record, rewardMarks: int, bonus: bool, rewardConfig: record, totalGamesRequires: int>, tokensEarned: int, milestoneGrades: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/champion-mastery/v4/champion-masteries/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a champion mastery by puuid and champion ID.
@@ -254,13 +261,14 @@ export def "lol-champion-mastery-champion-masteries-by-puuid-by-champion champio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, championPointsUntilNextLevel: int, chestGranted: bool, championId: int, lastPlayTime: int, championLevel: int, championPoints: int, championPointsSinceLastLevel: int, markRequiredForNextLevel: int, championSeasonMilestone: int, nextSeasonMilestone: record<requireGradeCounts: record, rewardMarks: int, bonus: bool, rewardConfig: record<rewardValue: string, rewardType: string, maximumReward: int>, totalGamesRequires: int>, tokensEarned: int, milestoneGrades: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/champion-mastery/v4/champion-masteries/by-puuid/($encryptedPUUID)/by-champion/($championId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get specified number of top champion mastery entries sorted by number of champion points descending.
@@ -277,6 +285,7 @@ export def "lol-champion-mastery-champion-masteries-by-puuid-top champion-master
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of entries to retrieve, defaults to 3. (format: int32)
 ]: nothing -> table<puuid: string, championPointsUntilNextLevel: int, chestGranted: bool, championId: int, lastPlayTime: int, championLevel: int, championPoints: int, championPointsSinceLastLevel: int, markRequiredForNextLevel: int, championSeasonMilestone: int, nextSeasonMilestone: record<requireGradeCounts: record, rewardMarks: int, bonus: bool, rewardConfig: record, totalGamesRequires: int>, tokensEarned: int, milestoneGrades: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -285,7 +294,7 @@ export def "lol-champion-mastery-champion-masteries-by-puuid-top champion-master
   let full_url = (build-url $base $"/lol/champion-mastery/v4/champion-masteries/by-puuid/($encryptedPUUID)/top" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a player's total champion mastery score, which is the sum of individual champion mastery levels.
@@ -302,13 +311,14 @@ export def "lol-champion-mastery-scores-by-puuid champion-mastery-v4getChampionM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/champion-mastery/v4/scores/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns champion rotations, including free-to-play and low-level free-to-play rotations (REST)
@@ -324,13 +334,14 @@ export def "lol-platform-champion-rotations champion-v3getChampionInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<maxNewPlayerLevel: int, freeChampionIdsForNewPlayers: list<int>, freeChampionIds: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/platform/v3/champion-rotations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get players by puuid
@@ -347,13 +358,14 @@ export def "lol-clash-players-by-puuid clash-v1getPlayersByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<puuid: string, teamId: string, position: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/clash/v1/players/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get team by ID.
@@ -370,13 +382,14 @@ export def "lol-clash-teams clash-v1getTeamById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, tournamentId: int, name: string, iconId: int, tier: int, captain: string, abbreviation: string, players: table<puuid: string, teamId: string, position: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/clash/v1/teams/($teamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all active or upcoming tournaments.
@@ -392,13 +405,14 @@ export def "lol-clash-tournaments clash-v1getTournaments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, themeId: int, nameKey: string, nameKeySecondary: string, schedule: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/clash/v1/tournaments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tournament by team ID.
@@ -415,13 +429,14 @@ export def "lol-clash-tournaments-by-team clash-v1getTournamentByTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, themeId: int, nameKey: string, nameKeySecondary: string, schedule: table<id: int, registrationTime: int, startTime: int, cancelled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/clash/v1/tournaments/by-team/($teamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tournament by ID.
@@ -438,13 +453,14 @@ export def "lol-clash-tournaments clash-v1getTournamentById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, themeId: int, nameKey: string, nameKeySecondary: string, schedule: table<id: int, registrationTime: int, startTime: int, cancelled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/clash/v1/tournaments/($tournamentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the league entries.
@@ -463,6 +479,7 @@ export def "lol-league-exp-entries league-exp-v4getLeagueEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Defaults to 1. Starts with page 1. (format: int32)
 ]: nothing -> table<leagueId: string, summonerId: string, puuid: string, queueType: string, tier: string, rank: string, leaguePoints: int, wins: int, losses: int, hotStreak: bool, veteran: bool, freshBlood: bool, inactive: bool, miniSeries: record<losses: int, progress: string, target: int, wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -471,7 +488,7 @@ export def "lol-league-exp-entries league-exp-v4getLeagueEntries" [
   let full_url = (build-url $base $"/lol/league-exp/v4/entries/($queue)/($tier)/($division)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the challenger league for given queue.
@@ -488,13 +505,14 @@ export def "lol-league-challengerleagues-by-queue league-v4getChallengerLeague" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string, summonerId: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/league/v4/challengerleagues/by-queue/($queue)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get league entries in all queues for a given puuid
@@ -511,13 +529,14 @@ export def "lol-league-entries-by-puuid league-v4getLeagueEntriesByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<leagueId: string, puuid: string, queueType: string, tier: string, rank: string, leaguePoints: int, wins: int, losses: int, hotStreak: bool, veteran: bool, freshBlood: bool, inactive: bool, miniSeries: record<losses: int, progress: string, target: int, wins: int>, summonerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/league/v4/entries/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the league entries.
@@ -536,6 +555,7 @@ export def "lol-league-entries league-v4getLeagueEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Defaults to 1. Starts with page 1. (format: int32)
 ]: nothing -> table<leagueId: string, puuid: string, queueType: string, tier: string, rank: string, leaguePoints: int, wins: int, losses: int, hotStreak: bool, veteran: bool, freshBlood: bool, inactive: bool, miniSeries: record<losses: int, progress: string, target: int, wins: int>, summonerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -544,7 +564,7 @@ export def "lol-league-entries league-v4getLeagueEntries" [
   let full_url = (build-url $base $"/lol/league/v4/entries/($queue)/($tier)/($division)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the grandmaster league of a specific queue.
@@ -561,13 +581,14 @@ export def "lol-league-grandmasterleagues-by-queue league-v4getGrandmasterLeague
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string, summonerId: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/league/v4/grandmasterleagues/by-queue/($queue)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the master league for given queue.
@@ -584,13 +605,14 @@ export def "lol-league-masterleagues-by-queue league-v4getMasterLeague" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string, summonerId: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/league/v4/masterleagues/by-queue/($queue)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of all basic challenge configuration information (includes all translations for names and descriptions)
@@ -606,13 +628,14 @@ export def "lol-challenges-challenges-config lol-challenges-v1getAllChallengeCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, localizedNames: record, state: string, tracking: string, startTimestamp: int, endTimestamp: int, leaderboard: bool, thresholds: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/challenges/v1/challenges/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Map of level to percentile of players who have achieved it - keys: ChallengeId -> Season -> Level -> percentile of players who achieved it
@@ -628,13 +651,14 @@ export def "lol-challenges-challenges-percentiles lol-challenges-v1getAllChallen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/challenges/v1/challenges/percentiles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get challenge configuration (REST)
@@ -651,13 +675,14 @@ export def "lol-challenges-challenges-config lol-challenges-v1getChallengeConfig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, localizedNames: record, state: string, tracking: string, startTimestamp: int, endTimestamp: int, leaderboard: bool, thresholds: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/challenges/v1/challenges/($challengeId)/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return top players for each level. Level must be MASTER, GRANDMASTER or CHALLENGER.
@@ -675,6 +700,7 @@ export def "lol-challenges-challenges-leaderboards-by-level lol-challenges-v1get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32
 ]: nothing -> table<puuid: string, value: float, position: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -683,7 +709,7 @@ export def "lol-challenges-challenges-leaderboards-by-level lol-challenges-v1get
   let full_url = (build-url $base $"/lol/challenges/v1/challenges/($challengeId)/leaderboards/by-level/($level)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Map of level to percentile of players who have achieved it
@@ -700,13 +726,14 @@ export def "lol-challenges-challenges-percentiles lol-challenges-v1getChallengeP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/challenges/v1/challenges/($challengeId)/percentiles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns player information with list of all progressed challenges (REST)
@@ -723,13 +750,14 @@ export def "lol-challenges-player-data lol-challenges-v1getPlayerData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<challenges: table<percentile: float, playersInLevel: int, achievedTime: int, value: float, challengeId: int, level: string, position: int>, preferences: record<bannerAccent: string, title: string, challengeIds: list<int>, crestBorder: string, prestigeCrestBorderLevel: int>, totalPoints: record<level: string, current: int, max: int, percentile: float, position: int>, categoryPoints: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/challenges/v1/player-data/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of match ids by player access token - Includes custom matches
@@ -745,6 +773,7 @@ export def "lol-rso-match-matches-ids lol-rso-match-v1getMatchIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Defaults to 20. Valid values: 0 to 100. Number of match ids to return. (format: int32)
   --start: int # Defaults to 0. Start index. (format: int32)
   --type: string@type-completer # Filter the list of match ids by the type of match. This filter is mutually inclusive of the queue filter meaning any match ids returned must match both the queue and type filters.
@@ -758,7 +787,7 @@ export def "lol-rso-match-matches-ids lol-rso-match-v1getMatchIds" [
   let full_url = (build-url $base "/lol/rso-match/v1/matches/ids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a match by match id
@@ -775,13 +804,14 @@ export def "lol-rso-match-matches lol-rso-match-v1getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<dataVersion: string, matchId: string, participants: list<string>>, info: record<endOfGameResult: string, gameCreation: int, gameDuration: int, gameEndTimestamp: int, gameId: int, gameMode: string, gameName: string, gameStartTimestamp: int, gameType: string, gameVersion: string, mapId: int, participants: list<record>, platformId: string, queueId: int, teams: list<record>, tournamentCode: string, gameModeMutators: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/rso-match/v1/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a match timeline by match id
@@ -798,13 +828,14 @@ export def "lol-rso-match-matches-timeline lol-rso-match-v1getTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<dataVersion: string, matchId: string, participants: list<string>>, info: record<endOfGameResult: string, frameInterval: int, gameId: int, participants: list<record>, frames: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/rso-match/v1/matches/($matchId)/timeline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get League of Legends status for the given platform.
@@ -820,13 +851,14 @@ export def "lol-status-platform-data lol-status-v4getPlatformData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, locales: list<string>, maintenances: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>, incidents: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/status/v4/platform-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of the calling user's decks.
@@ -842,13 +874,14 @@ export def "lor-deck-decks-me lor-deck-v1getDecks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lor/deck/v1/decks/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new deck for the calling user.
@@ -864,6 +897,7 @@ export def "lor-deck-decks-me lor-deck-v1createDeck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   code: string
 ]: any -> string {
@@ -875,7 +909,7 @@ export def "lor-deck-decks-me lor-deck-v1createDeck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of cards owned by the calling user.
@@ -891,13 +925,14 @@ export def "lor-inventory-cards-me lor-inventory-v1getCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<code: string, count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lor/inventory/v1/cards/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of match ids by PUUID
@@ -914,13 +949,14 @@ export def "lor-match-matches-by-puuid-ids lor-match-v1getMatchIdsByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lor/match/v1/matches/by-puuid/($puuid)/ids")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get match by id
@@ -937,13 +973,14 @@ export def "lor-match-matches lor-match-v1getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<data_version: string, match_id: string, participants: list<string>>, info: record<game_mode: string, game_type: string, game_start_time_utc: string, game_version: string, game_format: string, players: list<record>, total_turn_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lor/match/v1/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the players in Master tier.
@@ -959,13 +996,14 @@ export def "lor-ranked-leaderboards lor-ranked-v1getLeaderboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<players: table<name: string, rank: int, lp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lor/ranked/v1/leaderboards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Legends of Runeterra status for the given platform.
@@ -981,13 +1019,14 @@ export def "lor-status-platform-data lor-status-v1getPlatformData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, locales: list<string>, maintenances: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>, incidents: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lor/status/v1/platform-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of match ids by puuid
@@ -1004,6 +1043,7 @@ export def "lol-match-matches-by-puuid-ids match-v5getMatchIdsByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # Epoch timestamp in seconds. The matchlist started storing timestamps on June 16th, 2021. Any matches played before June 16th, 2021 won't be included in the results if the startTime filter is set. (format: int64)
   --endTime: int # Epoch timestamp in seconds. (format: int64)
   --queue: int # Filter the list of match ids by a specific queue id. This filter is mutually inclusive of the type filter meaning any match ids returned must match both the queue and type filters. (format: int32)
@@ -1017,7 +1057,7 @@ export def "lol-match-matches-by-puuid-ids match-v5getMatchIdsByPUUID" [
   let full_url = (build-url $base $"/lol/match/v5/matches/by-puuid/($puuid)/ids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get player replays
@@ -1034,13 +1074,14 @@ export def "lol-match-matches-by-puuid-replays match-v5getReplay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total: int, matchFileURLs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/match/v5/matches/by-puuid/($puuid)/replays")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a match by match id
@@ -1057,13 +1098,14 @@ export def "lol-match-matches match-v5getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<dataVersion: string, matchId: string, participants: list<string>>, info: record<endOfGameResult: string, gameCreation: int, gameDuration: int, gameEndTimestamp: int, gameId: int, gameMode: string, gameName: string, gameStartTimestamp: int, gameType: string, gameVersion: string, mapId: int, participants: list<record>, platformId: string, queueId: int, teams: list<record>, tournamentCode: string, gameModeMutators: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/match/v5/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a match timeline by match id
@@ -1080,13 +1122,14 @@ export def "lol-match-matches-timeline match-v5getTimeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<dataVersion: string, matchId: string, participants: list<string>>, info: record<endOfGameResult: string, frameInterval: int, gameId: int, participants: list<record>, frames: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/match/v5/matches/($matchId)/timeline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get riftbound content
@@ -1102,6 +1145,7 @@ export def "riftbound-content-contents riftbound-content-v1getContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Defaults to en. Optional. Specifies the language and regional settings for the response. Use a locale code. During beta only en available.
 ]: nothing -> record<game: string, version: string, lastUpdated: string, sets: table<id: string, name: string, cards: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1110,7 +1154,7 @@ export def "riftbound-content-contents riftbound-content-v1getContent" [
   let full_url = (build-url $base "/riftbound/content/v1/contents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current game information for the given puuid.
@@ -1127,13 +1171,14 @@ export def "lol-spectator-tft-active-games-by-puuid spectator-tft-v5getCurrentGa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gameId: int, gameType: string, gameStartTime: int, mapId: int, gameLength: int, platformId: string, gameMode: string, bannedChampions: table<pickTurn: int, championId: int, teamId: int>, gameQueueConfigId: int, observers: record<encryptionKey: string>, participants: table<championId: int, perks: record, profileIconId: int, teamId: int, puuid: string, spell1Id: int, spell2Id: int, gameCustomizationObjects: list, riotId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/spectator/tft/v5/active-games/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current game information for the given puuid.
@@ -1150,13 +1195,14 @@ export def "lol-spectator-active-games-by-summoner spectator-v5getCurrentGameInf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gameId: int, gameType: string, gameStartTime: int, mapId: int, gameLength: int, platformId: string, gameMode: string, bannedChampions: table<pickTurn: int, championId: int, teamId: int>, gameQueueConfigId: int, observers: record<encryptionKey: string>, participants: table<championId: int, perks: record, profileIconId: int, bot: bool, teamId: int, puuid: string, spell1Id: int, spell2Id: int, gameCustomizationObjects: list, riotId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/spectator/v5/active-games/by-summoner/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a summoner by PUUID.
@@ -1173,13 +1219,14 @@ export def "lol-summoner-summoners-by-puuid summoner-v4getByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<profileIconId: int, revisionDate: int, puuid: string, summonerLevel: int, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/summoner/v4/summoners/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a summoner by access token.
@@ -1195,13 +1242,14 @@ export def "lol-summoner-summoners-me summoner-v4getByAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<profileIconId: int, revisionDate: int, puuid: string, summonerLevel: int, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lol/summoner/v4/summoners/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get league entries in all queues for a given puuid
@@ -1218,13 +1266,14 @@ export def "tft-league-by-puuid tft-league-v1getLeagueEntriesByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<puuid: string, leagueId: string, queueType: string, ratedTier: string, ratedRating: int, tier: string, rank: string, leaguePoints: int, wins: int, losses: int, hotStreak: bool, veteran: bool, freshBlood: bool, inactive: bool, miniSeries: record<losses: int, progress: string, target: int, wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tft/league/v1/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the challenger league.
@@ -1240,6 +1289,7 @@ export def "tft-league-challenger tft-league-v1getChallengerLeague" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queue: string@queue-completer # Defaults to RANKED_TFT.
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1248,7 +1298,7 @@ export def "tft-league-challenger tft-league-v1getChallengerLeague" [
   let full_url = (build-url $base "/tft/league/v1/challenger" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the league entries.
@@ -1266,6 +1316,7 @@ export def "tft-league-entries tft-league-v1getLeagueEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queue: string@queue-completer # Defaults to RANKED_TFT.
   --page: int # Defaults to 1. Starts with page 1. (format: int32)
 ]: nothing -> table<puuid: string, leagueId: string, queueType: string, ratedTier: string, ratedRating: int, tier: string, rank: string, leaguePoints: int, wins: int, losses: int, hotStreak: bool, veteran: bool, freshBlood: bool, inactive: bool, miniSeries: record<losses: int, progress: string, target: int, wins: int>> {
@@ -1275,7 +1326,7 @@ export def "tft-league-entries tft-league-v1getLeagueEntries" [
   let full_url = (build-url $base $"/tft/league/v1/entries/($tier)/($division)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the grandmaster league.
@@ -1291,6 +1342,7 @@ export def "tft-league-grandmaster tft-league-v1getGrandmasterLeague" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queue: string@queue-completer # Defaults to RANKED_TFT.
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1299,7 +1351,7 @@ export def "tft-league-grandmaster tft-league-v1getGrandmasterLeague" [
   let full_url = (build-url $base "/tft/league/v1/grandmaster" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the master league.
@@ -1315,6 +1367,7 @@ export def "tft-league-master tft-league-v1getMasterLeague" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queue: string@queue-completer # Defaults to RANKED_TFT.
 ]: nothing -> record<leagueId: string, entries: table<freshBlood: bool, wins: int, miniSeries: record, inactive: bool, veteran: bool, hotStreak: bool, rank: string, leaguePoints: int, losses: int, puuid: string>, tier: string, name: string, queue: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1323,7 +1376,7 @@ export def "tft-league-master tft-league-v1getMasterLeague" [
   let full_url = (build-url $base "/tft/league/v1/master" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the top rated ladder for given queue
@@ -1340,13 +1393,14 @@ export def "tft-league-rated-ladders-top tft-league-v1getTopRatedLadder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<puuid: string, ratedTier: string, ratedRating: int, wins: int, previousUpdateLadderPosition: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tft/league/v1/rated-ladders/($queue)/top")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of match ids by PUUID
@@ -1363,6 +1417,7 @@ export def "tft-match-matches-by-puuid-ids tft-match-v1getMatchIdsByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Defaults to 0. Start index. (format: int32)
   --endTime: int # Epoch timestamp in seconds. (format: int64)
   --startTime: int # Epoch timestamp in seconds. The matchlist started storing timestamps on June 16th, 2021. Any matches played before June 16th, 2021 won't be included in the results if the startTime filter is set. (format: int64)
@@ -1374,7 +1429,7 @@ export def "tft-match-matches-by-puuid-ids tft-match-v1getMatchIdsByPUUID" [
   let full_url = (build-url $base $"/tft/match/v1/matches/by-puuid/($puuid)/ids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a match by match id
@@ -1391,13 +1446,14 @@ export def "tft-match-matches tft-match-v1getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record<data_version: string, match_id: string, participants: list<string>>, info: record<endOfGameResult: string, gameCreation: int, gameId: int, game_datetime: int, game_length: float, game_version: string, game_variation: string, mapId: int, participants: list<record>, queue_id: int, queueId: int, tft_game_type: string, tft_set_core_name: string, tft_set_number: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tft/match/v1/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Teamfight Tactics status for the given platform.
@@ -1413,13 +1469,14 @@ export def "tft-status-platform-data tft-status-v1getPlatformData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, locales: list<string>, maintenances: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>, incidents: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tft/status/v1/platform-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a summoner by PUUID.
@@ -1436,13 +1493,14 @@ export def "tft-summoner-summoners-by-puuid tft-summoner-v1getByPUUID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, profileIconId: int, revisionDate: int, summonerLevel: int, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tft/summoner/v1/summoners/by-puuid/($encryptedPUUID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a summoner by access token.
@@ -1458,13 +1516,14 @@ export def "tft-summoner-summoners-me tft-summoner-v1getByAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, profileIconId: int, revisionDate: int, summonerLevel: int, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tft/summoner/v1/summoners/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a tournament code for the given tournament - Stub method
@@ -1480,6 +1539,7 @@ export def "lol-tournament-stub-codes tournament-stub-v5createTournamentCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # The number of codes to create (max 1000) (format: int32)
   --tournamentId: int # The tournament ID (format: int64)
   --allowedParticipants: list # Optional list of encrypted puuids in order to validate the players eligible to join the lobby. NOTE: We currently do not enforce participants at the team level, but rather the aggregate of teamOne and teamTwo. We may add the ability to enforce at the team level in the future.
@@ -1499,7 +1559,7 @@ export def "lol-tournament-stub-codes tournament-stub-v5createTournamentCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the tournament code DTO associated with a tournament code string - Stub Method
@@ -1516,13 +1576,14 @@ export def "lol-tournament-stub-codes tournament-stub-v5getTournamentCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, lobbyName: string, metaData: string, password: string, teamSize: int, providerId: int, pickType: string, tournamentId: int, id: int, region: string, map: string, participants: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/tournament-stub/v5/codes/($tournamentCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of lobby events by tournament code - Stub method
@@ -1539,13 +1600,14 @@ export def "lol-tournament-stub-lobby-events-by-code tournament-stub-v5getLobbyE
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<eventList: table<timestamp: string, eventType: string, puuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/tournament-stub/v5/lobby-events/by-code/($tournamentCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a tournament provider and returns its ID - Stub method
@@ -1561,6 +1623,7 @@ export def "lol-tournament-stub-providers tournament-stub-v5registerProviderData
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   region: string@region-completer # The region in which the provider will be running tournaments.              (Legal values:  BR,  EUNE,  EUW,  JP,  LAN,  LAS,  NA,  OCE,  PBE,  RU,  TR,  KR)
   --body-url: string # The provider's callback URL to which tournament game results in this region should be posted. The URL must be well-formed, use the http or https protocol, and use the default port for the protocol (http URLs must use port 80, https URLs must use port 443).
 ]: any -> int {
@@ -1572,7 +1635,7 @@ export def "lol-tournament-stub-providers tournament-stub-v5registerProviderData
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a tournament and returns its ID - Stub method
@@ -1588,6 +1651,7 @@ export def "lol-tournament-stub-tournaments tournament-stub-v5registerTournament
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   providerId: int # The provider ID to specify the regional registered provider data to associate this tournament. (format: int32)
   --name: string # The optional name of the tournament.
 ]: any -> int {
@@ -1599,7 +1663,7 @@ export def "lol-tournament-stub-tournaments tournament-stub-v5registerTournament
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a tournament code for the given tournament.
@@ -1615,6 +1679,7 @@ export def "lol-tournament-codes tournament-v5createTournamentCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tournamentId: int # The tournament ID (format: int64)
   --count: int # The number of codes to create (max 1000) (format: int32)
   --allowedParticipants: list # Optional list of encrypted puuids in order to validate the players eligible to join the lobby. NOTE: We currently do not enforce participants at the team level, but rather the aggregate of teamOne and teamTwo. We may add the ability to enforce at the team level in the future.
@@ -1634,7 +1699,7 @@ export def "lol-tournament-codes tournament-v5createTournamentCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the tournament code DTO associated with a tournament code string.
@@ -1651,13 +1716,14 @@ export def "lol-tournament-codes tournament-v5getTournamentCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, providerId: int, tournamentId: int, code: string, region: string, map: string, teamSize: int, spectators: string, pickType: string, lobbyName: string, password: string, metaData: string, participants: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/tournament/v5/codes/($tournamentCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the pick type, map, spectator type, or allowed puuids for a code.
@@ -1674,6 +1740,7 @@ export def "lol-tournament-codes tournament-v5updateCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowedParticipants: list # Optional list of encrypted puuids in order to validate the players eligible to join the lobby. NOTE: We currently do not enforce participants at the team level, but rather the aggregate of teamOne and teamTwo. We may add the ability to enforce at the team level in the future.
   pickType: string@pickType-completer # The pick type              (Legal values:  BLIND_PICK,  DRAFT_MODE,  ALL_RANDOM,  TOURNAMENT_DRAFT)
   mapType: string@mapType-completer # The map type              (Legal values:  SUMMONERS_RIFT,  HOWLING_ABYSS)
@@ -1687,7 +1754,7 @@ export def "lol-tournament-codes tournament-v5updateCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get games details
@@ -1704,13 +1771,14 @@ export def "lol-tournament-games-by-code tournament-v5getGames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<startTime: int, winningTeam: list<record>, losingTeam: list<record>, shortCode: string, metaData: string, gameId: int, gameName: string, gameType: string, gameMap: int, gameMode: string, region: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/tournament/v5/games/by-code/($tournamentCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of lobby events by tournament code.
@@ -1727,13 +1795,14 @@ export def "lol-tournament-lobby-events-by-code tournament-v5getLobbyEventsByCod
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<eventList: table<timestamp: string, eventType: string, puuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lol/tournament/v5/lobby-events/by-code/($tournamentCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a tournament provider and returns its ID.
@@ -1749,6 +1818,7 @@ export def "lol-tournament-providers tournament-v5registerProviderData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   region: string@region-completer-1 # The region in which the provider will be running tournaments.              (Legal values:  BR,  EUNE,  EUW,  JP,  LAN,  LAS,  NA,  OCE,  PBE,  RU,  TR,  KR,  PH,  SG,  TH,  TW,  VN)
   --body-url: string # The provider's callback URL to which tournament game results in this region should be posted. The URL must be well-formed, use the http or https protocol, and use the default port for the protocol (http URLs must use port 80, https URLs must use port 443).
 ]: any -> int {
@@ -1760,7 +1830,7 @@ export def "lol-tournament-providers tournament-v5registerProviderData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a tournament and returns its ID.
@@ -1776,6 +1846,7 @@ export def "lol-tournament-tournaments tournament-v5registerTournament" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   providerId: int # The provider ID to specify the regional registered provider data to associate this tournament. (format: int32)
   --name: string # The optional name of the tournament.
 ]: any -> int {
@@ -1787,7 +1858,7 @@ export def "lol-tournament-tournaments tournament-v5registerTournament" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get match by id
@@ -1804,13 +1875,14 @@ export def "val-match-console-matches val-console-match-v1getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<matchInfo: record<matchId: string, mapId: string, gameLengthMillis: int, gameStartMillis: int, provisioningFlowId: string, isCompleted: bool, customGameName: string, queueId: string, gameMode: string, isRanked: bool, seasonId: string>, players: table<puuid: string, gameName: string, tagLine: string, teamId: string, partyId: string, characterId: string, stats: record, competitiveTier: int, playerCard: string, playerTitle: string>, coaches: table<puuid: string, teamId: string>, teams: table<teamId: string, won: bool, roundsPlayed: int, roundsWon: int, numPoints: int>, roundResults: table<roundNum: int, roundResult: string, roundCeremony: string, winningTeam: string, bombPlanter: string, bombDefuser: string, plantRoundTime: int, plantPlayerLocations: list, plantLocation: record, plantSite: string, defuseRoundTime: int, defusePlayerLocations: list, defuseLocation: record, playerStats: list, roundResultCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/val/match/console/v1/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get matchlist for games played by puuid and platform type
@@ -1827,6 +1899,7 @@ export def "val-match-console-matchlists-by-puuid val-console-match-v1getMatchli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --platformType: string@platformType-completer
 ]: nothing -> record<puuid: string, history: table<matchId: string, gameStartTimeMillis: int, queueId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1835,7 +1908,7 @@ export def "val-match-console-matchlists-by-puuid val-console-match-v1getMatchli
   let full_url = (build-url $base $"/val/match/console/v1/matchlists/by-puuid/($puuid)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent matches
@@ -1852,13 +1925,14 @@ export def "val-match-console-recent-matches-by-queue val-console-match-v1getRec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentTime: int, matchIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/val/match/console/v1/recent-matches/by-queue/($queue)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get leaderboard for the competitive queue
@@ -1875,6 +1949,7 @@ export def "val-console-ranked-leaderboards-by-act val-console-ranked-v1getLeade
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --platformType: string@platformType-completer
   --startIndex: int # Defaults to 0. (format: int32)
   --size: int # Defaults to 200. Valid values: 1 to 200. (format: int32)
@@ -1885,7 +1960,7 @@ export def "val-console-ranked-leaderboards-by-act val-console-ranked-v1getLeade
   let full_url = (build-url $base $"/val/console/ranked/v1/leaderboards/by-act/($actId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content optionally filtered by locale
@@ -1901,6 +1976,7 @@ export def "val-content-contents val-content-v1getContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string
 ]: nothing -> record<version: string, characters: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, maps: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, chromas: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, skins: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, skinLevels: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, equips: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, gameModes: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, sprays: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, sprayLevels: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, charms: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, charmLevels: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, playerCards: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, playerTitles: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, acts: table<name: string, localizedNames: record, id: string, isActive: bool, parentId: string, type: string>, ceremonies: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>, totems: table<name: string, localizedNames: record, id: string, assetName: string, assetPath: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1909,7 +1985,7 @@ export def "val-content-contents val-content-v1getContent" [
   let full_url = (build-url $base "/val/content/v1/contents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get match by id
@@ -1926,13 +2002,14 @@ export def "val-match-matches val-match-v1getMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<matchInfo: record<matchId: string, mapId: string, gameVersion: string, gameLengthMillis: int, region: string, gameStartMillis: int, provisioningFlowId: string, isCompleted: bool, customGameName: string, queueId: string, gameMode: string, isRanked: bool, seasonId: string, premierMatchInfo: record>, players: table<puuid: string, gameName: string, tagLine: string, teamId: string, partyId: string, characterId: string, stats: record, competitiveTier: int, isObserver: bool, playerCard: string, playerTitle: string, accountLevel: int>, coaches: table<puuid: string, teamId: string>, teams: table<teamId: string, won: bool, roundsPlayed: int, roundsWon: int, numPoints: int>, roundResults: table<roundNum: int, roundResult: string, roundCeremony: string, winningTeam: string, winningTeamRole: string, bombPlanter: string, bombDefuser: string, plantRoundTime: int, plantPlayerLocations: list, plantLocation: record, plantSite: string, defuseRoundTime: int, defusePlayerLocations: list, defuseLocation: record, playerStats: list, roundResultCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/val/match/v1/matches/($matchId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get matchlist for games played by puuid
@@ -1949,13 +2026,14 @@ export def "val-match-matchlists-by-puuid val-match-v1getMatchlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<puuid: string, history: table<matchId: string, gameStartTimeMillis: int, queueId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/val/match/v1/matchlists/by-puuid/($puuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent matches
@@ -1972,13 +2050,14 @@ export def "val-match-recent-matches-by-queue val-match-v1getRecent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentTime: int, matchIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/val/match/v1/recent-matches/by-queue/($queue)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get leaderboard for the competitive queue
@@ -1995,6 +2074,7 @@ export def "val-ranked-leaderboards-by-act val-ranked-v1getLeaderboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --size: int # Defaults to 200. Valid values: 1 to 200. (format: int32)
   --startIndex: int # Defaults to 0. (format: int32)
 ]: nothing -> record<shard: string, actId: string, totalPlayers: int, players: table<puuid: string, gameName: string, tagLine: string, leaderboardRank: int, rankedRating: int, numberOfWins: int, competitiveTier: int, prefix: string, premierRosterType: string>, immortalStartingPage: int, immortalStartingIndex: int, topTierRRThreshold: int, tierDetails: record, startIndex: int, query: string> {
@@ -2004,7 +2084,7 @@ export def "val-ranked-leaderboards-by-act val-ranked-v1getLeaderboard" [
   let full_url = (build-url $base $"/val/ranked/v1/leaderboards/by-act/($actId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get VALORANT status for the given platform.
@@ -2020,11 +2100,12 @@ export def "val-status-platform-data val-status-v1getPlatformData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, locales: list<string>, maintenances: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>, incidents: table<id: int, maintenance_status: string, incident_severity: string, titles: list, updates: list, created_at: string, archive_at: string, updated_at: string, platforms: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/val/status/v1/platform-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

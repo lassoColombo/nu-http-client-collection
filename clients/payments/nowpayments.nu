@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "estimate get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "estimate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # e.g. 3999.5000
   --currency-from: string # e.g. usd
   --currency-to: string # e.g. btc
@@ -112,7 +114,7 @@ export def "estimate get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the minimum payment amount
@@ -127,6 +129,7 @@ export def "min-amount get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency-from: string # e.g. eth
   --currency-to: string # e.g. trx
   --x-api-key: string # e.g. {{your_api_key}}
@@ -139,7 +142,7 @@ export def "min-amount get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of payments
@@ -154,6 +157,7 @@ export def "payment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # e.g. 10
   --page: string # e.g. 0
   --sortBy: string # e.g. created_at
@@ -170,7 +174,7 @@ export def "payment list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get/Update payment estimate
@@ -186,6 +190,7 @@ export def "payment-update-merchant-estimate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
 ]: nothing -> record<expiration_estimate_date: string, id: string, pay_amount: float, token_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -195,7 +200,7 @@ export def "payment-update-merchant-estimate post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get payment status
@@ -211,6 +216,7 @@ export def "payment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
 ]: nothing -> record<actually_paid: float, created_at: string, order_description: string, order_id: string, outcome_amount: float, outcome_currency: string, pay_address: string, pay_amount: float, pay_currency: string, payment_id: float, payment_status: string, price_amount: float, price_currency: string, purchase_id: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -220,7 +226,7 @@ export def "payment get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify payout
@@ -236,6 +242,7 @@ export def "payout-verify verifyPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
   --verification-code: string # e.g. 123456
 ]: any -> any {
@@ -249,7 +256,7 @@ export def "payout-verify verifyPayout" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sub-partners
@@ -264,6 +271,7 @@ export def "sub-partner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # int or array of int (optional) (e.g. 111)
   --offset: string # (optional) default 0 (e.g. 0)
   --limit: string # (optional) default 10 (e.g. 10)
@@ -275,7 +283,7 @@ export def "sub-partner get" [
   let full_url = (build-url $base "/v1/sub-partner" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sub-partner balance
@@ -291,6 +299,7 @@ export def "sub-partner-balance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
 ]: nothing -> record<result: record<balances: record<usddtrc20: record, usdtbsc: record>, subPartnerId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -300,7 +309,7 @@ export def "sub-partner-balance get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get transfer
@@ -316,13 +325,14 @@ export def "sub-partner-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<amount: string, created_at: string, currency: string, from_sub_id: string, id: string, status: string, to_sub_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/sub-partner/transfer/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all transfers
@@ -337,6 +347,7 @@ export def "sub-partner-transfers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # int or array of int (optional) (e.g. 111)
   --status: string # string or array of string  "WAITING"/"CREATED"/"FINISHED"/"REJECTED" (optional) (e.g. CREATED)
   --limit: string # (optional) default 10 (e.g. 10)
@@ -349,7 +360,7 @@ export def "sub-partner-transfers get" [
   let full_url = (build-url $base "/v1/sub-partner/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get many recurring payments
@@ -364,6 +375,7 @@ export def "subscriptions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # "WAITING_PAY" / "PAID" /  "PARTIALLY_PAID" / "EXPIRED" (e.g. PARTIALLY_PAID)
   --subscription-plan-id: string # e.g. 111394288
   --is-active: string # true / false (e.g. false)
@@ -382,7 +394,7 @@ export def "subscriptions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Get many plans
@@ -397,6 +409,7 @@ export def "subscriptions-plans list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number (e.g. 10)
   --offset: string # Number (e.g. 3)
   --x-api-key: string # e.g. {{your_api_key}}
@@ -409,7 +422,7 @@ export def "subscriptions-plans list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get one plan
@@ -425,6 +438,7 @@ export def "subscriptions-plans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
 ]: nothing -> record<result: record<amount: float, cancel_url: any, created_at: string, currency: string, id: string, interval_day: string, ipn_callback_url: any, partially_paid_url: any, success_url: any, title: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -434,7 +448,7 @@ export def "subscriptions-plans get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plan
@@ -450,6 +464,7 @@ export def "subscriptions-plans updatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # e.g. 2
   --currency: string # e.g. usd
   --interval-day: float # e.g. 1
@@ -463,7 +478,7 @@ export def "subscriptions-plans updatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete recurring payment
@@ -479,6 +494,7 @@ export def "subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<result: string> {
   let input = $in
@@ -488,7 +504,7 @@ export def "subscriptions delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Get one recurring payment
@@ -504,6 +520,7 @@ export def "subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
   --body: record
 ]: any -> record<result: record<created_at: string, expire_date: string, id: string, is_active: bool, status: string, subscriber: record<sub_partner_id: string>, subscription_plan_id: string, updated_at: string>> {
@@ -516,5 +533,5 @@ export def "subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }

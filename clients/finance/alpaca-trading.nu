@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def dtbp-check-completer [] { ["both" "entry" "exit"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -111,13 +112,14 @@ export def "account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_number: string, status: string, currency: string, cash: string, portfolio_value: string, pattern_day_trader: bool, trade_suspended_by_user: bool, trading_blocked: bool, transfers_blocked: bool, account_blocked: bool, created_at: string, shorting_enabled: bool, long_market_value: string, short_market_value: string, equity: string, last_equity: string, multiplier: string, buying_power: string, initial_margin: string, maintenance_margin: string, sma: string, daytrade_count: int, last_maintenance_margin: string, daytrading_buying_power: string, regt_buying_power: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Order
@@ -134,6 +136,7 @@ export def "orders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Order ID
   --client-order-id: string # Client unique order ID
   --created-at: string # format: date-time
@@ -175,7 +178,7 @@ export def "orders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # All Orders
@@ -190,6 +193,7 @@ export def "orders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Order status to be queried. open, closed or all. Defaults to open. (e.g. open)
   --limit: int # The maximum number of orders in response. Defaults to 50 and max is 500.
   --after: string # The response will include only ones submitted after this timestamp (exclusive.)
@@ -204,7 +208,7 @@ export def "orders list" [
   let full_url = (build-url $base "/v2/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Orders
@@ -219,13 +223,14 @@ export def "orders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/orders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Order by Order ID
@@ -241,6 +246,7 @@ export def "orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nested: oneof<nothing, bool> # If true, the result will roll up multi-leg orders under the legs field of primary order.
 ]: nothing -> record<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_percent: string, trail_price: string, hwm: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -249,7 +255,7 @@ export def "orders get" [
   let full_url = (build-url $base $"/v2/orders/($order_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Order
@@ -265,6 +271,7 @@ export def "orders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qty: string # number of shares to trade
   --time-in-force: string@time-in-force-completer # Note: For Crypto Trading, Alpaca supports the following Time-In-Force designations: day, gtc, ioc and fok. OPG and CLS are not supported.  Alpaca supports the following Time-In-Force designations:  - day   A day order is eligible for execution only on the day it is live. By default, the order is only valid during Regular Trading Hours (9:30am - 4:00pm ET). If unfilled after the closing auction, it is automatically canceled. If submitted after the close, it is queued and submitted the following trading day. However, if marked as eligible for extended hours, the order can also execute during supported extended hours.  - gtc   The order is good until canceled. Non-marketable GTC limit orders are subject to price adjustments to offset corporate actions affecting the issue. We do not currently support Do Not Reduce(DNR) orders to opt out of such price adjustments.  - opg   Use this TIF with a market/limit order type to submit “market on open” (MOO) and “limit on open” (LOO) orders. This order is eligible to execute only in the market opening auction. Any unfilled orders after the open will be cancelled. OPG orders submitted after 9:28am but before 7:00pm ET will be rejected. OPG orders submitted after 7:00pm will be queued and routed to the following day’s opening auction. On open/on close orders are routed to the primary exchange. Such orders do not necessarily execute exactly at 9:30am / 4:00pm ET but execute per the exchange’s auction rules.  - cls   Use this TIF with a market/limit order type to submit “market on close” (MOC) and “limit on close” (LOC) orders. This order is eligible to execute only in the market closing auction. Any unfilled orders after the close will be cancelled. CLS orders submitted after 3:50pm but before 7:00pm ET will be rejected. CLS orders submitted after 7:00pm will be queued and routed to the following day’s closing auction. Only available with API v2.  - ioc   An Immediate Or Cancel (IOC) order requires all or part of the order to be executed immediately. Any unfilled portion of the order is canceled. Only available with API v2. Most market makers who receive IOC orders will attempt to fill the order on a principal basis only, and cancel any unfilled balance. On occasion, this can result in the entire order being cancelled if the market maker does not have any existing inventory of the security in question.  - fok   A Fill or Kill (FOK) order is only executed if the entire order quantity can be filled, otherwise the order is canceled. Only available with API v2. (e.g. day)
   --limit-price: string # required if original order type is limit or stop_limit
@@ -280,7 +287,7 @@ export def "orders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Order by Order ID
@@ -296,13 +303,14 @@ export def "orders delete-by-order_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/orders/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Open Positions
@@ -317,13 +325,14 @@ export def "positions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<asset_id: string, symbol: string, exchange: string, asset_class: string, avg_entry_price: string, qty: string, qty_available: string, side: string, market_value: string, cost_basis: string, unrealized_pl: string, unrealized_plpc: string, unrealized_intraday_pl: string, unrealized_intraday_plpc: string, current_price: string, lastday_price: string, change_today: string, asset_marginable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/positions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Positions
@@ -338,6 +347,7 @@ export def "positions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancel-orders: oneof<nothing, bool> # If true is specified, cancel all open orders before liquidating all positions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -346,7 +356,7 @@ export def "positions delete" [
   let full_url = (build-url $base "/v2/positions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Open Position
@@ -362,13 +372,14 @@ export def "positions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<asset_id: string, symbol: string, exchange: string, asset_class: string, avg_entry_price: string, qty: string, qty_available: string, side: string, market_value: string, cost_basis: string, unrealized_pl: string, unrealized_plpc: string, unrealized_intraday_pl: string, unrealized_intraday_plpc: string, current_price: string, lastday_price: string, change_today: string, asset_marginable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/positions/($symbol_or_asset_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Position
@@ -384,6 +395,7 @@ export def "positions delete-by-symbol_or_asset_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qty: float # the number of shares to liquidate. Can accept up to 9 decimal points. Cannot work with percentage
   --percentage: float # percentage of position to liquidate. Must be between 0 and 100. Would only sell fractional if position is originally fractional. Can accept up to 9 decimal points. Cannot work with qty
 ]: nothing -> record<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_percent: string, trail_price: string, hwm: string> {
@@ -393,7 +405,7 @@ export def "positions delete-by-symbol_or_asset_id" [
   let full_url = (build-url $base $"/v2/positions/($symbol_or_asset_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Portfolio History
@@ -408,6 +420,7 @@ export def "account-portfolio-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --period: string # The duration of the data in <number> + <unit>, such as 1D, where <unit> can be D for day, W for week, M for month and A for year. Defaults to 1M.
   --timeframe: string # The resolution of time window. 1Min, 5Min, 15Min, 1H, or 1D. If omitted, 1Min for less than 7 days period, 15Min for less than 30 days, or otherwise 1D.
   --date-end: string # The date the data is returned up to, in “YYYY-MM-DD” format. Defaults to the current market date (rolls over at the market open if extended_hours is false, otherwise at 7am ET) (format: date, e.g. 2022-05-15)
@@ -419,7 +432,7 @@ export def "account-portfolio-history get" [
   let full_url = (build-url $base "/v2/account/portfolio/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watchlists
@@ -434,13 +447,14 @@ export def "watchlists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/watchlists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watchlist
@@ -455,6 +469,7 @@ export def "watchlists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --symbols: list
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
@@ -466,7 +481,7 @@ export def "watchlists post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Watchlist by ID
@@ -482,13 +497,14 @@ export def "watchlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/watchlists/($watchlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Watchlist By Id
@@ -504,6 +520,7 @@ export def "watchlists updateWatchlistById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --symbols: list
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
@@ -515,7 +532,7 @@ export def "watchlists updateWatchlistById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Asset to Watchlist
@@ -531,6 +548,7 @@ export def "watchlists addAssetToWatchlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # symbol name to append to watchlist (e.g. AAPL)
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
   let input = $in
@@ -541,7 +559,7 @@ export def "watchlists addAssetToWatchlist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Watchlist By Id
@@ -557,13 +575,14 @@ export def "watchlists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/watchlists/($watchlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Watchlist by Name
@@ -578,6 +597,7 @@ export def "watchlists-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # name of the watchlist
 ]: nothing -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -586,7 +606,7 @@ export def "watchlists-by-name get" [
   let full_url = (build-url $base "/v2/watchlists:by_name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Watchlist By Name
@@ -601,6 +621,7 @@ export def "watchlists-by-name updateWatchlistByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # name of the watchlist
   name: string
   --symbols: list
@@ -614,7 +635,7 @@ export def "watchlists-by-name updateWatchlistByName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Asset to Watchlist By Name
@@ -629,6 +650,7 @@ export def "watchlists-by-name addAssetToWatchlistByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # name of the watchlist
   --symbol: string # symbol name to append to watchlist (e.g. AAPL)
 ]: any -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
@@ -641,7 +663,7 @@ export def "watchlists-by-name addAssetToWatchlistByName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Watchlist By Name
@@ -656,6 +678,7 @@ export def "watchlists-by-name delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # name of the watchlist
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -664,7 +687,7 @@ export def "watchlists-by-name delete" [
   let full_url = (build-url $base "/v2/watchlists:by_name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Symbol from Watchlist
@@ -681,13 +704,14 @@ export def "watchlists removeAssetFromWatchlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, account_id: string, created_at: string, updated_at: string, name: string, assets: table<id: string, class: string, exchange: string, symbol: string, name: string, status: string, tradable: bool, marginable: bool, shortable: bool, easy_to_borrow: bool, fractionable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/watchlists/($watchlist_id)/($symbol)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Configurations
@@ -702,13 +726,14 @@ export def "account-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dtbp_check: string, trade_confirm_email: string, suspend_trade: bool, no_shorting: bool, fractional_trading: bool, max_margin_multiplier: string, pdt_check: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/account/configurations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Configurations
@@ -723,6 +748,7 @@ export def "account-configurations patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dtbp-check: string@dtbp-check-completer # both, entry, or exit. Controls Day Trading Margin Call (DTMC) checks.
   --trade-confirm-email: string # all or none. If none, emails for order fills are not sent.
   --suspend-trade: oneof<nothing, bool> # If true, new orders are blocked.
@@ -739,7 +765,7 @@ export def "account-configurations patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account activities of one type
@@ -754,6 +780,7 @@ export def "account-activities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # The date for which you want to see activities. (format: date-time)
   --until: string # The response will contain only activities submitted before this date. (Cannot be used with date.) (format: date-time)
   --after: string # The response will contain only activities submitted after this date. (Cannot be used with date.) (format: date-time)
@@ -768,7 +795,7 @@ export def "account-activities list" [
   let full_url = (build-url $base "/v2/account/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account activities of one type
@@ -784,6 +811,7 @@ export def "account-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # The date for which you want to see activities. (format: date-time)
   --until: string # The response will contain only activities submitted before this date. (Cannot be used with date.) (format: date-time)
   --after: string # The response will contain only activities submitted after this date. (Cannot be used with date.) (format: date-time)
@@ -797,7 +825,7 @@ export def "account-activities get" [
   let full_url = (build-url $base $"/v2/account/activities/($activity_type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Market Calendar info
@@ -812,6 +840,7 @@ export def "calendar get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The first date to retrieve data for (inclusive) (format: date-time)
   --end: string # The last date to retrieve data for (inclusive) (format: date-time)
 ]: nothing -> table<date: string, open: string, close: string, session_open: string, session_close: string> {
@@ -821,7 +850,7 @@ export def "calendar get" [
   let full_url = (build-url $base "/v2/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Market Clock info
@@ -836,11 +865,12 @@ export def "clock get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<timestamp: string, is_open: bool, next_open: string, next_close: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/clock")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

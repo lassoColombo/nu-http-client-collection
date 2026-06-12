@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def limitToType-completer [] { ["Auction" "Preferred" "Unknown"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "2023-10-retail-media-accounts GetAccounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "2023-10-retail-media-accounts GetAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -112,7 +114,7 @@ export def "2023-10-retail-media-accounts GetAccounts" [
   let full_url = (build-url $base "/2023-10/retail-media/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/accounts/{account-id}/campaigns
@@ -128,6 +130,7 @@ export def "2023-10-retail-media-accounts-campaigns GetCampaignsByAccountId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -138,7 +141,7 @@ export def "2023-10-retail-media-accounts-campaigns GetCampaignsByAccountId" [
   let full_url = (build-url $base $"/2023-10/retail-media/accounts/($account_id)/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/accounts/{account-id}/campaigns
@@ -155,6 +158,7 @@ export def "2023-10-retail-media-accounts-campaigns CreateCampaignsByAccountId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A JSON:API wrapper class to format a <typeparamref name="TAttributes" /> with Type, and Attributes properties — shape: {attributes?: record, type: string}
 ]: any -> record<data: record<attributes: record<accountId: string, budget: float, budgetRemaining: float, budgetSpent: float, clickAttributionScope: string, clickAttributionWindow: string, companyName: string, createdAt: string, dailyPacing: float, drawableBalanceIds: list, endDate: string, isAutoDailyPacing: bool, monthlyPacing: float, name: string, onBehalfCompanyName: string, promotedBrandIds: list, retailerId: int, startDate: string, status: string, type: string, updatedAt: string, viewAttributionScope: string, viewAttributionWindow: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>> {
   let input = $in
@@ -165,7 +169,7 @@ export def "2023-10-retail-media-accounts-campaigns CreateCampaignsByAccountId" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/accounts/{account-id}/creatives
@@ -181,13 +185,14 @@ export def "2023-10-retail-media-accounts-creatives GetAccountCreatives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/accounts/($account_id)/creatives")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/accounts/{account-id}/creatives
@@ -204,6 +209,7 @@ export def "2023-10-retail-media-accounts-creatives CreateCreative" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brandId: int # The brand associated to the creative (nullable, format: int64)
   --id: string # nullable
   name: string # The name of the creative
@@ -219,7 +225,7 @@ export def "2023-10-retail-media-accounts-creatives CreateCreative" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/accounts/{account-id}/creatives/{creative-id}
@@ -237,6 +243,7 @@ export def "2023-10-retail-media-accounts-creatives UpdateCreative" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brandId: int # The brand associated to the creative (format: int64)
   --id: string # nullable
   name: string # The name of the creative
@@ -252,7 +259,7 @@ export def "2023-10-retail-media-accounts-creatives UpdateCreative" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/accounts/{account-id}/line-items
@@ -268,6 +275,7 @@ export def "2023-10-retail-media-accounts-line-items GetLineItemsByAccountId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToCampaignId: list # The campaign ids that you would like to limit your result set to
   --limitToId: list # The ids that you would like to limit your result set to
   --limitToType: string@limitToType-completer # The campaign types that you would like to limit your result set to (nullable)
@@ -280,7 +288,7 @@ export def "2023-10-retail-media-accounts-line-items GetLineItemsByAccountId" [
   let full_url = (build-url $base $"/2023-10/retail-media/accounts/($account_id)/line-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/accounts/{accountId}/brands
@@ -296,6 +304,7 @@ export def "2023-10-retail-media-accounts-brands GetBrandsByAccountId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -306,7 +315,7 @@ export def "2023-10-retail-media-accounts-brands GetBrandsByAccountId" [
   let full_url = (build-url $base $"/2023-10/retail-media/accounts/($accountId)/brands" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/accounts/{accountId}/catalogs
@@ -323,6 +332,7 @@ export def "2023-10-retail-media-accounts-catalogs PostApiV1ExternalAccountCatal
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A JSON:API wrapper class to format a <typeparamref name="TAttributes" /> with Type, and Attributes properties — shape: {attributes?: record, type: string}
 ]: any -> record<data: record<attributes: record<createdAt: string, currency: string, fileSizeBytes: int, md5Checksum: string, message: string, rowCount: int, status: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>> {
   let input = $in
@@ -333,7 +343,7 @@ export def "2023-10-retail-media-accounts-catalogs PostApiV1ExternalAccountCatal
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/accounts/{accountId}/retailers
@@ -349,6 +359,7 @@ export def "2023-10-retail-media-accounts-retailers GetRetailersByAccountId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -359,7 +370,7 @@ export def "2023-10-retail-media-accounts-retailers GetRetailersByAccountId" [
   let full_url = (build-url $base $"/2023-10/retail-media/accounts/($accountId)/retailers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/assets
@@ -374,6 +385,7 @@ export def "2023-10-retail-media-assets CreateAsset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   AssetFile: string # The asset binary content (format: binary)
 ]: any -> record<data: record<attributes: record<fileExtension: string, fileLocation: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -384,7 +396,7 @@ export def "2023-10-retail-media-assets CreateAsset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # /2023-10/retail-media/auction-line-items/{line-item-id}
@@ -400,13 +412,14 @@ export def "2023-10-retail-media-auction-line-items GetAuctionLineItemsByLineIte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<bidStrategy: string, budget: float, budgetRemaining: float, budgetSpent: float, campaignId: string, createdAt: string, dailyPacing: float, endDate: string, id: string, isAutoDailyPacing: bool, maxBid: float, monthlyPacing: float, name: string, startDate: string, status: string, targetBid: float, targetRetailerId: string, updatedAt: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/auction-line-items/($line_item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/auction-line-items/{line-item-id}
@@ -423,6 +436,7 @@ export def "2023-10-retail-media-auction-line-items UpdateAuctionLineItemByLineI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A class that represents a domain entity exposed by an API — shape: {attributes?: record, id?: string, type?: string}
 ]: any -> record<data: record<attributes: record<bidStrategy: string, budget: float, budgetRemaining: float, budgetSpent: float, campaignId: string, createdAt: string, dailyPacing: float, endDate: string, id: string, isAutoDailyPacing: bool, maxBid: float, monthlyPacing: float, name: string, startDate: string, status: string, targetBid: float, targetRetailerId: string, updatedAt: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -433,7 +447,7 @@ export def "2023-10-retail-media-auction-line-items UpdateAuctionLineItemByLineI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/balances/{balance-id}/campaigns
@@ -449,6 +463,7 @@ export def "2023-10-retail-media-balances-campaigns GetCampaignsByBalanceId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -459,7 +474,7 @@ export def "2023-10-retail-media-balances-campaigns GetCampaignsByBalanceId" [
   let full_url = (build-url $base $"/2023-10/retail-media/balances/($balance_id)/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/balances/{balance-id}/campaigns/append
@@ -476,6 +491,7 @@ export def "2023-10-retail-media-balances-campaigns-append AppendCampaignsByBala
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # item shape: {attributes?: record, id?: string, type?: string}
 ]: any -> record<data: table<attributes: record, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, metadata: record<currentPageIndex: int, currentPageSize: int, nextPage: string, previousPage: string, totalItemsAcrossAllPages: int, totalPages: int>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -486,7 +502,7 @@ export def "2023-10-retail-media-balances-campaigns-append AppendCampaignsByBala
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/balances/{balance-id}/campaigns/delete
@@ -503,6 +519,7 @@ export def "2023-10-retail-media-balances-campaigns-delete DeleteCampaignsByBala
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # item shape: {attributes?: record, id?: string, type?: string}
 ]: any -> record<data: table<attributes: record, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, metadata: record<currentPageIndex: int, currentPageSize: int, nextPage: string, previousPage: string, totalItemsAcrossAllPages: int, totalPages: int>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -513,7 +530,7 @@ export def "2023-10-retail-media-balances-campaigns-delete DeleteCampaignsByBala
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/campaigns/{campaign-id}/auction-line-items
@@ -529,6 +546,7 @@ export def "2023-10-retail-media-campaigns-auction-line-items GetAuctionLineItem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limitToId: list # The ids that you would like to limit your result set to
   --pageIndex: int # The 0 indexed page index you would like to receive given the page size (format: int32, default: 0)
   --pageSize: int # The maximum number of items you would like to receive in this request (format: int32, default: 25)
@@ -539,7 +557,7 @@ export def "2023-10-retail-media-campaigns-auction-line-items GetAuctionLineItem
   let full_url = (build-url $base $"/2023-10/retail-media/campaigns/($campaign_id)/auction-line-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/campaigns/{campaign-id}/auction-line-items
@@ -556,6 +574,7 @@ export def "2023-10-retail-media-campaigns-auction-line-items ModifyAuctionLineI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a Resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<bidStrategy: string, budget: float, budgetRemaining: float, budgetSpent: float, campaignId: string, createdAt: string, dailyPacing: float, endDate: string, id: string, isAutoDailyPacing: bool, maxBid: float, monthlyPacing: float, name: string, startDate: string, status: string, targetBid: float, targetRetailerId: string, updatedAt: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -566,7 +585,7 @@ export def "2023-10-retail-media-campaigns-auction-line-items ModifyAuctionLineI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/campaigns/{campaignId}
@@ -582,13 +601,14 @@ export def "2023-10-retail-media-campaigns GetCampaignByCampaignId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<accountId: string, budget: float, budgetRemaining: float, budgetSpent: float, clickAttributionScope: string, clickAttributionWindow: string, companyName: string, createdAt: string, dailyPacing: float, drawableBalanceIds: list, endDate: string, isAutoDailyPacing: bool, monthlyPacing: float, name: string, onBehalfCompanyName: string, promotedBrandIds: list, retailerId: int, startDate: string, status: string, type: string, updatedAt: string, viewAttributionScope: string, viewAttributionWindow: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/campaigns/($campaignId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/campaigns/{campaignId}
@@ -605,6 +625,7 @@ export def "2023-10-retail-media-campaigns UpdateCampaignByCampaignId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A JSON:API wrapper class to format a <typeparamref name="TAttributes" /> with Id, Type, and Attributes properties — shape: {attributes?: record, id: string, type: string}
 ]: any -> record<data: record<attributes: record<accountId: string, budget: float, budgetRemaining: float, budgetSpent: float, clickAttributionScope: string, clickAttributionWindow: string, companyName: string, createdAt: string, dailyPacing: float, drawableBalanceIds: list, endDate: string, isAutoDailyPacing: bool, monthlyPacing: float, name: string, onBehalfCompanyName: string, promotedBrandIds: list, retailerId: int, startDate: string, status: string, type: string, updatedAt: string, viewAttributionScope: string, viewAttributionWindow: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>> {
   let input = $in
@@ -615,7 +636,7 @@ export def "2023-10-retail-media-campaigns UpdateCampaignByCampaignId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/catalogs/{catalogId}/output
@@ -631,13 +652,14 @@ export def "2023-10-retail-media-catalogs-output GetCatalogOutput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/catalogs/($catalogId)/output")
   let accept_val = "application/x-json-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/catalogs/{catalogId}/status
@@ -653,13 +675,14 @@ export def "2023-10-retail-media-catalogs-status GetCatalogStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<createdAt: string, currency: string, fileSizeBytes: int, md5Checksum: string, message: string, rowCount: int, status: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/catalogs/($catalogId)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/categories
@@ -674,6 +697,7 @@ export def "2023-10-retail-media-categories GetApiExternalV1Categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageIndex: int # The start position in the overall list of matches. Must be zero or greater. (format: int32, default: 0)
   --pageSize: int # The maximum number of results to return with each call. Must be greater than zero. (format: int32, default: 100)
   --retailerId: int # The retailer id for which Categories fetched (format: int32)
@@ -685,7 +709,7 @@ export def "2023-10-retail-media-categories GetApiExternalV1Categories" [
   let full_url = (build-url $base "/2023-10/retail-media/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/line-items/{id}/keywords
@@ -701,13 +725,14 @@ export def "2023-10-retail-media-line-items-keywords FetchKeywords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<keywords: record, rank: list>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/line-items/($id)/keywords")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/line-items/{id}/keywords/add-remove
@@ -724,6 +749,7 @@ export def "2023-10-retail-media-line-items-keywords-add-remove AddRemoveKeyword
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Resource object containing keywords to be added or removed from a line item — shape: {attributes?: record, id?: string, type?: string}
 ]: any -> record<errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>> {
   let input = $in
@@ -734,7 +760,7 @@ export def "2023-10-retail-media-line-items-keywords-add-remove AddRemoveKeyword
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/line-items/{id}/keywords/set-bid
@@ -751,6 +777,7 @@ export def "2023-10-retail-media-line-items-keywords-set-bid SetKeywordBids" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Resource object containing keywords and their associated bid overrides — shape: {attributes?: record, id?: string, type?: string}
 ]: any -> record<errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, status: int, title: string, traceId: string, type: string>> {
   let input = $in
@@ -761,7 +788,7 @@ export def "2023-10-retail-media-line-items-keywords-set-bid SetKeywordBids" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/line-items/{line-item-id}
@@ -777,13 +804,14 @@ export def "2023-10-retail-media-line-items GetLineItemsByCampaignId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<budget: float, budgetRemaining: float, budgetSpent: float, campaignId: string, createdAt: string, endDate: string, id: string, name: string, startDate: string, status: string, targetRetailerId: string, type: string, updatedAt: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/line-items/($line_item_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/me
@@ -798,13 +826,14 @@ export def "2023-10-retail-media-me GetCurrentApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<applicationId: int, criteoService: string, description: string, name: string, organizationId: int>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2023-10/retail-media/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/add-to-basket
@@ -820,13 +849,14 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket Ge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<categoryIds: list, productIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/preferred-line-items/($line_item_id)/targeting/add-to-basket")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/add-to-basket
@@ -843,6 +873,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket Pu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<categoryIds: list, productIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -853,7 +884,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket Pu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/add-to-basket/append
@@ -870,6 +901,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket-ap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<categoryIds: list, productIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -880,7 +912,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket-ap
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/add-to-basket/delete
@@ -897,6 +929,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<categoryIds: list, productIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -907,7 +940,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-add-to-basket-de
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/audiences
@@ -923,13 +956,14 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences GetAud
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<audienceIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/preferred-line-items/($line_item_id)/targeting/audiences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/audiences
@@ -946,6 +980,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences PutAud
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<audienceIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -956,7 +991,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences PutAud
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/audiences/append
@@ -973,6 +1008,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences-append
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<audienceIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -983,7 +1019,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences-append
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/audiences/delete
@@ -1000,6 +1036,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences-delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<audienceIds: list, scope: string>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -1010,7 +1047,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-audiences-delete
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/stores
@@ -1026,13 +1063,14 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores GetStoreT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<scope: string, storeIds: list>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/preferred-line-items/($line_item_id)/targeting/stores")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/stores
@@ -1049,6 +1087,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores PutStoreT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<scope: string, storeIds: list>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -1059,7 +1098,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores PutStoreT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/stores/append
@@ -1076,6 +1115,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores-append Ap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<scope: string, storeIds: list>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -1086,7 +1126,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores-append Ap
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/preferred-line-items/{line-item-id}/targeting/stores/delete
@@ -1103,6 +1143,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores-delete De
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # Data model for a value type resource — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<scope: string, storeIds: list>, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -1113,7 +1154,7 @@ export def "2023-10-retail-media-preferred-line-items-targeting-stores-delete De
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/reports/{reportId}/output
@@ -1129,13 +1170,14 @@ export def "2023-10-retail-media-reports-output GetAsyncExportOutput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/reports/($reportId)/output")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/reports/{reportId}/status
@@ -1151,13 +1193,14 @@ export def "2023-10-retail-media-reports-status GetAsyncExportStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<createdAt: string, expiresAt: string, fileSizeBytes: int, id: string, md5CheckSum: string, message: string, rowCount: int, status: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/reports/($reportId)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/reports/revenue
@@ -1173,6 +1216,7 @@ export def "2023-10-retail-media-reports-revenue GenerateAsyncRevenueReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # A top-level object that encapsulates a Criteo API response for a single value — shape: {attributes?: record, type?: string}
 ]: any -> record<data: record<attributes: record<createdAt: string, expiresAt: string, fileSizeBytes: int, id: string, md5CheckSum: string, message: string, rowCount: int, status: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in
@@ -1183,7 +1227,7 @@ export def "2023-10-retail-media-reports-revenue GenerateAsyncRevenueReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # /2023-10/retail-media/retailers/{retailer-id}/templates
@@ -1199,13 +1243,14 @@ export def "2023-10-retail-media-retailers-templates GetRetailerCreativeTemplate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/retailers/($retailer_id)/templates")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/retailers/{retailer-id}/templates/{template-id}
@@ -1222,13 +1267,14 @@ export def "2023-10-retail-media-retailers-templates GetCreativeTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<attributes: record<allCollectionsMandatory: bool, createdAt: string, creativeFormat: string, displayableSkusMax: int, id: string, name: string, sections: list, skuCollectionMax: int, skuCollectionMin: int, skuPerCollectionMax: int, skuPerCollectionMin: int, updatedAt: string>, id: string, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/retailers/($retailer_id)/templates/($template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # /2023-10/retail-media/retailers/{retailerId}/pages
@@ -1244,11 +1290,12 @@ export def "2023-10-retail-media-retailers-pages GetApi202110ExternalRetailerPag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pageTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/2023-10/retail-media/retailers/($retailerId)/pages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -107,7 +108,7 @@ def respondent-familiarity-is-completer [] { ["known" "new" "unknown"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "root get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -140,6 +141,7 @@ export def "root get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -150,7 +152,7 @@ export def "root get" [
   let full_url = (build-url $base "/" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest chimp chatter
@@ -165,6 +167,7 @@ export def "activity-feed-chimp-chatter get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
@@ -175,7 +178,7 @@ export def "activity-feed-chimp-chatter get" [
   let full_url = (build-url $base "/activity-feed/chimp-chatter" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List account exports
@@ -190,6 +193,7 @@ export def "account-exports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -202,7 +206,7 @@ export def "account-exports list" [
   let full_url = (build-url $base "/account-exports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add export
@@ -217,6 +221,7 @@ export def "account-exports post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   include_stages: list # The stages of an account export to include. (e.g. ["audiences", "gallery_files"])
   --since-timestamp: string # An ISO 8601 date that will limit the export to only records created after a given time. For instance, the reports stage will contain any campaign sent after the given timestamp. Audiences, however, are excluded from this limit. (format: date-time, e.g. 2021-08-23T14:15:09Z)
@@ -229,7 +234,7 @@ export def "account-exports post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account export info
@@ -245,6 +250,7 @@ export def "account-exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -255,7 +261,7 @@ export def "account-exports get" [
   let full_url = (build-url $base $"/account-exports/($export_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of audiences
@@ -270,6 +276,7 @@ export def "audiences list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -282,7 +289,7 @@ export def "audiences list" [
   let full_url = (build-url $base "/audiences" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get audience info
@@ -298,6 +305,7 @@ export def "audiences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -308,7 +316,7 @@ export def "audiences get" [
   let full_url = (build-url $base $"/audiences/($audience_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Contacts
@@ -324,6 +332,7 @@ export def "audiences-contacts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -342,7 +351,7 @@ export def "audiences-contacts list" [
   let full_url = (build-url $base $"/audiences/($audience_id)/contacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Contact
@@ -360,6 +369,7 @@ export def "audiences-contacts createAudienceContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --merge-field-validation-mode: string@merge-field-validation-mode-completer # Defines how merge field validation is handled. When set to `ignore_required_checks`, the API does not raise an error if required merge fields are missing from the request. When set to `strict`, the API enforces validation and returns an error if any required merge field is not provided. If this setting is omitted, `strict` is applied by default.
   --data-mode: string@data-mode-completer # Indicates the data processing mode. In `historical` mode, contact data changes do not trigger automations or webhooks. In `live mode`, such changes do trigger them.
@@ -379,7 +389,7 @@ export def "audiences-contacts createAudienceContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Contact
@@ -396,6 +406,7 @@ export def "audiences-contacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -406,7 +417,7 @@ export def "audiences-contacts get" [
   let full_url = (build-url $base $"/audiences/($audience_id)/contacts/($contact_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Contact
@@ -425,6 +436,7 @@ export def "audiences-contacts patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --merge-field-validation-mode: string@merge-field-validation-mode-completer # Defines how merge field validation is handled. When set to `ignore_required_checks`, the API does not raise an error if required merge fields are missing from the request. When set to `strict`, the API enforces validation and returns an error if any required merge field is not provided. If this setting is omitted, `strict` is applied by default.
   --data-mode: string@data-mode-completer # Indicates the data processing mode. In `historical` mode, contact data changes do not trigger automations or webhooks. In `live mode`, such changes do trigger them.
@@ -443,7 +455,7 @@ export def "audiences-contacts patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive Contact
@@ -460,6 +472,7 @@ export def "audiences-contacts-actions-archive post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -467,7 +480,7 @@ export def "audiences-contacts-actions-archive post" [
   let full_url = (build-url $base $"/audiences/($audience_id)/contacts/($contact_id)/actions/archive")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Forget Contact
@@ -484,6 +497,7 @@ export def "audiences-contacts-actions-forget post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -491,7 +505,7 @@ export def "audiences-contacts-actions-forget post" [
   let full_url = (build-url $base $"/audiences/($audience_id)/contacts/($contact_id)/actions/forget")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List authorized apps
@@ -506,6 +520,7 @@ export def "authorized-apps list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -518,7 +533,7 @@ export def "authorized-apps list" [
   let full_url = (build-url $base "/authorized-apps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get authorized app info
@@ -534,6 +549,7 @@ export def "authorized-apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -544,7 +560,7 @@ export def "authorized-apps get" [
   let full_url = (build-url $base $"/authorized-apps/($app_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List automations
@@ -559,6 +575,7 @@ export def "automations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
@@ -576,7 +593,7 @@ export def "automations list" [
   let full_url = (build-url $base "/automations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add automation
@@ -594,6 +611,7 @@ export def "automations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   recipients: record # List settings for the Automation. — shape: {list_id?: string, store_id?: string}
   --settings: record # The settings for the Automation workflow. — shape: {from_name?: string, reply_to?: string}
@@ -607,7 +625,7 @@ export def "automations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get automation info
@@ -623,6 +641,7 @@ export def "automations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -633,7 +652,7 @@ export def "automations get" [
   let full_url = (build-url $base $"/automations/($workflow_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause automation emails
@@ -649,6 +668,7 @@ export def "automations-actions-pause-all-emails post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -656,7 +676,7 @@ export def "automations-actions-pause-all-emails post" [
   let full_url = (build-url $base $"/automations/($workflow_id)/actions/pause-all-emails")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start automation emails
@@ -672,6 +692,7 @@ export def "automations-actions-start-all-emails post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -679,7 +700,7 @@ export def "automations-actions-start-all-emails post" [
   let full_url = (build-url $base $"/automations/($workflow_id)/actions/start-all-emails")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive automation
@@ -695,6 +716,7 @@ export def "automations-actions-archive archiveAutomations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -702,7 +724,7 @@ export def "automations-actions-archive archiveAutomations" [
   let full_url = (build-url $base $"/automations/($workflow_id)/actions/archive")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List automated emails
@@ -718,6 +740,7 @@ export def "automations-emails list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<emails: table<id: string, web_id: int, workflow_id: string, position: int, delay: record, create_time: string, start_time: string, archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, has_logo_merge_tag: bool, recipients: record, settings: record, tracking: record, social_card: record, trigger_settings: record, report_summary: record, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -725,7 +748,7 @@ export def "automations-emails list" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow email info
@@ -742,6 +765,7 @@ export def "automations-emails get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, web_id: int, workflow_id: string, position: int, delay: record<amount: int, type: string, direction: string, action: string, action_description: string, full_description: string>, create_time: string, start_time: string, archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, has_logo_merge_tag: bool, recipients: record<list_id: string, list_is_active: bool, list_name: string, segment_text: string, recipient_count: int, segment_opts: record<saved_segment_id: int, prebuilt_segment_id: string, match: string, conditions: list>>, settings: record<subject_line: string, preview_text: string, title: string, from_name: string, reply_to: string, authenticate: bool, auto_footer: bool, inline_css: bool, auto_tweet: bool, auto_fb_post: list<string>, fb_comments: bool, template_id: int, drag_and_drop: bool>, tracking: record<opens: bool, html_clicks: bool, text_clicks: bool, goal_tracking: bool, ecomm360: bool, google_analytics: string, clicktale: string, salesforce: record<campaign: bool, notes: bool>, capsule: record<notes: bool>>, social_card: record<image_url: string, description: string, title: string>, trigger_settings: record<workflow_type: string, workflow_title: string, runtime: record<days: list, hours: record>, workflow_emails_count: int>, report_summary: record<opens: int, unique_opens: int, open_rate: float, clicks: int, subscriber_clicks: int, click_rate: float>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -749,7 +773,7 @@ export def "automations-emails get" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete workflow email
@@ -766,6 +790,7 @@ export def "automations-emails delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -773,7 +798,7 @@ export def "automations-emails delete" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update workflow email
@@ -792,6 +817,7 @@ export def "automations-emails patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --settings: record # Settings for the campaign including the email subject, from name, and from email address. — shape: {subject_line?: string, preview_text?: string, title?: string, from_name?: string, reply_to?: string}
   --delay: record # The delay settings for an automation email. — shape: {amount?: int, type?: "now"|"day"|"hour"|"week", direction?: "after", action: "signup"|"ecomm_abandoned_browse"|"ecomm_abandoned_cart"}
@@ -804,7 +830,7 @@ export def "automations-emails patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List automated email subscribers
@@ -821,6 +847,7 @@ export def "automations-emails-queue list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<workflow_id: string, email_id: string, queue: table<id: string, workflow_id: string, email_id: string, list_id: string, email_address: string, next_send: string, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -828,7 +855,7 @@ export def "automations-emails-queue list" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)/queue")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add subscriber to workflow email
@@ -845,6 +872,7 @@ export def "automations-emails-queue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email_address: string # The list member's email address.
 ]: any -> record<id: string, workflow_id: string, email_id: string, list_id: string, list_is_active: bool, email_address: string, next_send: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -856,7 +884,7 @@ export def "automations-emails-queue post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get automated email subscriber
@@ -874,6 +902,7 @@ export def "automations-emails-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, workflow_id: string, email_id: string, list_id: string, list_is_active: bool, email_address: string, next_send: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -881,7 +910,7 @@ export def "automations-emails-queue get" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)/queue/($subscriber_hash)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause automated email
@@ -898,6 +927,7 @@ export def "automations-emails-actions-pause post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -905,7 +935,7 @@ export def "automations-emails-actions-pause post" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)/actions/pause")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start automated email
@@ -922,6 +952,7 @@ export def "automations-emails-actions-start post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -929,7 +960,7 @@ export def "automations-emails-actions-start post" [
   let full_url = (build-url $base $"/automations/($workflow_id)/emails/($workflow_email_id)/actions/start")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List subscribers removed from workflow
@@ -945,6 +976,7 @@ export def "automations-removed-subscribers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<workflow_id: string, subscribers: table<id: string, workflow_id: string, list_id: string, email_address: string, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -952,7 +984,7 @@ export def "automations-removed-subscribers list" [
   let full_url = (build-url $base $"/automations/($workflow_id)/removed-subscribers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove subscriber from workflow
@@ -968,6 +1000,7 @@ export def "automations-removed-subscribers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email_address: string # The list member's email address.
 ]: any -> record<id: string, workflow_id: string, list_id: string, email_address: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -979,7 +1012,7 @@ export def "automations-removed-subscribers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get subscriber removed from workflow
@@ -996,6 +1029,7 @@ export def "automations-removed-subscribers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, workflow_id: string, list_id: string, email_address: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1003,7 +1037,7 @@ export def "automations-removed-subscribers get" [
   let full_url = (build-url $base $"/automations/($workflow_id)/removed-subscribers/($subscriber_hash)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List batch requests
@@ -1018,6 +1052,7 @@ export def "batches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1030,7 +1065,7 @@ export def "batches list" [
   let full_url = (build-url $base "/batches" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start batch operation
@@ -1046,6 +1081,7 @@ export def "batches post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   operations: list # An array of objects that describes operations to perform. — item shape: {method: "GET"|"POST"|"PUT"|"PATCH"|"DELETE", headers?: record, path: string, params?: record, body?: string, operation_id?: string}
 ]: any -> record<id: string, status: string, total_operations: int, finished_operations: int, errored_operations: int, submitted_at: string, completed_at: string, response_body_url: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1057,7 +1093,7 @@ export def "batches post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get batch operation status
@@ -1073,6 +1109,7 @@ export def "batches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1083,7 +1120,7 @@ export def "batches get" [
   let full_url = (build-url $base $"/batches/($batch_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete batch request
@@ -1099,6 +1136,7 @@ export def "batches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1106,7 +1144,7 @@ export def "batches delete" [
   let full_url = (build-url $base $"/batches/($batch_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List batch webhooks
@@ -1121,6 +1159,7 @@ export def "batch-webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1133,7 +1172,7 @@ export def "batch-webhooks list" [
   let full_url = (build-url $base "/batch-webhooks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add batch webhook
@@ -1148,6 +1187,7 @@ export def "batch-webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
   --enabled: oneof<nothing, bool> # Whether the webhook receives requests or not. (e.g. true)
@@ -1160,7 +1200,7 @@ export def "batch-webhooks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get batch webhook info
@@ -1176,6 +1216,7 @@ export def "batch-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1186,7 +1227,7 @@ export def "batch-webhooks get" [
   let full_url = (build-url $base $"/batch-webhooks/($batch_webhook_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update batch webhook
@@ -1202,6 +1243,7 @@ export def "batch-webhooks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
   --enabled: oneof<nothing, bool> # Whether the webhook receives requests or not. (e.g. true)
@@ -1214,7 +1256,7 @@ export def "batch-webhooks patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete batch webhook
@@ -1230,6 +1272,7 @@ export def "batch-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1237,7 +1280,7 @@ export def "batch-webhooks delete" [
   let full_url = (build-url $base $"/batch-webhooks/($batch_webhook_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List template folders
@@ -1252,6 +1295,7 @@ export def "template-folders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1264,7 +1308,7 @@ export def "template-folders list" [
   let full_url = (build-url $base "/template-folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add template folder
@@ -1279,6 +1323,7 @@ export def "template-folders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the folder.
 ]: any -> record<name: string, id: string, count: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1290,7 +1335,7 @@ export def "template-folders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get template folder
@@ -1306,6 +1351,7 @@ export def "template-folders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1316,7 +1362,7 @@ export def "template-folders get" [
   let full_url = (build-url $base $"/template-folders/($folder_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template folder
@@ -1332,6 +1378,7 @@ export def "template-folders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the folder.
 ]: any -> record<name: string, id: string, count: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1343,7 +1390,7 @@ export def "template-folders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete template folder
@@ -1359,6 +1406,7 @@ export def "template-folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1366,7 +1414,7 @@ export def "template-folders delete" [
   let full_url = (build-url $base $"/template-folders/($folder_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign folders
@@ -1381,6 +1429,7 @@ export def "campaign-folders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1393,7 +1442,7 @@ export def "campaign-folders list" [
   let full_url = (build-url $base "/campaign-folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add campaign folder
@@ -1408,6 +1457,7 @@ export def "campaign-folders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Name to associate with the folder.
 ]: any -> record<name: string, id: string, count: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1419,7 +1469,7 @@ export def "campaign-folders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign folder
@@ -1435,6 +1485,7 @@ export def "campaign-folders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1445,7 +1496,7 @@ export def "campaign-folders get" [
   let full_url = (build-url $base $"/campaign-folders/($folder_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update campaign folder
@@ -1461,6 +1512,7 @@ export def "campaign-folders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Name to associate with the folder.
 ]: any -> record<name: string, id: string, count: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1472,7 +1524,7 @@ export def "campaign-folders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete campaign folder
@@ -1488,6 +1540,7 @@ export def "campaign-folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1495,7 +1548,7 @@ export def "campaign-folders delete" [
   let full_url = (build-url $base $"/campaign-folders/($folder_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaigns
@@ -1510,6 +1563,7 @@ export def "campaigns list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1535,7 +1589,7 @@ export def "campaigns list" [
   let full_url = (build-url $base "/campaigns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add campaign
@@ -1556,6 +1610,7 @@ export def "campaigns post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   type: string@type-completer # There are four types of [campaigns](https://mailchimp.com/help/getting-started-with-campaigns/) you can create in Mailchimp. A/B Split campaigns have been deprecated and variate campaigns should be used instead.
   --recipients: record # List settings for the campaign. — shape: {list_id: string, segment_opts?: record}
@@ -1574,7 +1629,7 @@ export def "campaigns post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign info
@@ -1590,6 +1645,7 @@ export def "campaigns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1602,7 +1658,7 @@ export def "campaigns get" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update campaign settings
@@ -1624,6 +1680,7 @@ export def "campaigns patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --recipients: record # List settings for the campaign. — shape: {list_id: string, segment_opts?: record}
   settings: record # The settings for your campaign, including subject, from name, reply-to address, and more. — shape: {subject_line: string, preview_text?: string, title?: string, from_name: string, reply_to: string, use_conversation?: bool, to_name?: string, folder_id?: string, authenticate?: bool, auto_footer?: bool, inline_css?: bool, auto_tweet?: bool, auto_fb_post?: list, fb_comments?: bool, template_id?: int}
@@ -1640,7 +1697,7 @@ export def "campaigns patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete campaign
@@ -1656,6 +1713,7 @@ export def "campaigns delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1663,7 +1721,7 @@ export def "campaigns delete" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel campaign
@@ -1679,6 +1737,7 @@ export def "campaigns-actions-cancel-send post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1686,7 +1745,7 @@ export def "campaigns-actions-cancel-send post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/cancel-send")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replicate campaign
@@ -1702,6 +1761,7 @@ export def "campaigns-actions-replicate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, web_id: int, parent_campaign_id: string, type: string, create_time: string, archive_url: string, long_archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, resendable: bool, recipients: record<list_id: string, list_name: string, segment_text: string, recipient_count: int, segment_opts: record<saved_segment_id: int, prebuilt_segment_id: string, match: string, conditions: list>>, settings: record<subject_line: string, preview_text: string, title: string, from_name: string, reply_to: string, use_conversation: bool, to_name: string, folder_id: string, authenticate: bool, auto_footer: bool, inline_css: bool, auto_tweet: bool, auto_fb_post: list<string>, fb_comments: bool, timewarp: bool, template_id: int, drag_and_drop: bool>, variate_settings: record<winning_combination_id: string, winning_campaign_id: string, winner_criteria: string, wait_time: int, test_size: int, subject_lines: list<string>, send_times: list<string>, from_names: list<string>, reply_to_addresses: list<string>, contents: list<string>, combinations: list<record>>, tracking: record<opens: bool, html_clicks: bool, text_clicks: bool, goal_tracking: bool, ecomm360: bool, google_analytics: string, clicktale: string, salesforce: record<campaign: bool, notes: bool>, capsule: record<notes: bool>>, rss_opts: record<feed_url: string, frequency: string, schedule: record<hour: int, daily_send: record, weekly_send_day: string, monthly_send_date: float>, last_sent: string, constrain_rss_img: bool>, ab_split_opts: record<split_test: string, pick_winner: string, wait_units: string, wait_time: int, split_size: int, from_name_a: string, from_name_b: string, reply_email_a: string, reply_email_b: string, subject_a: string, subject_b: string, send_time_a: string, send_time_b: string, send_time_winner: string>, social_card: record<image_url: string, description: string, title: string>, report_summary: record<opens: int, unique_opens: int, open_rate: float, clicks: int, subscriber_clicks: int, click_rate: float, ecommerce: record<total_orders: int, total_spent: float, total_revenue: float>>, delivery_status: record<enabled: bool, can_cancel: bool, status: string, emails_sent: int, emails_canceled: int>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1709,7 +1769,7 @@ export def "campaigns-actions-replicate post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/replicate")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send campaign
@@ -1725,6 +1785,7 @@ export def "campaigns-actions-send post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1732,7 +1793,7 @@ export def "campaigns-actions-send post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/send")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Schedule campaign
@@ -1749,6 +1810,7 @@ export def "campaigns-actions-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   schedule_time: string # The UTC date and time to schedule the campaign for delivery in ISO 8601 format. Campaigns may only be scheduled to send on the quarter-hour (:00, :15, :30, :45). (format: date-time)
   --timewarp: oneof<nothing, bool> # Choose whether the campaign should use [Timewarp](https://mailchimp.com/help/use-timewarp/) when sending. Campaigns scheduled with Timewarp are localized based on the recipients' time zones. For example, a Timewarp campaign with a `schedule_time` of 13:00 will be sent to each recipient at 1:00pm in their local time. Cannot be set to `true` for campaigns using [Batch Delivery](https://mailchimp.com/help/schedule-batch-delivery/).
@@ -1762,7 +1824,7 @@ export def "campaigns-actions-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unschedule campaign
@@ -1778,6 +1840,7 @@ export def "campaigns-actions-unschedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1785,7 +1848,7 @@ export def "campaigns-actions-unschedule post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/unschedule")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send test email
@@ -1801,6 +1864,7 @@ export def "campaigns-actions-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   test_emails: list # An array of email addresses to send the test email to.
   send_type: string@send-type-completer # Choose the type of test email to send.
@@ -1813,7 +1877,7 @@ export def "campaigns-actions-test post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pause rss campaign
@@ -1829,6 +1893,7 @@ export def "campaigns-actions-pause post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1836,7 +1901,7 @@ export def "campaigns-actions-pause post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/pause")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resume rss campaign
@@ -1852,6 +1917,7 @@ export def "campaigns-actions-resume post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1859,7 +1925,7 @@ export def "campaigns-actions-resume post" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/actions/resume")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend campaign
@@ -1875,6 +1941,7 @@ export def "campaigns-actions-create-resend post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --shortcut-type: string@shortcut-type-completer # Which campaign resend shortcut to use. Default is `to_non_openers`.
 ]: any -> record<id: string, web_id: int, parent_campaign_id: string, type: string, create_time: string, archive_url: string, long_archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, resendable: bool, recipients: record<list_id: string, list_name: string, segment_text: string, recipient_count: int, segment_opts: record<saved_segment_id: int, prebuilt_segment_id: string, match: string, conditions: list>>, settings: record<subject_line: string, preview_text: string, title: string, from_name: string, reply_to: string, use_conversation: bool, to_name: string, folder_id: string, authenticate: bool, auto_footer: bool, inline_css: bool, auto_tweet: bool, auto_fb_post: list<string>, fb_comments: bool, timewarp: bool, template_id: int, drag_and_drop: bool>, variate_settings: record<winning_combination_id: string, winning_campaign_id: string, winner_criteria: string, wait_time: int, test_size: int, subject_lines: list<string>, send_times: list<string>, from_names: list<string>, reply_to_addresses: list<string>, contents: list<string>, combinations: list<record>>, tracking: record<opens: bool, html_clicks: bool, text_clicks: bool, goal_tracking: bool, ecomm360: bool, google_analytics: string, clicktale: string, salesforce: record<campaign: bool, notes: bool>, capsule: record<notes: bool>>, rss_opts: record<feed_url: string, frequency: string, schedule: record<hour: int, daily_send: record, weekly_send_day: string, monthly_send_date: float>, last_sent: string, constrain_rss_img: bool>, ab_split_opts: record<split_test: string, pick_winner: string, wait_units: string, wait_time: int, split_size: int, from_name_a: string, from_name_b: string, reply_email_a: string, reply_email_b: string, subject_a: string, subject_b: string, send_time_a: string, send_time_b: string, send_time_winner: string>, social_card: record<image_url: string, description: string, title: string>, report_summary: record<opens: int, unique_opens: int, open_rate: float, clicks: int, subscriber_clicks: int, click_rate: float, ecommerce: record<total_orders: int, total_spent: float, total_revenue: float>>, delivery_status: record<enabled: bool, can_cancel: bool, status: string, emails_sent: int, emails_canceled: int>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -1886,7 +1953,7 @@ export def "campaigns-actions-create-resend post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign content
@@ -1902,6 +1969,7 @@ export def "campaigns-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1912,7 +1980,7 @@ export def "campaigns-content get" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set campaign content
@@ -1931,6 +1999,7 @@ export def "campaigns-content put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plain-text: string # The plain-text portion of the campaign. If left unspecified, we'll generate this automatically.
   --html: string # The raw HTML for the campaign.
@@ -1947,7 +2016,7 @@ export def "campaigns-content put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List campaign feedback
@@ -1963,6 +2032,7 @@ export def "campaigns-feedback list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -1973,7 +2043,7 @@ export def "campaigns-feedback list" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/feedback" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add campaign feedback
@@ -1989,6 +2059,7 @@ export def "campaigns-feedback post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --block-id: int # The block id for the editable block that the feedback addresses.
   message: string # The content of the feedback.
@@ -2002,7 +2073,7 @@ export def "campaigns-feedback post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign feedback message
@@ -2019,6 +2090,7 @@ export def "campaigns-feedback get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2029,7 +2101,7 @@ export def "campaigns-feedback get" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/feedback/($feedback_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update campaign feedback message
@@ -2046,6 +2118,7 @@ export def "campaigns-feedback patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --block-id: int # The block id for the editable block that the feedback addresses.
   --message: string # The content of the feedback.
@@ -2059,7 +2132,7 @@ export def "campaigns-feedback patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete campaign feedback message
@@ -2076,6 +2149,7 @@ export def "campaigns-feedback delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2083,7 +2157,7 @@ export def "campaigns-feedback delete" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/feedback/($feedback_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign send checklist
@@ -2099,6 +2173,7 @@ export def "campaigns-send-checklist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2109,7 +2184,7 @@ export def "campaigns-send-checklist get" [
   let full_url = (build-url $base $"/campaigns/($campaign_id)/send-checklist" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List connected sites
@@ -2124,6 +2199,7 @@ export def "connected-sites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2136,7 +2212,7 @@ export def "connected-sites list" [
   let full_url = (build-url $base "/connected-sites" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add connected site
@@ -2151,6 +2227,7 @@ export def "connected-sites post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   foreign_id: string # The unique identifier for the site. (e.g. MC001)
   domain: string # The connected site domain. (e.g. example.com)
@@ -2163,7 +2240,7 @@ export def "connected-sites post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get connected site
@@ -2179,6 +2256,7 @@ export def "connected-sites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2189,7 +2267,7 @@ export def "connected-sites get" [
   let full_url = (build-url $base $"/connected-sites/($connected_site_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete connected site
@@ -2205,6 +2283,7 @@ export def "connected-sites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2212,7 +2291,7 @@ export def "connected-sites delete" [
   let full_url = (build-url $base $"/connected-sites/($connected_site_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify connected site script
@@ -2228,6 +2307,7 @@ export def "connected-sites-actions-verify-script-installation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2235,7 +2315,7 @@ export def "connected-sites-actions-verify-script-installation post" [
   let full_url = (build-url $base $"/connected-sites/($connected_site_id)/actions/verify-script-installation")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable pixel for connected site
@@ -2251,6 +2331,7 @@ export def "connected-sites-actions-enable-pixel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2258,7 +2339,7 @@ export def "connected-sites-actions-enable-pixel post" [
   let full_url = (build-url $base $"/connected-sites/($connected_site_id)/actions/enable-pixel")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable pixel for connected site
@@ -2274,6 +2355,7 @@ export def "connected-sites-actions-disable-pixel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2281,7 +2363,7 @@ export def "connected-sites-actions-disable-pixel post" [
   let full_url = (build-url $base $"/connected-sites/($connected_site_id)/actions/disable-pixel")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List conversations
@@ -2298,6 +2380,7 @@ export def "conversations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2313,7 +2396,7 @@ export def "conversations list" [
   let full_url = (build-url $base "/conversations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get conversation
@@ -2331,6 +2414,7 @@ export def "conversations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2341,7 +2425,7 @@ export def "conversations get" [
   let full_url = (build-url $base $"/conversations/($conversation_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List messages
@@ -2359,6 +2443,7 @@ export def "conversations-messages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2372,7 +2457,7 @@ export def "conversations-messages list" [
   let full_url = (build-url $base $"/conversations/($conversation_id)/messages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get message
@@ -2391,6 +2476,7 @@ export def "conversations-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2401,7 +2487,7 @@ export def "conversations-messages get" [
   let full_url = (build-url $base $"/conversations/($conversation_id)/messages/($message_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customer Journeys API trigger for a contact
@@ -2418,6 +2504,7 @@ export def "customer-journeys-journeys-steps-actions-trigger post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email_address: string # The list member's email address.
 ]: any -> record<type: string, title: string, status: int, detail: string, instance: string> {
@@ -2429,7 +2516,7 @@ export def "customer-journeys-journeys-steps-actions-trigger post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List stored files
@@ -2444,6 +2531,7 @@ export def "file-manager-files list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2462,7 +2550,7 @@ export def "file-manager-files list" [
   let full_url = (build-url $base "/file-manager/files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add file
@@ -2477,6 +2565,7 @@ export def "file-manager-files post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --folder-id: int # The id of the folder.
   name: string # The name of the file.
@@ -2490,7 +2579,7 @@ export def "file-manager-files post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get file
@@ -2506,6 +2595,7 @@ export def "file-manager-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2516,7 +2606,7 @@ export def "file-manager-files get" [
   let full_url = (build-url $base $"/file-manager/files/($file_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update file
@@ -2532,6 +2622,7 @@ export def "file-manager-files patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --folder-id: int # The id of the folder. Setting `folder_id` to `0` will remove a file from its current folder.
   --name: string # The name of the file.
@@ -2544,7 +2635,7 @@ export def "file-manager-files patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete file
@@ -2560,6 +2651,7 @@ export def "file-manager-files delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2567,7 +2659,7 @@ export def "file-manager-files delete" [
   let full_url = (build-url $base $"/file-manager/files/($file_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List folders
@@ -2582,6 +2674,7 @@ export def "file-manager-folders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2597,7 +2690,7 @@ export def "file-manager-folders list" [
   let full_url = (build-url $base "/file-manager/folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add folder
@@ -2612,6 +2705,7 @@ export def "file-manager-folders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the folder.
 ]: any -> record<id: int, name: string, file_count: int, created_at: string, created_by: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -2623,7 +2717,7 @@ export def "file-manager-folders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get folder
@@ -2639,6 +2733,7 @@ export def "file-manager-folders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2649,7 +2744,7 @@ export def "file-manager-folders get" [
   let full_url = (build-url $base $"/file-manager/folders/($folder_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update folder
@@ -2665,6 +2760,7 @@ export def "file-manager-folders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the folder.
 ]: any -> record<id: int, name: string, file_count: int, created_at: string, created_by: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -2676,7 +2772,7 @@ export def "file-manager-folders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete folder
@@ -2692,6 +2788,7 @@ export def "file-manager-folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2699,7 +2796,7 @@ export def "file-manager-folders delete" [
   let full_url = (build-url $base $"/file-manager/folders/($folder_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List stored files
@@ -2715,6 +2812,7 @@ export def "file-manager-folders-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2733,7 +2831,7 @@ export def "file-manager-folders-files get" [
   let full_url = (build-url $base $"/file-manager/folders/($folder_id)/files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get lists info
@@ -2748,6 +2846,7 @@ export def "lists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2769,7 +2868,7 @@ export def "lists list" [
   let full_url = (build-url $base "/lists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add list
@@ -2786,6 +2885,7 @@ export def "lists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the list.
   contact: record # [Contact information displayed in campaign footers](https://mailchimp.com/help/about-campaign-footers/) to comply with international spam laws. — shape: {company: string, address1: string, address2?: string, city: string, state?: string, zip?: string, country: string, phone?: string}
@@ -2806,7 +2906,7 @@ export def "lists post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get list info
@@ -2822,6 +2922,7 @@ export def "lists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2833,7 +2934,7 @@ export def "lists get" [
   let full_url = (build-url $base $"/lists/($list_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update lists
@@ -2851,6 +2952,7 @@ export def "lists patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the list.
   contact: record # [Contact information displayed in campaign footers](https://mailchimp.com/help/about-campaign-footers/) to comply with international spam laws. — shape: {company: string, address1: string, address2?: string, city: string, state: string, zip: string, country: string, phone?: string}
@@ -2871,7 +2973,7 @@ export def "lists patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete list
@@ -2887,6 +2989,7 @@ export def "lists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2894,7 +2997,7 @@ export def "lists delete" [
   let full_url = (build-url $base $"/lists/($list_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch subscribe or unsubscribe
@@ -2911,6 +3014,7 @@ export def "lists post-by-list_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   --skip-duplicate-check: oneof<nothing, bool> # If skip_duplicate_check is true, we will ignore duplicates sent in the request when using the batch sub/unsub on the lists endpoint. The status of the first appearance in the request will be saved. This defaults to false.
@@ -2927,7 +3031,7 @@ export def "lists post-by-list_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List abuse reports
@@ -2943,6 +3047,7 @@ export def "lists-abuse-reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2955,7 +3060,7 @@ export def "lists-abuse-reports list" [
   let full_url = (build-url $base $"/lists/($list_id)/abuse-reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get abuse report
@@ -2972,6 +3077,7 @@ export def "lists-abuse-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -2984,7 +3090,7 @@ export def "lists-abuse-reports get" [
   let full_url = (build-url $base $"/lists/($list_id)/abuse-reports/($report_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recent activity
@@ -3000,6 +3106,7 @@ export def "lists-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
@@ -3012,7 +3119,7 @@ export def "lists-activity get" [
   let full_url = (build-url $base $"/lists/($list_id)/activity" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List top email clients
@@ -3028,6 +3135,7 @@ export def "lists-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3038,7 +3146,7 @@ export def "lists-clients get" [
   let full_url = (build-url $base $"/lists/($list_id)/clients" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List growth history data
@@ -3054,6 +3162,7 @@ export def "lists-growth-history list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3068,7 +3177,7 @@ export def "lists-growth-history list" [
   let full_url = (build-url $base $"/lists/($list_id)/growth-history" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get growth history by month
@@ -3085,6 +3194,7 @@ export def "lists-growth-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3095,7 +3205,7 @@ export def "lists-growth-history get" [
   let full_url = (build-url $base $"/lists/($list_id)/growth-history/($month)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List interest categories
@@ -3111,6 +3221,7 @@ export def "lists-interest-categories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3126,7 +3237,7 @@ export def "lists-interest-categories list" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add interest category
@@ -3142,6 +3253,7 @@ export def "lists-interest-categories post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   title: string # The text description of this category. This field appears on signup forms and is often phrased as a question.
   --display-order: int # The order that the categories are displayed in the list. Lower numbers display first.
@@ -3155,7 +3267,7 @@ export def "lists-interest-categories post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get interest category info
@@ -3172,6 +3284,7 @@ export def "lists-interest-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3182,7 +3295,7 @@ export def "lists-interest-categories get" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories/($interest_category_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update interest category
@@ -3199,6 +3312,7 @@ export def "lists-interest-categories patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   title: string # The text description of this category. This field appears on signup forms and is often phrased as a question.
   --display-order: int # The order that the categories are displayed in the list. Lower numbers display first.
@@ -3212,7 +3326,7 @@ export def "lists-interest-categories patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete interest category
@@ -3229,6 +3343,7 @@ export def "lists-interest-categories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3236,7 +3351,7 @@ export def "lists-interest-categories delete" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories/($interest_category_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List interests in category
@@ -3253,6 +3368,7 @@ export def "lists-interest-categories-interests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3265,7 +3381,7 @@ export def "lists-interest-categories-interests list" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories/($interest_category_id)/interests" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add interest in category
@@ -3282,6 +3398,7 @@ export def "lists-interest-categories-interests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the interest. This can be shown publicly on a subscription form.
   --display-order: int # The display order for interests.
@@ -3294,7 +3411,7 @@ export def "lists-interest-categories-interests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get interest in category
@@ -3312,6 +3429,7 @@ export def "lists-interest-categories-interests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3322,7 +3440,7 @@ export def "lists-interest-categories-interests get" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories/($interest_category_id)/interests/($interest_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update interest in category
@@ -3340,6 +3458,7 @@ export def "lists-interest-categories-interests patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the interest. This can be shown publicly on a subscription form.
   --display-order: int # The display order for interests.
@@ -3352,7 +3471,7 @@ export def "lists-interest-categories-interests patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete interest in category
@@ -3370,6 +3489,7 @@ export def "lists-interest-categories-interests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3377,7 +3497,7 @@ export def "lists-interest-categories-interests delete" [
   let full_url = (build-url $base $"/lists/($list_id)/interest-categories/($interest_category_id)/interests/($interest_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List segments
@@ -3393,6 +3513,7 @@ export def "lists-segments previewASegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3414,7 +3535,7 @@ export def "lists-segments previewASegment" [
   let full_url = (build-url $base $"/lists/($list_id)/segments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add segment
@@ -3431,6 +3552,7 @@ export def "lists-segments post-by-list_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the segment.
   --static-segment: list # An array of emails to be used for a static segment. Any emails provided that are not present on the list will be ignored. Passing an empty array will create a static segment without any subscribers. This field cannot be provided with the options field.
@@ -3444,7 +3566,7 @@ export def "lists-segments post-by-list_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get segment info
@@ -3461,6 +3583,7 @@ export def "lists-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3474,7 +3597,7 @@ export def "lists-segments get" [
   let full_url = (build-url $base $"/lists/($list_id)/segments/($segment_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete segment
@@ -3491,6 +3614,7 @@ export def "lists-segments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3498,7 +3622,7 @@ export def "lists-segments delete" [
   let full_url = (build-url $base $"/lists/($list_id)/segments/($segment_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update segment
@@ -3516,6 +3640,7 @@ export def "lists-segments patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the segment.
   --static-segment: list # An array of emails to be used for a static segment. Any emails provided that are not present on the list will be ignored. Passing an empty array for an existing static segment will reset that segment and remove all members. This field cannot be provided with the `options` field.
@@ -3529,7 +3654,7 @@ export def "lists-segments patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch add or remove members
@@ -3546,6 +3671,7 @@ export def "lists-segments post-by-list_id-segment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members-to-add: list # An array of emails to be used for a static segment. Any emails provided that are not present on the list will be ignored. A maximum of 500 members can be sent.
   --members-to-remove: list # An array of emails to be used for a static segment. Any emails provided that are not present on the list will be ignored. A maximum of 500 members can be sent.
@@ -3558,7 +3684,7 @@ export def "lists-segments post-by-list_id-segment_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List members in segment
@@ -3575,6 +3701,7 @@ export def "lists-segments-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3590,7 +3717,7 @@ export def "lists-segments-members get" [
   let full_url = (build-url $base $"/lists/($list_id)/segments/($segment_id)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add member to segment
@@ -3607,6 +3734,7 @@ export def "lists-segments-members post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email_address: string # Email address for a subscriber.
 ]: any -> record<id: string, email_address: string, full_name: string, unique_email_id: string, email_type: string, status: string, merge_fields: record, interests: record, stats: record<avg_open_rate: float, avg_click_rate: float>, ip_signup: string, timestamp_signup: string, ip_opt: string, timestamp_opt: string, member_rating: int, last_changed: string, language: string, vip: bool, email_client: string, location: record<latitude: float, longitude: float, gmtoff: int, dstoff: int, country_code: string, timezone: string>, last_note: record<note_id: int, created_at: string, created_by: string, note: string>, list_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -3618,7 +3746,7 @@ export def "lists-segments-members post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove list member from segment
@@ -3636,6 +3764,7 @@ export def "lists-segments-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3643,7 +3772,7 @@ export def "lists-segments-members delete" [
   let full_url = (build-url $base $"/lists/($list_id)/segments/($segment_id)/members/($subscriber_hash)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for tags on a list by name.
@@ -3659,6 +3788,7 @@ export def "lists-tag-search searchTagsByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The search query used to filter tags.  The search query will be compared to each tag as a prefix, so all tags that have a name starting with this field will be returned.
 ]: nothing -> record<tags: table<id: int, name: string>, total_items: int> {
@@ -3668,7 +3798,7 @@ export def "lists-tag-search searchTagsByName" [
   let full_url = (build-url $base $"/lists/($list_id)/tag-search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List members info
@@ -3684,6 +3814,7 @@ export def "lists-members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3711,7 +3842,7 @@ export def "lists-members list" [
   let full_url = (build-url $base $"/lists/($list_id)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add member to list
@@ -3729,6 +3860,7 @@ export def "lists-members post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   email_address: string # Email address for a subscriber.
@@ -3755,7 +3887,7 @@ export def "lists-members post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get member info
@@ -3772,6 +3904,7 @@ export def "lists-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3782,7 +3915,7 @@ export def "lists-members get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update list member
@@ -3801,6 +3934,7 @@ export def "lists-members put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   email_address: string # Email address for a subscriber. This value is required only if the email address is not already present on the list.
@@ -3827,7 +3961,7 @@ export def "lists-members put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update list member
@@ -3846,6 +3980,7 @@ export def "lists-members patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   --email-address: string # Email address for a subscriber.
@@ -3871,7 +4006,7 @@ export def "lists-members patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive list member
@@ -3888,6 +4023,7 @@ export def "lists-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3895,7 +4031,7 @@ export def "lists-members delete" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View recent activity 50
@@ -3912,6 +4048,7 @@ export def "lists-members-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3923,7 +4060,7 @@ export def "lists-members-activity get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/activity" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View recent activity
@@ -3940,6 +4077,7 @@ export def "lists-members-activity-feed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3953,7 +4091,7 @@ export def "lists-members-activity-feed get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/activity-feed" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List member tags
@@ -3970,6 +4108,7 @@ export def "lists-members-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -3982,7 +4121,7 @@ export def "lists-members-tags get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or remove member tags
@@ -4000,6 +4139,7 @@ export def "lists-members-tags post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tags: list # A list of tags assigned to the list member. — item shape: {name: string, status: "inactive"|"active"}
   --is-syncing: oneof<nothing, bool> # When is_syncing is true, automations based on the tags in the request will not fire
@@ -4012,7 +4152,7 @@ export def "lists-members-tags post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List member events
@@ -4029,6 +4169,7 @@ export def "lists-members-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
@@ -4041,7 +4182,7 @@ export def "lists-members-events get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add event
@@ -4058,6 +4199,7 @@ export def "lists-members-events post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name for this type of event ('purchased', 'visited', etc). Must be 2-30 characters in length
   --properties: record # An optional list of properties
@@ -4072,7 +4214,7 @@ export def "lists-members-events post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List member goal events
@@ -4089,6 +4231,7 @@ export def "lists-members-goals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4099,7 +4242,7 @@ export def "lists-members-goals get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/goals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List recent member notes
@@ -4116,6 +4259,7 @@ export def "lists-members-notes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sort-field: string@sort-field-completer-7 # Returns notes sorted by the specified field.
   --sort-dir: string@sort-dir-completer # Determines the order direction for sorted results.
@@ -4130,7 +4274,7 @@ export def "lists-members-notes list" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/notes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add member note
@@ -4147,6 +4291,7 @@ export def "lists-members-notes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --note: string # The content of the note. Note length is limited to 1,000 characters.
 ]: any -> record<id: int, created_at: string, created_by: string, updated_at: string, note: string, list_id: string, email_id: string, contact_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -4158,7 +4303,7 @@ export def "lists-members-notes post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get member note
@@ -4176,6 +4321,7 @@ export def "lists-members-notes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4186,7 +4332,7 @@ export def "lists-members-notes get" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/notes/($note_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update note
@@ -4204,6 +4350,7 @@ export def "lists-members-notes patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --note: string # The content of the note. Note length is limited to 1,000 characters.
 ]: any -> record<id: int, created_at: string, created_by: string, updated_at: string, note: string, list_id: string, email_id: string, contact_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -4215,7 +4362,7 @@ export def "lists-members-notes patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete note
@@ -4233,6 +4380,7 @@ export def "lists-members-notes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4240,7 +4388,7 @@ export def "lists-members-notes delete" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/notes/($note_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete list member
@@ -4257,6 +4405,7 @@ export def "lists-members-actions-delete-permanent post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4264,7 +4413,7 @@ export def "lists-members-actions-delete-permanent post" [
   let full_url = (build-url $base $"/lists/($list_id)/members/($subscriber_hash)/actions/delete-permanent")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List merge fields
@@ -4280,6 +4429,7 @@ export def "lists-merge-fields list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4294,7 +4444,7 @@ export def "lists-merge-fields list" [
   let full_url = (build-url $base $"/lists/($list_id)/merge-fields" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add merge field
@@ -4311,6 +4461,7 @@ export def "lists-merge-fields post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tag: string # The merge tag used for Mailchimp campaigns and [adding contact information](https://mailchimp.com/developer/marketing/docs/merge-fields/#add-merge-data-to-contacts).
   name: string # The name of the merge field (audience field).
@@ -4330,7 +4481,7 @@ export def "lists-merge-fields post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get merge field
@@ -4347,6 +4498,7 @@ export def "lists-merge-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
@@ -4357,7 +4509,7 @@ export def "lists-merge-fields get" [
   let full_url = (build-url $base $"/lists/($list_id)/merge-fields/($merge_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update merge field
@@ -4375,6 +4527,7 @@ export def "lists-merge-fields patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tag: string # The merge tag used for Mailchimp campaigns and [adding contact information](https://mailchimp.com/developer/marketing/docs/merge-fields/#add-merge-data-to-contacts).
   name: string # The name of the merge field (audience field).
@@ -4393,7 +4546,7 @@ export def "lists-merge-fields patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete merge field
@@ -4410,6 +4563,7 @@ export def "lists-merge-fields delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4417,7 +4571,7 @@ export def "lists-merge-fields delete" [
   let full_url = (build-url $base $"/lists/($list_id)/merge-fields/($merge_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webhooks
@@ -4433,6 +4587,7 @@ export def "lists-webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<webhooks: table<id: string, url: string, events: record, sources: record, list_id: string, _links: list>, list_id: string, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4440,7 +4595,7 @@ export def "lists-webhooks list" [
   let full_url = (build-url $base $"/lists/($list_id)/webhooks")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add webhook
@@ -4458,6 +4613,7 @@ export def "lists-webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
   --events: record # The events that can trigger the webhook and whether they are enabled. — shape: {subscribe?: bool, unsubscribe?: bool, profile?: bool, cleaned?: bool, upemail?: bool, campaign?: bool, sms_subscribe?: bool, sms_unsubscribe?: bool, upsms?: bool, sms_campaign?: bool}
@@ -4471,7 +4627,7 @@ export def "lists-webhooks post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhook info
@@ -4488,6 +4644,7 @@ export def "lists-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, url: string, events: record<subscribe: bool, unsubscribe: bool, profile: bool, cleaned: bool, upemail: bool, campaign: bool, sms_subscribe: bool, sms_unsubscribe: bool, upsms: bool, sms_campaign: bool>, sources: record<user: bool, admin: bool, api: bool>, list_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4495,7 +4652,7 @@ export def "lists-webhooks get" [
   let full_url = (build-url $base $"/lists/($list_id)/webhooks/($webhook_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete webhook
@@ -4512,6 +4669,7 @@ export def "lists-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4519,7 +4677,7 @@ export def "lists-webhooks delete" [
   let full_url = (build-url $base $"/lists/($list_id)/webhooks/($webhook_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -4538,6 +4696,7 @@ export def "lists-webhooks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
   --events: record # The events that can trigger the webhook and whether they are enabled. — shape: {subscribe?: bool, unsubscribe?: bool, profile?: bool, cleaned?: bool, upemail?: bool, campaign?: bool, sms_subscribe?: bool, sms_unsubscribe?: bool, upsms?: bool, sms_campaign?: bool}
@@ -4551,7 +4710,7 @@ export def "lists-webhooks patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List signup forms
@@ -4567,6 +4726,7 @@ export def "lists-signup-forms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<signup_forms: table<header: record, contents: list, styles: list, signup_form_url: string, list_id: string, _links: list>, list_id: string, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4574,7 +4734,7 @@ export def "lists-signup-forms get" [
   let full_url = (build-url $base $"/lists/($list_id)/signup-forms")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customize signup form
@@ -4593,6 +4753,7 @@ export def "lists-signup-forms post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --header: record # Options for customizing your signup form header. — shape: {image_url?: string, text?: string, image_width?: string, image_height?: string, image_alt?: string, image_link?: string, image_align?: "none"|"left"|"center"|"right", image_border_width?: string, image_border_style?: "none"|"solid"|"dotted"|"dashed"|"double"|"groove"|"outset"|"inset"|"ridge", image_border_color?: string, image_target?: "_blank"|"null"}
   --contents: list # The signup form body content. — item shape: {section?: "signup_message"|"unsub_message"|"signup_thank_you_title", value?: string}
@@ -4606,7 +4767,7 @@ export def "lists-signup-forms post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List locations
@@ -4622,6 +4783,7 @@ export def "lists-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4632,7 +4794,7 @@ export def "lists-locations get" [
   let full_url = (build-url $base $"/lists/($list_id)/locations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about all surveys for a list
@@ -4648,6 +4810,7 @@ export def "lists-surveys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4655,7 +4818,7 @@ export def "lists-surveys list" [
   let full_url = (build-url $base $"/lists/($list_id)/surveys")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey
@@ -4672,6 +4835,7 @@ export def "lists-surveys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4679,7 +4843,7 @@ export def "lists-surveys get" [
   let full_url = (build-url $base $"/lists/($list_id)/surveys/($survey_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Publish a Survey
@@ -4696,6 +4860,7 @@ export def "lists-surveys-actions-publish post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4703,7 +4868,7 @@ export def "lists-surveys-actions-publish post" [
   let full_url = (build-url $base $"/lists/($list_id)/surveys/($survey_id)/actions/publish")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpublish a Survey
@@ -4720,6 +4885,7 @@ export def "lists-surveys-actions-unpublish post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4727,7 +4893,7 @@ export def "lists-surveys-actions-unpublish post" [
   let full_url = (build-url $base $"/lists/($list_id)/surveys/($survey_id)/actions/unpublish")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Survey Campaign
@@ -4744,6 +4910,7 @@ export def "lists-surveys-actions-create-email post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, web_id: int, parent_campaign_id: string, type: string, create_time: string, archive_url: string, long_archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, resendable: bool, recipients: record<list_id: string, list_name: string, segment_text: string, recipient_count: int, segment_opts: record<saved_segment_id: int, prebuilt_segment_id: string, match: string, conditions: list>>, settings: record<subject_line: string, preview_text: string, title: string, from_name: string, reply_to: string, use_conversation: bool, to_name: string, folder_id: string, authenticate: bool, auto_footer: bool, inline_css: bool, auto_tweet: bool, auto_fb_post: list<string>, fb_comments: bool, timewarp: bool, template_id: int, drag_and_drop: bool>, variate_settings: record<winning_combination_id: string, winning_campaign_id: string, winner_criteria: string, wait_time: int, test_size: int, subject_lines: list<string>, send_times: list<string>, from_names: list<string>, reply_to_addresses: list<string>, contents: list<string>, combinations: list<record>>, tracking: record<opens: bool, html_clicks: bool, text_clicks: bool, goal_tracking: bool, ecomm360: bool, google_analytics: string, clicktale: string, salesforce: record<campaign: bool, notes: bool>, capsule: record<notes: bool>>, rss_opts: record<feed_url: string, frequency: string, schedule: record<hour: int, daily_send: record, weekly_send_day: string, monthly_send_date: float>, last_sent: string, constrain_rss_img: bool>, ab_split_opts: record<split_test: string, pick_winner: string, wait_units: string, wait_time: int, split_size: int, from_name_a: string, from_name_b: string, reply_email_a: string, reply_email_b: string, subject_a: string, subject_b: string, send_time_a: string, send_time_b: string, send_time_winner: string>, social_card: record<image_url: string, description: string, title: string>, report_summary: record<opens: int, unique_opens: int, open_rate: float, clicks: int, subscriber_clicks: int, click_rate: float, ecommerce: record<total_orders: int, total_spent: float, total_revenue: float>>, delivery_status: record<enabled: bool, can_cancel: bool, status: string, emails_sent: int, emails_canceled: int>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4751,7 +4918,7 @@ export def "lists-surveys-actions-create-email post" [
   let full_url = (build-url $base $"/lists/($list_id)/surveys/($survey_id)/actions/create-email")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List landing pages
@@ -4766,6 +4933,7 @@ export def "landing-pages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sort-dir: string@sort-dir-completer # Determines the order direction for sorted results.
   --sort-field: string@sort-field-completer # Returns files sorted by the specified field.
@@ -4779,7 +4947,7 @@ export def "landing-pages list" [
   let full_url = (build-url $base "/landing-pages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add landing page
@@ -4795,6 +4963,7 @@ export def "landing-pages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --use-default-list: oneof<nothing, bool> # Will create the Landing Page using the account's Default List instead of requiring a list_id.
   --name: string # The name of this landing page.
@@ -4815,7 +4984,7 @@ export def "landing-pages post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get landing page info
@@ -4831,6 +5000,7 @@ export def "landing-pages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4841,7 +5011,7 @@ export def "landing-pages get" [
   let full_url = (build-url $base $"/landing-pages/($page_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update landing page
@@ -4858,6 +5028,7 @@ export def "landing-pages patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of this landing page.
   --title: string # The title of this landing page seen in the browser's title bar.
@@ -4874,7 +5045,7 @@ export def "landing-pages patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete landing page
@@ -4890,6 +5061,7 @@ export def "landing-pages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4897,7 +5069,7 @@ export def "landing-pages delete" [
   let full_url = (build-url $base $"/landing-pages/($page_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Publish landing page
@@ -4913,6 +5085,7 @@ export def "landing-pages-actions-publish post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4920,7 +5093,7 @@ export def "landing-pages-actions-publish post" [
   let full_url = (build-url $base $"/landing-pages/($page_id)/actions/publish")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpublish landing page
@@ -4936,6 +5109,7 @@ export def "landing-pages-actions-unpublish post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4943,7 +5117,7 @@ export def "landing-pages-actions-unpublish post" [
   let full_url = (build-url $base $"/landing-pages/($page_id)/actions/unpublish")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get landing page content
@@ -4959,6 +5133,7 @@ export def "landing-pages-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4969,7 +5144,7 @@ export def "landing-pages-content get" [
   let full_url = (build-url $base $"/landing-pages/($page_id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign reports
@@ -4984,6 +5159,7 @@ export def "reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -4999,7 +5175,7 @@ export def "reports list" [
   let full_url = (build-url $base "/reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign report
@@ -5015,6 +5191,7 @@ export def "reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5025,7 +5202,7 @@ export def "reports get" [
   let full_url = (build-url $base $"/reports/($campaign_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List abuse reports
@@ -5041,6 +5218,7 @@ export def "reports-abuse-reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5051,7 +5229,7 @@ export def "reports-abuse-reports list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/abuse-reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get abuse report
@@ -5068,6 +5246,7 @@ export def "reports-abuse-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5078,7 +5257,7 @@ export def "reports-abuse-reports get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/abuse-reports/($report_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign feedback
@@ -5094,6 +5273,7 @@ export def "reports-advice get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5104,7 +5284,7 @@ export def "reports-advice get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/advice" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign details
@@ -5120,6 +5300,7 @@ export def "reports-click-details list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5134,7 +5315,7 @@ export def "reports-click-details list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/click-details" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign link details
@@ -5151,6 +5332,7 @@ export def "reports-click-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5161,7 +5343,7 @@ export def "reports-click-details get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/click-details/($link_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List clicked link subscribers
@@ -5178,6 +5360,7 @@ export def "reports-click-details-members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5190,7 +5373,7 @@ export def "reports-click-details-members list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/click-details/($link_id)/members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get clicked link subscriber
@@ -5208,6 +5391,7 @@ export def "reports-click-details-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5218,7 +5402,7 @@ export def "reports-click-details-members get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/click-details/($link_id)/members/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign open details
@@ -5234,6 +5418,7 @@ export def "reports-open-details list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5249,7 +5434,7 @@ export def "reports-open-details list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/open-details" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get opened campaign subscriber
@@ -5266,6 +5451,7 @@ export def "reports-open-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5276,7 +5462,7 @@ export def "reports-open-details get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/open-details/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List domain performance stats
@@ -5292,6 +5478,7 @@ export def "reports-domain-performance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5302,7 +5489,7 @@ export def "reports-domain-performance get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/domain-performance" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List EepURL activity
@@ -5318,6 +5505,7 @@ export def "reports-eepurl get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5328,7 +5516,7 @@ export def "reports-eepurl get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/eepurl" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List email activity
@@ -5344,6 +5532,7 @@ export def "reports-email-activity list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5357,7 +5546,7 @@ export def "reports-email-activity list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/email-activity" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subscriber email activity
@@ -5374,6 +5563,7 @@ export def "reports-email-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5385,7 +5575,7 @@ export def "reports-email-activity get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/email-activity/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List top open activities
@@ -5401,6 +5591,7 @@ export def "reports-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5413,7 +5604,7 @@ export def "reports-locations get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/locations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign recipients
@@ -5429,6 +5620,7 @@ export def "reports-sent-to list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5441,7 +5633,7 @@ export def "reports-sent-to list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/sent-to" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign recipient info
@@ -5458,6 +5650,7 @@ export def "reports-sent-to get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5468,7 +5661,7 @@ export def "reports-sent-to get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/sent-to/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List child campaign reports
@@ -5484,6 +5677,7 @@ export def "reports-sub-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5494,7 +5688,7 @@ export def "reports-sub-reports get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/sub-reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List unsubscribed members
@@ -5510,6 +5704,7 @@ export def "reports-unsubscribed list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5522,7 +5717,7 @@ export def "reports-unsubscribed list" [
   let full_url = (build-url $base $"/reports/($campaign_id)/unsubscribed" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get unsubscribed member
@@ -5539,6 +5734,7 @@ export def "reports-unsubscribed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5549,7 +5745,7 @@ export def "reports-unsubscribed get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/unsubscribed/($subscriber_hash)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaign product activity
@@ -5565,6 +5761,7 @@ export def "reports-ecommerce-product-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5578,7 +5775,7 @@ export def "reports-ecommerce-product-activity get" [
   let full_url = (build-url $base $"/reports/($campaign_id)/ecommerce-product-activity" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List templates
@@ -5593,6 +5790,7 @@ export def "templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5614,7 +5812,7 @@ export def "templates list" [
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add template
@@ -5629,6 +5827,7 @@ export def "templates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the template. (e.g. Freddie's Jokes)
   --folder-id: string # The id of the folder the template is currently in. (e.g. a4b830b)
@@ -5642,7 +5841,7 @@ export def "templates post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get template info
@@ -5658,6 +5857,7 @@ export def "templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5668,7 +5868,7 @@ export def "templates get" [
   let full_url = (build-url $base $"/templates/($template_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template
@@ -5684,6 +5884,7 @@ export def "templates patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the template. (e.g. Freddie's Jokes)
   --folder-id: string # The id of the folder the template is currently in. (e.g. a4b830b)
@@ -5697,7 +5898,7 @@ export def "templates patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete template
@@ -5713,6 +5914,7 @@ export def "templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5720,7 +5922,7 @@ export def "templates delete" [
   let full_url = (build-url $base $"/templates/($template_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View default content
@@ -5736,6 +5938,7 @@ export def "templates-default-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5746,7 +5949,7 @@ export def "templates-default-content get" [
   let full_url = (build-url $base $"/templates/($template_id)/default-content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List account orders
@@ -5761,6 +5964,7 @@ export def "ecommerce-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5777,7 +5981,7 @@ export def "ecommerce-orders get" [
   let full_url = (build-url $base "/ecommerce/orders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List stores
@@ -5792,6 +5996,7 @@ export def "ecommerce-stores list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5804,7 +6009,7 @@ export def "ecommerce-stores list" [
   let full_url = (build-url $base "/ecommerce/stores" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add store
@@ -5820,6 +6025,7 @@ export def "ecommerce-stores post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # The unique identifier for the store. (e.g. example_store)
   list_id: string # The unique identifier for the list associated with the store. The `list_id` for a specific store cannot change. (e.g. 1a2df69511)
@@ -5843,7 +6049,7 @@ export def "ecommerce-stores post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store info
@@ -5859,6 +6065,7 @@ export def "ecommerce-stores get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5869,7 +6076,7 @@ export def "ecommerce-stores get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update store
@@ -5886,6 +6093,7 @@ export def "ecommerce-stores patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the store. (e.g. Freddie's Cat Hat Emporium)
   --platform: string # The e-commerce platform of the store.
@@ -5907,7 +6115,7 @@ export def "ecommerce-stores patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete store
@@ -5923,6 +6131,7 @@ export def "ecommerce-stores delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5930,7 +6139,7 @@ export def "ecommerce-stores delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List carts
@@ -5946,6 +6155,7 @@ export def "ecommerce-stores-carts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -5958,7 +6168,7 @@ export def "ecommerce-stores-carts list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add cart
@@ -5976,6 +6186,7 @@ export def "ecommerce-stores-carts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the cart.
   customer: record # Information about a specific customer. For existing customers include only the `id` parameter in the `customer` object body. — shape: {id: string, email_address?: string, opt_in_status?: bool, company?: string, first_name?: string, last_name?: string, address?: record}
@@ -5994,7 +6205,7 @@ export def "ecommerce-stores-carts post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get cart info
@@ -6011,6 +6222,7 @@ export def "ecommerce-stores-carts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6021,7 +6233,7 @@ export def "ecommerce-stores-carts get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts/($cart_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update cart
@@ -6040,6 +6252,7 @@ export def "ecommerce-stores-carts patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --customer: record # Information about a specific customer. Orders for existing customers should include only the `id` parameter in the `customer` object body. — shape: {opt_in_status?: bool, company?: string, first_name?: string, last_name?: string, address?: record}
   --campaign-id: string # A string that uniquely identifies the campaign associated with a cart. (e.g. 839488a60b)
@@ -6057,7 +6270,7 @@ export def "ecommerce-stores-carts patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete cart
@@ -6074,6 +6287,7 @@ export def "ecommerce-stores-carts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6081,7 +6295,7 @@ export def "ecommerce-stores-carts delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts/($cart_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List cart line items
@@ -6098,6 +6312,7 @@ export def "ecommerce-stores-carts-lines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6110,7 +6325,7 @@ export def "ecommerce-stores-carts-lines list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts/($cart_id)/lines" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add cart line item
@@ -6127,6 +6342,7 @@ export def "ecommerce-stores-carts-lines post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the cart line item.
   product_id: string # A unique identifier for the product associated with the cart line item.
@@ -6142,7 +6358,7 @@ export def "ecommerce-stores-carts-lines post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get cart line item
@@ -6160,6 +6376,7 @@ export def "ecommerce-stores-carts-lines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6170,7 +6387,7 @@ export def "ecommerce-stores-carts-lines get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts/($cart_id)/lines/($line_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update cart line item
@@ -6188,6 +6405,7 @@ export def "ecommerce-stores-carts-lines patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --product-id: string # A unique identifier for the product associated with the cart line item.
   --product-variant-id: string # A unique identifier for the product variant associated with the cart line item.
@@ -6202,7 +6420,7 @@ export def "ecommerce-stores-carts-lines patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete cart line item
@@ -6220,6 +6438,7 @@ export def "ecommerce-stores-carts-lines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6227,7 +6446,7 @@ export def "ecommerce-stores-carts-lines delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/carts/($cart_id)/lines/($line_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List customers
@@ -6243,6 +6462,7 @@ export def "ecommerce-stores-customers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6256,7 +6476,7 @@ export def "ecommerce-stores-customers list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/customers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add customer
@@ -6273,6 +6493,7 @@ export def "ecommerce-stores-customers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the customer. Limited to 50 characters.
   --email-address: string # The customer's email address.
@@ -6291,7 +6512,7 @@ export def "ecommerce-stores-customers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customer info
@@ -6308,6 +6529,7 @@ export def "ecommerce-stores-customers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6318,7 +6540,7 @@ export def "ecommerce-stores-customers get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/customers/($customer_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update customer
@@ -6336,6 +6558,7 @@ export def "ecommerce-stores-customers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the customer. Limited to 50 characters.
   --email-address: string # The customer's email address.
@@ -6354,7 +6577,7 @@ export def "ecommerce-stores-customers put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update customer
@@ -6372,6 +6595,7 @@ export def "ecommerce-stores-customers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --opt-in-status: oneof<nothing, bool> # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
   --company: string # The customer's company.
@@ -6387,7 +6611,7 @@ export def "ecommerce-stores-customers patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete customer
@@ -6404,6 +6628,7 @@ export def "ecommerce-stores-customers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6411,7 +6636,7 @@ export def "ecommerce-stores-customers delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/customers/($customer_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List promo rules
@@ -6427,6 +6652,7 @@ export def "ecommerce-stores-promo-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6439,7 +6665,7 @@ export def "ecommerce-stores-promo-rules list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add promo rule
@@ -6455,6 +6681,7 @@ export def "ecommerce-stores-promo-rules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the promo rule. If Ecommerce platform does not support promo rule, use promo code id as promo rule id. Restricted to UTF-8 characters with max length 50.
   --title: string # The title that will show up in promotion campaign. Restricted to UTF-8 characters with max length of 100 bytes. (e.g. 50% off Total Order)
@@ -6476,7 +6703,7 @@ export def "ecommerce-stores-promo-rules post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get promo rule
@@ -6493,6 +6720,7 @@ export def "ecommerce-stores-promo-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6503,7 +6731,7 @@ export def "ecommerce-stores-promo-rules get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules/($promo_rule_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update promo rule
@@ -6520,6 +6748,7 @@ export def "ecommerce-stores-promo-rules patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # The title that will show up in promotion campaign. Restricted to UTF-8 characters with max length of 100 bytes. (e.g. 50% off Total Order)
   --description: string # The description of a promotion restricted to UTF-8 characters with max length 255. (e.g. Save BIG during our summer sale!)
@@ -6540,7 +6769,7 @@ export def "ecommerce-stores-promo-rules patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete promo rule
@@ -6557,6 +6786,7 @@ export def "ecommerce-stores-promo-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6564,7 +6794,7 @@ export def "ecommerce-stores-promo-rules delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules/($promo_rule_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List promo codes
@@ -6581,6 +6811,7 @@ export def "ecommerce-stores-promo-rules-promo-codes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6593,7 +6824,7 @@ export def "ecommerce-stores-promo-rules-promo-codes list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules/($promo_rule_id)/promo-codes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add promo code
@@ -6610,6 +6841,7 @@ export def "ecommerce-stores-promo-rules-promo-codes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the promo code. Restricted to UTF-8 characters with max length 50.
   code: string # The discount code. Restricted to UTF-8 characters with max length 50. (e.g. summersale)
@@ -6627,7 +6859,7 @@ export def "ecommerce-stores-promo-rules-promo-codes post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get promo code
@@ -6645,6 +6877,7 @@ export def "ecommerce-stores-promo-rules-promo-codes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6655,7 +6888,7 @@ export def "ecommerce-stores-promo-rules-promo-codes get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules/($promo_rule_id)/promo-codes/($promo_code_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update promo code
@@ -6673,6 +6906,7 @@ export def "ecommerce-stores-promo-rules-promo-codes patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string # The discount code. Restricted to UTF-8 characters with max length 50. (e.g. summersale)
   --redemption-url: string # The url that should be used in the promotion campaign restricted to UTF-8 characters with max length 2000. (e.g. A url that applies promo code directly at checkout or a url that points to sale page or store url)
@@ -6689,7 +6923,7 @@ export def "ecommerce-stores-promo-rules-promo-codes patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete promo code
@@ -6707,6 +6941,7 @@ export def "ecommerce-stores-promo-rules-promo-codes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6714,7 +6949,7 @@ export def "ecommerce-stores-promo-rules-promo-codes delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/promo-rules/($promo_rule_id)/promo-codes/($promo_code_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List orders
@@ -6730,6 +6965,7 @@ export def "ecommerce-stores-orders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6746,7 +6982,7 @@ export def "ecommerce-stores-orders list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add order
@@ -6768,6 +7004,7 @@ export def "ecommerce-stores-orders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the order.
   customer: record # Information about a specific customer. For existing customers include only the `id` parameter in the `customer` object body. — shape: {id: string, email_address?: string, opt_in_status?: bool, company?: string, first_name?: string, last_name?: string, address?: record}
@@ -6803,7 +7040,7 @@ export def "ecommerce-stores-orders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get order info
@@ -6820,6 +7057,7 @@ export def "ecommerce-stores-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6830,7 +7068,7 @@ export def "ecommerce-stores-orders get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders/($order_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update order
@@ -6853,6 +7091,7 @@ export def "ecommerce-stores-orders put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the order.
   --customer: record # Information about a specific customer. For existing customers include only the `id` parameter in the `customer` object body. — shape: {id: string, email_address?: string, opt_in_status?: bool, company?: string, first_name?: string, last_name?: string, address?: record}
@@ -6888,7 +7127,7 @@ export def "ecommerce-stores-orders put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update order
@@ -6911,6 +7150,7 @@ export def "ecommerce-stores-orders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --customer: record # Information about a specific customer. Orders for existing customers should include only the `id` parameter in the `customer` object body. — shape: {opt_in_status?: bool, company?: string, first_name?: string, last_name?: string, address?: record}
   --campaign-id: string # A string that uniquely identifies the campaign associated with an order. (e.g. 839488a60b)
@@ -6945,7 +7185,7 @@ export def "ecommerce-stores-orders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete order
@@ -6962,6 +7202,7 @@ export def "ecommerce-stores-orders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6969,7 +7210,7 @@ export def "ecommerce-stores-orders delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders/($order_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List order line items
@@ -6986,6 +7227,7 @@ export def "ecommerce-stores-orders-lines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -6998,7 +7240,7 @@ export def "ecommerce-stores-orders-lines list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders/($order_id)/lines" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add order line item
@@ -7016,6 +7258,7 @@ export def "ecommerce-stores-orders-lines post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the order line item.
   product_id: string # A unique identifier for the product associated with the order line item.
@@ -7033,7 +7276,7 @@ export def "ecommerce-stores-orders-lines post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get order line item
@@ -7051,6 +7294,7 @@ export def "ecommerce-stores-orders-lines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7061,7 +7305,7 @@ export def "ecommerce-stores-orders-lines get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders/($order_id)/lines/($line_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update order line item
@@ -7079,6 +7323,7 @@ export def "ecommerce-stores-orders-lines patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --product-id: string # A unique identifier for the product associated with the order line item.
   --product-variant-id: string # A unique identifier for the product variant associated with the order line item.
@@ -7094,7 +7339,7 @@ export def "ecommerce-stores-orders-lines patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete order line item
@@ -7112,6 +7357,7 @@ export def "ecommerce-stores-orders-lines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7119,7 +7365,7 @@ export def "ecommerce-stores-orders-lines delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/orders/($order_id)/lines/($line_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List product
@@ -7135,6 +7381,7 @@ export def "ecommerce-stores-products list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7147,7 +7394,7 @@ export def "ecommerce-stores-products list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add product
@@ -7165,6 +7412,7 @@ export def "ecommerce-stores-products post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the product.
   title: string # The title of a product. (e.g. Cat Hat)
@@ -7186,7 +7434,7 @@ export def "ecommerce-stores-products post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product info
@@ -7203,6 +7451,7 @@ export def "ecommerce-stores-products get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7213,7 +7462,7 @@ export def "ecommerce-stores-products get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update product
@@ -7232,6 +7481,7 @@ export def "ecommerce-stores-products patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # The title of a product. (e.g. Cat Hat)
   --handle: string # The handle of a product. (e.g. cat-hat)
@@ -7252,7 +7502,7 @@ export def "ecommerce-stores-products patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update product
@@ -7271,6 +7521,7 @@ export def "ecommerce-stores-products put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the product.
   --title: string # The title of a product. (e.g. Cat Hat)
@@ -7292,7 +7543,7 @@ export def "ecommerce-stores-products put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete product
@@ -7309,6 +7560,7 @@ export def "ecommerce-stores-products delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7316,7 +7568,7 @@ export def "ecommerce-stores-products delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List product variants
@@ -7333,6 +7585,7 @@ export def "ecommerce-stores-products-variants list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7345,7 +7598,7 @@ export def "ecommerce-stores-products-variants list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/variants" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add product variant
@@ -7362,6 +7615,7 @@ export def "ecommerce-stores-products-variants post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the product variant.
   title: string # The title of a product variant. (e.g. Cat Hat)
@@ -7381,7 +7635,7 @@ export def "ecommerce-stores-products-variants post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product variant info
@@ -7399,6 +7653,7 @@ export def "ecommerce-stores-products-variants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7409,7 +7664,7 @@ export def "ecommerce-stores-products-variants get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/variants/($variant_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update product variant
@@ -7427,6 +7682,7 @@ export def "ecommerce-stores-products-variants put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the product variant.
   title: string # The title of a product variant. (e.g. Cat Hat)
@@ -7446,7 +7702,7 @@ export def "ecommerce-stores-products-variants put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update product variant
@@ -7464,6 +7720,7 @@ export def "ecommerce-stores-products-variants patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # The title of a product variant. (e.g. Cat Hat)
   --body-url: string # The URL for a product variant.
@@ -7482,7 +7739,7 @@ export def "ecommerce-stores-products-variants patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete product variant
@@ -7500,6 +7757,7 @@ export def "ecommerce-stores-products-variants delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7507,7 +7765,7 @@ export def "ecommerce-stores-products-variants delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/variants/($variant_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List product images
@@ -7524,6 +7782,7 @@ export def "ecommerce-stores-products-images list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7536,7 +7795,7 @@ export def "ecommerce-stores-products-images list" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/images" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add product image
@@ -7553,6 +7812,7 @@ export def "ecommerce-stores-products-images post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   id: string # A unique identifier for the product image.
   --body-url: string # The URL for a product image.
@@ -7566,7 +7826,7 @@ export def "ecommerce-stores-products-images post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product image info
@@ -7584,6 +7844,7 @@ export def "ecommerce-stores-products-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7594,7 +7855,7 @@ export def "ecommerce-stores-products-images get" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/images/($image_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update product image
@@ -7612,6 +7873,7 @@ export def "ecommerce-stores-products-images patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # A unique identifier for the product image.
   --body-url: string # The URL for a product image.
@@ -7625,7 +7887,7 @@ export def "ecommerce-stores-products-images patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete product image
@@ -7643,6 +7905,7 @@ export def "ecommerce-stores-products-images delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7650,7 +7913,7 @@ export def "ecommerce-stores-products-images delete" [
   let full_url = (build-url $base $"/ecommerce/stores/($store_id)/products/($product_id)/images/($image_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search campaigns
@@ -7665,6 +7928,7 @@ export def "search-campaigns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7676,7 +7940,7 @@ export def "search-campaigns get" [
   let full_url = (build-url $base "/search-campaigns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List SMS campaigns
@@ -7691,6 +7955,7 @@ export def "sms-campaigns list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7703,7 +7968,7 @@ export def "sms-campaigns list" [
   let full_url = (build-url $base "/sms-campaigns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add SMS campaign
@@ -7718,6 +7983,7 @@ export def "sms-campaigns post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the campaign.
   --list-id: int # The numeric ID of the list to send the campaign to.
@@ -7733,7 +7999,7 @@ export def "sms-campaigns post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SMS campaign info
@@ -7749,6 +8015,7 @@ export def "sms-campaigns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7759,7 +8026,7 @@ export def "sms-campaigns get" [
   let full_url = (build-url $base $"/sms-campaigns/($sms_campaign_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SMS campaign settings
@@ -7775,6 +8042,7 @@ export def "sms-campaigns patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the campaign.
   --folder-id: string # The ID of the folder to place this campaign in.
@@ -7789,7 +8057,7 @@ export def "sms-campaigns patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SMS campaign
@@ -7805,6 +8073,7 @@ export def "sms-campaigns delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7812,7 +8081,7 @@ export def "sms-campaigns delete" [
   let full_url = (build-url $base $"/sms-campaigns/($sms_campaign_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send SMS campaign
@@ -7828,6 +8097,7 @@ export def "sms-campaigns-actions-send post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7835,7 +8105,7 @@ export def "sms-campaigns-actions-send post" [
   let full_url = (build-url $base $"/sms-campaigns/($sms_campaign_id)/actions/send")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Schedule SMS campaign
@@ -7851,6 +8121,7 @@ export def "sms-campaigns-actions-schedule post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   schedule_time: string # The UTC date and time to schedule the campaign to send. (format: date-time)
 ]: any -> record<type: string, title: string, status: int, detail: string, instance: string> {
@@ -7862,7 +8133,7 @@ export def "sms-campaigns-actions-schedule post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel SMS campaign send
@@ -7878,6 +8149,7 @@ export def "sms-campaigns-actions-cancel-send post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7885,7 +8157,7 @@ export def "sms-campaigns-actions-cancel-send post" [
   let full_url = (build-url $base $"/sms-campaigns/($sms_campaign_id)/actions/cancel-send")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SMS campaign content
@@ -7901,6 +8173,7 @@ export def "sms-campaigns-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7911,7 +8184,7 @@ export def "sms-campaigns-content get" [
   let full_url = (build-url $base $"/sms-campaigns/($sms_campaign_id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set SMS campaign content
@@ -7928,6 +8201,7 @@ export def "sms-campaigns-content put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   message_body: string # The SMS message body.
   --media: list # Attached images or files. — item shape: {url?: string, mime_type?: string}
@@ -7940,7 +8214,7 @@ export def "sms-campaigns-content put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search members
@@ -7955,6 +8229,7 @@ export def "search-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -7967,7 +8242,7 @@ export def "search-members get" [
   let full_url = (build-url $base "/search-members" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping
@@ -7982,6 +8257,7 @@ export def "ping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<health_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7989,7 +8265,7 @@ export def "ping get" [
   let full_url = (build-url $base "/ping")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List facebook ads
@@ -8004,6 +8280,7 @@ export def "facebook-ads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8018,7 +8295,7 @@ export def "facebook-ads list" [
   let full_url = (build-url $base "/facebook-ads" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get facebook ad info
@@ -8034,6 +8311,7 @@ export def "facebook-ads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8044,7 +8322,7 @@ export def "facebook-ads get" [
   let full_url = (build-url $base $"/facebook-ads/($outreach_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List facebook ads reports
@@ -8059,6 +8337,7 @@ export def "reporting-facebook-ads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8073,7 +8352,7 @@ export def "reporting-facebook-ads list" [
   let full_url = (build-url $base "/reporting/facebook-ads" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get facebook ad report
@@ -8089,6 +8368,7 @@ export def "reporting-facebook-ads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8099,7 +8379,7 @@ export def "reporting-facebook-ads get" [
   let full_url = (build-url $base $"/reporting/facebook-ads/($outreach_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List facebook ecommerce report
@@ -8115,6 +8395,7 @@ export def "reporting-facebook-ads-ecommerce-product-activity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8128,7 +8409,7 @@ export def "reporting-facebook-ads-ecommerce-product-activity get" [
   let full_url = (build-url $base $"/reporting/facebook-ads/($outreach_id)/ecommerce-product-activity" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get landing page report
@@ -8144,6 +8425,7 @@ export def "reporting-landing-pages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8154,7 +8436,7 @@ export def "reporting-landing-pages get" [
   let full_url = (build-url $base $"/reporting/landing-pages/($outreach_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List landing pages reports
@@ -8169,6 +8451,7 @@ export def "reporting-landing-pages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8181,7 +8464,7 @@ export def "reporting-landing-pages list" [
   let full_url = (build-url $base "/reporting/landing-pages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List survey reports
@@ -8196,6 +8479,7 @@ export def "reporting-surveys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8208,7 +8492,7 @@ export def "reporting-surveys list" [
   let full_url = (build-url $base "/reporting/surveys" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey report
@@ -8224,6 +8508,7 @@ export def "reporting-surveys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8234,7 +8519,7 @@ export def "reporting-surveys get" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List survey question reports
@@ -8250,6 +8535,7 @@ export def "reporting-surveys-questions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8260,7 +8546,7 @@ export def "reporting-surveys-questions list" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)/questions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey question report
@@ -8277,6 +8563,7 @@ export def "reporting-surveys-questions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8287,7 +8574,7 @@ export def "reporting-surveys-questions get" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)/questions/($question_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List answers for question
@@ -8304,6 +8591,7 @@ export def "reporting-surveys-questions-answers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8315,7 +8603,7 @@ export def "reporting-surveys-questions-answers get" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)/questions/($question_id)/answers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List survey responses
@@ -8331,6 +8619,7 @@ export def "reporting-surveys-responses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
@@ -8344,7 +8633,7 @@ export def "reporting-surveys-responses list" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)/responses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get survey response
@@ -8361,6 +8650,7 @@ export def "reporting-surveys-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<response_id: string, submitted_at: string, contact: record<email_id: string, contact_id: string, status: string, email: string, phone: string, full_name: string, consents_to_one_to_one_messaging: bool, avatar_url: string>, is_new_contact: bool, results: table<question_id: string, question_type: string, query: string, answer: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8368,7 +8658,7 @@ export def "reporting-surveys-responses get" [
   let full_url = (build-url $base $"/reporting/surveys/($survey_id)/responses/($response_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get domain info
@@ -8384,6 +8674,7 @@ export def "verified-domains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<domain: string, verified: bool, authenticated: bool, verification_email: string, verification_sent: string, status: string, is_free_email_provider: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8391,7 +8682,7 @@ export def "verified-domains get" [
   let full_url = (build-url $base $"/verified-domains/($domain_name)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete domain
@@ -8407,6 +8698,7 @@ export def "verified-domains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8414,7 +8706,7 @@ export def "verified-domains delete" [
   let full_url = (build-url $base $"/verified-domains/($domain_name)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify domain
@@ -8430,6 +8722,7 @@ export def "verified-domains-actions-verify verifyDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   code: string # The code that was sent to the email address provided when adding a new domain to verify.
 ]: any -> record<domain: string, verified: bool, authenticated: bool, verification_email: string, verification_sent: string, status: string, is_free_email_provider: bool> {
@@ -8441,7 +8734,7 @@ export def "verified-domains-actions-verify verifyDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List sending domains
@@ -8456,6 +8749,7 @@ export def "verified-domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<domains: table<domain: string, verified: bool, authenticated: bool, verification_email: string, verification_sent: string, status: string, is_free_email_provider: bool>, total_items: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8463,7 +8757,7 @@ export def "verified-domains list" [
   let full_url = (build-url $base "/verified-domains")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add domain to account
@@ -8478,6 +8772,7 @@ export def "verified-domains createVerifiedDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   verification_email: string # The e-mail address at the domain you want to verify. This will receive a two-factor challenge to be used in the verify action.
 ]: any -> record<domain: string, verified: bool, authenticated: bool, verification_email: string, verification_sent: string, status: string, is_free_email_provider: bool> {
@@ -8489,5 +8784,5 @@ export def "verified-domains createVerifiedDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

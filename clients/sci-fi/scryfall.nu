@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def dir-completer [] { ["asc" "auto" "desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "sets GetAll" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,13 +103,14 @@ export def "sets GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<code: string, mtgo_code: string, name: string, set_type: string, released_at: string, block_code: string, block: string, parent_set_code: string, card_count: int, digital: bool, foil: bool, icon_svg_uri: string, search_uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /sets/{code}
@@ -123,13 +125,14 @@ export def "sets GetByCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, mtgo_code: string, name: string, set_type: string, released_at: string, block_code: string, block: string, parent_set_code: string, card_count: int, digital: bool, foil: bool, icon_svg_uri: string, search_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/sets/($code)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/search
@@ -143,6 +146,7 @@ export def "cards-search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
   --unique: string@unique-completer
   --order: string@order-completer
@@ -156,7 +160,7 @@ export def "cards-search Search" [
   let full_url = (build-url $base "/cards/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/named
@@ -170,6 +174,7 @@ export def "cards-named GetNamed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exact: string
   --fuzzy: string
   --set: string
@@ -184,7 +189,7 @@ export def "cards-named GetNamed" [
   let full_url = (build-url $base "/cards/named" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/autocomplete
@@ -198,6 +203,7 @@ export def "cards-autocomplete Autocomplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -206,7 +212,7 @@ export def "cards-autocomplete Autocomplete" [
   let full_url = (build-url $base "/cards/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/random
@@ -220,13 +226,14 @@ export def "cards-random GetRandom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cards/random")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/multiverse/{id}
@@ -241,13 +248,14 @@ export def "cards-multiverse GetByMultiverseId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/multiverse/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/mtgo/{id}
@@ -262,13 +270,14 @@ export def "cards-mtgo GetByMtgoId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/mtgo/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/arena/{id}
@@ -283,13 +292,14 @@ export def "cards-arena GetByArenaId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/arena/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/{code}/{number}
@@ -305,13 +315,14 @@ export def "cards GetByCodeByNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/($code)/($number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/{id}
@@ -326,13 +337,14 @@ export def "cards GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/multiverse/{id}/rulings
@@ -347,13 +359,14 @@ export def "cards-multiverse-rulings GetByMultiverseId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<source: string, published_at: string, comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/multiverse/($id)/rulings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/mtgo/{id}/rulings
@@ -368,13 +381,14 @@ export def "cards-mtgo-rulings GetByMtgoId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<source: string, published_at: string, comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/mtgo/($id)/rulings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/{code}/{number}/rulings
@@ -390,13 +404,14 @@ export def "cards-rulings GetByCodeByNumberId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<source: string, published_at: string, comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/($code)/($number)/rulings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /cards/{id}/rulings
@@ -411,13 +426,14 @@ export def "cards-rulings GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<source: string, published_at: string, comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cards/($id)/rulings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /symbology
@@ -431,13 +447,14 @@ export def "symbology GetAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<symbol: string, loose_variant: string, english: string, transposable: bool, represents_mana: bool, cmc: float, appears_in_mana_costs: bool, funny: bool, colors: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/symbology")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /symbology/parse-mana
@@ -451,6 +468,7 @@ export def "symbology-parse-mana ParseMana" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cost: string
 ]: nothing -> record<cost: string, cmc: float, colors: string, colorless: bool, monocolored: bool, multicolored: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -459,7 +477,7 @@ export def "symbology-parse-mana ParseMana" [
   let full_url = (build-url $base "/symbology/parse-mana" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/card-names
@@ -473,13 +491,14 @@ export def "catalog-card-names GetCardNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/card-names")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/word-bank
@@ -493,13 +512,14 @@ export def "catalog-word-bank GetWordBank" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/word-bank")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/creature-types
@@ -513,13 +533,14 @@ export def "catalog-creature-types GetCreatureTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/creature-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/planeswalker-types
@@ -533,13 +554,14 @@ export def "catalog-planeswalker-types GetPlaneswalkerTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/planeswalker-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/land-types
@@ -553,13 +575,14 @@ export def "catalog-land-types GetLandTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/land-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/artifact-types
@@ -573,13 +596,14 @@ export def "catalog-artifact-types GetArtifactTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/artifact-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/enchantment-types
@@ -593,13 +617,14 @@ export def "catalog-enchantment-types GetEnchantmentTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/enchantment-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/spell-types
@@ -613,13 +638,14 @@ export def "catalog-spell-types GetSpellTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/spell-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/powers
@@ -633,13 +659,14 @@ export def "catalog-powers GetPowers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/powers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/thoughnesses
@@ -653,13 +680,14 @@ export def "catalog-thoughnesses GetToughnesses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/thoughnesses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/loyalties
@@ -673,13 +701,14 @@ export def "catalog-loyalties GetLoyalties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/loyalties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /catalog/watermarks
@@ -693,11 +722,12 @@ export def "catalog-watermarks GetWatermarks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<total_items: int, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catalog/watermarks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

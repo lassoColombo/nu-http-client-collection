@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -84,7 +85,7 @@ def timeframe-completer [] { ["all_time" "last_30_days" "last_365_days" "last_90
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -117,6 +118,7 @@ export def "accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsaccount: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -128,7 +130,7 @@ export def "accounts accounts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Account
@@ -144,6 +146,7 @@ export def "accounts account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsaccount: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -155,7 +158,7 @@ export def "accounts account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Campaigns
@@ -170,6 +173,7 @@ export def "campaigns campaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -188,7 +192,7 @@ export def "campaigns campaigns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Campaign
@@ -203,6 +207,7 @@ export def "campaigns campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -217,7 +222,7 @@ export def "campaigns campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Campaign
@@ -233,6 +238,7 @@ export def "campaigns campaign-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -247,7 +253,7 @@ export def "campaigns campaign-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Campaign
@@ -263,6 +269,7 @@ export def "campaigns campaign-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -277,7 +284,7 @@ export def "campaigns campaign-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Campaign
@@ -293,6 +300,7 @@ export def "campaigns campaign-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -302,7 +310,7 @@ export def "campaigns campaign-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Campaign Message
@@ -318,6 +326,7 @@ export def "campaign-messages message-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -333,7 +342,7 @@ export def "campaign-messages message-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Campaign Message
@@ -349,6 +358,7 @@ export def "campaign-messages message-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -363,7 +373,7 @@ export def "campaign-messages message-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Campaign Send Job
@@ -379,6 +389,7 @@ export def "campaign-send-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-send-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -390,7 +401,7 @@ export def "campaign-send-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Campaign Send
@@ -406,6 +417,7 @@ export def "campaign-send-jobs send" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -418,7 +430,7 @@ export def "campaign-send-jobs send" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Campaign Recipient Estimation Job
@@ -434,6 +446,7 @@ export def "campaign-recipient-estimation-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-recipient-estimation-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -445,7 +458,7 @@ export def "campaign-recipient-estimation-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Campaign Recipient Estimation
@@ -461,6 +474,7 @@ export def "campaign-recipient-estimations estimation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-recipient-estimation: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -472,7 +486,7 @@ export def "campaign-recipient-estimations estimation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Campaign Clone
@@ -487,6 +501,7 @@ export def "campaign-clone clone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -501,7 +516,7 @@ export def "campaign-clone clone" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Assign Template to Campaign Message
@@ -516,6 +531,7 @@ export def "campaign-message-assign-template message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -530,7 +546,7 @@ export def "campaign-message-assign-template message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Send Campaign
@@ -545,6 +561,7 @@ export def "campaign-send-jobs campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-send-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -559,7 +576,7 @@ export def "campaign-send-jobs campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Refresh Campaign Recipient Estimation
@@ -574,6 +591,7 @@ export def "campaign-recipient-estimation-jobs estimation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-recipient-estimation-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -588,7 +606,7 @@ export def "campaign-recipient-estimation-jobs estimation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Campaign for Campaign Message
@@ -604,6 +622,7 @@ export def "campaign-messages-campaign message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -615,7 +634,7 @@ export def "campaign-messages-campaign message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Campaign ID for Campaign Message
@@ -631,6 +650,7 @@ export def "campaign-messages-relationships-campaign message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -640,7 +660,7 @@ export def "campaign-messages-relationships-campaign message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template for Campaign Message
@@ -656,6 +676,7 @@ export def "campaign-messages-template message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -667,7 +688,7 @@ export def "campaign-messages-template message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template ID for Campaign Message
@@ -683,6 +704,7 @@ export def "campaign-messages-relationships-template message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -692,7 +714,7 @@ export def "campaign-messages-relationships-template message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Image for Campaign Message
@@ -708,6 +730,7 @@ export def "campaign-messages-image message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -719,7 +742,7 @@ export def "campaign-messages-image message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Image ID for Campaign Message
@@ -735,6 +758,7 @@ export def "campaign-messages-relationships-image message-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -744,7 +768,7 @@ export def "campaign-messages-relationships-image message-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Image for Campaign Message
@@ -760,6 +784,7 @@ export def "campaign-messages-relationships-image message-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -772,7 +797,7 @@ export def "campaign-messages-relationships-image message-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Tags for Campaign
@@ -788,6 +813,7 @@ export def "campaigns-tags campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -799,7 +825,7 @@ export def "campaigns-tags campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag IDs for Campaign
@@ -815,6 +841,7 @@ export def "campaigns-relationships-tags campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -824,7 +851,7 @@ export def "campaigns-relationships-tags campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Messages for Campaign
@@ -840,6 +867,7 @@ export def "campaigns-campaign-messages campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscampaign: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -855,7 +883,7 @@ export def "campaigns-campaign-messages campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message IDs for Campaign
@@ -871,6 +899,7 @@ export def "campaigns-relationships-campaign-messages campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -880,7 +909,7 @@ export def "campaigns-relationships-campaign-messages campaign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Catalog Items
@@ -895,6 +924,7 @@ export def "catalog-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`category.id`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1']))
@@ -912,7 +942,7 @@ export def "catalog-items items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Catalog Item
@@ -927,6 +957,7 @@ export def "catalog-items item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -941,7 +972,7 @@ export def "catalog-items item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Catalog Item
@@ -957,6 +988,7 @@ export def "catalog-items item-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -970,7 +1002,7 @@ export def "catalog-items item-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Catalog Item
@@ -986,6 +1018,7 @@ export def "catalog-items item-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1000,7 +1033,7 @@ export def "catalog-items item-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Catalog Item
@@ -1016,6 +1049,7 @@ export def "catalog-items item-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1025,7 +1059,7 @@ export def "catalog-items item-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Catalog Variants
@@ -1040,6 +1074,7 @@ export def "catalog-variants variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`sku`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1-VARIANT-MEDIUM']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1055,7 +1090,7 @@ export def "catalog-variants variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Catalog Variant
@@ -1070,6 +1105,7 @@ export def "catalog-variants variant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1084,7 +1120,7 @@ export def "catalog-variants variant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Catalog Variant
@@ -1100,6 +1136,7 @@ export def "catalog-variants variant-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -1111,7 +1148,7 @@ export def "catalog-variants variant-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Catalog Variant
@@ -1127,6 +1164,7 @@ export def "catalog-variants variant-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1141,7 +1179,7 @@ export def "catalog-variants variant-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Catalog Variant
@@ -1157,6 +1195,7 @@ export def "catalog-variants variant-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,7 +1205,7 @@ export def "catalog-variants variant-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Catalog Categories
@@ -1181,6 +1220,7 @@ export def "catalog-categories categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`name`: `contains` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-CATEGORY-APPAREL']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1196,7 +1236,7 @@ export def "catalog-categories categories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Catalog Category
@@ -1211,6 +1251,7 @@ export def "catalog-categories category" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1225,7 +1266,7 @@ export def "catalog-categories category" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Catalog Category
@@ -1241,6 +1282,7 @@ export def "catalog-categories category-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -1252,7 +1294,7 @@ export def "catalog-categories category-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Catalog Category
@@ -1268,6 +1310,7 @@ export def "catalog-categories category-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1282,7 +1325,7 @@ export def "catalog-categories category-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Catalog Category
@@ -1298,6 +1341,7 @@ export def "catalog-categories category-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1307,7 +1351,7 @@ export def "catalog-categories category-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Create Catalog Items Jobs
@@ -1322,6 +1366,7 @@ export def "catalog-item-bulk-create-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1335,7 +1380,7 @@ export def "catalog-item-bulk-create-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Catalog Items
@@ -1350,6 +1395,7 @@ export def "catalog-item-bulk-create-jobs items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1364,7 +1410,7 @@ export def "catalog-item-bulk-create-jobs items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Create Catalog Items Job
@@ -1380,6 +1426,7 @@ export def "catalog-item-bulk-create-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1393,7 +1440,7 @@ export def "catalog-item-bulk-create-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Update Catalog Items Jobs
@@ -1408,6 +1455,7 @@ export def "catalog-item-bulk-update-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1421,7 +1469,7 @@ export def "catalog-item-bulk-update-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Update Catalog Items
@@ -1436,6 +1484,7 @@ export def "catalog-item-bulk-update-jobs items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1450,7 +1499,7 @@ export def "catalog-item-bulk-update-jobs items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Update Catalog Items Job
@@ -1466,6 +1515,7 @@ export def "catalog-item-bulk-update-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1479,7 +1529,7 @@ export def "catalog-item-bulk-update-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Delete Catalog Items Jobs
@@ -1494,6 +1544,7 @@ export def "catalog-item-bulk-delete-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1507,7 +1558,7 @@ export def "catalog-item-bulk-delete-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Delete Catalog Items
@@ -1522,6 +1573,7 @@ export def "catalog-item-bulk-delete-jobs items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1536,7 +1588,7 @@ export def "catalog-item-bulk-delete-jobs items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Delete Catalog Items Job
@@ -1552,6 +1604,7 @@ export def "catalog-item-bulk-delete-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -1563,7 +1616,7 @@ export def "catalog-item-bulk-delete-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Create Variants Jobs
@@ -1578,6 +1631,7 @@ export def "catalog-variant-bulk-create-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1591,7 +1645,7 @@ export def "catalog-variant-bulk-create-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Catalog Variants
@@ -1606,6 +1660,7 @@ export def "catalog-variant-bulk-create-jobs variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1620,7 +1675,7 @@ export def "catalog-variant-bulk-create-jobs variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Create Variants Job
@@ -1636,6 +1691,7 @@ export def "catalog-variant-bulk-create-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1649,7 +1705,7 @@ export def "catalog-variant-bulk-create-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Update Variants Jobs
@@ -1664,6 +1720,7 @@ export def "catalog-variant-bulk-update-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1677,7 +1734,7 @@ export def "catalog-variant-bulk-update-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Update Catalog Variants
@@ -1692,6 +1749,7 @@ export def "catalog-variant-bulk-update-jobs variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1706,7 +1764,7 @@ export def "catalog-variant-bulk-update-jobs variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Update Variants Job
@@ -1722,6 +1780,7 @@ export def "catalog-variant-bulk-update-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1735,7 +1794,7 @@ export def "catalog-variant-bulk-update-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Delete Variants Jobs
@@ -1750,6 +1809,7 @@ export def "catalog-variant-bulk-delete-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1763,7 +1823,7 @@ export def "catalog-variant-bulk-delete-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Delete Catalog Variants
@@ -1778,6 +1838,7 @@ export def "catalog-variant-bulk-delete-jobs variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1792,7 +1853,7 @@ export def "catalog-variant-bulk-delete-jobs variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Delete Variants Job
@@ -1808,6 +1869,7 @@ export def "catalog-variant-bulk-delete-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -1819,7 +1881,7 @@ export def "catalog-variant-bulk-delete-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Create Categories Jobs
@@ -1834,6 +1896,7 @@ export def "catalog-category-bulk-create-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1847,7 +1910,7 @@ export def "catalog-category-bulk-create-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Catalog Categories
@@ -1862,6 +1925,7 @@ export def "catalog-category-bulk-create-jobs categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1876,7 +1940,7 @@ export def "catalog-category-bulk-create-jobs categories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Create Categories Job
@@ -1892,6 +1956,7 @@ export def "catalog-category-bulk-create-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1905,7 +1970,7 @@ export def "catalog-category-bulk-create-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Update Categories Jobs
@@ -1920,6 +1985,7 @@ export def "catalog-category-bulk-update-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -1933,7 +1999,7 @@ export def "catalog-category-bulk-update-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Update Catalog Categories
@@ -1948,6 +2014,7 @@ export def "catalog-category-bulk-update-jobs categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -1962,7 +2029,7 @@ export def "catalog-category-bulk-update-jobs categories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Update Categories Job
@@ -1978,6 +2045,7 @@ export def "catalog-category-bulk-update-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-update-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -1991,7 +2059,7 @@ export def "catalog-category-bulk-update-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Delete Categories Jobs
@@ -2006,6 +2074,7 @@ export def "catalog-category-bulk-delete-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -2019,7 +2088,7 @@ export def "catalog-category-bulk-delete-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Delete Catalog Categories
@@ -2034,6 +2103,7 @@ export def "catalog-category-bulk-delete-jobs categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2048,7 +2118,7 @@ export def "catalog-category-bulk-delete-jobs categories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Delete Categories Job
@@ -2064,6 +2134,7 @@ export def "catalog-category-bulk-delete-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -2075,7 +2146,7 @@ export def "catalog-category-bulk-delete-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Back In Stock Subscription
@@ -2090,6 +2161,7 @@ export def "back-in-stock-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2102,7 +2174,7 @@ export def "back-in-stock-subscriptions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Items for Catalog Category
@@ -2118,6 +2190,7 @@ export def "catalog-categories-items category" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-item: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`category.id`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1']))
@@ -2135,7 +2208,7 @@ export def "catalog-categories-items category" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Item IDs for Catalog Category
@@ -2151,6 +2224,7 @@ export def "catalog-categories-relationships-items category-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`category.id`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 100. Min: 1. Max: 100. (default: 100)
@@ -2165,7 +2239,7 @@ export def "catalog-categories-relationships-items category-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Items to Catalog Category
@@ -2181,6 +2255,7 @@ export def "catalog-categories-relationships-items category-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2193,7 +2268,7 @@ export def "catalog-categories-relationships-items category-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Update Items for Catalog Category
@@ -2209,6 +2284,7 @@ export def "catalog-categories-relationships-items category-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2221,7 +2297,7 @@ export def "catalog-categories-relationships-items category-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Items from Catalog Category
@@ -2237,6 +2313,7 @@ export def "catalog-categories-relationships-items category-by-id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2249,7 +2326,7 @@ export def "catalog-categories-relationships-items category-by-id-3" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Variants for Catalog Item
@@ -2265,6 +2342,7 @@ export def "catalog-items-variants item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-variant: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`sku`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1-VARIANT-MEDIUM']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -2280,7 +2358,7 @@ export def "catalog-items-variants item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Variant IDs for Catalog Item
@@ -2296,6 +2374,7 @@ export def "catalog-items-relationships-variants item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`sku`: `equals`<br>`title`: `contains`<br>`published`: `equals` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-ITEM-1-VARIANT-MEDIUM']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 100. Min: 1. Max: 100. (default: 100)
@@ -2310,7 +2389,7 @@ export def "catalog-items-relationships-variants item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Categories for Catalog Item
@@ -2326,6 +2405,7 @@ export def "catalog-items-categories item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscatalog-category: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`name`: `contains` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-CATEGORY-APPAREL']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -2341,7 +2421,7 @@ export def "catalog-items-categories item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Category IDs for Catalog Item
@@ -2357,6 +2437,7 @@ export def "catalog-items-relationships-categories item-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`ids`: `any`<br>`item.id`: `equals`<br>`name`: `contains` (e.g. any(ids,['$custom:::$default:::SAMPLE-DATA-CATEGORY-APPAREL']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 100. Min: 1. Max: 100. (default: 100)
@@ -2371,7 +2452,7 @@ export def "catalog-items-relationships-categories item-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Categories to Catalog Item
@@ -2387,6 +2468,7 @@ export def "catalog-items-relationships-categories item-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2399,7 +2481,7 @@ export def "catalog-items-relationships-categories item-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Update Categories for Catalog Item
@@ -2415,6 +2497,7 @@ export def "catalog-items-relationships-categories item-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2427,7 +2510,7 @@ export def "catalog-items-relationships-categories item-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Categories from Catalog Item
@@ -2443,6 +2526,7 @@ export def "catalog-items-relationships-categories item-by-id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2455,7 +2539,7 @@ export def "catalog-items-relationships-categories item-by-id-3" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create Conversation Message
@@ -2470,6 +2554,7 @@ export def "conversation-messages message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -2482,7 +2567,7 @@ export def "conversation-messages message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Coupons
@@ -2497,6 +2582,7 @@ export def "coupons coupons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 100. Min: 1. Max: 100. (default: 100)
@@ -2510,7 +2596,7 @@ export def "coupons coupons" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Coupon
@@ -2525,6 +2611,7 @@ export def "coupons coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2539,7 +2626,7 @@ export def "coupons coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Coupon
@@ -2555,6 +2642,7 @@ export def "coupons coupon-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -2566,7 +2654,7 @@ export def "coupons coupon-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Coupon
@@ -2582,6 +2670,7 @@ export def "coupons coupon-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2596,7 +2685,7 @@ export def "coupons coupon-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Coupon
@@ -2612,6 +2701,7 @@ export def "coupons coupon-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2621,7 +2711,7 @@ export def "coupons coupon-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Coupon Codes
@@ -2636,6 +2726,7 @@ export def "coupon-codes codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`expires_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`status`: `equals`<br>`coupon.id`: `any`, `equals`<br>`profile.id`: `any`, `equals` (e.g. equals(coupon.id,'10OFF'))
@@ -2652,7 +2743,7 @@ export def "coupon-codes codes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Coupon Code
@@ -2667,6 +2758,7 @@ export def "coupon-codes code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2681,7 +2773,7 @@ export def "coupon-codes code" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Coupon Code
@@ -2697,6 +2789,7 @@ export def "coupon-codes code-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -2710,7 +2803,7 @@ export def "coupon-codes code-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Coupon Code
@@ -2726,6 +2819,7 @@ export def "coupon-codes code-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2740,7 +2834,7 @@ export def "coupon-codes code-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Coupon Code
@@ -2756,6 +2850,7 @@ export def "coupon-codes code-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2765,7 +2860,7 @@ export def "coupon-codes code-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Create Coupon Code Jobs
@@ -2780,6 +2875,7 @@ export def "coupon-code-bulk-create-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -2793,7 +2889,7 @@ export def "coupon-code-bulk-create-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Coupon Codes
@@ -2808,6 +2904,7 @@ export def "coupon-code-bulk-create-jobs codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -2822,7 +2919,7 @@ export def "coupon-code-bulk-create-jobs codes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Create Coupon Codes Job
@@ -2838,6 +2935,7 @@ export def "coupon-code-bulk-create-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -2851,7 +2949,7 @@ export def "coupon-code-bulk-create-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Coupon For Coupon Code
@@ -2867,6 +2965,7 @@ export def "coupon-codes-coupon code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -2878,7 +2977,7 @@ export def "coupon-codes-coupon code" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Coupon ID for Coupon Code
@@ -2894,6 +2993,7 @@ export def "coupon-codes-relationships-coupon code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2903,7 +3003,7 @@ export def "coupon-codes-relationships-coupon code" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Coupon Codes for Coupon
@@ -2919,6 +3019,7 @@ export def "coupons-coupon-codes coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscoupon-code: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`expires_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`status`: `equals`<br>`coupon.id`: `any`, `equals`<br>`profile.id`: `any`, `equals` (e.g. less-than(expires_at,2022-11-08T00:00:00+00:00))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -2933,7 +3034,7 @@ export def "coupons-coupon-codes coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Coupon Code IDs for Coupon
@@ -2949,6 +3050,7 @@ export def "coupons-relationships-coupon-codes coupon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`expires_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`status`: `equals`<br>`coupon.id`: `any`, `equals`<br>`profile.id`: `any`, `equals` (e.g. less-than(expires_at,2022-11-08T00:00:00+00:00))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 100. Min: 1. Max: 100. (default: 100)
@@ -2962,7 +3064,7 @@ export def "coupons-relationships-coupon-codes coupon" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Data Sources
@@ -2977,6 +3079,7 @@ export def "data-sources sources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsdata-source: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
@@ -2990,7 +3093,7 @@ export def "data-sources sources" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Data Source
@@ -3005,6 +3108,7 @@ export def "data-sources source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsdata-source: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -3019,7 +3123,7 @@ export def "data-sources source" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Data Source
@@ -3035,6 +3139,7 @@ export def "data-sources source-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsdata-source: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3046,7 +3151,7 @@ export def "data-sources source-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Data Source
@@ -3062,6 +3167,7 @@ export def "data-sources source-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3071,7 +3177,7 @@ export def "data-sources source-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Data Source Records
@@ -3086,6 +3192,7 @@ export def "data-source-record-bulk-create-jobs records" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -3098,7 +3205,7 @@ export def "data-source-record-bulk-create-jobs records" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create Data Source Record
@@ -3113,6 +3220,7 @@ export def "data-source-record-create-jobs record" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -3125,7 +3233,7 @@ export def "data-source-record-create-jobs record" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Request Profile Deletion
@@ -3140,6 +3248,7 @@ export def "data-privacy-deletion-jobs deletion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -3152,7 +3261,7 @@ export def "data-privacy-deletion-jobs deletion" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Events
@@ -3167,6 +3276,7 @@ export def "events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsattribution: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsevent: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3186,7 +3296,7 @@ export def "events events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Event
@@ -3201,6 +3311,7 @@ export def "events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -3213,7 +3324,7 @@ export def "events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Event
@@ -3229,6 +3340,7 @@ export def "events event-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsattribution: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsevent: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3244,7 +3356,7 @@ export def "events event-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Create Events
@@ -3259,6 +3371,7 @@ export def "event-bulk-create-jobs events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -3271,7 +3384,7 @@ export def "event-bulk-create-jobs events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Metric for Event
@@ -3287,6 +3400,7 @@ export def "events-metric event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3298,7 +3412,7 @@ export def "events-metric event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric ID for Event
@@ -3314,6 +3428,7 @@ export def "events-relationships-metric event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3323,7 +3438,7 @@ export def "events-relationships-metric event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile for Event
@@ -3339,6 +3454,7 @@ export def "events-profile event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -3351,7 +3467,7 @@ export def "events-profile event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile ID for Event
@@ -3367,6 +3483,7 @@ export def "events-relationships-profile event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3376,7 +3493,7 @@ export def "events-relationships-profile event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flows
@@ -3391,6 +3508,7 @@ export def "flows flows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3409,7 +3527,7 @@ export def "flows flows" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Flow
@@ -3424,6 +3542,7 @@ export def "flows flow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsflow: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -3439,7 +3558,7 @@ export def "flows flow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Flow
@@ -3455,6 +3574,7 @@ export def "flows flow-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsflow: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3470,7 +3590,7 @@ export def "flows flow-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Flow Status
@@ -3486,6 +3606,7 @@ export def "flows flow-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -3500,7 +3621,7 @@ export def "flows flow-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Flow
@@ -3516,6 +3637,7 @@ export def "flows flow-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3525,7 +3647,7 @@ export def "flows flow-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flow Action
@@ -3541,6 +3663,7 @@ export def "flow-actions action-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsflow-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3555,7 +3678,7 @@ export def "flow-actions action-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Flow Action
@@ -3571,6 +3694,7 @@ export def "flow-actions action-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -3585,7 +3709,7 @@ export def "flow-actions action-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Flow Message
@@ -3601,6 +3725,7 @@ export def "flow-messages message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsflow-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -3615,7 +3740,7 @@ export def "flow-messages message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Actions for Flow
@@ -3631,6 +3756,7 @@ export def "flows-flow-actions flow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`<br>`action_type`: `any`, `equals`<br>`status`: `equals`<br>`created`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. any(id,['example']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -3646,7 +3772,7 @@ export def "flows-flow-actions flow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Action IDs for Flow
@@ -3662,6 +3788,7 @@ export def "flows-relationships-flow-actions flow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`<br>`action_type`: `any`, `equals`<br>`status`: `equals`<br>`created`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. any(id,['example']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 50. Min: 1. Max: 50. (default: 50)
@@ -3676,7 +3803,7 @@ export def "flows-relationships-flow-actions flow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tags for Flow
@@ -3692,6 +3819,7 @@ export def "flows-tags flow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3703,7 +3831,7 @@ export def "flows-tags flow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag IDs for Flow
@@ -3719,6 +3847,7 @@ export def "flows-relationships-tags flow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3728,7 +3857,7 @@ export def "flows-relationships-tags flow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flow for Flow Action
@@ -3744,6 +3873,7 @@ export def "flow-actions-flow action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3755,7 +3885,7 @@ export def "flow-actions-flow action" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flow ID for Flow Action
@@ -3771,6 +3901,7 @@ export def "flow-actions-relationships-flow action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3780,7 +3911,7 @@ export def "flow-actions-relationships-flow action" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Messages For Flow Action
@@ -3796,6 +3927,7 @@ export def "flow-actions-flow-messages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-message: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`<br>`name`: `contains`, `ends-with`, `equals`, `starts-with`<br>`created`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. any(id,['example']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -3811,7 +3943,7 @@ export def "flow-actions-flow-messages messages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Message IDs for Flow Action
@@ -3827,6 +3959,7 @@ export def "flow-actions-relationships-flow-messages action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`name`: `contains`, `ends-with`, `equals`, `starts-with`<br>`created`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(name,'example'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 50. Min: 1. Max: 50. (default: 50)
@@ -3841,7 +3974,7 @@ export def "flow-actions-relationships-flow-messages action" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Action for Flow Message
@@ -3857,6 +3990,7 @@ export def "flow-messages-flow-action message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-action: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3868,7 +4002,7 @@ export def "flow-messages-flow-action message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Action ID for Flow Message
@@ -3884,6 +4018,7 @@ export def "flow-messages-relationships-flow-action message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3893,7 +4028,7 @@ export def "flow-messages-relationships-flow-action message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template for Flow Message
@@ -3909,6 +4044,7 @@ export def "flow-messages-template message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -3920,7 +4056,7 @@ export def "flow-messages-template message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Template ID for Flow Message
@@ -3936,6 +4072,7 @@ export def "flow-messages-relationships-template message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3945,7 +4082,7 @@ export def "flow-messages-relationships-template message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Forms
@@ -3960,6 +4097,7 @@ export def "forms forms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`, `equals`<br>`name`: `any`, `contains`, `equals`<br>`ab_test`: `equals`<br>`updated_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`created_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`status`: `equals` (e.g. equals(id,'Y6nRLr'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -3975,7 +4113,7 @@ export def "forms forms" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Form
@@ -3990,6 +4128,7 @@ export def "forms form" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4004,7 +4143,7 @@ export def "forms form" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Form
@@ -4020,6 +4159,7 @@ export def "forms form-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4031,7 +4171,7 @@ export def "forms form-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Form
@@ -4047,6 +4187,7 @@ export def "forms form-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4056,7 +4197,7 @@ export def "forms form-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Form Version
@@ -4072,6 +4213,7 @@ export def "form-versions version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform-version: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4083,7 +4225,7 @@ export def "form-versions version" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Versions for Form
@@ -4099,6 +4241,7 @@ export def "forms-form-versions form" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform-version: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`form_type`: `any`, `equals`<br>`status`: `equals`<br>`updated_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`created_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(form_type,'popup'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -4114,7 +4257,7 @@ export def "forms-form-versions form" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Version IDs for Form
@@ -4130,6 +4273,7 @@ export def "forms-relationships-form-versions form" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`form_type`: `any`, `equals`<br>`status`: `equals`<br>`updated_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`created_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(form_type,'popup'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
@@ -4144,7 +4288,7 @@ export def "forms-relationships-form-versions form" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Form for Form Version
@@ -4160,6 +4304,7 @@ export def "form-versions-form version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4171,7 +4316,7 @@ export def "form-versions-form version" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Form ID for Form Version
@@ -4187,6 +4332,7 @@ export def "form-versions-relationships-form version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4196,7 +4342,7 @@ export def "form-versions-relationships-form version" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Images
@@ -4211,6 +4357,7 @@ export def "images images" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`, `equals`<br>`updated_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`format`: `any`, `equals`<br>`name`: `any`, `contains`, `ends-with`, `equals`, `starts-with`<br>`size`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`hidden`: `any`, `equals` (e.g. equals(id,'7'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -4226,7 +4373,7 @@ export def "images images" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload Image From URL
@@ -4241,6 +4388,7 @@ export def "images url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4255,7 +4403,7 @@ export def "images url" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Image
@@ -4271,6 +4419,7 @@ export def "images image-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4282,7 +4431,7 @@ export def "images image-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Image
@@ -4298,6 +4447,7 @@ export def "images image-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4312,7 +4462,7 @@ export def "images image-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Upload Image From File
@@ -4327,6 +4477,7 @@ export def "image-upload file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimage: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   file: string # The image file to upload. Supported image formats: jpeg,png,gif. Maximum image size: 5MB. (format: binary)
@@ -4344,7 +4495,7 @@ export def "image-upload file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Lists
@@ -4359,6 +4510,7 @@ export def "lists lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -4377,7 +4529,7 @@ export def "lists lists" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create List
@@ -4392,6 +4544,7 @@ export def "lists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4406,7 +4559,7 @@ export def "lists list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get List
@@ -4422,6 +4575,7 @@ export def "lists list-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldslist: list # Request additional fields not included by default in the response. Supported values: 'profile_count'
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -4437,7 +4591,7 @@ export def "lists list-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update List
@@ -4453,6 +4607,7 @@ export def "lists list-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4467,7 +4622,7 @@ export def "lists list-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete List
@@ -4483,6 +4638,7 @@ export def "lists list-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4492,7 +4648,7 @@ export def "lists list-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tags for List
@@ -4508,6 +4664,7 @@ export def "lists-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4519,7 +4676,7 @@ export def "lists-tags list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag IDs for List
@@ -4535,6 +4692,7 @@ export def "lists-relationships-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4544,7 +4702,7 @@ export def "lists-relationships-tags list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profiles for List
@@ -4560,6 +4718,7 @@ export def "lists-profiles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`email`: `any`, `equals`<br>`phone_number`: `any`, `equals`<br>`push_token`: `any`, `equals`<br>`_kx`: `equals`<br>`joined_group_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(email,['example']))
@@ -4576,7 +4735,7 @@ export def "lists-profiles list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile IDs for List
@@ -4592,6 +4751,7 @@ export def "lists-relationships-profiles list-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`email`: `any`, `equals`<br>`phone_number`: `any`, `equals`<br>`push_token`: `any`, `equals`<br>`_kx`: `equals`<br>`joined_group_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(email,['example']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
@@ -4606,7 +4766,7 @@ export def "lists-relationships-profiles list-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Profiles to List
@@ -4622,6 +4782,7 @@ export def "lists-relationships-profiles list-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -4634,7 +4795,7 @@ export def "lists-relationships-profiles list-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Profiles from List
@@ -4650,6 +4811,7 @@ export def "lists-relationships-profiles list-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -4662,7 +4824,7 @@ export def "lists-relationships-profiles list-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Flows Triggered by List
@@ -4678,6 +4840,7 @@ export def "lists-flow-triggers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -4689,7 +4852,7 @@ export def "lists-flow-triggers list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IDs for Flows Triggered by List
@@ -4705,6 +4868,7 @@ export def "lists-relationships-flow-triggers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4714,7 +4878,7 @@ export def "lists-relationships-flow-triggers list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metrics
@@ -4729,6 +4893,7 @@ export def "metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`integration.name`: `equals`<br>`integration.category`: `equals` (e.g. equals(integration.name,'example'))
@@ -4744,7 +4909,7 @@ export def "metrics metrics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric
@@ -4760,6 +4925,7 @@ export def "metrics metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -4773,7 +4939,7 @@ export def "metrics metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric Property
@@ -4789,6 +4955,7 @@ export def "metric-properties property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsmetric-property: list # Request additional fields not included by default in the response. Supported values: 'sample_values'
   --fieldsmetric-property: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -4803,7 +4970,7 @@ export def "metric-properties property" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Metrics
@@ -4818,6 +4985,7 @@ export def "custom-metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -4831,7 +4999,7 @@ export def "custom-metrics metrics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Custom Metric
@@ -4846,6 +5014,7 @@ export def "custom-metrics metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4860,7 +5029,7 @@ export def "custom-metrics metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Custom Metric
@@ -4876,6 +5045,7 @@ export def "custom-metrics metric-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -4889,7 +5059,7 @@ export def "custom-metrics metric-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Custom Metric
@@ -4905,6 +5075,7 @@ export def "custom-metrics metric-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -4919,7 +5090,7 @@ export def "custom-metrics metric-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Custom Metric
@@ -4935,6 +5106,7 @@ export def "custom-metrics metric-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4944,7 +5116,7 @@ export def "custom-metrics metric-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mapped Metrics
@@ -4959,6 +5131,7 @@ export def "mapped-metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmapped-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -4973,7 +5146,7 @@ export def "mapped-metrics metrics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mapped Metric
@@ -4989,6 +5162,7 @@ export def "mapped-metrics metric-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmapped-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -5003,7 +5177,7 @@ export def "mapped-metrics metric-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Mapped Metric
@@ -5019,6 +5193,7 @@ export def "mapped-metrics metric-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmapped-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5033,7 +5208,7 @@ export def "mapped-metrics metric-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Metric Aggregates
@@ -5048,6 +5223,7 @@ export def "metric-aggregates aggregates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmetric-aggregate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5062,7 +5238,7 @@ export def "metric-aggregates aggregates" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Flows Triggered by Metric
@@ -5078,6 +5254,7 @@ export def "metrics-flow-triggers metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5089,7 +5266,7 @@ export def "metrics-flow-triggers metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IDs for Flows Triggered by Metric
@@ -5105,6 +5282,7 @@ export def "metrics-relationships-flow-triggers metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5114,7 +5292,7 @@ export def "metrics-relationships-flow-triggers metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Properties for Metric
@@ -5130,6 +5308,7 @@ export def "metrics-metric-properties metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsmetric-property: list # Request additional fields not included by default in the response. Supported values: 'sample_values'
   --fieldsmetric-property: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -5142,7 +5321,7 @@ export def "metrics-metric-properties metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Property IDs for Metric
@@ -5158,6 +5337,7 @@ export def "metrics-relationships-metric-properties metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5167,7 +5347,7 @@ export def "metrics-relationships-metric-properties metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric for Metric Property
@@ -5183,6 +5363,7 @@ export def "metric-properties-metric property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5194,7 +5375,7 @@ export def "metric-properties-metric property" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric ID for Metric Property
@@ -5210,6 +5391,7 @@ export def "metric-properties-relationships-metric property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5219,7 +5401,7 @@ export def "metric-properties-relationships-metric property" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metrics for Custom Metric
@@ -5235,6 +5417,7 @@ export def "custom-metrics-metrics metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5246,7 +5429,7 @@ export def "custom-metrics-metrics metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric IDs for Custom Metric
@@ -5262,6 +5445,7 @@ export def "custom-metrics-relationships-metrics metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5271,7 +5455,7 @@ export def "custom-metrics-relationships-metrics metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric for Mapped Metric
@@ -5287,6 +5471,7 @@ export def "mapped-metrics-metric metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsmetric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5298,7 +5483,7 @@ export def "mapped-metrics-metric metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metric ID for Mapped Metric
@@ -5314,6 +5499,7 @@ export def "mapped-metrics-relationships-metric metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5323,7 +5509,7 @@ export def "mapped-metrics-relationships-metric metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Metric for Mapped Metric
@@ -5339,6 +5525,7 @@ export def "mapped-metrics-custom-metric metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscustom-metric: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5350,7 +5537,7 @@ export def "mapped-metrics-custom-metric metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Metric ID for Mapped Metric
@@ -5366,6 +5553,7 @@ export def "mapped-metrics-relationships-custom-metric metric" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5375,7 +5563,7 @@ export def "mapped-metrics-relationships-custom-metric metric" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profiles
@@ -5390,6 +5578,7 @@ export def "profiles profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsconversation: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -5409,7 +5598,7 @@ export def "profiles profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Profile
@@ -5424,6 +5613,7 @@ export def "profiles profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -5439,7 +5629,7 @@ export def "profiles profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Profile
@@ -5455,6 +5645,7 @@ export def "profiles profile-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsconversation: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -5472,7 +5663,7 @@ export def "profiles profile-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Profile
@@ -5488,6 +5679,7 @@ export def "profiles profile-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -5503,7 +5695,7 @@ export def "profiles profile-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Import Profiles Jobs
@@ -5518,6 +5710,7 @@ export def "profile-bulk-import-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-bulk-import-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `any`, `equals` (e.g. equals(status,'queued'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -5533,7 +5726,7 @@ export def "profile-bulk-import-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Import Profiles
@@ -5548,6 +5741,7 @@ export def "profile-bulk-import-jobs profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-bulk-import-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5562,7 +5756,7 @@ export def "profile-bulk-import-jobs profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Import Profiles Job
@@ -5578,6 +5772,7 @@ export def "profile-bulk-import-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsprofile-bulk-import-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -5591,7 +5786,7 @@ export def "profile-bulk-import-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Suppress Profiles Jobs
@@ -5606,6 +5801,7 @@ export def "profile-suppression-bulk-create-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals`<br>`list_id`: `equals`<br>`segment_id`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -5620,7 +5816,7 @@ export def "profile-suppression-bulk-create-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Suppress Profiles
@@ -5635,6 +5831,7 @@ export def "profile-suppression-bulk-create-jobs profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5649,7 +5846,7 @@ export def "profile-suppression-bulk-create-jobs profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Suppress Profiles Job
@@ -5665,6 +5862,7 @@ export def "profile-suppression-bulk-create-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-create-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5676,7 +5874,7 @@ export def "profile-suppression-bulk-create-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bulk Unsuppress Profiles Jobs
@@ -5691,6 +5889,7 @@ export def "profile-suppression-bulk-delete-jobs jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals`<br>`list_id`: `equals`<br>`segment_id`: `equals` (e.g. equals(status,'processing'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -5705,7 +5904,7 @@ export def "profile-suppression-bulk-delete-jobs jobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Unsuppress Profiles
@@ -5720,6 +5919,7 @@ export def "profile-suppression-bulk-delete-jobs profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5734,7 +5934,7 @@ export def "profile-suppression-bulk-delete-jobs profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Bulk Unsuppress Profiles Job
@@ -5750,6 +5950,7 @@ export def "profile-suppression-bulk-delete-jobs job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile-suppression-bulk-delete-job: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -5761,7 +5962,7 @@ export def "profile-suppression-bulk-delete-jobs job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Push Tokens
@@ -5776,6 +5977,7 @@ export def "push-tokens tokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldspush-token: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `equals`<br>`profile.id`: `equals`<br>`enablement_status`: `equals`<br>`platform`: `equals` (e.g. equals(id,'example'))
@@ -5792,7 +5994,7 @@ export def "push-tokens tokens" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or Update Push Token
@@ -5807,6 +6009,7 @@ export def "push-tokens token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -5819,7 +6022,7 @@ export def "push-tokens token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Push Token
@@ -5835,6 +6038,7 @@ export def "push-tokens token-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldspush-token: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -5848,7 +6052,7 @@ export def "push-tokens token-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Push Token
@@ -5864,6 +6068,7 @@ export def "push-tokens token-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5873,7 +6078,7 @@ export def "push-tokens token-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or Update Profile
@@ -5888,6 +6093,7 @@ export def "profile-import profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -5903,7 +6109,7 @@ export def "profile-import profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Merge Profiles
@@ -5918,6 +6124,7 @@ export def "profile-merge profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -5932,7 +6139,7 @@ export def "profile-merge profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Bulk Subscribe Profiles
@@ -5947,6 +6154,7 @@ export def "profile-subscription-bulk-create-jobs profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -5959,7 +6167,7 @@ export def "profile-subscription-bulk-create-jobs profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Bulk Unsubscribe Profiles
@@ -5974,6 +6182,7 @@ export def "profile-subscription-bulk-delete-jobs profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -5986,7 +6195,7 @@ export def "profile-subscription-bulk-delete-jobs profiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Push Tokens for Profile
@@ -6002,6 +6211,7 @@ export def "profiles-push-tokens profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldspush-token: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6013,7 +6223,7 @@ export def "profiles-push-tokens profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Push Token IDs for Profile
@@ -6029,6 +6239,7 @@ export def "profiles-relationships-push-tokens profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6038,7 +6249,7 @@ export def "profiles-relationships-push-tokens profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Lists for Profile
@@ -6054,6 +6265,7 @@ export def "profiles-lists profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6065,7 +6277,7 @@ export def "profiles-lists profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get List IDs for Profile
@@ -6081,6 +6293,7 @@ export def "profiles-relationships-lists profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6090,7 +6303,7 @@ export def "profiles-relationships-lists profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Segments for Profile
@@ -6106,6 +6319,7 @@ export def "profiles-segments profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldssegment: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6117,7 +6331,7 @@ export def "profiles-segments profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Segment IDs for Profile
@@ -6133,6 +6347,7 @@ export def "profiles-relationships-segments profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6142,7 +6357,7 @@ export def "profiles-relationships-segments profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conversation for Profile
@@ -6158,6 +6373,7 @@ export def "profiles-conversation profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsconversation: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6169,7 +6385,7 @@ export def "profiles-conversation profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conversation ID for Profile
@@ -6185,6 +6401,7 @@ export def "profiles-relationships-conversation profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6194,7 +6411,7 @@ export def "profiles-relationships-conversation profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get List for Bulk Import Profiles Job
@@ -6210,6 +6427,7 @@ export def "profile-bulk-import-jobs-lists job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldslist: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6221,7 +6439,7 @@ export def "profile-bulk-import-jobs-lists job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get List IDs for Bulk Import Profiles Job
@@ -6237,6 +6455,7 @@ export def "profile-bulk-import-jobs-relationships-lists job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6246,7 +6465,7 @@ export def "profile-bulk-import-jobs-relationships-lists job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profiles for Bulk Import Profiles Job
@@ -6262,6 +6481,7 @@ export def "profile-bulk-import-jobs-profiles job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -6276,7 +6496,7 @@ export def "profile-bulk-import-jobs-profiles job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile IDs for Bulk Import Profiles Job
@@ -6292,6 +6512,7 @@ export def "profile-bulk-import-jobs-relationships-profiles job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -6304,7 +6525,7 @@ export def "profile-bulk-import-jobs-relationships-profiles job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Errors for Bulk Import Profiles Job
@@ -6320,6 +6541,7 @@ export def "profile-bulk-import-jobs-import-errors job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsimport-error: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
@@ -6333,7 +6555,7 @@ export def "profile-bulk-import-jobs-import-errors job" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile for Push Token
@@ -6349,6 +6571,7 @@ export def "push-tokens-profile token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -6361,7 +6584,7 @@ export def "push-tokens-profile token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile ID for Push Token
@@ -6377,6 +6600,7 @@ export def "push-tokens-relationships-profile token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6386,7 +6610,7 @@ export def "push-tokens-relationships-profile token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Campaign Values
@@ -6401,6 +6625,7 @@ export def "campaign-values-reports values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldscampaign-values-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --page-cursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -6416,7 +6641,7 @@ export def "campaign-values-reports values" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Flow Values
@@ -6431,6 +6656,7 @@ export def "flow-values-reports values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-values-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --page-cursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -6446,7 +6672,7 @@ export def "flow-values-reports values" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Flow Series
@@ -6461,6 +6687,7 @@ export def "flow-series-reports series" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow-series-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --page-cursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -6476,7 +6703,7 @@ export def "flow-series-reports series" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Form Values
@@ -6491,6 +6718,7 @@ export def "form-values-reports values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform-values-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6505,7 +6733,7 @@ export def "form-values-reports values" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Form Series
@@ -6520,6 +6748,7 @@ export def "form-series-reports series" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsform-series-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6534,7 +6763,7 @@ export def "form-series-reports series" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Segment Values
@@ -6549,6 +6778,7 @@ export def "segment-values-reports values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldssegment-values-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6563,7 +6793,7 @@ export def "segment-values-reports values" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Query Segment Series
@@ -6578,6 +6808,7 @@ export def "segment-series-reports series" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldssegment-series-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6592,7 +6823,7 @@ export def "segment-series-reports series" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Reviews
@@ -6607,6 +6838,7 @@ export def "reviews reviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsevent: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsreview: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`created`: `greater-or-equal`, `less-or-equal`<br>`rating`: `any`, `equals`, `greater-or-equal`, `less-or-equal`<br>`id`: `any`, `equals`<br>`item.id`: `any`, `equals`<br>`content`: `contains`<br>`status`: `equals`<br>`review_type`: `equals`<br>`verified`: `equals` (e.g. less-or-equal(created,2022-11-08T00:00:00+00:00))
@@ -6624,7 +6856,7 @@ export def "reviews reviews" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Review
@@ -6640,6 +6872,7 @@ export def "reviews review-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsevent: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldsreview: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -6653,7 +6886,7 @@ export def "reviews review-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Review
@@ -6669,6 +6902,7 @@ export def "reviews review-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsreview: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6683,7 +6917,7 @@ export def "reviews review-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Segments
@@ -6698,6 +6932,7 @@ export def "segments segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldssegment: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -6716,7 +6951,7 @@ export def "segments segments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Segment
@@ -6731,6 +6966,7 @@ export def "segments segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldssegment: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6745,7 +6981,7 @@ export def "segments segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Segment
@@ -6761,6 +6997,7 @@ export def "segments segment-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldssegment: list # Request additional fields not included by default in the response. Supported values: 'profile_count'
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldssegment: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
@@ -6776,7 +7013,7 @@ export def "segments segment-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Segment
@@ -6792,6 +7029,7 @@ export def "segments segment-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldssegment: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -6806,7 +7044,7 @@ export def "segments segment-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Segment
@@ -6822,6 +7060,7 @@ export def "segments segment-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6831,7 +7070,7 @@ export def "segments segment-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tags for Segment
@@ -6847,6 +7086,7 @@ export def "segments-tags segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6858,7 +7098,7 @@ export def "segments-tags segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag IDs for Segment
@@ -6874,6 +7114,7 @@ export def "segments-relationships-tags segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6883,7 +7124,7 @@ export def "segments-relationships-tags segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profiles for Segment
@@ -6899,6 +7140,7 @@ export def "segments-profiles segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldsprofile: list # Request additional fields not included by default in the response. Supported values: 'subscriptions', 'predictive_analytics'
   --fieldsprofile: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`profile_id`: `any`, `equals`<br>`email`: `any`, `equals`<br>`phone_number`: `any`, `equals`<br>`push_token`: `any`, `equals`<br>`_kx`: `equals`<br>`joined_group_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(profile_id,['example']))
@@ -6915,7 +7157,7 @@ export def "segments-profiles segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Profile IDs for Segment
@@ -6931,6 +7173,7 @@ export def "segments-relationships-profiles segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`profile_id`: `any`, `equals`<br>`email`: `any`, `equals`<br>`phone_number`: `any`, `equals`<br>`push_token`: `any`, `equals`<br>`_kx`: `equals`<br>`joined_group_at`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(profile_id,['example']))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 20. Min: 1. Max: 100. (default: 20)
@@ -6945,7 +7188,7 @@ export def "segments-relationships-profiles segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flows Triggered by Segment
@@ -6961,6 +7204,7 @@ export def "segments-flow-triggers segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsflow: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -6972,7 +7216,7 @@ export def "segments-flow-triggers segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IDs for Flows Triggered by Segment
@@ -6988,6 +7232,7 @@ export def "segments-relationships-flow-triggers segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6997,7 +7242,7 @@ export def "segments-relationships-flow-triggers segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tags
@@ -7012,6 +7257,7 @@ export def "tags tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`name`: `contains`, `ends-with`, `equals`, `starts-with` (e.g. equals(name,'My Tag'))
@@ -7029,7 +7275,7 @@ export def "tags tags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Tag
@@ -7044,6 +7290,7 @@ export def "tags tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -7058,7 +7305,7 @@ export def "tags tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Tag
@@ -7074,6 +7321,7 @@ export def "tags tag-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -7087,7 +7335,7 @@ export def "tags tag-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Tag
@@ -7103,6 +7351,7 @@ export def "tags tag-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7115,7 +7364,7 @@ export def "tags tag-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Tag
@@ -7131,6 +7380,7 @@ export def "tags tag-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7140,7 +7390,7 @@ export def "tags tag-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag Groups
@@ -7155,6 +7405,7 @@ export def "tag-groups groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`name`: `contains`, `ends-with`, `equals`, `starts-with`<br>`exclusive`: `equals`<br>`default`: `equals` (e.g. equals(name,'My Tag Group'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -7170,7 +7421,7 @@ export def "tag-groups groups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Tag Group
@@ -7185,6 +7436,7 @@ export def "tag-groups group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -7199,7 +7451,7 @@ export def "tag-groups group" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Tag Group
@@ -7215,6 +7467,7 @@ export def "tag-groups group-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -7226,7 +7479,7 @@ export def "tag-groups group-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Tag Group
@@ -7242,6 +7495,7 @@ export def "tag-groups group-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7254,7 +7508,7 @@ export def "tag-groups group-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Tag Group
@@ -7270,6 +7524,7 @@ export def "tag-groups group-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7279,7 +7534,7 @@ export def "tag-groups group-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flow IDs for Tag
@@ -7295,6 +7550,7 @@ export def "tags-relationships-flows tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7304,7 +7560,7 @@ export def "tags-relationships-flows tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tag Flows
@@ -7320,6 +7576,7 @@ export def "tags-relationships-flows flows-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7332,7 +7589,7 @@ export def "tags-relationships-flows flows-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Tag from Flows
@@ -7348,6 +7605,7 @@ export def "tags-relationships-flows flows-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7360,7 +7618,7 @@ export def "tags-relationships-flows flows-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Campaign IDs for Tag
@@ -7376,6 +7634,7 @@ export def "tags-relationships-campaigns tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7385,7 +7644,7 @@ export def "tags-relationships-campaigns tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tag Campaigns
@@ -7401,6 +7660,7 @@ export def "tags-relationships-campaigns campaigns-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7413,7 +7673,7 @@ export def "tags-relationships-campaigns campaigns-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Tag from Campaigns
@@ -7429,6 +7689,7 @@ export def "tags-relationships-campaigns campaigns-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7441,7 +7702,7 @@ export def "tags-relationships-campaigns campaigns-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get List IDs for Tag
@@ -7457,6 +7718,7 @@ export def "tags-relationships-lists tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7466,7 +7728,7 @@ export def "tags-relationships-lists tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tag Lists
@@ -7482,6 +7744,7 @@ export def "tags-relationships-lists lists-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7494,7 +7757,7 @@ export def "tags-relationships-lists lists-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Tag from Lists
@@ -7510,6 +7773,7 @@ export def "tags-relationships-lists lists-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7522,7 +7786,7 @@ export def "tags-relationships-lists lists-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Segment IDs for Tag
@@ -7538,6 +7802,7 @@ export def "tags-relationships-segments tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7547,7 +7812,7 @@ export def "tags-relationships-segments tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tag Segments
@@ -7563,6 +7828,7 @@ export def "tags-relationships-segments segments-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7575,7 +7841,7 @@ export def "tags-relationships-segments segments-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove Tag from Segments
@@ -7591,6 +7857,7 @@ export def "tags-relationships-segments segments-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
 ]: any -> any {
@@ -7603,7 +7870,7 @@ export def "tags-relationships-segments segments-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Tag Group for Tag
@@ -7619,6 +7886,7 @@ export def "tags-tag-group tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag-group: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -7630,7 +7898,7 @@ export def "tags-tag-group tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag Group ID for Tag
@@ -7646,6 +7914,7 @@ export def "tags-relationships-tag-group tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7655,7 +7924,7 @@ export def "tags-relationships-tag-group tag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tags for Tag Group
@@ -7671,6 +7940,7 @@ export def "tag-groups-tags group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstag: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -7682,7 +7952,7 @@ export def "tag-groups-tags group" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tag IDs for Tag Group
@@ -7698,6 +7968,7 @@ export def "tag-groups-relationships-tags group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7707,7 +7978,7 @@ export def "tag-groups-relationships-tags group" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Templates
@@ -7722,6 +7993,7 @@ export def "templates templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldstemplate: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`, `equals`<br>`name`: `any`, `contains`, `equals`<br>`created`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `equals`, `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(id,['example']))
@@ -7738,7 +8010,7 @@ export def "templates templates" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Template
@@ -7753,6 +8025,7 @@ export def "templates template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldstemplate: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -7768,7 +8041,7 @@ export def "templates template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Template
@@ -7784,6 +8057,7 @@ export def "templates template-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldstemplate: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -7796,7 +8070,7 @@ export def "templates template-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Template
@@ -7812,6 +8086,7 @@ export def "templates template-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-fieldstemplate: list # Request additional fields not included by default in the response. Supported values: 'definition'
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
@@ -7827,7 +8102,7 @@ export def "templates template-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Template
@@ -7843,6 +8118,7 @@ export def "templates template-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7852,7 +8128,7 @@ export def "templates template-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Universal Content
@@ -7867,6 +8143,7 @@ export def "template-universal-content content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate-universal-content: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`id`: `any`, `equals`<br>`name`: `any`, `equals`<br>`created`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`definition.content_type`: `equals`<br>`definition.type`: `equals` (e.g. equals(id,'01HWWWKAW4RHXQJCMW4R2KRYR4'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -7882,7 +8159,7 @@ export def "template-universal-content content" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Universal Content
@@ -7897,6 +8174,7 @@ export def "template-universal-content content-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate-universal-content: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -7911,7 +8189,7 @@ export def "template-universal-content content-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Universal Content
@@ -7927,6 +8205,7 @@ export def "template-universal-content content-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate-universal-content: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -7938,7 +8217,7 @@ export def "template-universal-content content-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Universal Content
@@ -7954,6 +8233,7 @@ export def "template-universal-content content-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate-universal-content: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -7968,7 +8248,7 @@ export def "template-universal-content content-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Universal Content
@@ -7984,6 +8264,7 @@ export def "template-universal-content content-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7993,7 +8274,7 @@ export def "template-universal-content content-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Render Template
@@ -8008,6 +8289,7 @@ export def "template-render template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8022,7 +8304,7 @@ export def "template-render template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Clone Template
@@ -8037,6 +8319,7 @@ export def "template-clone template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstemplate: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8051,7 +8334,7 @@ export def "template-clone template" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Tracking Settings
@@ -8066,6 +8349,7 @@ export def "tracking-settings settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstracking-setting: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
   --pagesize: int # Default: 1. Min: 1. Max: 1. (default: 1)
@@ -8079,7 +8363,7 @@ export def "tracking-settings settings" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tracking Setting
@@ -8095,6 +8379,7 @@ export def "tracking-settings setting-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstracking-setting: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -8106,7 +8391,7 @@ export def "tracking-settings setting-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Tracking Setting
@@ -8122,6 +8407,7 @@ export def "tracking-settings setting-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldstracking-setting: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8136,7 +8422,7 @@ export def "tracking-settings setting-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Web Feeds
@@ -8151,6 +8437,7 @@ export def "web-feeds feeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsweb-feed: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`name`: `any`, `contains`, `equals`<br>`created`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than`<br>`updated`: `greater-or-equal`, `greater-than`, `less-or-equal`, `less-than` (e.g. equals(name,'Blog_posts'))
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -8166,7 +8453,7 @@ export def "web-feeds feeds" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Web Feed
@@ -8181,6 +8468,7 @@ export def "web-feeds feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsweb-feed: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8195,7 +8483,7 @@ export def "web-feeds feed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Web Feed
@@ -8211,6 +8499,7 @@ export def "web-feeds feed-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsweb-feed: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -8222,7 +8511,7 @@ export def "web-feeds feed-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Web Feed
@@ -8238,6 +8527,7 @@ export def "web-feeds feed-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldsweb-feed: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8252,7 +8542,7 @@ export def "web-feeds feed-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Web Feed
@@ -8268,6 +8558,7 @@ export def "web-feeds feed-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8277,7 +8568,7 @@ export def "web-feeds feed-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webhooks
@@ -8292,6 +8583,7 @@ export def "webhooks webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook-topic: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldswebhook: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -8305,7 +8597,7 @@ export def "webhooks webhooks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webhook
@@ -8320,6 +8612,7 @@ export def "webhooks webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8334,7 +8627,7 @@ export def "webhooks webhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Webhook
@@ -8350,6 +8643,7 @@ export def "webhooks webhook-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook-topic: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --fieldswebhook: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --include: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#relationships
@@ -8363,7 +8657,7 @@ export def "webhooks webhook-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webhook
@@ -8379,6 +8673,7 @@ export def "webhooks webhook-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8393,7 +8688,7 @@ export def "webhooks webhook-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Webhook
@@ -8409,6 +8704,7 @@ export def "webhooks webhook-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8418,7 +8714,7 @@ export def "webhooks webhook-by-id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webhook Topics
@@ -8433,6 +8729,7 @@ export def "webhook-topics topics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook-topic: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -8444,7 +8741,7 @@ export def "webhook-topics topics" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webhook Topic
@@ -8460,6 +8757,7 @@ export def "webhook-topics topic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldswebhook-topic: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
 ]: nothing -> any {
@@ -8471,7 +8769,7 @@ export def "webhook-topics topic" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Client Review Values Reports
@@ -8486,6 +8784,7 @@ export def "client-review-values-reports reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --fieldsreview-values-report: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`product_external_ids`: `any`, `equals` (e.g. equals(product_external_ids,'example'))
@@ -8504,7 +8803,7 @@ export def "client-review-values-reports reports" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Client Reviews
@@ -8519,6 +8818,7 @@ export def "client-reviews reviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --fieldsreview: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --filter: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#filtering<br>Allowed field(s)/operator(s):<br>`status`: `equals`<br>`review_type`: `equals`<br>`rating`: `any`, `equals`, `greater-or-equal`, `less-or-equal`<br>`id`: `any`, `equals`<br>`content`: `contains`<br>`smart_quote`: `has`<br>`public_reply`: `has`<br>`verified`: `equals`<br>`incentivized`: `equals`<br>`edited`: `equals`<br>`media`: `has`<br>`created`: `greater-or-equal`, `less-or-equal`<br>`updated`: `greater-or-equal`, `less-or-equal` (e.g. equals(status,'published'))
@@ -8535,7 +8835,7 @@ export def "client-reviews reviews" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Client Review
@@ -8550,6 +8850,7 @@ export def "client-reviews review" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8564,7 +8865,7 @@ export def "client-reviews review" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Client Geofences
@@ -8579,6 +8880,7 @@ export def "client-geofences geofences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --fieldsgeofence: list # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#sparse-fieldsets
   --pagecursor: string # For more information please visit https://developers.klaviyo.com/en/v2026-04-15/reference/api-overview#pagination
@@ -8594,7 +8896,7 @@ export def "client-geofences geofences" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Client Subscription
@@ -8609,6 +8911,7 @@ export def "client-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8623,7 +8926,7 @@ export def "client-subscriptions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create or Update Client Push Token
@@ -8638,6 +8941,7 @@ export def "client-push-tokens token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8652,7 +8956,7 @@ export def "client-push-tokens token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Unregister Client Push Token
@@ -8667,6 +8971,7 @@ export def "client-push-token-unregister token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8681,7 +8986,7 @@ export def "client-push-token-unregister token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create Client Event
@@ -8696,6 +9001,7 @@ export def "client-events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8710,7 +9016,7 @@ export def "client-events event" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create or Update Client Profile
@@ -8725,6 +9031,7 @@ export def "client-profiles profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8739,7 +9046,7 @@ export def "client-profiles profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Bulk Create Client Events
@@ -8754,6 +9061,7 @@ export def "client-event-bulk-create events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8768,7 +9076,7 @@ export def "client-event-bulk-create events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create Client Back In Stock Subscription
@@ -8783,6 +9091,7 @@ export def "client-back-in-stock-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company-id: string # Your Public API Key / Site ID. See [this article](https://help.klaviyo.com/hc/en-us/articles/115005062267) for more details. (e.g. PUBLIC_API_KEY)
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   --body: record
@@ -8797,5 +9106,5 @@ export def "client-back-in-stock-subscriptions subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }

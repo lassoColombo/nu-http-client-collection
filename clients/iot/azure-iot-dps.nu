@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def certificatepurpose-completer [] { ["clientAuthentication" "serverAuthenticat
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "providers-microsoft-devices-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -110,7 +112,7 @@ export def "providers-microsoft-devices-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Devices/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if a provisioning service name is available.
@@ -126,6 +128,7 @@ export def "subscriptions-providers-microsoft-devices-check-provisioning-service
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   name: string # The name of the Provisioning Service to check.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -138,7 +141,7 @@ export def "subscriptions-providers-microsoft-devices-check-provisioning-service
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all the provisioning services in a subscription.
@@ -154,6 +157,7 @@ export def "subscriptions-providers-microsoft-devices-provisioning-services List
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -162,7 +166,7 @@ export def "subscriptions-providers-microsoft-devices-provisioning-services List
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/provisioningServices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all provisioning services in the given resource group.
@@ -179,6 +183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -187,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the Provisioning Service
@@ -205,6 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<code: string, details: string, httpStatusCode: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -213,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the non-security related metadata of the provisioning service.
@@ -231,6 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -239,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing provisioning service's tags.
@@ -257,6 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --tags: any # Resource tags
 ]: any -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>> {
@@ -269,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update the metadata of the provisioning service.
@@ -289,6 +297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --etag: string # The Etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal ETag convention.
   properties: record # the service specific properties of a provisioning service, including keys, linked iot hubs, current state, and system generated properties such as hostname and idScope — shape: {allocationPolicy?: "Hashed"|"GeoLatency"|"Static", authorizationPolicies?: list, iotHubs?: list, provisioningState?: string, state?: "Activating"|"Active"|"Deleting"|"Deleted"|"ActivationFailed"|"DeletionFailed"|"Transitioning"|"Suspending"|"Suspended"|"Resuming"|"FailingOver"|"FailoverFailed"}
@@ -305,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all the certificates tied to the provisioning service.
@@ -323,6 +332,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -331,7 +341,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the Provisioning Service Certificate.
@@ -350,6 +360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificatename: string # This is optional, and it is the Common Name of the certificate.
   --certificaterawBytes: string # Raw data within the certificate. (format: byte)
   --certificateisVerified: oneof<nothing, bool> # Indicates if certificate has been verified by owner of the private key.
@@ -369,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the certificate from the provisioning service.
@@ -388,6 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --If-Match: string # ETag of the certificate.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
@@ -399,7 +411,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload the certificate to the provisioning service.
@@ -418,6 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --If-Match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
   --certificate: string # Base-64 representation of the X509 leaf certificate .cer file or just .pem file content.
@@ -433,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate verification code for Proof of Possession.
@@ -452,6 +465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificatename: string # Common Name for the certificate.
   --certificaterawBytes: string # Raw data of certificate. (format: byte)
   --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
@@ -471,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify certificate's private key possession.
@@ -490,6 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificatename: string # Common Name for the certificate.
   --certificaterawBytes: string # Raw data of certificate. (format: byte)
   --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
@@ -513,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a shared access policy by name from a provisioning service.
@@ -532,6 +547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<keyName: string, primaryKey: string, rights: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -540,7 +556,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/keys/($keyName)/listkeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the security metadata for a provisioning service.
@@ -558,6 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<keyName: string, primaryKey: string, rights: string, secondaryKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -566,7 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/listkeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the status of a long running operation, such as create, update or delete a provisioning service.
@@ -585,6 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asyncinfo: string # Async header used to poll on the status of the operation, obtained while creating the long running operation. (default: true)
   --api-version: string # The version of the API.
 ]: nothing -> record<error: record<code: string, details: string, message: string>, status: string> {
@@ -594,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/operationresults/($operationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of valid SKUs for a provisioning service.
@@ -612,6 +630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -620,5 +639,5 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/skus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

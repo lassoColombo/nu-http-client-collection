@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "acquisition-of-beneficial-ownership acquisitionOwnership" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "acquisition-of-beneficial-ownership acquisitionOwnership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<cik: string, symbol: string, filingDate: string, acceptedDate: string, cusip: string, nameOfReportingPerson: string, citizenshipOrPlaceOfOrganization: string, soleVotingPower: string, sharedVotingPower: string, soleDispositivePower: string, sharedDispositivePower: string, amountBeneficiallyOwned: string, percentOfClass: string, typeOfReportingPerson: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -108,7 +110,7 @@ export def "acquisition-of-beneficial-ownership acquisitionOwnership" [
   let full_url = (build-url $base "/acquisition-of-beneficial-ownership" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List actively trading companies
@@ -123,13 +125,14 @@ export def "actively-trading-list activelyTradingList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actively-trading-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get aftermarket quote
@@ -144,6 +147,7 @@ export def "aftermarket-quote aftermarketQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, bidSize: int, bidPrice: float, askSize: int, askPrice: float, volume: int, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -152,7 +156,7 @@ export def "aftermarket-quote aftermarketQuote" [
   let full_url = (build-url $base "/aftermarket-quote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get aftermarket trade data
@@ -167,6 +171,7 @@ export def "aftermarket-trade aftermarketTrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, price: float, tradeSize: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -175,7 +180,7 @@ export def "aftermarket-trade aftermarketTrade" [
   let full_url = (build-url $base "/aftermarket-trade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get market hours for all exchanges
@@ -190,13 +195,14 @@ export def "all-exchange-market-hours allExchangeMarketHours" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<exchange: string, name: string, openingHour: string, closingHour: string, timezone: string, isMarketOpen: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/all-exchange-market-hours")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all SEC industry classifications
@@ -211,13 +217,14 @@ export def "all-industry-classification secAllIndustryClassification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, cik: string, sicCode: string, industryTitle: string, businessAddress: string, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/all-industry-classification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analyst financial estimates
@@ -232,6 +239,7 @@ export def "analyst-estimates financialEstimates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --page: int # Page number
@@ -243,7 +251,7 @@ export def "analyst-estimates financialEstimates" [
   let full_url = (build-url $base "/analyst-estimates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available countries
@@ -258,13 +266,14 @@ export def "available-countries availableCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<country: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/available-countries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available exchanges
@@ -279,13 +288,14 @@ export def "available-exchanges availableExchanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<exchange: string, name: string, countryName: string, countryCode: string, symbolSuffix: string, delay: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/available-exchanges")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available industries
@@ -300,13 +310,14 @@ export def "available-industries availableIndustries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<industry: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/available-industries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available sectors
@@ -321,13 +332,14 @@ export def "available-sectors availableSectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<sector: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/available-sectors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get symbols with available transcripts
@@ -342,13 +354,14 @@ export def "available-transcript-symbols availableTranscriptSymbols" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/available-transcript-symbols")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get balance sheet statement
@@ -363,6 +376,7 @@ export def "balance-sheet-statement balanceSheetStatement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -373,7 +387,7 @@ export def "balance-sheet-statement balanceSheetStatement" [
   let full_url = (build-url $base "/balance-sheet-statement" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get balance sheet growth rates
@@ -388,6 +402,7 @@ export def "balance-sheet-statement-growth balanceSheetStatementGrowth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -398,7 +413,7 @@ export def "balance-sheet-statement-growth balanceSheetStatementGrowth" [
   let full_url = (build-url $base "/balance-sheet-statement-growth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trailing twelve months balance sheet
@@ -413,6 +428,7 @@ export def "balance-sheet-statement-ttm balanceSheetStatementsTtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<date: string, symbol: string, reportedCurrency: string, cik: string, filingDate: string, acceptedDate: string, fiscalYear: string, period: string, cashAndCashEquivalents: int, shortTermInvestments: int, cashAndShortTermInvestments: int, netReceivables: int, accountsReceivables: int, otherReceivables: int, inventory: int, prepaids: int, otherCurrentAssets: int, totalCurrentAssets: int, propertyPlantEquipmentNet: int, goodwill: int, intangibleAssets: int, goodwillAndIntangibleAssets: int, longTermInvestments: int, taxAssets: int, otherNonCurrentAssets: int, totalNonCurrentAssets: int, otherAssets: int, totalAssets: int, totalPayables: int, accountPayables: int, otherPayables: int, accruedExpenses: int, shortTermDebt: int, capitalLeaseObligationsCurrent: int, taxPayables: int, deferredRevenue: int, otherCurrentLiabilities: int, totalCurrentLiabilities: int, longTermDebt: int, deferredRevenueNonCurrent: int, deferredTaxLiabilitiesNonCurrent: int, otherNonCurrentLiabilities: int, totalNonCurrentLiabilities: int, otherLiabilities: int, capitalLeaseObligations: int, totalLiabilities: int, treasuryStock: int, preferredStock: int, commonStock: int, retainedEarnings: int, additionalPaidInCapital: int, accumulatedOtherComprehensiveIncomeLoss: int, otherTotalStockholdersEquity: int, totalStockholdersEquity: int, totalEquity: int, minorityInterest: int, totalLiabilitiesAndTotalEquity: int, totalInvestments: int, totalDebt: int, netDebt: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -421,7 +437,7 @@ export def "balance-sheet-statement-ttm balanceSheetStatementsTtm" [
   let full_url = (build-url $base "/balance-sheet-statement-ttm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get batch aftermarket quotes
@@ -436,6 +452,7 @@ export def "batch-aftermarket-quote batchAftermarketQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Comma-separated symbols
 ]: nothing -> table<symbol: string, bidSize: int, bidPrice: float, askSize: int, askPrice: float, volume: int, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -444,7 +461,7 @@ export def "batch-aftermarket-quote batchAftermarketQuote" [
   let full_url = (build-url $base "/batch-aftermarket-quote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get batch aftermarket trades
@@ -459,6 +476,7 @@ export def "batch-aftermarket-trade batchAftermarketTrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Comma-separated symbols
 ]: nothing -> table<symbol: string, price: float, tradeSize: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -467,7 +485,7 @@ export def "batch-aftermarket-trade batchAftermarketTrade" [
   let full_url = (build-url $base "/batch-aftermarket-trade" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all commodity quotes
@@ -482,13 +500,14 @@ export def "batch-commodity-quotes fullCommoditiesQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, price: float, change: int, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch-commodity-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all forex quotes
@@ -503,13 +522,14 @@ export def "batch-forex-quotes fullForexQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, price: float, change: float, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch-forex-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all index quotes
@@ -524,13 +544,14 @@ export def "batch-index-quotes allIndexQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch-index-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get batch stock quotes
@@ -545,6 +566,7 @@ export def "batch-quote batchQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Comma-separated symbols
 ]: nothing -> table<symbol: string, name: string, price: float, changePercentage: float, change: float, volume: int, dayLow: float, dayHigh: float, yearHigh: float, yearLow: float, marketCap: float, priceAvg50: float, priceAvg200: float, exchange: string, open: float, previousClose: float, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -553,7 +575,7 @@ export def "batch-quote batchQuote" [
   let full_url = (build-url $base "/batch-quote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get batch short quotes
@@ -568,6 +590,7 @@ export def "batch-quote-short batchQuoteShort" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Comma-separated symbols
 ]: nothing -> table<symbol: string, price: float, change: float, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -576,7 +599,7 @@ export def "batch-quote-short batchQuoteShort" [
   let full_url = (build-url $base "/batch-quote-short" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get biggest gainers today
@@ -591,13 +614,14 @@ export def "biggest-gainers biggestGainers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, price: float, name: string, change: float, changesPercentage: float, exchange: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/biggest-gainers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get biggest losers today
@@ -612,13 +636,14 @@ export def "biggest-losers biggestLosers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, price: float, name: string, change: float, changesPercentage: float, exchange: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/biggest-losers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cash flow statement
@@ -633,6 +658,7 @@ export def "cash-flow-statement cashflowStatement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -643,7 +669,7 @@ export def "cash-flow-statement cashflowStatement" [
   let full_url = (build-url $base "/cash-flow-statement" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cash flow statement growth rates
@@ -658,6 +684,7 @@ export def "cash-flow-statement-growth cashflowStatementGrowth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -668,7 +695,7 @@ export def "cash-flow-statement-growth cashflowStatementGrowth" [
   let full_url = (build-url $base "/cash-flow-statement-growth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trailing twelve months cash flow statement
@@ -683,6 +710,7 @@ export def "cash-flow-statement-ttm cashflowStatementsTtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<date: string, symbol: string, reportedCurrency: string, cik: string, filingDate: string, acceptedDate: string, fiscalYear: string, period: string, netIncome: int, depreciationAndAmortization: int, deferredIncomeTax: int, stockBasedCompensation: int, changeInWorkingCapital: int, accountsReceivables: int, inventory: int, accountsPayables: int, otherWorkingCapital: int, otherNonCashItems: int, netCashProvidedByOperatingActivities: int, investmentsInPropertyPlantAndEquipment: int, acquisitionsNet: int, purchasesOfInvestments: int, salesMaturitiesOfInvestments: int, otherInvestingActivities: int, netCashProvidedByInvestingActivities: int, netDebtIssuance: int, longTermNetDebtIssuance: int, shortTermNetDebtIssuance: int, netStockIssuance: int, netCommonStockIssuance: int, commonStockIssuance: int, commonStockRepurchased: int, netPreferredStockIssuance: int, netDividendsPaid: int, commonDividendsPaid: int, preferredDividendsPaid: int, otherFinancingActivities: int, netCashProvidedByFinancingActivities: int, effectOfForexChangesOnCash: int, netChangeInCash: int, cashAtEndOfPeriod: int, cashAtBeginningOfPeriod: int, operatingCashFlow: int, capitalExpenditure: int, freeCashFlow: int, incomeTaxesPaid: int, interestPaid: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -691,7 +719,7 @@ export def "cash-flow-statement-ttm cashflowStatementsTtm" [
   let full_url = (build-url $base "/cash-flow-statement-ttm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all CIK numbers
@@ -706,13 +734,14 @@ export def "cik-list cikList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<cik: string, companyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cik-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all commodities
@@ -727,13 +756,14 @@ export def "commodities-list commoditiesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, exchange: string, tradeMonth: string, currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commodities-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company notes
@@ -748,6 +778,7 @@ export def "company-notes companyNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<cik: string, symbol: string, title: string, exchange: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -756,7 +787,7 @@ export def "company-notes companyNotes" [
   let full_url = (build-url $base "/company-notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Screen companies by various criteria
@@ -771,6 +802,7 @@ export def "company-screener companyScreener" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string # Filter by exchange
   --sector: string # Filter by sector
   --industry: string # Filter by industry
@@ -795,7 +827,7 @@ export def "company-screener companyScreener" [
   let full_url = (build-url $base "/company-screener" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get delisted companies
@@ -810,6 +842,7 @@ export def "delisted-companies delistedCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max results
 ]: nothing -> table<symbol: string, companyName: string, exchange: string, ipoDate: string, delistedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -818,7 +851,7 @@ export def "delisted-companies delistedCompanies" [
   let full_url = (build-url $base "/delisted-companies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company dividend history
@@ -833,6 +866,7 @@ export def "dividends dividendsCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, date: string, recordDate: string, paymentDate: string, declarationDate: string, adjDividend: float, dividend: float, yield: float, frequency: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -841,7 +875,7 @@ export def "dividends dividendsCompany" [
   let full_url = (build-url $base "/dividends" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upcoming dividends calendar
@@ -856,6 +890,7 @@ export def "dividends-calendar dividendsCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, date: string, recordDate: string, paymentDate: string, declarationDate: string, adjDividend: float, dividend: float, yield: float, frequency: string> {
@@ -865,7 +900,7 @@ export def "dividends-calendar dividendsCalendar" [
   let full_url = (build-url $base "/dividends-calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dow Jones constituents
@@ -880,13 +915,14 @@ export def "dowjones-constituent dowJonesConstituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, sector: string, subSector: string, headQuarter: string, dateFirstAdded: string, cik: string, founded: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dowjones-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search earnings call transcripts
@@ -901,6 +937,7 @@ export def "earning-call-transcript searchTranscripts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --year: int # Year
   --quarter: int # Quarter (1-4)
@@ -911,7 +948,7 @@ export def "earning-call-transcript searchTranscripts" [
   let full_url = (build-url $base "/earning-call-transcript" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get transcript dates for a symbol
@@ -926,6 +963,7 @@ export def "earning-call-transcript-dates transcriptsDatesBySymbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<quarter: int, fiscalYear: int, date: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -934,7 +972,7 @@ export def "earning-call-transcript-dates transcriptsDatesBySymbol" [
   let full_url = (build-url $base "/earning-call-transcript-dates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest earnings call transcripts
@@ -949,6 +987,7 @@ export def "earning-call-transcript-latest latestTranscripts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max results
 ]: nothing -> table<symbol: string, period: string, fiscalYear: int, date: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -957,7 +996,7 @@ export def "earning-call-transcript-latest latestTranscripts" [
   let full_url = (build-url $base "/earning-call-transcript-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company earnings history
@@ -972,6 +1011,7 @@ export def "earnings earningsCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, date: string, epsActual: float, epsEstimated: float, revenueActual: int, revenueEstimated: int, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -980,7 +1020,7 @@ export def "earnings earningsCompany" [
   let full_url = (build-url $base "/earnings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upcoming earnings calendar
@@ -995,6 +1035,7 @@ export def "earnings-calendar earningsCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, date: string, epsActual: float, epsEstimated: float, revenueActual: int, revenueEstimated: int, lastUpdated: string> {
@@ -1004,7 +1045,7 @@ export def "earnings-calendar earningsCalendar" [
   let full_url = (build-url $base "/earnings-calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available earnings transcripts
@@ -1019,13 +1060,14 @@ export def "earnings-transcript-list earningsTranscriptList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, companyName: string, noOfTranscripts: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/earnings-transcript-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get economics calendar events
@@ -1040,6 +1082,7 @@ export def "economic-calendar economicsCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<date: string, country: string, event: string, currency: string, previous: float, estimate: float, actual: float, change: float, impact: string, changePercentage: float, unit: string> {
@@ -1049,7 +1092,7 @@ export def "economic-calendar economicsCalendar" [
   let full_url = (build-url $base "/economic-calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get economic indicators
@@ -1064,6 +1107,7 @@ export def "economic-indicators economicsIndicators" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Indicator name (e.g. GDP, CPI, unemployment)
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -1074,7 +1118,7 @@ export def "economic-indicators economicsIndicators" [
   let full_url = (build-url $base "/economic-indicators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current employee count
@@ -1089,6 +1133,7 @@ export def "employee-count employeeCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, cik: string, acceptanceTime: string, periodOfReport: string, companyName: string, formType: string, filingDate: string, employeeCount: int, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1097,7 +1142,7 @@ export def "employee-count employeeCount" [
   let full_url = (build-url $base "/employee-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get enterprise values
@@ -1112,6 +1157,7 @@ export def "enterprise-values enterpriseValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -1122,7 +1168,7 @@ export def "enterprise-values enterpriseValues" [
   let full_url = (build-url $base "/enterprise-values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all ETFs
@@ -1137,13 +1183,14 @@ export def "etf-list etfsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/etf-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETF asset exposure
@@ -1158,6 +1205,7 @@ export def "etf-asset-exposure etfAssetExposure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # ETF symbol
 ]: nothing -> table<symbol: string, asset: string, sharesNumber: int, weightPercentage: float, marketValue: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1166,7 +1214,7 @@ export def "etf-asset-exposure etfAssetExposure" [
   let full_url = (build-url $base "/etf/asset-exposure" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETF country weighting
@@ -1181,6 +1229,7 @@ export def "etf-country-weightings etfCountryWeighting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # ETF symbol
 ]: nothing -> table<country: string, weightPercentage: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1189,7 +1238,7 @@ export def "etf-country-weightings etfCountryWeighting" [
   let full_url = (build-url $base "/etf/country-weightings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETF holdings
@@ -1204,6 +1253,7 @@ export def "etf-holdings etfHoldings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # ETF symbol
 ]: nothing -> table<symbol: string, asset: string, name: string, isin: string, securityCusip: string, sharesNumber: int, weightPercentage: float, marketValue: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1212,7 +1262,7 @@ export def "etf-holdings etfHoldings" [
   let full_url = (build-url $base "/etf/holdings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETF information
@@ -1227,6 +1277,7 @@ export def "etf-info etfInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # ETF symbol
 ]: nothing -> table<symbol: string, name: string, description: string, isin: string, assetClass: string, securityCusip: string, domicile: string, website: string, etfCompany: string, expenseRatio: float, assetsUnderManagement: int, avgVolume: int, inceptionDate: string, nav: float, navCurrency: string, holdingsCount: int, isActivelyTrading: bool, updatedAt: string, sectorsList: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1235,7 +1286,7 @@ export def "etf-info etfInformation" [
   let full_url = (build-url $base "/etf/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETF sector weighting
@@ -1250,6 +1301,7 @@ export def "etf-sector-weightings etfSectorWeighting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # ETF symbol
 ]: nothing -> table<symbol: string, sector: string, weightPercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1258,7 +1310,7 @@ export def "etf-sector-weightings etfSectorWeighting" [
   let full_url = (build-url $base "/etf/sector-weightings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get market hours for an exchange
@@ -1273,6 +1325,7 @@ export def "exchange-market-hours exchangeMarketHours" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string # Exchange name (e.g. NASDAQ)
 ]: nothing -> table<exchange: string, name: string, openingHour: string, closingHour: string, timezone: string, isMarketOpen: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1281,7 +1334,7 @@ export def "exchange-market-hours exchangeMarketHours" [
   let full_url = (build-url $base "/exchange-market-hours" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get executive compensation benchmark
@@ -1296,6 +1349,7 @@ export def "executive-compensation-benchmark executiveCompensationBenchmark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year
 ]: nothing -> table<industryTitle: string, year: int, averageCompensation: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1304,7 +1358,7 @@ export def "executive-compensation-benchmark executiveCompensationBenchmark" [
   let full_url = (build-url $base "/executive-compensation-benchmark" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get overall financial statement growth
@@ -1319,6 +1373,7 @@ export def "financial-growth financialStatementGrowth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -1329,7 +1384,7 @@ export def "financial-growth financialStatementGrowth" [
   let full_url = (build-url $base "/financial-growth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get financial report filing dates
@@ -1344,6 +1399,7 @@ export def "financial-reports-dates financialReportsDates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, fiscalYear: int, period: string, linkJson: string, linkXlsx: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1352,7 +1408,7 @@ export def "financial-reports-dates financialReportsDates" [
   let full_url = (build-url $base "/financial-reports-dates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get financial scores (Altman Z-Score, Piotroski, etc.)
@@ -1367,6 +1423,7 @@ export def "financial-scores financialScores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, reportedCurrency: string, altmanZScore: float, piotroskiScore: int, workingCapital: int, totalAssets: int, retainedEarnings: int, ebit: int, marketCap: float, totalLiabilities: int, revenue: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1375,7 +1432,7 @@ export def "financial-scores financialScores" [
   let full_url = (build-url $base "/financial-scores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all financial statement symbols
@@ -1390,13 +1447,14 @@ export def "financial-statement-symbol-list financialSymbolsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, companyName: string, tradingCurrency: string, reportingCurrency: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/financial-statement-symbol-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get FMP articles
@@ -1411,6 +1469,7 @@ export def "fmp-articles fmpArticles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max results
 ]: nothing -> table<title: string, date: string, content: string, tickers: string, image: string, link: string, author: string, site: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1419,7 +1478,7 @@ export def "fmp-articles fmpArticles" [
   let full_url = (build-url $base "/fmp-articles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all cryptocurrency quotes
@@ -1434,13 +1493,14 @@ export def "full-cryptocurrency-quotes fullCryptocurrencyQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/full-cryptocurrency-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all ETF quotes
@@ -1455,13 +1515,14 @@ export def "full-etf-quotes fullEtfQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/full-etf-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all quotes for an exchange
@@ -1476,6 +1537,7 @@ export def "full-exchange-quotes fullExchangeQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string # Exchange name (e.g. NASDAQ)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1484,7 +1546,7 @@ export def "full-exchange-quotes fullExchangeQuotes" [
   let full_url = (build-url $base "/full-exchange-quotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all mutual fund quotes
@@ -1499,13 +1561,14 @@ export def "full-mutualfund-quotes fullMutualFundQuotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/full-mutualfund-quotes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mutual fund disclosures
@@ -1520,6 +1583,7 @@ export def "funds-disclosure mutualFundDisclosures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Fund symbol
   --year: int # Year
   --quarter: int # Quarter (1-4)
@@ -1531,7 +1595,7 @@ export def "funds-disclosure mutualFundDisclosures" [
   let full_url = (build-url $base "/funds/disclosure" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get disclosure dates for a fund
@@ -1546,6 +1610,7 @@ export def "funds-disclosure-dates disclosuresDates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Fund symbol
   --cik: string # CIK number
 ]: nothing -> table<date: string, year: int, quarter: int> {
@@ -1555,7 +1620,7 @@ export def "funds-disclosure-dates disclosuresDates" [
   let full_url = (build-url $base "/funds/disclosure-dates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest ETF/fund disclosures
@@ -1570,6 +1635,7 @@ export def "funds-disclosure-holders-latest latestDisclosures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<cik: string, holder: string, securityCusip: string, shares: int, dateReported: string, change: int, weightPercent: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1578,7 +1644,7 @@ export def "funds-disclosure-holders-latest latestDisclosures" [
   let full_url = (build-url $base "/funds/disclosure-holders-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search disclosures by name
@@ -1593,6 +1659,7 @@ export def "funds-disclosure-holders-search disclosuresNameSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Fund name to search
 ]: nothing -> table<symbol: string, cik: string, classId: string, seriesId: string, entityName: string, entityOrgType: string, seriesName: string, className: string, reportingFileNumber: string, address: string, city: string, zipCode: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1601,7 +1668,7 @@ export def "funds-disclosure-holders-search disclosuresNameSearch" [
   let full_url = (build-url $base "/funds/disclosure-holders-search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get executive compensation data
@@ -1616,6 +1683,7 @@ export def "governance-executive-compensation executiveCompensation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<cik: string, symbol: string, companyName: string, filingDate: string, acceptedDate: string, nameAndPosition: string, year: int, salary: int, bonus: int, stockAward: int, optionAward: int, incentivePlanCompensation: int, allOtherCompensation: int, total: int, link: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1624,7 +1692,7 @@ export def "governance-executive-compensation executiveCompensation" [
   let full_url = (build-url $base "/governance-executive-compensation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest analyst grades
@@ -1639,6 +1707,7 @@ export def "grades grades" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, date: string, gradingCompany: string, previousGrade: string, newGrade: string, action: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1647,7 +1716,7 @@ export def "grades grades" [
   let full_url = (build-url $base "/grades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analyst grades summary
@@ -1662,6 +1731,7 @@ export def "grades-consensus gradesSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, strongBuy: int, buy: int, hold: int, sell: int, strongSell: int, consensus: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1670,7 +1740,7 @@ export def "grades-consensus gradesSummary" [
   let full_url = (build-url $base "/grades-consensus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical analyst grades
@@ -1685,6 +1755,7 @@ export def "grades-historical historicalGrades" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --limit: int # Max results
 ]: nothing -> table<symbol: string, date: string, analystRatingsStrongBuy: int, analystRatingsBuy: int, analystRatingsHold: int, analystRatingsSell: int, analystRatingsStrongSell: int> {
@@ -1694,7 +1765,7 @@ export def "grades-historical historicalGrades" [
   let full_url = (build-url $base "/grades-historical" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 15-minute intraday chart data
@@ -1709,6 +1780,7 @@ export def "historical-chart-15min intradayChart15Min" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -1719,7 +1791,7 @@ export def "historical-chart-15min intradayChart15Min" [
   let full_url = (build-url $base "/historical-chart/15min" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 1-hour index intraday data
@@ -1734,6 +1806,7 @@ export def "historical-chart-1hour indexIntraday1Hour" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Index symbol
   --qp-from: string # Start date
   --qp-to: string # End date
@@ -1744,7 +1817,7 @@ export def "historical-chart-1hour indexIntraday1Hour" [
   let full_url = (build-url $base "/historical-chart/1hour" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 1-minute index intraday data
@@ -1759,6 +1832,7 @@ export def "historical-chart-1min indexIntraday1Min" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Index symbol
   --qp-from: string # Start date
   --qp-to: string # End date
@@ -1769,7 +1843,7 @@ export def "historical-chart-1min indexIntraday1Min" [
   let full_url = (build-url $base "/historical-chart/1min" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 30-minute intraday chart data
@@ -1784,6 +1858,7 @@ export def "historical-chart-30min intradayChart30Min" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -1794,7 +1869,7 @@ export def "historical-chart-30min intradayChart30Min" [
   let full_url = (build-url $base "/historical-chart/30min" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 4-hour intraday chart data
@@ -1809,6 +1884,7 @@ export def "historical-chart-4hour intradayChart4Hour" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -1819,7 +1895,7 @@ export def "historical-chart-4hour intradayChart4Hour" [
   let full_url = (build-url $base "/historical-chart/4hour" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 5-minute index intraday data
@@ -1834,6 +1910,7 @@ export def "historical-chart-5min indexIntraday5Min" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Index symbol
   --qp-from: string # Start date
   --qp-to: string # End date
@@ -1844,7 +1921,7 @@ export def "historical-chart-5min indexIntraday5Min" [
   let full_url = (build-url $base "/historical-chart/5min" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical Dow Jones constituent changes
@@ -1859,13 +1936,14 @@ export def "historical-dowjones-constituent historicalDowJonesConstituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<dateAdded: string, addedSecurity: string, removedTicker: string, removedSecurity: string, date: string, symbol: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/historical-dowjones-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical employee count
@@ -1880,6 +1958,7 @@ export def "historical-employee-count historicalEmployeeCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, cik: string, acceptanceTime: string, periodOfReport: string, companyName: string, formType: string, filingDate: string, employeeCount: int, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1888,7 +1967,7 @@ export def "historical-employee-count historicalEmployeeCount" [
   let full_url = (build-url $base "/historical-employee-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical industry P/E ratios
@@ -1903,6 +1982,7 @@ export def "historical-industry-pe historicalIndustryPe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1911,7 +1991,7 @@ export def "historical-industry-pe historicalIndustryPe" [
   let full_url = (build-url $base "/historical-industry-pe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical industry performance
@@ -1926,6 +2006,7 @@ export def "historical-industry-performance historicalIndustryPerformance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -1934,7 +2015,7 @@ export def "historical-industry-performance historicalIndustryPerformance" [
   let full_url = (build-url $base "/historical-industry-performance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical market capitalization
@@ -1949,6 +2030,7 @@ export def "historical-market-capitalization historicalMarketCap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -1960,7 +2042,7 @@ export def "historical-market-capitalization historicalMarketCap" [
   let full_url = (build-url $base "/historical-market-capitalization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical Nasdaq constituent changes
@@ -1975,13 +2057,14 @@ export def "historical-nasdaq-constituent historicalNasdaqConstituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<dateAdded: string, addedSecurity: string, removedTicker: string, removedSecurity: string, date: string, symbol: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/historical-nasdaq-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dividend-adjusted end-of-day prices
@@ -1996,6 +2079,7 @@ export def "historical-price-eod-dividend-adjusted historicalPriceEodDividendAdj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -2006,7 +2090,7 @@ export def "historical-price-eod-dividend-adjusted historicalPriceEodDividendAdj
   let full_url = (build-url $base "/historical-price-eod/dividend-adjusted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get full index end-of-day prices
@@ -2021,6 +2105,7 @@ export def "historical-price-eod-full indexHistoricalPriceEodFull" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Index symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -2031,7 +2116,7 @@ export def "historical-price-eod-full indexHistoricalPriceEodFull" [
   let full_url = (build-url $base "/historical-price-eod/full" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get lightweight index end-of-day prices
@@ -2046,6 +2131,7 @@ export def "historical-price-eod-light indexHistoricalPriceEodLight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Index symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -2056,7 +2142,7 @@ export def "historical-price-eod-light indexHistoricalPriceEodLight" [
   let full_url = (build-url $base "/historical-price-eod/light" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get non-split-adjusted end-of-day prices
@@ -2071,6 +2157,7 @@ export def "historical-price-eod-non-split-adjusted historicalPriceEodNonSplitAd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -2081,7 +2168,7 @@ export def "historical-price-eod-non-split-adjusted historicalPriceEodNonSplitAd
   let full_url = (build-url $base "/historical-price-eod/non-split-adjusted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical sector P/E ratios
@@ -2096,6 +2183,7 @@ export def "historical-sector-pe historicalSectorPe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2104,7 +2192,7 @@ export def "historical-sector-pe historicalSectorPe" [
   let full_url = (build-url $base "/historical-sector-pe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical sector performance
@@ -2119,6 +2207,7 @@ export def "historical-sector-performance historicalSectorPerformance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2127,7 +2216,7 @@ export def "historical-sector-performance historicalSectorPerformance" [
   let full_url = (build-url $base "/historical-sector-performance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical S&P 500 constituent changes
@@ -2142,13 +2231,14 @@ export def "historical-sp500-constituent historicalSp500Constituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<dateAdded: string, addedSecurity: string, removedTicker: string, removedSecurity: string, date: string, symbol: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/historical-sp500-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get holidays by exchange
@@ -2163,6 +2253,7 @@ export def "holidays-by-exchange holidaysByExchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string # Exchange name
 ]: nothing -> table<exchange: string, date: string, name: string, isClosed: bool, adjOpenTime: string, adjCloseTime: string, isFullyClosed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2171,7 +2262,7 @@ export def "holidays-by-exchange holidaysByExchange" [
   let full_url = (build-url $base "/holidays-by-exchange" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get income statement
@@ -2186,6 +2277,7 @@ export def "income-statement incomeStatement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter, Q1, Q2, Q3, Q4, FY
   --limit: int # Max results
@@ -2196,7 +2288,7 @@ export def "income-statement incomeStatement" [
   let full_url = (build-url $base "/income-statement" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get income statement growth rates
@@ -2211,6 +2303,7 @@ export def "income-statement-growth incomeStatementGrowth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -2221,7 +2314,7 @@ export def "income-statement-growth incomeStatementGrowth" [
   let full_url = (build-url $base "/income-statement-growth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trailing twelve months income statement
@@ -2236,6 +2329,7 @@ export def "income-statement-ttm incomeStatementsTtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<date: string, symbol: string, reportedCurrency: string, cik: string, filingDate: string, acceptedDate: string, fiscalYear: string, period: string, revenue: int, costOfRevenue: int, grossProfit: int, researchAndDevelopmentExpenses: int, generalAndAdministrativeExpenses: int, sellingAndMarketingExpenses: int, sellingGeneralAndAdministrativeExpenses: int, otherExpenses: int, operatingExpenses: int, costAndExpenses: int, netInterestIncome: int, interestIncome: int, interestExpense: int, depreciationAndAmortization: int, ebitda: int, ebit: int, nonOperatingIncomeExcludingInterest: int, operatingIncome: int, totalOtherIncomeExpensesNet: int, incomeBeforeTax: int, incomeTaxExpense: int, netIncomeFromContinuingOperations: int, netIncomeFromDiscontinuedOperations: int, otherAdjustmentsToNetIncome: int, netIncome: int, netIncomeDeductions: int, bottomLineNetIncome: int, eps: float, epsDiluted: float, weightedAverageShsOut: int, weightedAverageShsOutDil: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2244,7 +2338,7 @@ export def "income-statement-ttm incomeStatementsTtm" [
   let full_url = (build-url $base "/income-statement-ttm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all market indexes
@@ -2259,13 +2353,14 @@ export def "index-list indexesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, exchange: string, currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/index-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC industry classifications
@@ -2280,6 +2375,7 @@ export def "industry-classification-search secIndustryClassificationSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Search query
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2288,7 +2384,7 @@ export def "industry-classification-search secIndustryClassificationSearch" [
   let full_url = (build-url $base "/industry-classification-search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current industry P/E ratios
@@ -2303,6 +2399,7 @@ export def "industry-pe-snapshot industryPeSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
   --exchange: string # Exchange filter
 ]: nothing -> table<date: string, industry: string, exchange: string, pe: float> {
@@ -2312,7 +2409,7 @@ export def "industry-pe-snapshot industryPeSnapshot" [
   let full_url = (build-url $base "/industry-pe-snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current industry performance
@@ -2327,6 +2424,7 @@ export def "industry-performance-snapshot industryPerformanceSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
   --exchange: string # Exchange filter
   --industry: string # Industry filter
@@ -2337,7 +2435,7 @@ export def "industry-performance-snapshot industryPerformanceSnapshot" [
   let full_url = (build-url $base "/industry-performance-snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all insider trade transaction types
@@ -2352,13 +2450,14 @@ export def "insider-trading-transaction-type allTransactionTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<transactionType: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/insider-trading-transaction-type")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest insider trades
@@ -2373,6 +2472,7 @@ export def "insider-trading-latest latestInsiderTrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
   --limit: int # Max results
 ]: nothing -> table<symbol: string, filingDate: string, transactionDate: string, reportingCik: string, companyCik: string, transactionType: string, securitiesOwned: int, reportingName: string, typeOfOwner: string, acquisitionOrDisposition: string, directOrIndirect: string, formType: string, securitiesTransacted: int, price: int, securityName: string, url: string> {
@@ -2382,7 +2482,7 @@ export def "insider-trading-latest latestInsiderTrade" [
   let full_url = (build-url $base "/insider-trading/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search insider trades by reporting name
@@ -2397,6 +2497,7 @@ export def "insider-trading-reporting-name searchReportingName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Insider name to search
 ]: nothing -> table<reportingCik: string, reportingName: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2405,7 +2506,7 @@ export def "insider-trading-reporting-name searchReportingName" [
   let full_url = (build-url $base "/insider-trading/reporting-name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search insider trades by symbol
@@ -2420,6 +2521,7 @@ export def "insider-trading-search searchInsiderTrades" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --limit: int # Max results
 ]: nothing -> table<symbol: string, filingDate: string, transactionDate: string, reportingCik: string, companyCik: string, transactionType: string, securitiesOwned: int, reportingName: string, typeOfOwner: string, acquisitionOrDisposition: string, directOrIndirect: string, formType: string, securitiesTransacted: int, price: int, securityName: string, url: string> {
@@ -2429,7 +2531,7 @@ export def "insider-trading-search searchInsiderTrades" [
   let full_url = (build-url $base "/insider-trading/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get insider trade statistics for a company
@@ -2444,6 +2546,7 @@ export def "insider-trading-statistics insiderTradeStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, cik: string, year: int, quarter: int, acquiredTransactions: int, disposedTransactions: int, acquiredDisposedRatio: int, totalAcquired: int, totalDisposed: int, averageAcquired: float, averageDisposed: float, totalPurchases: int, totalSales: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2452,7 +2555,7 @@ export def "insider-trading-statistics insiderTradeStatistics" [
   let full_url = (build-url $base "/insider-trading/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 13F filing dates for a CIK
@@ -2467,6 +2570,7 @@ export def "institutional-ownership-dates form13fFilingsDates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
 ]: nothing -> table<date: string, year: int, quarter: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2475,7 +2579,7 @@ export def "institutional-ownership-dates form13fFilingsDates" [
   let full_url = (build-url $base "/institutional-ownership/dates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extract 13F filing data
@@ -2490,6 +2594,7 @@ export def "institutional-ownership-extract filingsExtract" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
   --year: int # Filing year
   --quarter: int # Filing quarter (1-4)
@@ -2500,7 +2605,7 @@ export def "institutional-ownership-extract filingsExtract" [
   let full_url = (build-url $base "/institutional-ownership/extract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get 13F filings with analytics by holder
@@ -2515,6 +2620,7 @@ export def "institutional-ownership-extract-analytics-holder filingsExtractWithA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --year: int # Filing year
   --quarter: int # Filing quarter
@@ -2527,7 +2633,7 @@ export def "institutional-ownership-extract-analytics-holder filingsExtractWithA
   let full_url = (build-url $base "/institutional-ownership/extract-analytics/holder" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get holder industry breakdown
@@ -2542,6 +2648,7 @@ export def "institutional-ownership-holder-industry-breakdown holdersIndustryBre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
   --date: string # Filing date
 ]: nothing -> any {
@@ -2551,7 +2658,7 @@ export def "institutional-ownership-holder-industry-breakdown holdersIndustryBre
   let full_url = (build-url $base "/institutional-ownership/holder-industry-breakdown" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get holder performance summary
@@ -2566,6 +2673,7 @@ export def "institutional-ownership-holder-performance-summary holderPerformance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
 ]: nothing -> table<date: string, cik: string, investorName: string, portfolioSize: int, securitiesAdded: int, securitiesRemoved: int, marketValue: int, previousMarketValue: int, changeInMarketValue: int, changeInMarketValuePercentage: float, averageHoldingPeriod: int, averageHoldingPeriodTop10: int, averageHoldingPeriodTop20: int, turnover: float, turnoverAlternateSell: float, turnoverAlternateBuy: float, performance: int, performancePercentage: float, lastPerformance: int, changeInPerformance: int, performance1year: int, performancePercentage1year: float, performance3year: int, performancePercentage3year: float, performance5year: int, performancePercentage5year: float, performanceSinceInception: int, performanceSinceInceptionPercentage: float, performanceRelativeToSP500Percentage: float, performance1yearRelativeToSP500Percentage: float, performance3yearRelativeToSP500Percentage: float, performance5yearRelativeToSP500Percentage: float, performanceSinceInceptionRelativeToSP500Percentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2574,7 +2682,7 @@ export def "institutional-ownership-holder-performance-summary holderPerformance
   let full_url = (build-url $base "/institutional-ownership/holder-performance-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get industry summary for 13F data
@@ -2589,6 +2697,7 @@ export def "institutional-ownership-industry-summary industrySummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year
   --quarter: int # Quarter (1-4)
 ]: nothing -> table<industryTitle: string, industryValue: int, date: string> {
@@ -2598,7 +2707,7 @@ export def "institutional-ownership-industry-summary industrySummary" [
   let full_url = (build-url $base "/institutional-ownership/industry-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest 13F filings
@@ -2613,6 +2722,7 @@ export def "institutional-ownership-latest latestFilings13F" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
   --limit: int # Max results
 ]: nothing -> table<cik: string, name: string, date: string, filingDate: string, acceptedDate: string, formType: string, link: string, finalLink: string> {
@@ -2622,7 +2732,7 @@ export def "institutional-ownership-latest latestFilings13F" [
   let full_url = (build-url $base "/institutional-ownership/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get position summary for a holder
@@ -2637,6 +2747,7 @@ export def "institutional-ownership-symbol-positions-summary positionsSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --year: int # Year
   --quarter: int # Quarter (1-4)
@@ -2647,7 +2758,7 @@ export def "institutional-ownership-symbol-positions-summary positionsSummary" [
   let full_url = (build-url $base "/institutional-ownership/symbol-positions-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upcoming IPO calendar
@@ -2662,6 +2773,7 @@ export def "ipos-calendar iposCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, date: string, daa: string, company: string, exchange: string, actions: string, shares: int, priceRange: string, marketCap: int> {
@@ -2671,7 +2783,7 @@ export def "ipos-calendar iposCalendar" [
   let full_url = (build-url $base "/ipos-calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IPO disclosure filings
@@ -2686,6 +2798,7 @@ export def "ipos-disclosure iposDisclosure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, filingDate: string, acceptedDate: string, effectivenessDate: string, cik: string, form: string, url: string> {
@@ -2695,7 +2808,7 @@ export def "ipos-disclosure iposDisclosure" [
   let full_url = (build-url $base "/ipos-disclosure" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IPO prospectus details
@@ -2710,6 +2823,7 @@ export def "ipos-prospectus iposProspectus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, acceptedDate: string, filingDate: string, ipoDate: string, cik: string, pricePublicPerShare: int, pricePublicTotal: int, discountsAndCommissionsPerShare: int, discountsAndCommissionsTotal: int, proceedsBeforeExpensesPerShare: int, proceedsBeforeExpensesTotal: int, form: string, url: string> {
@@ -2719,7 +2833,7 @@ export def "ipos-prospectus iposProspectus" [
   let full_url = (build-url $base "/ipos-prospectus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company executives
@@ -2734,6 +2848,7 @@ export def "key-executives companyExecutives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<title: string, name: string, pay: int, currencyPay: string, gender: string, yearBorn: int, titleSince: string, active: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2742,7 +2857,7 @@ export def "key-executives companyExecutives" [
   let full_url = (build-url $base "/key-executives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get key financial metrics
@@ -2757,6 +2872,7 @@ export def "key-metrics keyMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -2767,7 +2883,7 @@ export def "key-metrics keyMetrics" [
   let full_url = (build-url $base "/key-metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get TTM key metrics
@@ -2782,6 +2898,7 @@ export def "key-metrics-ttm keyMetricsTtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, marketCap: float, enterpriseValueTTM: float, evToSalesTTM: float, evToOperatingCashFlowTTM: float, evToFreeCashFlowTTM: float, evToEBITDATTM: float, netDebtToEBITDATTM: float, currentRatioTTM: float, incomeQualityTTM: float, grahamNumberTTM: float, grahamNetNetTTM: float, taxBurdenTTM: float, interestBurdenTTM: float, workingCapitalTTM: int, investedCapitalTTM: int, returnOnAssetsTTM: float, operatingReturnOnAssetsTTM: float, returnOnTangibleAssetsTTM: float, returnOnEquityTTM: float, returnOnInvestedCapitalTTM: float, returnOnCapitalEmployedTTM: float, earningsYieldTTM: float, freeCashFlowYieldTTM: float, capexToOperatingCashFlowTTM: float, capexToDepreciationTTM: float, capexToRevenueTTM: float, salesGeneralAndAdministrativeToRevenueTTM: int, researchAndDevelopementToRevenueTTM: float, stockBasedCompensationToRevenueTTM: float, intangiblesToTotalAssetsTTM: int, averageReceivablesTTM: int, averagePayablesTTM: int, averageInventoryTTM: int, daysOfSalesOutstandingTTM: float, daysOfPayablesOutstandingTTM: float, daysOfInventoryOutstandingTTM: float, operatingCycleTTM: float, cashConversionCycleTTM: float, freeCashFlowToEquityTTM: int, freeCashFlowToFirmTTM: float, tangibleAssetValueTTM: int, netCurrentAssetValueTTM: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2790,7 +2907,7 @@ export def "key-metrics-ttm keyMetricsTtm" [
   let full_url = (build-url $base "/key-metrics-ttm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest financial statements
@@ -2805,6 +2922,7 @@ export def "latest-financial-statements latestFinancialStatements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max results
 ]: nothing -> table<symbol: string, calendarYear: int, period: string, date: string, dateAdded: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2813,7 +2931,7 @@ export def "latest-financial-statements latestFinancialStatements" [
   let full_url = (build-url $base "/latest-financial-statements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get market cap for multiple symbols
@@ -2828,6 +2946,7 @@ export def "market-capitalization batchMarketCap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Comma-separated symbols
 ]: nothing -> table<symbol: string, date: string, marketCap: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2836,7 +2955,7 @@ export def "market-capitalization batchMarketCap" [
   let full_url = (build-url $base "/market-capitalization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get market risk premium by country
@@ -2851,13 +2970,14 @@ export def "market-risk-premium marketRiskPremium" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<country: string, continent: string, countryRiskPremium: float, totalEquityRiskPremium: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/market-risk-premium")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest mergers and acquisitions
@@ -2872,6 +2992,7 @@ export def "mergers-acquisitions-latest latestMergersAcquisitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
   --limit: int # Max results
 ]: nothing -> table<symbol: string, companyName: string, cik: string, targetedCompanyName: string, targetedCik: string, targetedSymbol: string, transactionDate: string, acceptedDate: string, link: string> {
@@ -2881,7 +3002,7 @@ export def "mergers-acquisitions-latest latestMergersAcquisitions" [
   let full_url = (build-url $base "/mergers-acquisitions-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search mergers and acquisitions
@@ -2896,6 +3017,7 @@ export def "mergers-acquisitions-search searchMergersAcquisitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Company name to search
 ]: nothing -> table<symbol: string, companyName: string, cik: string, targetedCompanyName: string, targetedCik: string, targetedSymbol: string, transactionDate: string, acceptedDate: string, link: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -2904,7 +3026,7 @@ export def "mergers-acquisitions-search searchMergersAcquisitions" [
   let full_url = (build-url $base "/mergers-acquisitions-search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get most actively traded stocks
@@ -2919,13 +3041,14 @@ export def "most-actives mostActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, price: float, name: string, change: float, changesPercentage: float, exchange: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/most-actives")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Nasdaq constituents
@@ -2940,13 +3063,14 @@ export def "nasdaq-constituent nasdaqConstituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, sector: string, subSector: string, headQuarter: string, dateFirstAdded: string, cik: string, founded: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nasdaq-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search crypto news
@@ -2961,6 +3085,7 @@ export def "news-crypto searchCryptoNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Crypto symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -2971,7 +3096,7 @@ export def "news-crypto searchCryptoNews" [
   let full_url = (build-url $base "/news/crypto" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cryptocurrency news
@@ -2986,6 +3111,7 @@ export def "news-crypto-latest cryptoNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Crypto symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -2996,7 +3122,7 @@ export def "news-crypto-latest cryptoNews" [
   let full_url = (build-url $base "/news/crypto-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search forex news
@@ -3011,6 +3137,7 @@ export def "news-forex searchForexNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Forex pair symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -3021,7 +3148,7 @@ export def "news-forex searchForexNews" [
   let full_url = (build-url $base "/news/forex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get forex news
@@ -3036,6 +3163,7 @@ export def "news-forex-latest forexNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Forex pair symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -3046,7 +3174,7 @@ export def "news-forex-latest forexNews" [
   let full_url = (build-url $base "/news/forex-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get general financial news
@@ -3061,6 +3189,7 @@ export def "news-general-latest generalNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
   --limit: int # Max results
 ]: nothing -> table<symbol: string, publishedDate: string, publisher: string, title: string, image: string, site: string, text: string, url: string> {
@@ -3070,7 +3199,7 @@ export def "news-general-latest generalNews" [
   let full_url = (build-url $base "/news/general-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search press releases
@@ -3085,6 +3214,7 @@ export def "news-press-releases searchPressReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Stock ticker symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -3095,7 +3225,7 @@ export def "news-press-releases searchPressReleases" [
   let full_url = (build-url $base "/news/press-releases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get press releases
@@ -3110,6 +3240,7 @@ export def "news-press-releases-latest pressReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --page: int # Page number
   --limit: int # Max results
@@ -3120,7 +3251,7 @@ export def "news-press-releases-latest pressReleases" [
   let full_url = (build-url $base "/news/press-releases-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search stock news
@@ -3135,6 +3266,7 @@ export def "news-stock searchStockNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Stock ticker symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -3145,7 +3277,7 @@ export def "news-stock searchStockNews" [
   let full_url = (build-url $base "/news/stock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stock-specific news
@@ -3160,6 +3292,7 @@ export def "news-stock-latest stockNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Stock ticker symbol(s)
   --page: int # Page number
   --limit: int # Max results
@@ -3170,7 +3303,7 @@ export def "news-stock-latest stockNews" [
   let full_url = (build-url $base "/news/stock-latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owner earnings (Buffett method)
@@ -3185,6 +3318,7 @@ export def "owner-earnings ownerEarnings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, reportedCurrency: string, fiscalYear: string, period: string, date: string, averagePPE: float, maintenanceCapex: int, ownersEarnings: int, growthCapex: int, ownersEarningsPerShare: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3193,7 +3327,7 @@ export def "owner-earnings ownerEarnings" [
   let full_url = (build-url $base "/owner-earnings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get consensus price target
@@ -3208,6 +3342,7 @@ export def "price-target-consensus priceTargetConsensus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, targetHigh: int, targetLow: int, targetConsensus: float, targetMedian: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3216,7 +3351,7 @@ export def "price-target-consensus priceTargetConsensus" [
   let full_url = (build-url $base "/price-target-consensus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analyst price target summary
@@ -3231,6 +3366,7 @@ export def "price-target-summary priceTargetSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, lastMonthCount: int, lastMonthAvgPriceTarget: float, lastQuarterCount: int, lastQuarterAvgPriceTarget: float, lastYearCount: int, lastYearAvgPriceTarget: float, allTimeCount: int, allTimeAvgPriceTarget: float, publishers: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3239,7 +3375,7 @@ export def "price-target-summary priceTargetSummary" [
   let full_url = (build-url $base "/price-target-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company profile by CIK
@@ -3254,6 +3390,7 @@ export def "profile companyProfileByCik" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3262,7 +3399,7 @@ export def "profile companyProfileByCik" [
   let full_url = (build-url $base "/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get commodity quote
@@ -3277,6 +3414,7 @@ export def "quote commoditiesQuote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Commodity symbol
 ]: nothing -> table<symbol: string, name: string, price: float, changePercentage: float, change: float, volume: int, dayLow: float, dayHigh: float, yearHigh: float, yearLow: float, marketCap: string, priceAvg50: float, priceAvg200: float, exchange: string, open: int, previousClose: float, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3285,7 +3423,7 @@ export def "quote commoditiesQuote" [
   let full_url = (build-url $base "/quote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get short commodity quote
@@ -3300,6 +3438,7 @@ export def "quote-short commoditiesQuoteShort" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Commodity symbol
 ]: nothing -> table<symbol: string, price: float, change: float, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3308,7 +3447,7 @@ export def "quote-short commoditiesQuoteShort" [
   let full_url = (build-url $base "/quote-short" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical analyst ratings
@@ -3323,6 +3462,7 @@ export def "ratings-historical historicalRatings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --limit: int # Max results
 ]: nothing -> table<symbol: string, date: string, rating: string, overallScore: int, discountedCashFlowScore: int, returnOnEquityScore: int, returnOnAssetsScore: int, debtToEquityScore: int, priceToEarningsScore: int, priceToBookScore: int> {
@@ -3332,7 +3472,7 @@ export def "ratings-historical historicalRatings" [
   let full_url = (build-url $base "/ratings-historical" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current analyst ratings snapshot
@@ -3347,6 +3487,7 @@ export def "ratings-snapshot ratingsSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, rating: string, overallScore: int, discountedCashFlowScore: int, returnOnEquityScore: int, returnOnAssetsScore: int, debtToEquityScore: int, priceToEarningsScore: int, priceToBookScore: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3355,7 +3496,7 @@ export def "ratings-snapshot ratingsSnapshot" [
   let full_url = (build-url $base "/ratings-snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get financial ratios and metrics
@@ -3370,6 +3511,7 @@ export def "ratios metricsRatios" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --period: string # Period: annual, quarter
   --limit: int # Max results
@@ -3380,7 +3522,7 @@ export def "ratios metricsRatios" [
   let full_url = (build-url $base "/ratios" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get TTM financial ratios
@@ -3395,6 +3537,7 @@ export def "ratios-ttm metricsRatiosTtm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, grossProfitMarginTTM: float, ebitMarginTTM: float, ebitdaMarginTTM: float, operatingProfitMarginTTM: float, pretaxProfitMarginTTM: float, continuousOperationsProfitMarginTTM: float, netProfitMarginTTM: float, bottomLineProfitMarginTTM: float, receivablesTurnoverTTM: float, payablesTurnoverTTM: float, inventoryTurnoverTTM: float, fixedAssetTurnoverTTM: float, assetTurnoverTTM: float, currentRatioTTM: float, quickRatioTTM: float, solvencyRatioTTM: float, cashRatioTTM: float, priceToEarningsRatioTTM: float, priceToEarningsGrowthRatioTTM: float, forwardPriceToEarningsGrowthRatioTTM: float, priceToBookRatioTTM: float, priceToSalesRatioTTM: float, priceToFreeCashFlowRatioTTM: float, priceToOperatingCashFlowRatioTTM: float, debtToAssetsRatioTTM: float, debtToEquityRatioTTM: float, debtToCapitalRatioTTM: float, longTermDebtToCapitalRatioTTM: float, financialLeverageRatioTTM: float, workingCapitalTurnoverRatioTTM: float, operatingCashFlowRatioTTM: float, operatingCashFlowSalesRatioTTM: float, freeCashFlowOperatingCashFlowRatioTTM: float, debtServiceCoverageRatioTTM: float, interestCoverageRatioTTM: int, shortTermOperatingCashFlowCoverageRatioTTM: float, operatingCashFlowCoverageRatioTTM: float, capitalExpenditureCoverageRatioTTM: float, dividendPaidAndCapexCoverageRatioTTM: float, dividendPayoutRatioTTM: float, dividendYieldTTM: float, enterpriseValueTTM: float, revenuePerShareTTM: float, netIncomePerShareTTM: float, interestDebtPerShareTTM: float, cashPerShareTTM: float, bookValuePerShareTTM: float, tangibleBookValuePerShareTTM: float, shareholdersEquityPerShareTTM: float, operatingCashFlowPerShareTTM: float, capexPerShareTTM: float, freeCashFlowPerShareTTM: float, netIncomePerEBTTTM: float, ebtPerEbitTTM: float, priceToFairValueTTM: float, debtToMarketCapTTM: float, effectiveTaxRateTTM: float, enterpriseValueMultipleTTM: float, dividendPerShareTTM: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3403,7 +3546,7 @@ export def "ratios-ttm metricsRatiosTtm" [
   let full_url = (build-url $base "/ratios-ttm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get revenue by geographic segment
@@ -3418,6 +3561,7 @@ export def "revenue-geographic-segmentation revenueGeographicSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, fiscalYear: int, period: string, reportedCurrency: string, date: string, data: record<Americas_Segment: int, Europe_Segment: int, Greater_China_Segment: int, Japan_Segment: int, Rest_of_Asia_Pacific_Segment: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3426,7 +3570,7 @@ export def "revenue-geographic-segmentation revenueGeographicSegments" [
   let full_url = (build-url $base "/revenue-geographic-segmentation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get revenue by product segment
@@ -3441,6 +3585,7 @@ export def "revenue-product-segmentation revenueProductSegmentation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, fiscalYear: int, period: string, reportedCurrency: string, date: string, data: record<Mac: int, Service: int, Wearables__Home_and_Accessories: int, iPad: int, iPhone: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3449,7 +3594,7 @@ export def "revenue-product-segmentation revenueProductSegmentation" [
   let full_url = (build-url $base "/revenue-product-segmentation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search by CIK number
@@ -3464,6 +3609,7 @@ export def "search-cik searchCik" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # CIK number to search
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3472,7 +3618,7 @@ export def "search-cik searchCik" [
   let full_url = (build-url $base "/search-cik" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search by CUSIP
@@ -3487,6 +3633,7 @@ export def "search-cusip searchCusip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # CUSIP to search
 ]: nothing -> table<symbol: string, companyName: string, cusip: string, marketCap: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3495,7 +3642,7 @@ export def "search-cusip searchCusip" [
   let full_url = (build-url $base "/search-cusip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search exchange variants for a symbol
@@ -3510,6 +3657,7 @@ export def "search-exchange-variants searchExchangeVariants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, price: float, beta: float, volAvg: int, mktCap: float, lastDiv: float, range: string, changes: float, companyName: string, currency: string, cik: string, isin: string, cusip: string, exchange: string, exchangeShortName: string, industry: string, website: string, description: string, ceo: string, sector: string, country: string, fullTimeEmployees: string, phone: string, address: string, city: string, state: string, zip: string, dcfDiff: float, dcf: float, image: string, ipoDate: string, defaultImage: bool, isEtf: bool, isActivelyTrading: bool, isAdr: bool, isFund: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3518,7 +3666,7 @@ export def "search-exchange-variants searchExchangeVariants" [
   let full_url = (build-url $base "/search-exchange-variants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search by ISIN
@@ -3533,6 +3681,7 @@ export def "search-isin searchIsin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # ISIN to search
 ]: nothing -> table<symbol: string, name: string, isin: string, marketCap: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3541,7 +3690,7 @@ export def "search-isin searchIsin" [
   let full_url = (build-url $base "/search-isin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search by company name
@@ -3556,6 +3705,7 @@ export def "search-name searchName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Company name to search
   --limit: int # Max results to return
   --exchange: string # Filter by exchange
@@ -3566,7 +3716,7 @@ export def "search-name searchName" [
   let full_url = (build-url $base "/search-name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search by stock ticker symbol
@@ -3581,6 +3731,7 @@ export def "search-symbol searchSymbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Search query (ticker symbol)
   --limit: int # Max results to return
   --exchange: string # Filter by exchange (e.g. NASDAQ)
@@ -3591,7 +3742,7 @@ export def "search-symbol searchSymbol" [
   let full_url = (build-url $base "/search-symbol" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest 8-K filings
@@ -3606,6 +3757,7 @@ export def "sec-filings-8k sec8kLatest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
   --page: int # Page number
@@ -3617,7 +3769,7 @@ export def "sec-filings-8k sec8kLatest" [
   let full_url = (build-url $base "/sec-filings-8k" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC company by CIK
@@ -3632,6 +3784,7 @@ export def "sec-filings-company-search-cik secCompanySearchByCik" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
 ]: nothing -> table<symbol: string, name: string, cik: string, sicCode: string, industryTitle: string, businessAddress: string, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3640,7 +3793,7 @@ export def "sec-filings-company-search-cik secCompanySearchByCik" [
   let full_url = (build-url $base "/sec-filings-company-search/cik" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC filings by company name
@@ -3655,6 +3808,7 @@ export def "sec-filings-company-search-name secSearchByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --company: string # Company name to search
 ]: nothing -> table<symbol: string, name: string, cik: string, sicCode: string, industryTitle: string, businessAddress: string, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3663,7 +3817,7 @@ export def "sec-filings-company-search-name secSearchByName" [
   let full_url = (build-url $base "/sec-filings-company-search/name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC company by symbol
@@ -3678,6 +3832,7 @@ export def "sec-filings-company-search-symbol secCompanySearchBySymbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, name: string, cik: string, sicCode: string, industryTitle: string, businessAddress: string, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3686,7 +3841,7 @@ export def "sec-filings-company-search-symbol secCompanySearchBySymbol" [
   let full_url = (build-url $base "/sec-filings-company-search/symbol" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest financial filings (10-K, 10-Q)
@@ -3701,6 +3856,7 @@ export def "sec-filings-financials secFinancialsLatest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
   --page: int # Page number
@@ -3712,7 +3868,7 @@ export def "sec-filings-financials secFinancialsLatest" [
   let full_url = (build-url $base "/sec-filings-financials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC filings by CIK
@@ -3727,6 +3883,7 @@ export def "sec-filings-search-cik secSearchByCik" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cik: string # CIK number
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -3739,7 +3896,7 @@ export def "sec-filings-search-cik secSearchByCik" [
   let full_url = (build-url $base "/sec-filings-search/cik" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC filings by form type
@@ -3754,6 +3911,7 @@ export def "sec-filings-search-form-type secSearchByFormType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --formType: string # Form type (e.g. 10-K, 10-Q, 8-K)
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -3766,7 +3924,7 @@ export def "sec-filings-search-form-type secSearchByFormType" [
   let full_url = (build-url $base "/sec-filings-search/form-type" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search SEC filings by symbol
@@ -3781,6 +3939,7 @@ export def "sec-filings-search-symbol secSearchBySymbol" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
@@ -3793,7 +3952,7 @@ export def "sec-filings-search-symbol secSearchBySymbol" [
   let full_url = (build-url $base "/sec-filings-search/symbol" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SEC company full profile
@@ -3808,6 +3967,7 @@ export def "sec-profile secCompanyFullProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, cik: string, registrantName: string, sicCode: string, sicDescription: string, sicGroup: string, isin: string, businessAddress: string, mailingAddress: string, phoneNumber: string, postalCode: string, city: string, state: string, country: string, description: string, ceo: string, website: string, exchange: string, stateLocation: string, stateOfIncorporation: string, fiscalYearEnd: string, ipoDate: string, employees: string, secFilingsUrl: string, taxIdentificationNumber: string, fiftyTwoWeekRange: string, isActive: bool, assetType: string, openFigiComposite: string, priceCurrency: string, marketSector: string, securityType: string, isEtf: bool, isAdr: bool, isFund: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3816,7 +3976,7 @@ export def "sec-profile secCompanyFullProfile" [
   let full_url = (build-url $base "/sec-profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current sector P/E ratios
@@ -3831,6 +3991,7 @@ export def "sector-pe-snapshot sectorPeSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
   --exchange: string # Exchange filter
 ]: nothing -> table<date: string, sector: string, exchange: string, pe: float> {
@@ -3840,7 +4001,7 @@ export def "sector-pe-snapshot sectorPeSnapshot" [
   let full_url = (build-url $base "/sector-pe-snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current sector performance
@@ -3855,6 +4016,7 @@ export def "sector-performance-snapshot sectorPerformanceSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (YYYY-MM-DD)
   --exchange: string # Exchange filter
   --sector: string # Sector filter
@@ -3865,7 +4027,7 @@ export def "sector-performance-snapshot sectorPerformanceSnapshot" [
   let full_url = (build-url $base "/sector-performance-snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shares float data
@@ -3880,6 +4042,7 @@ export def "shares-float sharesFloat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, date: string, freeFloat: float, floatShares: int, outstandingShares: int, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3888,7 +4051,7 @@ export def "shares-float sharesFloat" [
   let full_url = (build-url $base "/shares-float" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shares float for all companies
@@ -3903,6 +4066,7 @@ export def "shares-float-all allSharesFloat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
   --limit: int # Max results per page
 ]: nothing -> table<symbol: string, date: string, freeFloat: float, floatShares: int, outstandingShares: int> {
@@ -3912,7 +4076,7 @@ export def "shares-float-all allSharesFloat" [
   let full_url = (build-url $base "/shares-float-all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get S&P 500 constituents
@@ -3927,13 +4091,14 @@ export def "sp500-constituent sp500Constituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, name: string, sector: string, subSector: string, headQuarter: string, dateFirstAdded: string, cik: string, founded: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sp500-constituent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company stock split history
@@ -3948,6 +4113,7 @@ export def "splits splitsCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, date: string, numerator: int, denominator: int, splitType: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -3956,7 +4122,7 @@ export def "splits splitsCompany" [
   let full_url = (build-url $base "/splits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upcoming stock splits calendar
@@ -3971,6 +4137,7 @@ export def "splits-calendar splitsCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<symbol: string, date: string, numerator: int, denominator: int, splitType: string> {
@@ -3980,7 +4147,7 @@ export def "splits-calendar splitsCalendar" [
   let full_url = (build-url $base "/splits-calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List SEC industry classifications (SIC codes)
@@ -3995,13 +4162,14 @@ export def "standard-industrial-classification-list secIndustryClassificationLis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<office: string, sicCode: string, industryTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/standard-industrial-classification-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all company symbols
@@ -4016,13 +4184,14 @@ export def "stock-list companySymbolsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<symbol: string, companyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stock-list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company peers
@@ -4037,6 +4206,7 @@ export def "stock-peers companyPeers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, companyName: string, price: float, mktCap: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -4045,7 +4215,7 @@ export def "stock-peers companyPeers" [
   let full_url = (build-url $base "/stock-peers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quote price change
@@ -4060,6 +4230,7 @@ export def "stock-price-change quoteChange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
 ]: nothing -> table<symbol: string, 1D: float, 5D: float, 1M: float, 3M: float, 6M: float, ytd: float, 1Y: float, 3Y: float, 5Y: float, 10Y: float, max: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
@@ -4068,7 +4239,7 @@ export def "stock-price-change quoteChange" [
   let full_url = (build-url $base "/stock-price-change" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List symbol changes
@@ -4083,13 +4254,14 @@ export def "symbol-change symbolChangesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<date: string, companyName: string, oldSymbol: string, newSymbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/symbol-change")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Average Directional Index
@@ -4104,6 +4276,7 @@ export def "technical-indicators-adx adx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4116,7 +4289,7 @@ export def "technical-indicators-adx adx" [
   let full_url = (build-url $base "/technical-indicators/adx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Double Exponential Moving Average
@@ -4131,6 +4304,7 @@ export def "technical-indicators-dema dema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4143,7 +4317,7 @@ export def "technical-indicators-dema dema" [
   let full_url = (build-url $base "/technical-indicators/dema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Exponential Moving Average
@@ -4158,6 +4332,7 @@ export def "technical-indicators-ema ema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe: 1min, 5min, 15min, 30min, 1hour, 4hour, 1day
@@ -4170,7 +4345,7 @@ export def "technical-indicators-ema ema" [
   let full_url = (build-url $base "/technical-indicators/ema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Relative Strength Index
@@ -4185,6 +4360,7 @@ export def "technical-indicators-rsi rsi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods (default 14)
   --timeframe: string # Timeframe
@@ -4197,7 +4373,7 @@ export def "technical-indicators-rsi rsi" [
   let full_url = (build-url $base "/technical-indicators/rsi" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Simple Moving Average
@@ -4212,6 +4388,7 @@ export def "technical-indicators-sma sma" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe: 1min, 5min, 15min, 30min, 1hour, 4hour, 1day
@@ -4224,7 +4401,7 @@ export def "technical-indicators-sma sma" [
   let full_url = (build-url $base "/technical-indicators/sma" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Standard Deviation
@@ -4239,6 +4416,7 @@ export def "technical-indicators-standard-deviation standardDeviation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4251,7 +4429,7 @@ export def "technical-indicators-standard-deviation standardDeviation" [
   let full_url = (build-url $base "/technical-indicators/standardDeviation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Triple Exponential Moving Average
@@ -4266,6 +4444,7 @@ export def "technical-indicators-tema tema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4278,7 +4457,7 @@ export def "technical-indicators-tema tema" [
   let full_url = (build-url $base "/technical-indicators/tema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Williams %R
@@ -4293,6 +4472,7 @@ export def "technical-indicators-williams williams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4305,7 +4485,7 @@ export def "technical-indicators-williams williams" [
   let full_url = (build-url $base "/technical-indicators/williams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Weighted Moving Average
@@ -4320,6 +4500,7 @@ export def "technical-indicators-wma wma" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Stock ticker symbol
   --periodLength: int # Number of periods
   --timeframe: string # Timeframe
@@ -4332,7 +4513,7 @@ export def "technical-indicators-wma wma" [
   let full_url = (build-url $base "/technical-indicators/wma" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get treasury rates
@@ -4347,6 +4528,7 @@ export def "treasury-rates treasuryRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date (YYYY-MM-DD)
   --qp-to: string # End date (YYYY-MM-DD)
 ]: nothing -> table<date: string, month1: float, month2: float, month3: float, month6: float, year1: float, year2: float, year3: float, year5: float, year7: float, year10: float, year20: float, year30: float> {
@@ -4356,5 +4538,5 @@ export def "treasury-rates treasuryRates" [
   let full_url = (build-url $base "/treasury-rates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

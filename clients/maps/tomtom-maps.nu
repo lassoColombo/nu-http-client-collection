@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -83,7 +84,7 @@ def request-completer-1 [] { ["GetCapabilities"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "map-copyrights-format get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -117,6 +118,7 @@ export def "map-copyrights-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Specifies the jsonp callback method. Only used when format is jsonp
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -125,7 +127,7 @@ export def "map-copyrights-format get" [
   let full_url = (build-url $base $"/map/($versionNumber)/copyrights.($format)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Captions
@@ -141,6 +143,7 @@ export def "map-copyrights-caption-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Specifies the jsonp callback method. Only used when format is jsonp
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -149,7 +152,7 @@ export def "map-copyrights-caption-format get" [
   let full_url = (build-url $base $"/map/($versionNumber)/copyrights/caption.($format)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copyrights bounding box
@@ -169,6 +172,7 @@ export def "map-copyrights get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Specifies the jsonp callback method. Only used when format is jsonp.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -177,7 +181,7 @@ export def "map-copyrights get" [
   let full_url = (build-url $base $"/map/($versionNumber)/copyrights/($minLon)/($minLat)/($maxLon)/($maxLat).($format)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copyrights tile
@@ -196,6 +200,7 @@ export def "map-copyrights list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Specifies the jsonp callback method. Only used when format is jsonp.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -204,7 +209,7 @@ export def "map-copyrights list" [
   let full_url = (build-url $base $"/map/($versionNumber)/copyrights/($zoom)/($X)/($Y).($format)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Static Image
@@ -219,6 +224,7 @@ export def "map-staticimage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --layer: string@layer-completer # Layer of image to be rendered. <em>Hybrid</em> and <em>labels</em> are intended for layering with other data and are only available in <em>png</em> format. (default: basic, e.g. basic)
   --style: string@style-completer # Map style to be returned (default: main, e.g. main)
   --format: string@format-completer # Image format to be returned (default: png, e.g. png)
@@ -235,7 +241,7 @@ export def "map-staticimage get" [
   let full_url = (build-url $base $"/map/($versionNumber)/staticimage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tile
@@ -255,6 +261,7 @@ export def "map-tile list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer-1 # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-api/maps-api-documentation-vector/tile">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
   --language: string # Language to be used for labels in the response. The default is NGT: Neutral Ground Truth, which uses each place's local official language and script (where available). See the <a href="/maps-api/maps-api-documentation-vector/tile">documentation</a> for a full list of options. (default: NGT)
 ]: nothing -> any {
@@ -264,7 +271,7 @@ export def "map-tile list" [
   let full_url = (build-url $base $"/map/($versionNumber)/tile/($layer)/($style)/($zoom)/($X)/($Y).pbf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tile
@@ -285,6 +292,7 @@ export def "map-tile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tileSize: int@tileSize-completer # Tile dimensions in pixels. <em>512</em> is only available for the <em>main</em> style and <em>basic</em> or <em>labels</em> layers. (default: 256)
   --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-sdk-web/functional-examples#geopolitical-views">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
 ]: nothing -> any {
@@ -294,7 +302,7 @@ export def "map-tile get" [
   let full_url = (build-url $base $"/map/($versionNumber)/tile/($layer)/($style)/($zoom)/($X)/($Y).($format)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetMap
@@ -310,6 +318,7 @@ export def "map-wms GetMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: string@request-completer # Request type
   --srs: string@srs-completer # Projection used in describing the <b>bbox</b> EPSG:3857 is recommended, particularly at higher zoom levels. (Note that EPSG:3857 is functionally equivalent to EPSG:900913/EPSG:3785) (e.g. EPSG:4326)
   --bbox: string # Bounding box in the projection stated in <b>srs</b> (minLon,minLat,maxLon,maxLat) (e.g. -0.489,51.28,0.236,51.686)
@@ -327,7 +336,7 @@ export def "map-wms GetMap" [
   let full_url = (build-url $base $"/map/($versionNumber)/wms/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetCapabilities
@@ -343,6 +352,7 @@ export def "map-wms GetCapabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --service: string@service-completer
   --request: string@request-completer-1
   --version: string@version-completer # WMS service version
@@ -353,7 +363,7 @@ export def "map-wms GetCapabilities" [
   let full_url = (build-url $base $"/map/($versionNumber)/wms//" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # WMTS
@@ -370,11 +380,12 @@ export def "map-wmts-wmts-capabilitiesxml get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/map/($versionNumber)/wmts/($key)/($wmtsVersion)/WMTSCapabilities.xml")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

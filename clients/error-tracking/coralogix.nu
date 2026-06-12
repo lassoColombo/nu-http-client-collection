@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -85,7 +86,7 @@ def sourceType-completer-1 [] { ["SOURCE_TYPE_DATA_MAP" "SOURCE_TYPE_LOG" "SOURC
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "aaa-api-keys CreateApiKey" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -119,6 +120,7 @@ export def "aaa-api-keys CreateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessPolicy: string # JSON string representing the access policy for this API key. Defines granular permissions for users and groups. (e.g. {"version":"2025-01-01","default":{"permissions":{"data-ingest-api-keys:ReadAccessPolicy":"grant","data-ingest-api-keys:Manage":"deny","data-ingest-api-keys:UpdateAccessPolicy":"deny","data-ingest-api-keys:ReadConfig":"grant"}},"rules":[]})
   --hashed: oneof<nothing, bool> # e.g. true
   --keyPermissions: record # This data structure allows to specify loose permissions and permission presets for an API key. — shape: {permissions?: list, presets?: list}
@@ -133,7 +135,7 @@ export def "aaa-api-keys CreateApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get "Send Data" API Keys
@@ -148,13 +150,14 @@ export def "aaa-api-keys-send-data GetSendDataApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<accessPolicy: string, active: bool, hashed: bool, id: string, keyPermissions: record, name: string, owner: any, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aaa/api-keys/v3/send_data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get API Key
@@ -170,13 +173,14 @@ export def "aaa-api-keys GetApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keyInfo: record<accessPolicy: string, active: bool, hashed: bool, id: string, keyPermissions: record<permissions: list, presets: list>, name: string, owner: any, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/api-keys/v3/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update API Key
@@ -194,6 +198,7 @@ export def "aaa-api-keys UpdateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accessPolicy: string # JSON string representing the access policy for this API key. Defines granular permissions for users and groups. To delete an existing policy, pass an empty string. (e.g. {"version":"2025-01-01","default":{"permissions":{"data-ingest-api-keys:ReadAccessPolicy":"grant","data-ingest-api-keys:Manage":"deny","data-ingest-api-keys:UpdateAccessPolicy":"deny","data-ingest-api-keys:ReadConfig":"grant"}},"rules":[]})
   --isActive: oneof<nothing, bool> # e.g. true
   --newName: string # e.g. my_new_name
@@ -208,7 +213,7 @@ export def "aaa-api-keys UpdateApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete API Key
@@ -224,13 +229,14 @@ export def "aaa-api-keys DeleteApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/api-keys/v3/($key_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Team Groups
@@ -245,6 +251,7 @@ export def "aaa-team-groups GetTeamGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: record
 ]: nothing -> record<groups: table<createdAt: string, description: string, externalId: string, groupId: record, groupOrigin: string, groupType: string, name: string, nextGenScopeId: string, roles: list, scope: record, teamId: record, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -253,7 +260,7 @@ export def "aaa-team-groups GetTeamGroups" [
   let full_url = (build-url $base "/aaa/team-groups/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Team Group
@@ -272,6 +279,7 @@ export def "aaa-team-groups UpdateTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --externalId: string
   --groupId: record # This data structure represents the information associated with a team group. — shape: {id?: int}
@@ -290,7 +298,7 @@ export def "aaa-team-groups UpdateTeamGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Team Group
@@ -309,6 +317,7 @@ export def "aaa-team-groups CreateTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --externalId: string
   --groupType: string@groupType-completer
@@ -327,7 +336,7 @@ export def "aaa-team-groups CreateTeamGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Team Group
@@ -343,13 +352,14 @@ export def "aaa-team-groups-id GetTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<group: record<createdAt: string, description: string, externalId: string, groupId: record<id: int>, groupOrigin: string, groupType: string, name: string, nextGenScopeId: string, roles: list<record>, scope: record<filters: record, id: record>, teamId: record<id: int>, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-groups/v1/id/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Team Group By Name
@@ -365,13 +375,14 @@ export def "aaa-team-groups-name GetTeamGroupByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<group: record<createdAt: string, description: string, externalId: string, groupId: record<id: int>, groupOrigin: string, groupType: string, name: string, nextGenScopeId: string, roles: list<record>, scope: record<filters: record, id: record>, teamId: record<id: int>, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-groups/v1/name/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Users To Team Groups
@@ -388,6 +399,7 @@ export def "aaa-team-groups-users AddUsersToTeamGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --addUsersToGroup: list # item shape: {groupId?: record, userIds?: list}
   --teamId: record # shape: {id?: int}
 ]: any -> record {
@@ -399,7 +411,7 @@ export def "aaa-team-groups-users AddUsersToTeamGroups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Users From Team Groups
@@ -414,6 +426,7 @@ export def "aaa-team-groups-users RemoveUsersFromTeamGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: record
   --remove-users-from-group: list
 ]: nothing -> record {
@@ -423,7 +436,7 @@ export def "aaa-team-groups-users RemoveUsersFromTeamGroups" [
   let full_url = (build-url $base "/aaa/team-groups/v1/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Team Group
@@ -439,13 +452,14 @@ export def "aaa-team-groups DeleteTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-groups/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Group Users
@@ -461,6 +475,7 @@ export def "aaa-team-groups-users GetGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # format: int64
   --page-token: string # e.g. 
 ]: nothing -> any {
@@ -470,7 +485,7 @@ export def "aaa-team-groups-users GetGroupUsers" [
   let full_url = (build-url $base $"/aaa/team-groups/v1/($id)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Users To Team Group
@@ -487,6 +502,7 @@ export def "aaa-team-groups-users AddUsersToTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userIds: list # item shape: {id?: string}
 ]: any -> record<teamId: record<id: int>> {
   let input = $in
@@ -497,7 +513,7 @@ export def "aaa-team-groups-users AddUsersToTeamGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Users From Team Group
@@ -513,6 +529,7 @@ export def "aaa-team-groups-users RemoveUsersFromTeamGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-ids: list
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -521,7 +538,7 @@ export def "aaa-team-groups-users RemoveUsersFromTeamGroup" [
   let full_url = (build-url $base $"/aaa/team-groups/v1/($id)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Custom Roles
@@ -536,6 +553,7 @@ export def "aaa-team-roles-custom-roles ListCustomRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: int # format: int64
 ]: nothing -> record<roles: table<description: string, name: string, parentRoleId: int, parentRoleName: string, permissions: list, roleId: int, teamId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -544,7 +562,7 @@ export def "aaa-team-roles-custom-roles ListCustomRoles" [
   let full_url = (build-url $base "/aaa/team-roles/v1/custom-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Role
@@ -559,6 +577,7 @@ export def "aaa-team-roles-custom-roles CreateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --name: string
   --parentRoleId: int # format: int64
@@ -574,7 +593,7 @@ export def "aaa-team-roles-custom-roles CreateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Custom Role
@@ -590,13 +609,14 @@ export def "aaa-team-roles-custom-roles GetCustomRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<role: record<description: string, name: string, parentRoleId: int, parentRoleName: string, permissions: list<string>, roleId: int, teamId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-roles/v1/custom-roles/($role_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Role
@@ -613,6 +633,7 @@ export def "aaa-team-roles-custom-roles UpdateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --newDescription: string
   --newName: string
   --newPermissions: record # shape: {permissions?: list}
@@ -625,7 +646,7 @@ export def "aaa-team-roles-custom-roles UpdateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Role
@@ -641,13 +662,14 @@ export def "aaa-team-roles-custom-roles DeleteRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-roles/v1/custom-roles/($role_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List System Roles
@@ -662,13 +684,14 @@ export def "aaa-team-roles-system-roles ListSystemRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<roles: table<description: string, name: string, permissions: list, roleId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aaa/team-roles/v1/system-roles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate/Deactivate SAML
@@ -683,6 +706,7 @@ export def "aaa-team-saml-active SetActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isActive: oneof<nothing, bool>
   --teamId: int # format: int64
 ]: any -> record {
@@ -694,7 +718,7 @@ export def "aaa-team-saml-active SetActive" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SAML Configuration
@@ -709,6 +733,7 @@ export def "aaa-team-saml-configuration GetConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: int # format: int64
 ]: nothing -> record<idpDetails: record<icon: string, name: string>, idpParameters: any, spParameters: record<assertionConsumerServiceUrl: string, binding: string, metadataUrl: string, nameIdFormat: string, signingCertPem: string>, teamId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -717,7 +742,7 @@ export def "aaa-team-saml-configuration GetConfiguration" [
   let full_url = (build-url $base "/aaa/team-saml/v1/configuration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set IDP Parameters
@@ -732,6 +757,7 @@ export def "aaa-team-saml-idp-parameters SetIDPParameters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --params: any
   --teamId: int # format: int64
 ]: any -> record {
@@ -743,7 +769,7 @@ export def "aaa-team-saml-idp-parameters SetIDPParameters" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SP Parameters
@@ -758,6 +784,7 @@ export def "aaa-team-saml-sp-parameters GetSPParameters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: int # format: int64, e.g. 1234567
 ]: nothing -> record<params: record<assertionConsumerServiceUrl: string, binding: string, metadataUrl: string, nameIdFormat: string, signingCertPem: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -766,7 +793,7 @@ export def "aaa-team-saml-sp-parameters GetSPParameters" [
   let full_url = (build-url $base "/aaa/team-saml/v1/sp_parameters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Team Scopes By Ids
@@ -781,6 +808,7 @@ export def "aaa-team-scopes GetTeamScopesByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list
 ]: nothing -> record<scopes: table<defaultExpression: string, description: string, displayName: string, filters: list, id: string, teamId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -789,7 +817,7 @@ export def "aaa-team-scopes GetTeamScopesByIds" [
   let full_url = (build-url $base "/aaa/team-scopes/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Scope
@@ -805,6 +833,7 @@ export def "aaa-team-scopes UpdateScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   defaultExpression: string # e.g. <v1>true
   --description: string # e.g. The best scope
   displayName: string # e.g. my-scope
@@ -819,7 +848,7 @@ export def "aaa-team-scopes UpdateScope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Scope
@@ -835,6 +864,7 @@ export def "aaa-team-scopes CreateScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultExpression: string # e.g. <v1>true
   --description: string # e.g. The best scope
   displayName: string # e.g. my-scope
@@ -848,7 +878,7 @@ export def "aaa-team-scopes CreateScope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Team Scopes
@@ -863,13 +893,14 @@ export def "aaa-team-scopes-list GetTeamScopes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scopes: table<defaultExpression: string, description: string, displayName: string, filters: list, id: string, teamId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aaa/team-scopes/v1/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Scope
@@ -885,13 +916,14 @@ export def "aaa-team-scopes DeleteScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aaa/team-scopes/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get company IP access settings
@@ -906,6 +938,7 @@ export def "aaa-team-sec-ip-access GetCompanyIpAccessSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. 
 ]: nothing -> record<settings: record<enableCoralogixCustomerSupportAccess: string, id: string, ipAccess: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -914,7 +947,7 @@ export def "aaa-team-sec-ip-access GetCompanyIpAccessSettings" [
   let full_url = (build-url $base "/aaa/team-sec-ip-access/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace company IP access settings
@@ -930,6 +963,7 @@ export def "aaa-team-sec-ip-access ReplaceCompanyIpAccessSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enableCoralogixCustomerSupportAccess: string@enableCoralogixCustomerSupportAccess-completer
   --id: string # e.g. d662a2f1-21c3-493c-8f8a-595d3ab05ef3
   --ipAccess: list # item shape: {enabled?: bool, ipRange?: string, name?: string}
@@ -942,7 +976,7 @@ export def "aaa-team-sec-ip-access ReplaceCompanyIpAccessSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create company IP access settings
@@ -958,6 +992,7 @@ export def "aaa-team-sec-ip-access CreateCompanyIpAccessSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enableCoralogixCustomerSupportAccess: string@enableCoralogixCustomerSupportAccess-completer
   --ipAccess: list # item shape: {enabled?: bool, ipRange?: string, name?: string}
 ]: any -> record<settings: record<enableCoralogixCustomerSupportAccess: string, id: string, ipAccess: record>> {
@@ -969,7 +1004,7 @@ export def "aaa-team-sec-ip-access CreateCompanyIpAccessSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete company IP access settings
@@ -984,6 +1019,7 @@ export def "aaa-team-sec-ip-access DeleteCompanyIpAccessSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. d662a2f1-21c3-493c-8f8a-595d3ab05ef3
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -992,7 +1028,7 @@ export def "aaa-team-sec-ip-access DeleteCompanyIpAccessSettings" [
   let full_url = (build-url $base "/aaa/team-sec-ip-access/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all accessible alert definitions
@@ -1007,6 +1043,7 @@ export def "alerts-alerts-general ListAlertDefs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --query-filter: record
   --pagination: record
   --order-bys: record
@@ -1017,7 +1054,7 @@ export def "alerts-alerts-general ListAlertDefs" [
   let full_url = (build-url $base "/alerts/alerts-general/v3" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace an alert definition
@@ -1032,6 +1069,7 @@ export def "alerts-alerts-general ReplaceAlertDef" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alertDefProperties: any
   --id: string # Alert definition ID (e.g. 123e4567-e89b-12d3-a456-426614174000)
 ]: any -> record<alertDef: record<alertDefProperties: any, alertVersionId: string, createdTime: string, id: string, lastTriggeredTime: string, status: string, updatedTime: string>> {
@@ -1043,7 +1081,7 @@ export def "alerts-alerts-general ReplaceAlertDef" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an alert
@@ -1058,6 +1096,7 @@ export def "alerts-alerts-general CreateAlertDef" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alertDefProperties: any
 ]: any -> record<alertDef: record<alertDefProperties: any, alertVersionId: string, createdTime: string, id: string, lastTriggeredTime: string, status: string, updatedTime: string>> {
   let input = $in
@@ -1068,7 +1107,7 @@ export def "alerts-alerts-general CreateAlertDef" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get alert definition by alert version ID
@@ -1084,13 +1123,14 @@ export def "alerts-alerts-general-alert-version-id GetAlertDefByVersionId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alertDef: record<alertDefProperties: any, alertVersionId: string, createdTime: string, id: string, lastTriggeredTime: string, status: string, updatedTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/alerts-general/v3/alert-version-id/($alert_version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk replace alert definitions
@@ -1106,6 +1146,7 @@ export def "alerts-alerts-general-bulk BulkReplaceAlertDefs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alertDefsToReplace: list # item shape: {alertDefProperties?: any, id?: string}
 ]: any -> record<alertDefs: table<alertDefProperties: any, alertVersionId: string, createdTime: string, id: string, lastTriggeredTime: string, status: string, updatedTime: string>, failedToReplaceAlertDefs: table<id: string>, notFoundIds: list<string>, skippedIds: list<string>> {
   let input = $in
@@ -1116,7 +1157,7 @@ export def "alerts-alerts-general-bulk BulkReplaceAlertDefs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download alerts
@@ -1131,13 +1172,14 @@ export def "alerts-alerts-general-download DownloadAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/alerts-general/v3/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get counts for filter options
@@ -1152,6 +1194,7 @@ export def "alerts-alerts-general-filter-option-counts FilterOptionCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --query-filter: record
 ]: nothing -> record<counts: record<enabledCounts: list<record>, entityLabelCounts: list<record>, priorityCounts: list<record>, statusCounts: list<record>, typeCounts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1160,7 +1203,7 @@ export def "alerts-alerts-general-filter-option-counts FilterOptionCounts" [
   let full_url = (build-url $base "/alerts/alerts-general/v3/filter-option-counts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get alert definition by ID
@@ -1176,13 +1219,14 @@ export def "alerts-alerts-general GetAlertDef" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alertDef: record<alertDefProperties: any, alertVersionId: string, createdTime: string, id: string, lastTriggeredTime: string, status: string, updatedTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/alerts-general/v3/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteAlertDef
@@ -1198,13 +1242,14 @@ export def "alerts-alerts-general DeleteAlertDef" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/alerts/alerts-general/v3/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable or enable an alert
@@ -1220,6 +1265,7 @@ export def "alerts-alerts-general SetActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # e.g. true
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1228,7 +1274,7 @@ export def "alerts-alerts-general SetActive" [
   let full_url = (build-url $base $"/alerts/alerts-general/v3/($id):setActive" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Events
@@ -1243,6 +1289,7 @@ export def "alerts-events ListEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
   --order-bys: list
   --pagination: record
@@ -1253,7 +1300,7 @@ export def "alerts-events ListEvents" [
   let full_url = (build-url $base "/alerts/events/v3" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Alert Events
@@ -1268,6 +1315,7 @@ export def "alerts-events-alert-events ListAlertEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alert-ids: list # e.g. [32144a8a-7ee0-4c16-a093-2bf1f9c12e1e]
   --timestamp-range: record
   --cx-event-labels: record
@@ -1280,7 +1328,7 @@ export def "alerts-events-alert-events ListAlertEvents" [
   let full_url = (build-url $base "/alerts/events/v3/alert-events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Event
@@ -1295,6 +1343,7 @@ export def "alerts-events-batch BatchGetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list
   --order-bys: list
   --pagination: record
@@ -1306,7 +1355,7 @@ export def "alerts-events-batch BatchGetEvent" [
   let full_url = (build-url $base "/alerts/events/v3/batch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Events Count
@@ -1321,6 +1370,7 @@ export def "alerts-events-count ListEventsCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
 ]: nothing -> record<count: string, reachedLimit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1329,7 +1379,7 @@ export def "alerts-events-count ListEventsCount" [
   let full_url = (build-url $base "/alerts/events/v3/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Events Statistics
@@ -1344,6 +1394,7 @@ export def "alerts-events-statistics GetEventsStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
 ]: nothing -> record<cxEventLabelsFieldStatistics: record, cxEventMetadataFieldStatistics: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1352,7 +1403,7 @@ export def "alerts-events-statistics GetEventsStatistics" [
   let full_url = (build-url $base "/alerts/events/v3/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Event
@@ -1368,6 +1419,7 @@ export def "alerts-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order-bys: list
   --pagination: record
 ]: nothing -> record<event: any, pagination: record<nextPageToken: string, totalSize: int>> {
@@ -1377,7 +1429,7 @@ export def "alerts-events GetEvent" [
   let full_url = (build-url $base $"/alerts/events/v3/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Service SLOs
@@ -1392,6 +1444,7 @@ export def "apm-apm-slo ListServiceSlos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: record
   --service-names: list
 ]: nothing -> record<slos: list<any>> {
@@ -1401,7 +1454,7 @@ export def "apm-apm-slo ListServiceSlos" [
   let full_url = (build-url $base "/apm/apm-slo/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace Service SLO
@@ -1416,6 +1469,7 @@ export def "apm-apm-slo ReplaceServiceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slo: any
 ]: any -> record<slo: any> {
   let input = $in
@@ -1426,7 +1480,7 @@ export def "apm-apm-slo ReplaceServiceSlo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Service SLO
@@ -1441,6 +1495,7 @@ export def "apm-apm-slo CreateServiceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slo: any
 ]: any -> record<slo: any> {
   let input = $in
@@ -1451,7 +1506,7 @@ export def "apm-apm-slo CreateServiceSlo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch Get Service SLOs
@@ -1466,6 +1521,7 @@ export def "apm-apm-slo-batch BatchGetServiceSlos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # e.g. [slo_id1, slo_id2]
 ]: nothing -> record<notFoundIds: list<string>, slos: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1474,7 +1530,7 @@ export def "apm-apm-slo-batch BatchGetServiceSlos" [
   let full_url = (build-url $base "/apm/apm-slo/v1/batch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Service SLO
@@ -1490,13 +1546,14 @@ export def "apm-apm-slo GetServiceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<slo: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/apm/apm-slo/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Service SLO
@@ -1512,13 +1569,14 @@ export def "apm-apm-slo DeleteServiceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/apm/apm-slo/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a team configuration
@@ -1534,6 +1592,7 @@ export def "cases-cases-team-configs-configs CreateTeamConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Optional display name for the team configuration (e.g. Primary Team Config)
   settings: record # Team-level configuration options for case management, including suppression and snooze periods. — shape: {manualResolutionSnoozePeriod?: string, suppressionPeriod?: string}
 ]: any -> record<teamConfig: record<createTime: string, id: string, name: string, settings: record<manualResolutionSnoozePeriod: string, suppressionPeriod: string>, updateTime: string>> {
@@ -1545,7 +1604,7 @@ export def "cases-cases-team-configs-configs CreateTeamConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the active team configuration
@@ -1560,13 +1619,14 @@ export def "cases-cases-team-configs-configs-active GetActiveTeamConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<teamConfig: record<createTime: string, id: string, name: string, settings: record<manualResolutionSnoozePeriod: string, suppressionPeriod: string>, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cases/cases/team-configs/v1/configs/active")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system default team configuration settings
@@ -1581,13 +1641,14 @@ export def "cases-cases-team-configs-configs-system-defaults GetSystemDefaults" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<settings: record<manualResolutionSnoozePeriod: string, suppressionPeriod: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cases/cases/team-configs/v1/configs/system-defaults")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a team configuration
@@ -1603,13 +1664,14 @@ export def "cases-cases-team-configs-configs GetTeamConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<teamConfig: record<createTime: string, id: string, name: string, settings: record<manualResolutionSnoozePeriod: string, suppressionPeriod: string>, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/team-configs/v1/configs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a team configuration
@@ -1625,13 +1687,14 @@ export def "cases-cases-team-configs-configs DeleteTeamConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/team-configs/v1/configs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a team configuration
@@ -1648,6 +1711,7 @@ export def "cases-cases-team-configs-configs UpdateTeamConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # New display name for the team configuration (e.g. SRE Team Config)
   --settings: record # Team-level configuration options for case management, including suppression and snooze periods. — shape: {manualResolutionSnoozePeriod?: string, suppressionPeriod?: string}
 ]: any -> record<teamConfig: record<createTime: string, id: string, name: string, settings: record<manualResolutionSnoozePeriod: string, suppressionPeriod: string>, updateTime: string>> {
@@ -1659,7 +1723,7 @@ export def "cases-cases-team-configs-configs UpdateTeamConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List cases with filters
@@ -1677,6 +1741,7 @@ export def "cases-cases ListCases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # Filters applied when querying cases, including states, priorities, categories, groupings, and labels. — shape: {assignees?: list, categories?: list, dateRange?: record, groupings?: list, labels?: list, priorities?: list, states?: list, statuses?: list, textSearch?: string}
   --orderBy: record # Defines how cases should be sorted in the response. By default, cases are sorted by creation time and id in descending order. With this field, one can specify the primary sorting field and direction. — shape: {direction?: "CASE_ORDER_BY_DIRECTION_UNSPECIFIED"|"CASE_ORDER_BY_DIRECTION_ASCENDING"|"CASE_ORDER_BY_DIRECTION_DESCENDING", field?: "CASE_ORDER_BY_FIELD_UNSPECIFIED"|"CASE_ORDER_BY_FIELD_PRIORITY"|"CASE_ORDER_BY_FIELD_STATUS"|"CASE_ORDER_BY_FIELD_STATE"|"CASE_ORDER_BY_FIELD_UPDATED_AT"|"CASE_ORDER_BY_FIELD_CATEGORY"}
   --pagination: record # Pagination parameters for list requests. — shape: {pageSize?: int, pageToken?: string, skip?: int}
@@ -1689,7 +1754,7 @@ export def "cases-cases ListCases" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a comment event
@@ -1705,6 +1770,7 @@ export def "cases-cases-events-comment CreateComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Comment text to update (e.g. This is updated text)
 ]: any -> record<event: record<actor: any, createTime: string, eventData: any, eventId: string, eventTime: string, updateTime: string>> {
   let input = $in
@@ -1715,7 +1781,7 @@ export def "cases-cases-events-comment CreateComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment event
@@ -1731,13 +1797,14 @@ export def "cases-cases-events-comment DeleteComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/events/comment/($event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a comment event
@@ -1753,6 +1820,7 @@ export def "cases-cases-events-comment UpdateComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Comment text to update (e.g. This is updated text)
 ]: any -> record<event: record<actor: any, createTime: string, eventData: any, eventId: string, eventTime: string, updateTime: string>> {
   let input = $in
@@ -1763,7 +1831,7 @@ export def "cases-cases-events-comment UpdateComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List events for a case
@@ -1779,13 +1847,14 @@ export def "cases-cases-events ListEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<events: table<actor: any, createTime: string, eventData: any, eventId: string, eventTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/events/($case_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an event by ID
@@ -1801,13 +1870,14 @@ export def "cases-cases-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<event: record<actor: any, createTime: string, eventData: any, eventId: string, eventTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/events/($event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get case by ID
@@ -1823,13 +1893,14 @@ export def "cases-cases GetCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update case fields
@@ -1845,6 +1916,7 @@ export def "cases-cases UpdateCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # New case description (e.g. Investigate intermittent connection drops)
   --title: string # New case title (e.g. Database connection investigation)
 ]: any -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
@@ -1856,7 +1928,7 @@ export def "cases-cases UpdateCase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Acknowledge a case
@@ -1873,6 +1945,7 @@ export def "cases-cases AcknowledgeCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   actor: record # Minimal user identity information used in case assignments. — shape: {userId?: string}
 ]: any -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let input = $in
@@ -1883,7 +1956,7 @@ export def "cases-cases AcknowledgeCase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign a case to a user
@@ -1900,6 +1973,7 @@ export def "cases-cases AssignCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   assignee: record # Minimal user identity information used in case assignments. — shape: {userId?: string}
 ]: any -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let input = $in
@@ -1910,7 +1984,7 @@ export def "cases-cases AssignCase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Close a case
@@ -1926,6 +2000,7 @@ export def "cases-cases CloseCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # e.g. This case is not applicable.
 ]: nothing -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1934,7 +2009,7 @@ export def "cases-cases CloseCase" [
   let full_url = (build-url $base $"/cases/cases/v1/($id):close" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve a case
@@ -1950,6 +2025,7 @@ export def "cases-cases ResolveCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # e.g. This case is not applicable.
 ]: nothing -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1958,7 +2034,7 @@ export def "cases-cases ResolveCase" [
   let full_url = (build-url $base $"/cases/cases/v1/($id):resolve" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set priority override
@@ -1974,6 +2050,7 @@ export def "cases-cases SetPriorityOverride" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   priority: string@priority-completer
 ]: any -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let input = $in
@@ -1984,7 +2061,7 @@ export def "cases-cases SetPriorityOverride" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove case assignment
@@ -2000,13 +2077,14 @@ export def "cases-cases UnassignCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/($id):unassign")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove priority override
@@ -2022,13 +2100,14 @@ export def "cases-cases UnsetPriorityOverride" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<case: record<acknowledgeTime: string, alertIndicators: list<record>, assignee: record<userId: string>, category: string, createTime: string, description: string, groupings: list<record>, id: string, labels: list<record>, priority: string, priorityDetails: record<override: string, system: string>, readableId: string, resolutionDetails: record<resolveTime: string, resolvedBy: string>, state: string, status: string, title: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cases/cases/v1/($id):unsetPriorityOverride")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available filter values
@@ -2044,6 +2123,7 @@ export def "cases-cases-v1-get-filter-values GetFilterValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # Filters applied when querying cases, including states, priorities, categories, groupings, and labels. — shape: {assignees?: list, categories?: list, dateRange?: record, groupings?: list, labels?: list, priorities?: list, states?: list, statuses?: list, textSearch?: string}
 ]: any -> record<assigneeAggregations: record<assignedCounts: list<record>, unassignedCount: int>, categoryAggregations: table<category: string, count: int>, groupingAggregations: table<key: string, valueCounts: list>, labelAggregations: table<key: string, valueCounts: list>, priorityAggregations: table<count: int, priority: string>, stateAggregations: table<count: int, state: string>, statusAggregations: table<count: int, status: string>> {
   let input = $in
@@ -2054,7 +2134,7 @@ export def "cases-cases-v1-get-filter-values GetFilterValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dashboard catalog
@@ -2069,13 +2149,14 @@ export def "dashboards-dashboards-catalog GetDashboardCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<authorId: string, createTime: string, description: string, folder: record, id: string, isDefault: bool, isLocked: bool, isPinned: bool, lockerAuthorId: string, name: string, slugName: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboards/dashboards/v1/catalog")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List dashboard folders
@@ -2090,13 +2171,14 @@ export def "dashboards-dashboards-folders ListDashboardFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<folder: table<id: string, name: string, parentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboards/dashboards/v1/folders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace a dashboard folder
@@ -2112,6 +2194,7 @@ export def "dashboards-dashboards-folders ReplaceDashboardFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folder: record # shape: {id?: string, name?: string, parentId?: string}
   --requestId: string
 ]: any -> record {
@@ -2123,7 +2206,7 @@ export def "dashboards-dashboards-folders ReplaceDashboardFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a dashboard folder
@@ -2139,6 +2222,7 @@ export def "dashboards-dashboards-folders CreateDashboardFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folder: record # shape: {id?: string, name?: string, parentId?: string}
   --requestId: string
 ]: any -> record<folderId: string> {
@@ -2150,7 +2234,7 @@ export def "dashboards-dashboards-folders CreateDashboardFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a dashboard folder
@@ -2166,6 +2250,7 @@ export def "dashboards-dashboards-folders GetDashboardFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request-id: string
 ]: nothing -> record<folder: record<id: string, name: string, parentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2174,7 +2259,7 @@ export def "dashboards-dashboards-folders GetDashboardFolder" [
   let full_url = (build-url $base $"/dashboards/dashboards/v1/folders/($folder_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a dashboard folder
@@ -2190,6 +2275,7 @@ export def "dashboards-dashboards-folders DeleteDashboardFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request-id: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2198,7 +2284,7 @@ export def "dashboards-dashboards-folders DeleteDashboardFolder" [
   let full_url = (build-url $base $"/dashboards/dashboards/v1/folders/($folder_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List views service
@@ -2213,13 +2299,14 @@ export def "data-exploration-saved-views ListViews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<views: table<filters: record, folderId: string, id: int, isCompactMode: bool, name: string, searchQuery: record, timeSelection: any, viewType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-exploration/saved-views/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a view service
@@ -2236,6 +2323,7 @@ export def "data-exploration-saved-views CreateView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # shape: {filters?: list}
   --folderId: string # Unique identifier for folders (e.g. 3dc02998-0b50-4ea8-b68a-4779d716fa1f)
   name: string # View name (e.g. Logs view)
@@ -2251,7 +2339,7 @@ export def "data-exploration-saved-views CreateView" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List view folders service
@@ -2266,13 +2354,14 @@ export def "data-exploration-saved-views-folders ListViewFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<folders: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-exploration/saved-views/v1/folders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace View Folder service
@@ -2287,6 +2376,7 @@ export def "data-exploration-saved-views-folders ReplaceViewFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Unique identifier for folders (e.g. 3dc02998-0b50-4ea8-b68a-4779d716fa1f)
   name: string # Folder name (e.g. My Folder)
 ]: any -> record<id: string, name: string> {
@@ -2298,7 +2388,7 @@ export def "data-exploration-saved-views-folders ReplaceViewFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create View Folder service
@@ -2313,6 +2403,7 @@ export def "data-exploration-saved-views-folders CreateViewFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Folder name (e.g. My Folder)
 ]: any -> record<id: string, name: string> {
   let input = $in
@@ -2323,7 +2414,7 @@ export def "data-exploration-saved-views-folders CreateViewFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get View Folder service
@@ -2339,13 +2430,14 @@ export def "data-exploration-saved-views-folders GetViewFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/data-exploration/saved-views/v1/folders/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete View Folder service
@@ -2361,13 +2453,14 @@ export def "data-exploration-saved-views-folders DeleteViewFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/data-exploration/saved-views/v1/folders/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get view service
@@ -2383,13 +2476,14 @@ export def "data-exploration-saved-views GetView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<filters: record<filters: list<record>>, folderId: string, id: int, isCompactMode: bool, name: string, searchQuery: record<query: string, syntaxType: string>, timeSelection: any, viewType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/data-exploration/saved-views/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace a view service
@@ -2407,6 +2501,7 @@ export def "data-exploration-saved-views ReplaceView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # shape: {filters?: list}
   --folderId: string # Unique identifier for folders (e.g. 3dc02998-0b50-4ea8-b68a-4779d716fa1f)
   --isCompactMode: oneof<nothing, bool>
@@ -2423,7 +2518,7 @@ export def "data-exploration-saved-views ReplaceView" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete view service
@@ -2439,13 +2534,14 @@ export def "data-exploration-saved-views DeleteView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/data-exploration/saved-views/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Retentions
@@ -2460,13 +2556,14 @@ export def "dataengine-retention-tags GetRetentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<retentions: table<editable: bool, id: string, name: string, order: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataengine/retention-tags/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Retentions
@@ -2482,6 +2579,7 @@ export def "dataengine-retention-tags UpdateRetentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   retentionUpdateElements: list # item shape: {id?: string, name?: string}
 ]: any -> record<retentions: table<editable: bool, id: string, name: string, order: int>> {
   let input = $in
@@ -2492,7 +2590,7 @@ export def "dataengine-retention-tags UpdateRetentions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Activate Retentions
@@ -2507,13 +2605,14 @@ export def "dataengine-retention-tags-activate ActivateRetentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<activateRetentions: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataengine/retention-tags/v1/activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Retentions Enabled
@@ -2528,13 +2627,14 @@ export def "dataengine-retention-tags-enabled GetRetentionsEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enableTags: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataengine/retention-tags/v1/enabled")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Data Usage
@@ -2549,6 +2649,7 @@ export def "dataplans-data-usage GetDataUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-range: record
   --resolution: string
   --aggregate: list
@@ -2560,7 +2661,7 @@ export def "dataplans-data-usage GetDataUsage" [
   let full_url = (build-url $base "/dataplans/data-usage/v2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Daily Usage Evaluation Tokens
@@ -2576,6 +2677,7 @@ export def "dataplans-data-usage-daily-evaluation-tokens GetDailyUsageEvaluation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --range: string@range-completer
   --dateRange: record # This data structure represents a date range. — shape: {fromDate?: string, toDate?: string}
 ]: any -> record<tokens: table<evaluations: list, statsDate: string, totalTokens: record>> {
@@ -2587,7 +2689,7 @@ export def "dataplans-data-usage-daily-evaluation-tokens GetDailyUsageEvaluation
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Daily Usage Processed GBs
@@ -2603,6 +2705,7 @@ export def "dataplans-data-usage-daily-processed-gbs GetDailyUsageProcessedGbs" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateRange: record # This data structure represents a date range. — shape: {fromDate?: string, toDate?: string}
   --range: string@range-completer
 ]: any -> record<gbs: table<blockedGbs: record, blockedMetricsGbs: record, cpuProfilesGbs: record, highLogsGbs: record, highMetricsGbs: record, highTracingGbs: record, lowLogsGbs: record, lowSessionRecordingGbs: record, lowTracingGbs: record, mediumLogsGbs: record, mediumTracingGbs: record, statsDate: string, totalGbs: record>> {
@@ -2614,7 +2717,7 @@ export def "dataplans-data-usage-daily-processed-gbs GetDailyUsageProcessedGbs" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Daily Usage Units
@@ -2630,6 +2733,7 @@ export def "dataplans-data-usage-daily-units GetDailyUsageUnits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --range: string@range-completer
   --dateRange: record # This data structure represents a date range. — shape: {fromDate?: string, toDate?: string}
 ]: any -> record<units: table<blockedMetricsUnits: record, blockedUnits: record, cpuProfilesUnits: record, evaluationUnits: record, highLogsUnits: record, highMetricsUnits: record, highTracingUnits: record, lowLogsUnits: record, lowSessionRecordingUnits: record, lowTracingUnits: record, mediumLogsUnits: record, mediumTracingUnits: record, statsDate: string, totalUnits: record>> {
@@ -2641,7 +2745,7 @@ export def "dataplans-data-usage-daily-units GetDailyUsageUnits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Data Usage Metrics Export Status
@@ -2656,13 +2760,14 @@ export def "dataplans-data-usage-export-status GetDataUsageMetricsExportStatus" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataplans/data-usage/v2/export-status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Data Usage Metrics Export Status
@@ -2677,6 +2782,7 @@ export def "dataplans-data-usage-export-status UpdateDataUsageMetricsExportStatu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. true
 ]: any -> record<enabled: bool> {
   let input = $in
@@ -2687,7 +2793,7 @@ export def "dataplans-data-usage-export-status UpdateDataUsageMetricsExportStatu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Logs Count
@@ -2702,6 +2808,7 @@ export def "dataplans-data-usage-logs-count GetLogsCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-range: record
   --resolution: string
   --filters: record
@@ -2714,7 +2821,7 @@ export def "dataplans-data-usage-logs-count GetLogsCount" [
   let full_url = (build-url $base "/dataplans/data-usage/v2/logs:count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Spans Count
@@ -2729,6 +2836,7 @@ export def "dataplans-data-usage-spans-count GetSpansCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date-range: record
   --resolution: string
   --filters: record
@@ -2739,7 +2847,7 @@ export def "dataplans-data-usage-spans-count GetSpansCount" [
   let full_url = (build-url $base "/dataplans/data-usage/v2/spans:count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Policies
@@ -2754,6 +2862,7 @@ export def "dataplans-policies GetCompanyPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled-only: oneof<nothing, bool> # e.g. true
   --source-type: string@source-type-completer
 ]: nothing -> record<policies: list<any>> {
@@ -2763,7 +2872,7 @@ export def "dataplans-policies GetCompanyPolicies" [
   let full_url = (build-url $base "/dataplans/policies/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Policy
@@ -2783,6 +2892,7 @@ export def "dataplans-policies UpdatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationRule: record # shape: {name?: string, ruleTypeId?: "RULE_TYPE_ID_UNSPECIFIED"|"RULE_TYPE_ID_IS"|"RULE_TYPE_ID_IS_NOT"|"RULE_TYPE_ID_START_WITH"|"RULE_TYPE_ID_INCLUDES"}
   --archiveRetention: record # shape: {id?: string}
   --description: string # e.g. My Policy Description
@@ -2802,7 +2912,7 @@ export def "dataplans-policies UpdatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Policy
@@ -2822,6 +2932,7 @@ export def "dataplans-policies CreatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationRule: record # shape: {name?: string, ruleTypeId?: "RULE_TYPE_ID_UNSPECIFIED"|"RULE_TYPE_ID_IS"|"RULE_TYPE_ID_IS_NOT"|"RULE_TYPE_ID_START_WITH"|"RULE_TYPE_ID_INCLUDES"}
   --archiveRetention: record # shape: {id?: string}
   --description: string # e.g. My Policy Description
@@ -2841,7 +2952,7 @@ export def "dataplans-policies CreatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Atomic Overwrite Log Policies
@@ -2857,6 +2968,7 @@ export def "dataplans-policies-atomic-overwrite-log-policies AtomicOverwriteLogP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policies: list # item shape: {logRules: record, policy: record}
 ]: any -> record<createResponses: table<policy: any>> {
   let input = $in
@@ -2867,7 +2979,7 @@ export def "dataplans-policies-atomic-overwrite-log-policies AtomicOverwriteLogP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Atomic Overwrite Span Policies
@@ -2883,6 +2995,7 @@ export def "dataplans-policies-atomic-overwrite-span-policies AtomicOverwriteSpa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policies: list # item shape: {policy: record, spanRules: record}
 ]: any -> record<createResponses: table<policy: any>> {
   let input = $in
@@ -2893,7 +3006,7 @@ export def "dataplans-policies-atomic-overwrite-span-policies AtomicOverwriteSpa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Atomic Batch Create Policy
@@ -2908,6 +3021,7 @@ export def "dataplans-policies-bulk-create AtomicBatchCreatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   policyRequests: list
 ]: any -> record<createResponses: table<policy: any>> {
   let input = $in
@@ -2918,7 +3032,7 @@ export def "dataplans-policies-bulk-create AtomicBatchCreatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Test Log Policies
@@ -2934,6 +3048,7 @@ export def "dataplans-policies-bulk-test-log BulkTestLogPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metaFieldsValuesList: list # item shape: {applicationNameValues: string, severityValues: string, subsystemNameValues: string}
 ]: any -> record<testPoliciesBulkResult: table<matched: bool, metaFieldsValues: record, policy: any>> {
   let input = $in
@@ -2944,7 +3059,7 @@ export def "dataplans-policies-bulk-test-log BulkTestLogPolicies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Policy Priority Settings
@@ -2959,13 +3074,14 @@ export def "dataplans-policies-get-policy-priority-settings GetPolicySettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<logsPolicySettings: record<defaultPriority: string>, spansPolicySettings: record<defaultPriority: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataplans/policies/v1/getPolicyPrioritySettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reorder Policies
@@ -2981,6 +3097,7 @@ export def "dataplans-policies-reorder ReorderPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   orders: list # item shape: {id: string, order: int}
   sourceType: string@sourceType-completer
 ]: any -> record<orders: table<id: string, order: int>> {
@@ -2992,7 +3109,7 @@ export def "dataplans-policies-reorder ReorderPolicies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace Policy Settings
@@ -3009,6 +3126,7 @@ export def "dataplans-policies-replace-policy-settings ReplacePolicySettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --logsPolicySettings: record # shape: {defaultPriority?: "PRIORITY_TYPE_UNSPECIFIED"|"PRIORITY_TYPE_BLOCK"|"PRIORITY_TYPE_LOW"|"PRIORITY_TYPE_MEDIUM"|"PRIORITY_TYPE_HIGH"}
   --spansPolicySettings: record # shape: {defaultPriority?: "PRIORITY_TYPE_UNSPECIFIED"|"PRIORITY_TYPE_BLOCK"|"PRIORITY_TYPE_LOW"|"PRIORITY_TYPE_MEDIUM"|"PRIORITY_TYPE_HIGH"}
 ]: any -> record<logsPolicySettings: record<defaultPriority: string>, spansPolicySettings: record<defaultPriority: string>> {
@@ -3020,7 +3138,7 @@ export def "dataplans-policies-replace-policy-settings ReplacePolicySettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Toggle Policies
@@ -3035,6 +3153,7 @@ export def "dataplans-policies-toggle TogglePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. true
   id: string # e.g. id
 ]: any -> record<enabled: bool, id: string> {
@@ -3046,7 +3165,7 @@ export def "dataplans-policies-toggle TogglePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Policy by ID
@@ -3062,13 +3181,14 @@ export def "dataplans-policies GetPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<policy: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataplans/policies/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Policy
@@ -3084,13 +3204,14 @@ export def "dataplans-policies DeletePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataplans/policies/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Enrichments
@@ -3105,13 +3226,14 @@ export def "enrichment-rules-custom-enrichment-rules GetCustomEnrichments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customEnrichments: table<description: string, fileName: string, fileSize: int, id: int, isQueryOnly: bool, name: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment-rules/custom-enrichment-rules/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Custom Enrichment
@@ -3126,6 +3248,7 @@ export def "enrichment-rules-custom-enrichment-rules UpdateCustomEnrichment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customEnrichmentId: int # format: int64, e.g. 1
   description: string # e.g. custom_enrichment_description
   file: any
@@ -3139,7 +3262,7 @@ export def "enrichment-rules-custom-enrichment-rules UpdateCustomEnrichment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Custom Enrichments
@@ -3154,6 +3277,7 @@ export def "enrichment-rules-custom-enrichment-rules CreateCustomEnrichment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # e.g. custom_enrichment_description
   file: any
   name: string # e.g. custom_enrichment_name
@@ -3166,7 +3290,7 @@ export def "enrichment-rules-custom-enrichment-rules CreateCustomEnrichment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search Custom Enrichment Data
@@ -3181,6 +3305,7 @@ export def "enrichment-rules-custom-enrichment-rules-all-contents SearchCustomEn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search-clauses: list
 ]: nothing -> record<customEnrichmentsData: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3189,7 +3314,7 @@ export def "enrichment-rules-custom-enrichment-rules-all-contents SearchCustomEn
   let full_url = (build-url $base "/enrichment-rules/custom-enrichment-rules/v1/all/contents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Custom Enrichments
@@ -3205,13 +3330,14 @@ export def "enrichment-rules-custom-enrichment-rules DeleteCustomEnrichment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customEnrichmentId: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enrichment-rules/custom-enrichment-rules/v1/($custom_enrichment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Enrichment
@@ -3227,13 +3353,14 @@ export def "enrichment-rules-custom-enrichment-rules GetCustomEnrichment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customEnrichment: record<description: string, fileName: string, fileSize: int, id: int, isQueryOnly: bool, name: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enrichment-rules/custom-enrichment-rules/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Enrichments
@@ -3248,13 +3375,14 @@ export def "enrichment-rules-enrichment-rules GetEnrichments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enrichments: table<enrichedFieldName: string, enrichmentType: any, fieldName: string, id: int, selectedColumns: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment-rules/enrichment-rules/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Atomic Overwrite Enrichments
@@ -3271,6 +3399,7 @@ export def "enrichment-rules-enrichment-rules AtomicOverwriteEnrichments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enrichmentFields: list # item shape: {enrichedFieldName?: string, fieldName?: string, selectedColumns?: list}
   --enrichmentType: any
   --requestEnrichments: list # item shape: {enrichedFieldName?: string, enrichmentType: any, fieldName: string, selectedColumns?: list}
@@ -3283,7 +3412,7 @@ export def "enrichment-rules-enrichment-rules AtomicOverwriteEnrichments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Enrichments
@@ -3299,6 +3428,7 @@ export def "enrichment-rules-enrichment-rules AddEnrichments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requestEnrichments: list # item shape: {enrichedFieldName?: string, enrichmentType: any, fieldName: string, selectedColumns?: list}
 ]: any -> record<enrichments: table<enrichedFieldName: string, enrichmentType: any, fieldName: string, id: int, selectedColumns: list>> {
   let input = $in
@@ -3309,7 +3439,7 @@ export def "enrichment-rules-enrichment-rules AddEnrichments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Enrichments
@@ -3324,6 +3454,7 @@ export def "enrichment-rules-enrichment-rules RemoveEnrichments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enrichment-ids: list # e.g. [1, 2, 3]
 ]: nothing -> record<remainingEnrichments: table<enrichedFieldName: string, enrichmentType: any, fieldName: string, id: int, selectedColumns: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3332,7 +3463,7 @@ export def "enrichment-rules-enrichment-rules RemoveEnrichments" [
   let full_url = (build-url $base "/enrichment-rules/enrichment-rules/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Enrichment Limit
@@ -3347,13 +3478,14 @@ export def "enrichment-rules-enrichment-rules-limit GetEnrichmentLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<limit: int, used: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment-rules/enrichment-rules/v1/limit")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Enrichment Settings
@@ -3368,13 +3500,14 @@ export def "enrichment-rules-enrichment-rules-settings GetCompanyEnrichmentSetti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enrichmentSettings: record<enrichmentAmountLimit: int, enrichmentsInUse: int, queryOnlyRowLimit: int, queryOnlySizeLimitBytes: string, rowLimit: int, sizeLimitBytes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment-rules/enrichment-rules/v1/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List E2Ms
@@ -3389,13 +3522,14 @@ export def "events2metrics-events2metrics ListE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<e2m: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events2metrics/events2metrics/v2")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace an E2M
@@ -3415,6 +3549,7 @@ export def "events2metrics-events2metrics ReplaceE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createTime: string # e.g. 2022-06-30T12:30:00Z'
   --description: string # e.g. avg and max the latency of catalog service
   --id: string # e.g. d6a3658e-78d2-47d0-9b81-b2c551f01b09
@@ -3436,7 +3571,7 @@ export def "events2metrics-events2metrics ReplaceE2M" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new E2M
@@ -3455,6 +3590,7 @@ export def "events2metrics-events2metrics CreateE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # e.g. avg and max the latency of catalog service
   --metricFields: list # item shape: {aggregations: list, sourceField: string, targetBaseMetricName: string}
   --metricLabels: list # item shape: {sourceField: string, targetLabel: string}
@@ -3472,7 +3608,7 @@ export def "events2metrics-events2metrics CreateE2M" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Atomic Batch Execute E2M
@@ -3487,6 +3623,7 @@ export def "events2metrics-events2metrics-batch AtomicBatchExecuteE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list
 ]: any -> record<matchingResponses: list<any>> {
   let input = $in
@@ -3497,7 +3634,7 @@ export def "events2metrics-events2metrics-batch AtomicBatchExecuteE2M" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List E2M Labels Cardinality
@@ -3512,6 +3649,7 @@ export def "events2metrics-events2metrics-labels-cardinality ListLabelsCardinali
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spans-query: record
   --logs-query: record
   --metric-labels: list
@@ -3522,7 +3660,7 @@ export def "events2metrics-events2metrics-labels-cardinality ListLabelsCardinali
   let full_url = (build-url $base "/events2metrics/events2metrics/v2/labels:cardinality" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get E2M Limits
@@ -3537,13 +3675,14 @@ export def "events2metrics-events2metrics-limits GetLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyId: string, labelsLimit: int, metricsLimit: record<limit: int, used: int>, permutationsLimit: record<limit: int, used: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events2metrics/events2metrics/v2/limits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an E2M
@@ -3559,13 +3698,14 @@ export def "events2metrics-events2metrics GetE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<e2m: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/events2metrics/events2metrics/v2/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an E2M
@@ -3581,13 +3721,14 @@ export def "events2metrics-events2metrics DeleteE2M" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/events2metrics/events2metrics/v2/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List incidents with filters
@@ -3602,6 +3743,7 @@ export def "incidents-incidents ListIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
   --pagination: record
   --order-bys: list
@@ -3612,7 +3754,7 @@ export def "incidents-incidents ListIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledge incidents
@@ -3627,6 +3769,7 @@ export def "incidents-incidents-acknowledge AcknowledgeIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-ids: list # e.g. [incident_id_1, incident_id_2]
 ]: nothing -> record<incidents: table<assignments: list, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3635,7 +3778,7 @@ export def "incidents-incidents-acknowledge AcknowledgeIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1/acknowledge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get incident aggregations
@@ -3650,6 +3793,7 @@ export def "incidents-incidents-aggregations ListIncidentAggregations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
   --group-bys: list
   --pagination: record
@@ -3660,7 +3804,7 @@ export def "incidents-incidents-aggregations ListIncidentAggregations" [
   let full_url = (build-url $base "/incidents/incidents/v1/aggregations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple incidents by IDs
@@ -3675,6 +3819,7 @@ export def "incidents-incidents-batch BatchGetIncident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list
 ]: nothing -> record<incidents: record, notFoundIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3683,7 +3828,7 @@ export def "incidents-incidents-batch BatchGetIncident" [
   let full_url = (build-url $base "/incidents/incidents/v1/batch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign incidents to a user
@@ -3698,6 +3843,7 @@ export def "incidents-incidents-by-user AssignIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-ids: list # e.g. [incident_id_1, incident_id_2]
   --assigned-to: record
 ]: nothing -> record<incidents: table<assignments: list, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list, name: string, severity: string, state: string, status: string>> {
@@ -3707,7 +3853,7 @@ export def "incidents-incidents-by-user AssignIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1/by-user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove incident user assignments
@@ -3722,6 +3868,7 @@ export def "incidents-incidents-by-user UnassignIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-ids: list # e.g. [incident_id_1, incident_id_2]
 ]: nothing -> record<incidents: table<assignments: list, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3730,7 +3877,7 @@ export def "incidents-incidents-by-user UnassignIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1/by-user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close incidents
@@ -3745,6 +3892,7 @@ export def "incidents-incidents-close CloseIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-ids: list # e.g. [incident_id_1, incident_id_2]
 ]: nothing -> record<incidents: table<assignments: list, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3753,7 +3901,7 @@ export def "incidents-incidents-close CloseIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1/close" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List incident events with filters
@@ -3768,6 +3916,7 @@ export def "incidents-incidents-events ListIncidentEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
   --pagination: record
   --order-by: record
@@ -3778,7 +3927,7 @@ export def "incidents-incidents-events ListIncidentEvents" [
   let full_url = (build-url $base "/incidents/incidents/v1/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get total count of incident events
@@ -3793,6 +3942,7 @@ export def "incidents-incidents-events-count ListIncidentEventsTotalCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
 ]: nothing -> record<count: string, reachedLimit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3801,7 +3951,7 @@ export def "incidents-incidents-events-count ListIncidentEventsTotalCount" [
   let full_url = (build-url $base "/incidents/incidents/v1/events/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available incident event filter values
@@ -3816,6 +3966,7 @@ export def "incidents-incidents-events-filter-values ListIncidentEventsFilterVal
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
 ]: nothing -> record<filtersValues: record<assigneeWithCount: list<record>, contextualLabels: record, displayLabels: record, metaLabelsOp: string, metaLabelsWithCount: list<record>, severityWithCount: list<record>, stateWithCount: list<record>, statusWithCount: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3824,7 +3975,7 @@ export def "incidents-incidents-events-filter-values ListIncidentEventsFilterVal
   let full_url = (build-url $base "/incidents/incidents/v1/events/filter-values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get incident by event ID
@@ -3840,13 +3991,14 @@ export def "incidents-incidents-events GetIncidentByEventId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incident: record<assignments: list<record>, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list<any>, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list<record>, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/incidents/v1/events/($event_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledge incident by event id
@@ -3862,13 +4014,14 @@ export def "incidents-incidents-events-acknowledge AcknowledgeIncidentByEventId"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incident: record<assignments: list<record>, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list<any>, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list<record>, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/incidents/v1/events/($event_id)/acknowledge")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve incident by event id
@@ -3884,13 +4037,14 @@ export def "incidents-incidents-events-resolve ResolveIncidentByEventId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incident: record<assignments: list<record>, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list<any>, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list<record>, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/incidents/v1/events/($event_id)/resolve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available filter values
@@ -3905,6 +4059,7 @@ export def "incidents-incidents-filter-values GetFilterValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record
 ]: nothing -> record<filtersValues: record<assigneeWithCount: list<record>, contextualLabels: record, displayLabels: record, metaLabelsOp: string, metaLabelsWithCount: list<record>, severityWithCount: list<record>, stateWithCount: list<record>, statusWithCount: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3913,7 +4068,7 @@ export def "incidents-incidents-filter-values GetFilterValues" [
   let full_url = (build-url $base "/incidents/incidents/v1/filter-values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve incidents
@@ -3928,6 +4083,7 @@ export def "incidents-incidents-resolve ResolveIncidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-ids: list # e.g. [incident_id_1, incident_id_2]
 ]: nothing -> record<incidents: table<assignments: list, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3936,7 +4092,7 @@ export def "incidents-incidents-resolve ResolveIncidents" [
   let full_url = (build-url $base "/incidents/incidents/v1/resolve" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get incident by ID
@@ -3952,13 +4108,14 @@ export def "incidents-incidents GetIncident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incident: record<assignments: list<record>, closedAt: string, contextualLabels: record, createdAt: string, description: string, displayLabels: record, duration: string, events: list<any>, id: string, isMuted: bool, lastStateUpdateKey: string, lastStateUpdateTime: string, metaLabels: list<record>, name: string, severity: string, state: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/incidents/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get incident events
@@ -3974,13 +4131,14 @@ export def "incidents-incidents-events GetIncidentEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incidentEvents: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/incidents/incidents/v1/($incident_id)/events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all contextual data integrations accessible
@@ -3995,6 +4153,7 @@ export def "integrations-contextual-data GetContextualDataIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-integrations: oneof<nothing, bool>
 ]: nothing -> record<integrations: table<amountIntegrations: int, errors: list, integration: record, isNew: bool, upgradeAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4003,7 +4162,7 @@ export def "integrations-contextual-data GetContextualDataIntegrations" [
   let full_url = (build-url $base "/integrations/contextual-data/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update contextual data integration
@@ -4019,6 +4178,7 @@ export def "integrations-contextual-data UpdateContextualDataIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrationId: string
   --metadata: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
 ]: any -> record {
@@ -4030,7 +4190,7 @@ export def "integrations-contextual-data UpdateContextualDataIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Save contextual data integration
@@ -4046,6 +4206,7 @@ export def "integrations-contextual-data SaveContextualDataIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
 ]: any -> record<integrationId: string> {
   let input = $in
@@ -4056,7 +4217,7 @@ export def "integrations-contextual-data SaveContextualDataIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get contextual data integration definition
@@ -4072,6 +4233,7 @@ export def "integrations-contextual-data-definition GetContextualDataIntegration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-integrations: oneof<nothing, bool>
 ]: nothing -> record<integrationDefinition: record<featureFlag: string, integrationType: any, key: string, revisions: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4080,7 +4242,7 @@ export def "integrations-contextual-data-definition GetContextualDataIntegration
   let full_url = (build-url $base $"/integrations/contextual-data/v1/definition/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test contextual data integration
@@ -4096,6 +4258,7 @@ export def "integrations-contextual-data-test TestContextualDataIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrationData: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
   --integrationId: string
 ]: any -> record<result: any> {
@@ -4107,7 +4270,7 @@ export def "integrations-contextual-data-test TestContextualDataIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get contextual data integration details
@@ -4123,6 +4286,7 @@ export def "integrations-contextual-data GetContextualDataIntegrationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-revisions: oneof<nothing, bool>
 ]: nothing -> record<integrationDetail: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4131,7 +4295,7 @@ export def "integrations-contextual-data GetContextualDataIntegrationDetails" [
   let full_url = (build-url $base $"/integrations/contextual-data/v1/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete contextual data integration
@@ -4147,13 +4311,14 @@ export def "integrations-contextual-data DeleteContextualDataIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/contextual-data/v1/($integration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all extensions
@@ -4169,6 +4334,7 @@ export def "integrations-extensions-all GetAllExtensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Filter by integration ids — shape: {integrations?: list}
   --includeHiddenExtensions: oneof<nothing, bool>
 ]: any -> record<extensions: table<darkModeImage: string, deprecation: record, id: string, image: string, integrations: list, isHidden: bool, keywords: list, name: string, revisions: list>> {
@@ -4180,7 +4346,7 @@ export def "integrations-extensions-all GetAllExtensions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get deployed extensions
@@ -4195,13 +4361,14 @@ export def "integrations-extensions-deployed GetDeployedExtensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deployedExtensions: table<applications: list, id: string, itemIds: list, subsystems: list, summary: record, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/extensions/v1/deployed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deploy extension
@@ -4216,6 +4383,7 @@ export def "integrations-extensions-deployed DeployExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --version: string
   --item-ids: list
@@ -4229,7 +4397,7 @@ export def "integrations-extensions-deployed DeployExtension" [
   let full_url = (build-url $base "/integrations/extensions/v1/deployed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update extension
@@ -4244,6 +4412,7 @@ export def "integrations-extensions-deployed UpdateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --version: string
   --item-ids: list
@@ -4257,7 +4426,7 @@ export def "integrations-extensions-deployed UpdateExtension" [
   let full_url = (build-url $base "/integrations/extensions/v1/deployed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revert deployment of extension
@@ -4272,6 +4441,7 @@ export def "integrations-extensions-deployed UndeployExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --keptExtensionItems: list
 ]: any -> record<extensionDeployment: record<applications: list<string>, id: string, itemIds: list<string>, subsystems: list<string>, version: string>, failedItems: table<itemId: string, reason: string, remoteId: string>> {
@@ -4283,7 +4453,7 @@ export def "integrations-extensions-deployed UndeployExtension" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Test extension revision
@@ -4299,6 +4469,7 @@ export def "integrations-extensions-testing TestExtensionRevision" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cleanupAfterTest: oneof<nothing, bool>
   --extensionData: record # Extension details for ingestion — shape: {binaries?: list, changelog?: list, darkModeImage?: string, deprecation?: record, description?: string, excerpt?: string, id?: string, image?: string, integrationDetails?: list, integrations?: list, isHidden?: bool, items?: list, keywords?: list, labels?: list, name?: string, version?: string}
 ]: any -> record {
@@ -4310,7 +4481,7 @@ export def "integrations-extensions-testing TestExtensionRevision" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cleanup testing extension
@@ -4325,6 +4496,7 @@ export def "integrations-extensions-testing CleanupTestingRevision" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
 ]: any -> record {
   let input = $in
@@ -4335,7 +4507,7 @@ export def "integrations-extensions-testing CleanupTestingRevision" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initialize testing revision
@@ -4351,6 +4523,7 @@ export def "integrations-extensions-testing-initialize InitializeTestingRevision
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extensionData: record # Extension details for ingestion — shape: {binaries?: list, changelog?: list, darkModeImage?: string, deprecation?: record, description?: string, excerpt?: string, id?: string, image?: string, integrationDetails?: list, integrations?: list, isHidden?: bool, items?: list, keywords?: list, labels?: list, name?: string, version?: string}
 ]: any -> record {
   let input = $in
@@ -4361,7 +4534,7 @@ export def "integrations-extensions-testing-initialize InitializeTestingRevision
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get extension by ID
@@ -4377,6 +4550,7 @@ export def "integrations-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-dashboard-binaries: oneof<nothing, bool>
   --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<changelog: table<descriptionMd: string, version: string>, darkModeImage: string, deprecation: record<reason: string, replacementExtensions: list<string>>, id: string, image: string, integrations: list<string>, isHidden: bool, keywords: list<string>, name: string, permissionDeniedRevisions: table<binaries: list, description: string, excerpt: string, integrationDetails: list, isTesting: bool, items: list, labels: list, permissionDeniedItems: list, version: string>, revisions: table<binaries: list, description: string, excerpt: string, integrationDetails: list, isTesting: bool, items: list, labels: list, permissionDeniedItems: list, version: string>> {
@@ -4386,7 +4560,7 @@ export def "integrations-extensions GetExtension" [
   let full_url = (build-url $base $"/integrations/extensions/v1/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all integrations
@@ -4401,6 +4575,7 @@ export def "integrations-integrations GetIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrations: table<amountIntegrations: int, errors: list, integration: record, isNew: bool, upgradeAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4409,7 +4584,7 @@ export def "integrations-integrations GetIntegrations" [
   let full_url = (build-url $base "/integrations/integrations/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get integration definition
@@ -4425,6 +4600,7 @@ export def "integrations-integrations-definition GetIntegrationDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrationDefinition: record<featureFlag: string, integrationType: any, key: string, revisions: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4433,7 +4609,7 @@ export def "integrations-integrations-definition GetIntegrationDefinition" [
   let full_url = (build-url $base $"/integrations/integrations/v1/definition/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get deployed integration
@@ -4449,13 +4625,14 @@ export def "integrations-integrations-deployed GetDeployedIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<integration: record<definitionKey: string, definitionVersion: string, id: string, integrationStatus: record<connectionStatus: string, details: record, messages: list>, parameters: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/integrations/v1/deployed/($integration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete integration
@@ -4471,13 +4648,14 @@ export def "integrations-integrations-instance DeleteIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/integrations/v1/instance/($integration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List managed integration keys
@@ -4492,13 +4670,14 @@ export def "integrations-integrations-managed ListManagedIntegrationKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<integrationKeys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/integrations/v1/managed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get managed integration status
@@ -4514,13 +4693,14 @@ export def "integrations-integrations-managed GetManagedIntegrationStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<integrationId: string, status: record<connectionStatus: string, details: record, messages: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/integrations/v1/managed/($integration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update integration
@@ -4536,6 +4716,7 @@ export def "integrations-integrations-metadata UpdateIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --metadata: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
 ]: any -> record {
@@ -4547,7 +4728,7 @@ export def "integrations-integrations-metadata UpdateIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Save integration registration metadata
@@ -4563,6 +4744,7 @@ export def "integrations-integrations-metadata SaveIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
 ]: any -> record<integrationId: string> {
   let input = $in
@@ -4573,7 +4755,7 @@ export def "integrations-integrations-metadata SaveIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Test integration
@@ -4589,6 +4771,7 @@ export def "integrations-integrations-metadata-test TestIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrationData: record # This data structure represents the metadata of an integration. — shape: {integrationKey?: string, integrationParameters?: record, version?: string}
   --integrationId: string
 ]: any -> record<result: any> {
@@ -4600,7 +4783,7 @@ export def "integrations-integrations-metadata-test TestIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get RUM integration versions data
@@ -4615,6 +4798,7 @@ export def "integrations-integrations-rum-app-versions GetRumApplicationVersionD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application-name: string
 ]: nothing -> record<versionData: record<syncedAt: string, versions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4623,7 +4807,7 @@ export def "integrations-integrations-rum-app-versions GetRumApplicationVersionD
   let full_url = (build-url $base "/integrations/integrations/v1/rum/app-versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger sync of RUM integration data
@@ -4638,6 +4822,7 @@ export def "integrations-integrations-rum-sync SyncRumData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool>
 ]: any -> record<syncExecuted: bool, syncedAt: string> {
   let input = $in
@@ -4648,7 +4833,7 @@ export def "integrations-integrations-rum-sync SyncRumData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get integration template
@@ -4663,6 +4848,7 @@ export def "integrations-integrations-template GetTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integration-id: string
   --common-arm-params: record
   --empty: record
@@ -4673,7 +4859,7 @@ export def "integrations-integrations-template GetTemplate" [
   let full_url = (build-url $base "/integrations/integrations/v1/template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get integration details
@@ -4689,6 +4875,7 @@ export def "integrations-integrations GetIntegrationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrationDetail: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4697,7 +4884,7 @@ export def "integrations-integrations GetIntegrationDetails" [
   let full_url = (build-url $base $"/integrations/integrations/v1/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all outgoing webhooks
@@ -4712,13 +4899,14 @@ export def "integrations-webhooks ListAllOutgoingWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deployed: table<createdAt: string, externalId: int, id: string, name: string, type: string, updatedAt: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/webhooks/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an outgoing webhook
@@ -4733,6 +4921,7 @@ export def "integrations-webhooks UpdateOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: any
   --id: string # e.g. example_id
 ]: any -> record {
@@ -4744,7 +4933,7 @@ export def "integrations-webhooks UpdateOutgoingWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an outgoing webhook
@@ -4759,6 +4948,7 @@ export def "integrations-webhooks CreateOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: any
 ]: any -> record<id: string> {
   let input = $in
@@ -4769,7 +4959,7 @@ export def "integrations-webhooks CreateOutgoingWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List outbound webhooks summary
@@ -4784,13 +4974,14 @@ export def "integrations-webhooks-summary ListOutboundWebhooksSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<outboundWebhookSummaries: table<createdAt: string, externalId: int, id: string, name: string, type: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/webhooks/v1/summary")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test an outgoing webhook
@@ -4805,6 +4996,7 @@ export def "integrations-webhooks-test TestOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: any
 ]: any -> any {
   let input = $in
@@ -4815,7 +5007,7 @@ export def "integrations-webhooks-test TestOutgoingWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Test an existing outgoing webhook
@@ -4830,6 +5022,7 @@ export def "integrations-webhooks-test-existing TestExistingOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. example_id
 ]: any -> any {
   let input = $in
@@ -4840,7 +5033,7 @@ export def "integrations-webhooks-test-existing TestExistingOutgoingWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get outgoing webhook types
@@ -4855,13 +5048,14 @@ export def "integrations-webhooks-types ListOutgoingWebhookTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhooks: table<count: int, label: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/webhooks/v1/types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get outgoing webhook type details
@@ -4877,13 +5071,14 @@ export def "integrations-webhooks-types GetOutgoingWebhookTypeDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<details: record<label: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/webhooks/v1/types/($type)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get outgoing webhook
@@ -4899,13 +5094,14 @@ export def "integrations-webhooks GetOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhook: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/webhooks/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an outgoing webhook
@@ -4921,13 +5117,14 @@ export def "integrations-webhooks DeleteOutgoingWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/webhooks/v1/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List outgoing webhooks
@@ -4942,6 +5139,7 @@ export def "integrations-webhooks-v1-list-by-type ListOutgoingWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1
 ]: nothing -> record<deployed: table<createdAt: string, externalId: int, id: string, name: string, updatedAt: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4950,7 +5148,7 @@ export def "integrations-webhooks-v1-list-by-type ListOutgoingWebhooks" [
   let full_url = (build-url $base "/integrations/webhooks/v1:listByType" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get target
@@ -4965,13 +5163,14 @@ export def "logs-data-setup GetTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<target: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logs/data-setup/v2")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set target
@@ -4987,6 +5186,7 @@ export def "logs-data-setup SetTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isActive: oneof<nothing, bool> # e.g. true
   --s3: record # This data structure represents an S3 target. — shape: {bucket: string, region?: string}
 ]: any -> record<target: any> {
@@ -4998,7 +5198,7 @@ export def "logs-data-setup SetTarget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetTenantConfig
@@ -5013,13 +5213,14 @@ export def "metrics-data-setup GetTenantConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tenantConfig: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metrics/data-setup/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update
@@ -5036,6 +5237,7 @@ export def "metrics-data-setup Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ibm: record # This data structure is used to configure an IBM bucket. — shape: {crn?: string, endpoint?: string, serviceCrn?: string}
   --retentionDays: int # format: int64
   --s3: record # This data structure represents the S3 configuration for a tenant. — shape: {bucket?: string, region?: string}
@@ -5048,7 +5250,7 @@ export def "metrics-data-setup Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ConfigureTenant
@@ -5066,6 +5268,7 @@ export def "metrics-data-setup ConfigureTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --retentionPolicy: record # This data structure is used to set the retention policy for a tenant. — shape: {fiveMinutesResolution?: int, oneHourResolution?: int, rawResolution?: int}
   --s3: record # This data structure represents the S3 configuration for a tenant. — shape: {bucket?: string, region?: string}
   --ibm: record # This data structure is used to configure an IBM bucket. — shape: {crn?: string, endpoint?: string, serviceCrn?: string}
@@ -5078,7 +5281,7 @@ export def "metrics-data-setup ConfigureTenant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DisableArchive
@@ -5093,13 +5296,14 @@ export def "metrics-data-setup-disable DisableArchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metrics/data-setup/v1/disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # EnableArchive
@@ -5114,13 +5318,14 @@ export def "metrics-data-setup-enable EnableArchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metrics/data-setup/v1/enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ValidateBucket
@@ -5137,6 +5342,7 @@ export def "metrics-data-setup-validate ValidateBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --s3: record # This data structure represents the S3 configuration for a tenant. — shape: {bucket?: string, region?: string}
   --ibm: record # This data structure is used to configure an IBM bucket. — shape: {crn?: string, endpoint?: string, serviceCrn?: string}
 ]: any -> record {
@@ -5148,7 +5354,7 @@ export def "metrics-data-setup-validate ValidateBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace a Connector
@@ -5164,6 +5370,7 @@ export def "notifications-notification-center-connector ReplaceConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # A connector configuration for sending notifications — shape: {configOverrides?: list, connectorConfig?: record, createTime?: string, description?: string, diagnostics?: record, id?: string, name?: string, teamId?: int, type?: "CONNECTOR_TYPE_UNSPECIFIED"|"SLACK"|"GENERIC_HTTPS"|"PAGERDUTY"|"IBM_EVENT_NOTIFICATIONS"|"SERVICE_NOW"|"EMAIL", updateTime?: string}
 ]: any -> record<connector: record<configOverrides: list<record>, connectorConfig: record<fields: list>, createTime: string, description: string, diagnostics: record<delivery: string>, id: string, name: string, teamId: int, type: string, updateTime: string>> {
   let input = $in
@@ -5174,7 +5381,7 @@ export def "notifications-notification-center-connector ReplaceConnector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetConnectorSchema
@@ -5189,6 +5396,7 @@ export def "notifications-notification-center-connector-schema GetConnectorSchem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2
 ]: nothing -> record<connectorSchema: record<connectorConfigSchema: record<fields: list>, messageConfigSchemas: list<record>, supportedPayloadTypes: list<string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5197,7 +5405,7 @@ export def "notifications-notification-center-connector-schema GetConnectorSchem
   let full_url = (build-url $base "/notifications/notification-center/v1/connector-schema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Connectors
@@ -5212,6 +5420,7 @@ export def "notifications-notification-center-connectors ListConnectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-type: string@connector-type-completer
   --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectors: table<configOverrides: list, connectorConfig: record, createTime: string, description: string, diagnostics: record, id: string, name: string, teamId: int, type: string, updateTime: string>> {
@@ -5221,7 +5430,7 @@ export def "notifications-notification-center-connectors ListConnectors" [
   let full_url = (build-url $base "/notifications/notification-center/v1/connectors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Connector
@@ -5237,6 +5446,7 @@ export def "notifications-notification-center-connectors CreateConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # A connector configuration for sending notifications — shape: {configOverrides?: list, connectorConfig?: record, createTime?: string, description?: string, diagnostics?: record, id?: string, name?: string, teamId?: int, type?: "CONNECTOR_TYPE_UNSPECIFIED"|"SLACK"|"GENERIC_HTTPS"|"PAGERDUTY"|"IBM_EVENT_NOTIFICATIONS"|"SERVICE_NOW"|"EMAIL", updateTime?: string}
 ]: any -> record<connector: record<configOverrides: list<record>, connectorConfig: record<fields: list>, createTime: string, description: string, diagnostics: record<delivery: string>, id: string, name: string, teamId: int, type: string, updateTime: string>> {
   let input = $in
@@ -5247,7 +5457,7 @@ export def "notifications-notification-center-connectors CreateConnector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Connector
@@ -5263,13 +5473,14 @@ export def "notifications-notification-center-connectors GetConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connector: record<configOverrides: list<record>, connectorConfig: record<fields: list>, createTime: string, description: string, diagnostics: record<delivery: string>, id: string, name: string, teamId: int, type: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/connectors/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Connector
@@ -5285,13 +5496,14 @@ export def "notifications-notification-center-connectors DeleteConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/connectors/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Connectors
@@ -5306,6 +5518,7 @@ export def "notifications-notification-center-connectors-batch-get BatchGetConne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-ids: list # e.g. [connector-id-1, connector-id-2]
 ]: nothing -> record<connectors: record, notFoundIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5314,7 +5527,7 @@ export def "notifications-notification-center-connectors-batch-get BatchGetConne
   let full_url = (build-url $base "/notifications/notification-center/v1/connectors:batchGet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Connectors Summaries
@@ -5329,6 +5542,7 @@ export def "notifications-notification-center-connectors-batch-get-summaries Bat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-ids: list
 ]: nothing -> record<connectorSummaries: record, notFoundIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5337,7 +5551,7 @@ export def "notifications-notification-center-connectors-batch-get-summaries Bat
   let full_url = (build-url $base "/notifications/notification-center/v1/connectors:batchGetSummaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Connector Type Summaries
@@ -5352,6 +5566,7 @@ export def "notifications-notification-center-connectors-get-type-summaries GetC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectorTypeSummaries: table<count: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5360,7 +5575,7 @@ export def "notifications-notification-center-connectors-get-type-summaries GetC
   let full_url = (build-url $base "/notifications/notification-center/v1/connectors:getTypeSummaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Connector Summaries
@@ -5375,6 +5590,7 @@ export def "notifications-notification-center-connectors-list-summaries ListConn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-type: string@connector-type-completer
   --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectors: table<createTime: string, description: string, id: string, name: string, teamId: int, type: string, updateTime: string>> {
@@ -5384,7 +5600,7 @@ export def "notifications-notification-center-connectors-list-summaries ListConn
   let full_url = (build-url $base "/notifications/notification-center/v1/connectors:listSummaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Entity Types
@@ -5399,13 +5615,14 @@ export def "notifications-notification-center-entity-types ListEntityTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entityTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/notification-center/v1/entity-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Entity Subtypes
@@ -5421,13 +5638,14 @@ export def "notifications-notification-center-entity-types-entity-subtypes ListE
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entitySubTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/entity-types/($entity_type)/entity-subtypes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TestConnectorConfig
@@ -5443,6 +5661,7 @@ export def "notifications-notification-center-notifications-testing-test-connect
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: string@entityType-completer
   --body-fields: list # item shape: {fieldName?: string, value?: string}
   --payloadType: string # e.g. default
@@ -5456,7 +5675,7 @@ export def "notifications-notification-center-notifications-testing-test-connect
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestDestination
@@ -5473,6 +5692,7 @@ export def "notifications-notification-center-notifications-testing-test-destina
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectorConfigFields: list # item shape: {fieldName?: string, template?: string}
   --connectorId: string
   --entitySubType: string # e.g. logsImmediateResolved
@@ -5489,7 +5709,7 @@ export def "notifications-notification-center-notifications-testing-test-destina
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestExistingConnector
@@ -5504,6 +5724,7 @@ export def "notifications-notification-center-notifications-testing-test-existin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectorId: string
   --payloadType: string # e.g. default
 ]: any -> record<result: any> {
@@ -5515,7 +5736,7 @@ export def "notifications-notification-center-notifications-testing-test-existin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestExistingPreset
@@ -5530,6 +5751,7 @@ export def "notifications-notification-center-notifications-testing-test-existin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectorId: string
   --entitySubType: string # e.g. logsImmediateResolved
   --entityType: string@entityType-completer
@@ -5543,7 +5765,7 @@ export def "notifications-notification-center-notifications-testing-test-existin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestPresetConfig
@@ -5559,6 +5781,7 @@ export def "notifications-notification-center-notifications-testing-test-preset-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --configOverrides: list # item shape: {conditionType?: any, messageConfig?: record, payloadType?: string}
   --connectorId: string
   --entitySubType: string # e.g. metric
@@ -5573,7 +5796,7 @@ export def "notifications-notification-center-notifications-testing-test-preset-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestRoutingConditionValid
@@ -5588,6 +5811,7 @@ export def "notifications-notification-center-notifications-testing-test-routing
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: string@entityType-completer
   --template: string # e.g. alertDef.priority == 'P1'
 ]: any -> any {
@@ -5599,7 +5823,7 @@ export def "notifications-notification-center-notifications-testing-test-routing
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestTemplateRender
@@ -5614,6 +5838,7 @@ export def "notifications-notification-center-notifications-testing-test-templat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entitySubType: string # e.g. logsImmediateResolved
   --entityType: string@entityType-completer
   --template: string # e.g. {{ alertDef.name }}
@@ -5626,7 +5851,7 @@ export def "notifications-notification-center-notifications-testing-test-templat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace Custom Preset
@@ -5642,6 +5867,7 @@ export def "notifications-notification-center-presets-custom ReplaceCustomPreset
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preset: record # Set of preconfigured templates for notification content rendering — shape: {configOverrides?: list, connectorType?: "CONNECTOR_TYPE_UNSPECIFIED"|"SLACK"|"GENERIC_HTTPS"|"PAGERDUTY"|"IBM_EVENT_NOTIFICATIONS"|"SERVICE_NOW"|"EMAIL", createTime?: string, description?: string, entityType?: "ENTITY_TYPE_UNSPECIFIED"|"ALERTS"|"TEST_NOTIFICATIONS"|"CASES", id?: string, name?: string, parentId?: string, presetType?: "PRESET_TYPE_UNSPECIFIED"|"SYSTEM"|"CUSTOM", updateTime?: string}
 ]: any -> record<preset: record<configOverrides: list<record>, connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let input = $in
@@ -5652,7 +5878,7 @@ export def "notifications-notification-center-presets-custom ReplaceCustomPreset
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Custom Preset
@@ -5668,6 +5894,7 @@ export def "notifications-notification-center-presets-custom CreateCustomPreset"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preset: record # Set of preconfigured templates for notification content rendering — shape: {configOverrides?: list, connectorType?: "CONNECTOR_TYPE_UNSPECIFIED"|"SLACK"|"GENERIC_HTTPS"|"PAGERDUTY"|"IBM_EVENT_NOTIFICATIONS"|"SERVICE_NOW"|"EMAIL", createTime?: string, description?: string, entityType?: "ENTITY_TYPE_UNSPECIFIED"|"ALERTS"|"TEST_NOTIFICATIONS"|"CASES", id?: string, name?: string, parentId?: string, presetType?: "PRESET_TYPE_UNSPECIFIED"|"SYSTEM"|"CUSTOM", updateTime?: string}
 ]: any -> record<preset: record<configOverrides: list<record>, connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let input = $in
@@ -5678,7 +5905,7 @@ export def "notifications-notification-center-presets-custom CreateCustomPreset"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Custom Preset
@@ -5694,13 +5921,14 @@ export def "notifications-notification-center-presets-custom DeleteCustomPreset"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/presets/custom/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Custom Preset As Default
@@ -5716,13 +5944,14 @@ export def "notifications-notification-center-presets-custom SetCustomPresetAsDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/presets/custom/($id):defaultSet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Preset
@@ -5738,13 +5967,14 @@ export def "notifications-notification-center-presets GetPreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<preset: record<configOverrides: list<record>, connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/presets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Preset As Default
@@ -5760,13 +5990,14 @@ export def "notifications-notification-center-presets SetPresetAsDefault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/presets/($id):defaultSet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Presets
@@ -5781,6 +6012,7 @@ export def "notifications-notification-center-presets-batch-get BatchGetPresets"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preset-ids: list
 ]: nothing -> record<notFoundIds: list<string>, presets: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5789,7 +6021,7 @@ export def "notifications-notification-center-presets-batch-get BatchGetPresets"
   let full_url = (build-url $base "/notifications/notification-center/v1/presets:batchGet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Default Preset Summary
@@ -5804,6 +6036,7 @@ export def "notifications-notification-center-presets-default-summary-get GetDef
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-type: string@connector-type-completer
   --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummary: record<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
@@ -5813,7 +6046,7 @@ export def "notifications-notification-center-presets-default-summary-get GetDef
   let full_url = (build-url $base "/notifications/notification-center/v1/presets:defaultSummaryGet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Preset Summaries
@@ -5828,6 +6061,7 @@ export def "notifications-notification-center-presets-summaries-list ListPresetS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-type: string@connector-type-completer
   --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummaries: table<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
@@ -5837,7 +6071,7 @@ export def "notifications-notification-center-presets-summaries-list ListPresetS
   let full_url = (build-url $base "/notifications/notification-center/v1/presets:summariesList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get System Default Preset Summary
@@ -5852,6 +6086,7 @@ export def "notifications-notification-center-presets-system-default-summary-get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector-type: string@connector-type-completer
   --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummary: record<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
@@ -5861,7 +6096,7 @@ export def "notifications-notification-center-presets-system-default-summary-get
   let full_url = (build-url $base "/notifications/notification-center/v1/presets:systemDefaultSummaryGet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Global Routers
@@ -5876,6 +6111,7 @@ export def "notifications-notification-center-routers ListGlobalRouters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entity-type: string@entity-type-completer
   --source-entity-labels: record
 ]: nothing -> record<routers: table<createTime: string, description: string, entityLabelMatcher: record, entityLabels: record, entityType: string, fallback: list, id: string, name: string, routingLabels: record, rules: list, updateTime: string>> {
@@ -5885,7 +6121,7 @@ export def "notifications-notification-center-routers ListGlobalRouters" [
   let full_url = (build-url $base "/notifications/notification-center/v1/routers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace Global Router
@@ -5901,6 +6137,7 @@ export def "notifications-notification-center-routers ReplaceGlobalRouter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --router: record # Defines a set of pre-configured routing rules for directing notifications — shape: {createTime?: string, description?: string, entityLabelMatcher?: record, entityLabels?: record, entityType?: "ENTITY_TYPE_UNSPECIFIED"|"ALERTS"|"TEST_NOTIFICATIONS"|"CASES", fallback?: list, id?: string, name?: string, routingLabels?: record, rules?: list, updateTime?: string}
 ]: any -> record<router: record<createTime: string, description: string, entityLabelMatcher: record, entityLabels: record, entityType: string, fallback: list<record>, id: string, name: string, routingLabels: record<environment: string, service: string, team: string>, rules: list<record>, updateTime: string>> {
   let input = $in
@@ -5911,7 +6148,7 @@ export def "notifications-notification-center-routers ReplaceGlobalRouter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Global Router
@@ -5927,6 +6164,7 @@ export def "notifications-notification-center-routers CreateGlobalRouter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --router: record # Defines a set of pre-configured routing rules for directing notifications — shape: {createTime?: string, description?: string, entityLabelMatcher?: record, entityLabels?: record, entityType?: "ENTITY_TYPE_UNSPECIFIED"|"ALERTS"|"TEST_NOTIFICATIONS"|"CASES", fallback?: list, id?: string, name?: string, routingLabels?: record, rules?: list, updateTime?: string}
 ]: any -> record<router: record<createTime: string, description: string, entityLabelMatcher: record, entityLabels: record, entityType: string, fallback: list<record>, id: string, name: string, routingLabels: record<environment: string, service: string, team: string>, rules: list<record>, updateTime: string>> {
   let input = $in
@@ -5937,7 +6175,7 @@ export def "notifications-notification-center-routers CreateGlobalRouter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Global Router
@@ -5953,13 +6191,14 @@ export def "notifications-notification-center-routers GetGlobalRouter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<router: record<createTime: string, description: string, entityLabelMatcher: record, entityLabels: record, entityType: string, fallback: list<record>, id: string, name: string, routingLabels: record<environment: string, service: string, team: string>, rules: list<record>, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/routers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Global Router
@@ -5975,13 +6214,14 @@ export def "notifications-notification-center-routers DeleteGlobalRouter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/notifications/notification-center/v1/routers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Global Routers
@@ -5996,6 +6236,7 @@ export def "notifications-notification-center-routers-batch-get-summaries BatchG
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --global-router-ids: list
 ]: nothing -> record<notFoundIds: list<string>, routers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6004,7 +6245,7 @@ export def "notifications-notification-center-routers-batch-get-summaries BatchG
   let full_url = (build-url $base "/notifications/notification-center/v1/routers:batchGetSummaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ValidateEntityLabelMatcher
@@ -6019,6 +6260,7 @@ export def "notifications-notification-center-routers-validate-entity-label-matc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entity-label-matcher: record
 ]: nothing -> record<result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6027,7 +6269,7 @@ export def "notifications-notification-center-routers-validate-entity-label-matc
   let full_url = (build-url $base "/notifications/notification-center/v1/routers:validateEntityLabelMatcher" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Rule Groups
@@ -6042,13 +6284,14 @@ export def "parsing-rules-rule-groups ListRuleGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ruleGroups: table<creator: string, description: string, enabled: bool, hidden: bool, id: string, name: string, order: int, ruleMatchers: list, ruleSubgroups: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parsing-rules/rule-groups/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Rule Group
@@ -6065,6 +6308,7 @@ export def "parsing-rules-rule-groups CreateRuleGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creator: string
   --description: string
   --enabled: oneof<nothing, bool>
@@ -6083,7 +6327,7 @@ export def "parsing-rules-rule-groups CreateRuleGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Delete Rule Group
@@ -6098,6 +6342,7 @@ export def "parsing-rules-rule-groups BulkDeleteRuleGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group-ids: list
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6106,7 +6351,7 @@ export def "parsing-rules-rule-groups BulkDeleteRuleGroup" [
   let full_url = (build-url $base "/parsing-rules/rule-groups/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Company Usage Limits
@@ -6121,13 +6366,14 @@ export def "parsing-rules-rule-groups-limits GetCompanyUsageLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyId: string, limits: record<groups: int, parsingThemes: int, rules: int>, usage: record<groups: int, parsingThemes: int, rules: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parsing-rules/rule-groups/v1/limits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Rule Group Model Mapping
@@ -6143,6 +6389,7 @@ export def "parsing-rules-rule-groups-mapping GetRuleGroupModelMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creator: string
   --description: string
   --enabled: oneof<nothing, bool>
@@ -6160,7 +6407,7 @@ export def "parsing-rules-rule-groups-mapping GetRuleGroupModelMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Rule Group
@@ -6176,13 +6423,14 @@ export def "parsing-rules-rule-groups GetRuleGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ruleGroup: record<creator: string, description: string, enabled: bool, hidden: bool, id: string, name: string, order: int, ruleMatchers: list<any>, ruleSubgroups: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/parsing-rules/rule-groups/v1/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Rule Group
@@ -6200,6 +6448,7 @@ export def "parsing-rules-rule-groups UpdateRuleGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creator: string
   --description: string
   --enabled: oneof<nothing, bool>
@@ -6218,7 +6467,7 @@ export def "parsing-rules-rule-groups UpdateRuleGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Rule Group
@@ -6234,13 +6483,14 @@ export def "parsing-rules-rule-groups DeleteRuleGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/parsing-rules/rule-groups/v1/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quota allocation rule set
@@ -6255,6 +6505,7 @@ export def "quota-rules-quota-allocation-rule-set GetQuotaAllocationRuleSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. 
 ]: nothing -> record<ruleSet: record<id: string, rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6263,7 +6514,7 @@ export def "quota-rules-quota-allocation-rule-set GetQuotaAllocationRuleSet" [
   let full_url = (build-url $base "/quota-rules/v1/quota-allocation-rule-set" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace quota allocation rule set
@@ -6279,6 +6530,7 @@ export def "quota-rules-quota-allocation-rule-set ReplaceQuotaAllocationRuleSet"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleSet: record # Contains a collection of quota allocation rules for entity types — shape: {id?: string, rules: list}
 ]: any -> record<ruleSet: record<id: string, rules: list<record>>> {
   let input = $in
@@ -6289,7 +6541,7 @@ export def "quota-rules-quota-allocation-rule-set ReplaceQuotaAllocationRuleSet"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create quota allocation rule set
@@ -6305,6 +6557,7 @@ export def "quota-rules-quota-allocation-rule-set CreateQuotaAllocationRuleSet" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleSet: record # Contains a collection of quota allocation rules for entity types — shape: {id?: string, rules: list}
 ]: any -> record<ruleSet: record<id: string, rules: list<record>>> {
   let input = $in
@@ -6315,7 +6568,7 @@ export def "quota-rules-quota-allocation-rule-set CreateQuotaAllocationRuleSet" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete quota allocation rule set
@@ -6330,13 +6583,14 @@ export def "quota-rules-quota-allocation-rule-set DeleteQuotaAllocationRuleSet" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quota-rules/v1/quota-allocation-rule-set")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an alert scheduler rule
@@ -6352,6 +6606,7 @@ export def "alert-scheduler-rules UpdateAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alertSchedulerRule: record # shape: {createdAt?: string, description?: string, enabled?: bool, filter?: any, id?: string, metaLabels?: list, name?: string, schedule?: any, uniqueIdentifier?: string, updatedAt?: string}
 ]: any -> record<alertSchedulerRule: record<createdAt: string, description: string, enabled: bool, filter: any, id: string, metaLabels: list<record>, name: string, schedule: any, uniqueIdentifier: string, updatedAt: string>> {
   let input = $in
@@ -6362,7 +6617,7 @@ export def "alert-scheduler-rules UpdateAlertSchedulerRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an alert scheduler rule
@@ -6378,6 +6633,7 @@ export def "alert-scheduler-rules CreateAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alertSchedulerRule: record # shape: {createdAt?: string, description?: string, enabled?: bool, filter?: any, id?: string, metaLabels?: list, name?: string, schedule?: any, uniqueIdentifier?: string, updatedAt?: string}
 ]: any -> record<alertSchedulerRule: record<createdAt: string, description: string, enabled: bool, filter: any, id: string, metaLabels: list<record>, name: string, schedule: any, uniqueIdentifier: string, updatedAt: string>> {
   let input = $in
@@ -6388,7 +6644,7 @@ export def "alert-scheduler-rules CreateAlertSchedulerRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get multiple alert scheduler rules
@@ -6403,6 +6659,7 @@ export def "alert-scheduler-rules-bulk GetBulkAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active-timeframe: record
   --enabled: oneof<nothing, bool>
   --alert-scheduler-rules-ids: string
@@ -6414,7 +6671,7 @@ export def "alert-scheduler-rules-bulk GetBulkAlertSchedulerRule" [
   let full_url = (build-url $base "/v1/alert-scheduler-rules/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update multiple alert scheduler rules
@@ -6430,6 +6687,7 @@ export def "alert-scheduler-rules-bulk UpdateBulkAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   updateAlertSchedulerRuleRequests: list # item shape: {alertSchedulerRule: record}
 ]: any -> record<updateSuppressionResponses: table<alertSchedulerRule: record>> {
   let input = $in
@@ -6440,7 +6698,7 @@ export def "alert-scheduler-rules-bulk UpdateBulkAlertSchedulerRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create multiple alert scheduler rules
@@ -6456,6 +6714,7 @@ export def "alert-scheduler-rules-bulk CreateBulkAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   createAlertSchedulerRuleRequests: list # item shape: {alertSchedulerRule: record}
 ]: any -> record<createSuppressionResponses: table<alertSchedulerRule: record>> {
   let input = $in
@@ -6466,7 +6725,7 @@ export def "alert-scheduler-rules-bulk CreateBulkAlertSchedulerRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an alert scheduler rule
@@ -6482,13 +6741,14 @@ export def "alert-scheduler-rules GetAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alertSchedulerRule: record<createdAt: string, description: string, enabled: bool, filter: any, id: string, metaLabels: list<record>, name: string, schedule: any, uniqueIdentifier: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/alert-scheduler-rules/($alert_scheduler_rule_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an alert scheduler rule
@@ -6504,13 +6764,14 @@ export def "alert-scheduler-rules DeleteAlertSchedulerRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/alert-scheduler-rules/($alert_scheduler_rule_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a dashboard by URL slug
@@ -6526,13 +6787,14 @@ export def "dashboards-by-slug GetDashboardBySlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorId: string, authorName: string, createdAt: string, createdOriginType: string, dashboard: any, isLocked: bool, lockerAuthorId: string, lockerName: string, updatedAt: string, updatedOriginType: string, updaterAuthorId: string, updaterName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/dashboards/by-slug/($slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace a dashboard
@@ -6547,6 +6809,7 @@ export def "dashboards-dashboards ReplaceDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   dashboard: any
   --isLocked: oneof<nothing, bool>
   requestId: string
@@ -6559,7 +6822,7 @@ export def "dashboards-dashboards ReplaceDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new dashboard
@@ -6574,6 +6837,7 @@ export def "dashboards-dashboards CreateDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   dashboard: any
   --isLocked: oneof<nothing, bool>
   requestId: string
@@ -6586,7 +6850,7 @@ export def "dashboards-dashboards CreateDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a dashboard
@@ -6602,13 +6866,14 @@ export def "dashboards-dashboards GetDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorId: string, authorName: string, createdAt: string, createdOriginType: string, dashboard: any, isLocked: bool, lockerAuthorId: string, lockerName: string, updatedAt: string, updatedOriginType: string, updaterAuthorId: string, updaterName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/dashboards/dashboards/($dashboard_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a dashboard
@@ -6624,6 +6889,7 @@ export def "dashboards-dashboards DeleteDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request-id: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6632,7 +6898,7 @@ export def "dashboards-dashboards DeleteDashboard" [
   let full_url = (build-url $base $"/v1/dashboards/dashboards/($dashboard_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace the default dashboard
@@ -6648,6 +6914,7 @@ export def "dashboards-dashboards-default ReplaceDefaultDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requestId: string
 ]: any -> record {
   let input = $in
@@ -6658,7 +6925,7 @@ export def "dashboards-dashboards-default ReplaceDefaultDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign a dashboard to a folder
@@ -6674,6 +6941,7 @@ export def "dashboards-dashboards-folder AssignDashboardFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --folderId: string
   requestId: string
 ]: any -> record {
@@ -6685,7 +6953,7 @@ export def "dashboards-dashboards-folder AssignDashboardFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add dashboard to favorites
@@ -6701,6 +6969,7 @@ export def "dashboards-dashboards PinDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requestId: string
 ]: any -> record {
   let input = $in
@@ -6711,7 +6980,7 @@ export def "dashboards-dashboards PinDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove dashboard from favorites
@@ -6727,6 +6996,7 @@ export def "dashboards-dashboards UnpinDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requestId: string
 ]: any -> record {
   let input = $in
@@ -6737,7 +7007,7 @@ export def "dashboards-dashboards UnpinDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Recording Rules
@@ -6752,13 +7022,14 @@ export def "rule-group-sets List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sets: table<groups: list, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rule-group-sets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Recording Rules
@@ -6774,6 +7045,7 @@ export def "rule-group-sets Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groups: list # item shape: {id?: string, interval?: int, limit?: string, name?: string, rules?: list, version?: int}
   --name: string
 ]: any -> record<id: string> {
@@ -6785,7 +7057,7 @@ export def "rule-group-sets Create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Recording Rules
@@ -6801,13 +7073,14 @@ export def "rule-group-sets Fetch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<groups: table<id: string, interval: int, lastEvalAt: string, limit: string, name: string, rules: list, version: int>, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/rule-group-sets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Recording Rules
@@ -6824,6 +7097,7 @@ export def "rule-group-sets Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groups: list # item shape: {id?: string, interval?: int, limit?: string, name?: string, rules?: list, version?: int}
   --name: string
 ]: any -> record {
@@ -6835,7 +7109,7 @@ export def "rule-group-sets Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Recording Rules
@@ -6851,13 +7125,14 @@ export def "rule-group-sets Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/rule-group-sets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Slos
@@ -6872,6 +7147,7 @@ export def "slo-slos ListSlos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record
 ]: nothing -> record<slos: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6880,7 +7156,7 @@ export def "slo-slos ListSlos" [
   let full_url = (build-url $base "/v1/slo/slos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace Slo
@@ -6899,6 +7175,7 @@ export def "slo-slos ReplaceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --silence-data-validations: oneof<nothing, bool>
   --createTime: string # format: date-time
   --creator: string # e.g. test@domain.com
@@ -6924,7 +7201,7 @@ export def "slo-slos ReplaceSlo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Slo
@@ -6943,6 +7220,7 @@ export def "slo-slos CreateSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --silence-data-validations: oneof<nothing, bool>
   --createTime: string # format: date-time
   --creator: string # e.g. test@domain.com
@@ -6968,7 +7246,7 @@ export def "slo-slos CreateSlo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace Slo Pre-Validate Alerts
@@ -6987,6 +7265,7 @@ export def "slo-slos-validate ValidateReplaceSloAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createTime: string # format: date-time
   --creator: string # e.g. test@domain.com
   --description: string # e.g. A brief description of my SLO
@@ -7010,7 +7289,7 @@ export def "slo-slos-validate ValidateReplaceSloAlerts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Slo Zero State
@@ -7025,13 +7304,14 @@ export def "slo-slos-zero-state GetZeroState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<zeroState: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/slo/slos/zeroState")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Slo
@@ -7047,13 +7327,14 @@ export def "slo-slos GetSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<slo: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/slo/slos/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Slo
@@ -7069,13 +7350,14 @@ export def "slo-slos DeleteSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<effectedSloAlertIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/slo/slos/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Execute Slo
@@ -7090,6 +7372,7 @@ export def "slo-slos-batch-execute BatchExecuteSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list
 ]: nothing -> record<matchingResponses: list<any>, status: record<details: record, message: string, statusCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7098,7 +7381,7 @@ export def "slo-slos-batch-execute BatchExecuteSlo" [
   let full_url = (build-url $base "/v1/slo/slos:batchExecute" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Get Slo
@@ -7113,6 +7396,7 @@ export def "slo-slos-batch-get BatchGetSlos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list
 ]: nothing -> record<notFoundIds: list<string>, slos: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7121,7 +7405,7 @@ export def "slo-slos-batch-get BatchGetSlos" [
   let full_url = (build-url $base "/v1/slo/slos:batchGet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Team Group Scope
@@ -7137,13 +7421,14 @@ export def "teams-groups-scope GetTeamGroupScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scope: record<filters: record<applications: list, subsystems: list>, id: record<id: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/teams/groups/($id)/scope")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Team Group Scope
@@ -7160,6 +7445,7 @@ export def "teams-groups-scope SetTeamGroupScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scopeFilters: record # shape: {applications?: list, subsystems?: list}
 ]: any -> record<scopeId: record<id: int>> {
   let input = $in
@@ -7170,7 +7456,7 @@ export def "teams-groups-scope SetTeamGroupScope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Actions
@@ -7185,13 +7471,14 @@ export def "actions ListActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: table<applicationNames: list, createdBy: string, id: string, isHidden: bool, isPrivate: bool, name: string, sourceType: string, subsystemNames: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/actions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace Action
@@ -7207,6 +7494,7 @@ export def "actions ReplaceAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: record # shape: {applicationNames?: list, createdBy?: string, id?: string, isHidden?: bool, isPrivate?: bool, name?: string, sourceType?: "SOURCE_TYPE_UNSPECIFIED"|"SOURCE_TYPE_LOG"|"SOURCE_TYPE_DATA_MAP", subsystemNames?: list, url?: string}
 ]: any -> record<action: record<applicationNames: list<string>, createdBy: string, id: string, isHidden: bool, isPrivate: bool, name: string, sourceType: string, subsystemNames: list<string>, url: string>> {
   let input = $in
@@ -7217,7 +7505,7 @@ export def "actions ReplaceAction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Action
@@ -7232,6 +7520,7 @@ export def "actions CreateAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationNames: list
   --isPrivate: oneof<nothing, bool>
   --name: string
@@ -7247,7 +7536,7 @@ export def "actions CreateAction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Atomic Batch Execute Actions
@@ -7262,6 +7551,7 @@ export def "actions-actions-atomic-batch-execute AtomicBatchExecuteActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list
 ]: any -> record<matchingResponses: list<any>> {
   let input = $in
@@ -7272,7 +7562,7 @@ export def "actions-actions-atomic-batch-execute AtomicBatchExecuteActions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Order Actions
@@ -7287,6 +7577,7 @@ export def "actions-actions-order OrderActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --privateActionsOrder: record
   --sharedActionsOrder: record
 ]: any -> record {
@@ -7298,7 +7589,7 @@ export def "actions-actions-order OrderActions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Action
@@ -7314,13 +7605,14 @@ export def "actions GetAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<action: record<applicationNames: list<string>, createdBy: string, id: string, isHidden: bool, isPrivate: bool, name: string, sourceType: string, subsystemNames: list<string>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Action
@@ -7336,13 +7628,14 @@ export def "actions DeleteAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/actions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get alert events statistics
@@ -7357,6 +7650,7 @@ export def "alert-event-stats GetAlertEventsStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list
   --order-bys: list
 ]: nothing -> record<eventsStats: record> {
@@ -7366,7 +7660,7 @@ export def "alert-event-stats GetAlertEventsStats" [
   let full_url = (build-url $base "/v3/alert-event-stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get alert event by ID
@@ -7382,6 +7676,7 @@ export def "alert-event GetAlertEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order-bys: list
   --pagination: record
 ]: nothing -> any {
@@ -7391,5 +7686,5 @@ export def "alert-event GetAlertEvent" [
   let full_url = (build-url $base $"/v3/alert-event/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def accept-completer-2 [] { ["application/mathml+xml" "application/problem+json"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "feed-availability get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "feed-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<in_the_news: list<string>, most_read: list<string>, on_this_day: list<string>, picture_of_the_day: list<string>, todays_featured_article: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -110,7 +112,7 @@ export def "feed-availability get" [
   let full_url = (build-url $base "/feed/availability")
   let accept_val = ($accept | default "application/json; charset=utf-8; profile="https://www.mediawiki.org/wiki/Specs/Availability/1.0.1"")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check and normalize a TeX formula.
@@ -125,6 +127,7 @@ export def "media-math-check post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   q: string # The formula to check
 ]: any -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
@@ -136,7 +139,7 @@ export def "media-math-check post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a previously-stored formula
@@ -151,6 +154,7 @@ export def "media-math-formula get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -158,7 +162,7 @@ export def "media-math-formula get" [
   let full_url = (build-url $base $"/media/math/formula/($hash)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rendered formula in the given format.
@@ -174,6 +178,7 @@ export def "media-math-render get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -181,7 +186,7 @@ export def "media-math-render get" [
   let full_url = (build-url $base $"/media/math/render/($format)/($hash)")
   let accept_val = ($accept | default "image/svg+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the sum of absolute value of text bytes difference between current edit and previous one.
@@ -201,6 +206,7 @@ export def "metrics-bytes-difference-absolute-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -208,7 +214,7 @@ export def "metrics-bytes-difference-absolute-aggregate get" [
   let full_url = (build-url $base $"/metrics/bytes-difference/absolute/aggregate/($project)/($editor_type)/($page_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the sum of absolute text bytes difference per page.
@@ -228,6 +234,7 @@ export def "metrics-bytes-difference-absolute-per-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -235,7 +242,7 @@ export def "metrics-bytes-difference-absolute-per-page get" [
   let full_url = (build-url $base $"/metrics/bytes-difference/absolute/per-page/($project)/($page_title)/($editor_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the sum of net text bytes difference between current edit and previous one.
@@ -255,6 +262,7 @@ export def "metrics-bytes-difference-net-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -262,7 +270,7 @@ export def "metrics-bytes-difference-net-aggregate get" [
   let full_url = (build-url $base $"/metrics/bytes-difference/net/aggregate/($project)/($editor_type)/($page_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the sum of net text bytes difference per page.
@@ -282,6 +290,7 @@ export def "metrics-bytes-difference-net-per-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -289,7 +298,7 @@ export def "metrics-bytes-difference-net-per-page get" [
   let full_url = (build-url $base $"/metrics/bytes-difference/net/per-page/($project)/($page_title)/($editor_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get edited-pages counts for a project.
@@ -310,6 +319,7 @@ export def "metrics-edited-pages-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -317,7 +327,7 @@ export def "metrics-edited-pages-aggregate get" [
   let full_url = (build-url $base $"/metrics/edited-pages/aggregate/($project)/($editor_type)/($page_type)/($activity_level)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get new pages counts for a project.
@@ -337,6 +347,7 @@ export def "metrics-edited-pages-new get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -344,7 +355,7 @@ export def "metrics-edited-pages-new get" [
   let full_url = (build-url $base $"/metrics/edited-pages/new/($project)/($editor_type)/($page_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 edited-pages by absolute bytes-difference.
@@ -364,6 +375,7 @@ export def "metrics-edited-pages-top-by-absolute-bytes-difference get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -371,7 +383,7 @@ export def "metrics-edited-pages-top-by-absolute-bytes-difference get" [
   let full_url = (build-url $base $"/metrics/edited-pages/top-by-absolute-bytes-difference/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 edited-pages by edits count.
@@ -391,6 +403,7 @@ export def "metrics-edited-pages-top-by-edits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -398,7 +411,7 @@ export def "metrics-edited-pages-top-by-edits get" [
   let full_url = (build-url $base $"/metrics/edited-pages/top-by-edits/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 edited-pages by net bytes-difference.
@@ -418,6 +431,7 @@ export def "metrics-edited-pages-top-by-net-bytes-difference get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -425,7 +439,7 @@ export def "metrics-edited-pages-top-by-net-bytes-difference get" [
   let full_url = (build-url $base $"/metrics/edited-pages/top-by-net-bytes-difference/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get editors counts for a project.
@@ -446,6 +460,7 @@ export def "metrics-editors-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -453,7 +468,7 @@ export def "metrics-editors-aggregate get" [
   let full_url = (build-url $base $"/metrics/editors/aggregate/($project)/($editor_type)/($page_type)/($activity_level)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 editors by absolute bytes-difference.
@@ -473,6 +488,7 @@ export def "metrics-editors-top-by-absolute-bytes-difference get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -480,7 +496,7 @@ export def "metrics-editors-top-by-absolute-bytes-difference get" [
   let full_url = (build-url $base $"/metrics/editors/top-by-absolute-bytes-difference/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 editors by edits count.
@@ -500,6 +516,7 @@ export def "metrics-editors-top-by-edits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -507,7 +524,7 @@ export def "metrics-editors-top-by-edits get" [
   let full_url = (build-url $base $"/metrics/editors/top-by-edits/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top 100 editors by net bytes-difference.
@@ -527,6 +544,7 @@ export def "metrics-editors-top-by-net-bytes-difference get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -534,7 +552,7 @@ export def "metrics-editors-top-by-net-bytes-difference get" [
   let full_url = (build-url $base $"/metrics/editors/top-by-net-bytes-difference/($project)/($editor_type)/($page_type)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get edits counts for a project.
@@ -554,6 +572,7 @@ export def "metrics-edits-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -561,7 +580,7 @@ export def "metrics-edits-aggregate get" [
   let full_url = (build-url $base $"/metrics/edits/aggregate/($project)/($editor_type)/($page_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get edit counts for a page in a project.
@@ -581,6 +600,7 @@ export def "metrics-edits-per-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -588,7 +608,7 @@ export def "metrics-edits-per-page get" [
   let full_url = (build-url $base $"/metrics/edits/per-page/($project)/($page_title)/($editor_type)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Given a project and a date range, returns a timeseries of pagecounts. You can filter by access site (mobile or desktop) and you can choose between monthly, daily and hourly granularity as well.  - Stability: [experimental](https://www.mediawiki.org/wiki/API_versioning#Experimental) - Rate limit: 100 req/s - License: Data accessible via this endpoint is available under the   [CC0 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/).
@@ -607,6 +627,7 @@ export def "metrics-legacy-pagecounts-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access_site: string, count: int, granularity: string, project: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -614,7 +635,7 @@ export def "metrics-legacy-pagecounts-aggregate get" [
   let full_url = (build-url $base $"/metrics/legacy/pagecounts/aggregate/($project)/($access_site)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pageview counts for a project.
@@ -634,6 +655,7 @@ export def "metrics-pageviews-aggregate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access: string, agent: string, granularity: string, project: string, timestamp: string, views: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -641,7 +663,7 @@ export def "metrics-pageviews-aggregate get" [
   let full_url = (build-url $base $"/metrics/pageviews/aggregate/($project)/($access)/($agent)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pageview counts for a page.
@@ -662,6 +684,7 @@ export def "metrics-pageviews-per-article get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access: string, agent: string, article: string, granularity: string, project: string, timestamp: string, views: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -669,7 +692,7 @@ export def "metrics-pageviews-per-article get" [
   let full_url = (build-url $base $"/metrics/pageviews/per-article/($project)/($access)/($agent)/($article)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pageviews by country and access method.
@@ -687,6 +710,7 @@ export def "metrics-pageviews-top-by-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access: string, countries: list, month: string, project: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -694,7 +718,7 @@ export def "metrics-pageviews-top-by-country get" [
   let full_url = (build-url $base $"/metrics/pageviews/top-by-country/($project)/($access)/($year)/($month)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the most viewed articles for a project.
@@ -713,6 +737,7 @@ export def "metrics-pageviews-top get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access: string, articles: list, day: string, month: string, project: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -720,7 +745,7 @@ export def "metrics-pageviews-top get" [
   let full_url = (build-url $base $"/metrics/pageviews/top/($project)/($access)/($year)/($month)/($day)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get newly registered users counts for a project.
@@ -738,6 +763,7 @@ export def "metrics-registered-users-new get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<granularity: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -745,7 +771,7 @@ export def "metrics-registered-users-new get" [
   let full_url = (build-url $base $"/metrics/registered-users/new/($project)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get unique devices count per project
@@ -764,6 +790,7 @@ export def "metrics-unique-devices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<items: table<access_site: string, devices: int, granularity: string, project: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -771,7 +798,7 @@ export def "metrics-unique-devices get" [
   let full_url = (build-url $base $"/metrics/unique-devices/($project)/($access_site)/($granularity)/($start)/($end)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Machine-translate content
@@ -787,6 +814,7 @@ export def "transform-html-from-to post-by-from_lang-to_lang" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   html: string # The HTML content to translate
 ]: any -> record<contents: string> {
@@ -798,7 +826,7 @@ export def "transform-html-from-to post-by-from_lang-to_lang" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Machine-translate content
@@ -815,6 +843,7 @@ export def "transform-html-from-to post-by-from_lang-to_lang-provider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   html: string # The HTML content to translate
 ]: any -> record<contents: string> {
@@ -826,7 +855,7 @@ export def "transform-html-from-to post-by-from_lang-to_lang-provider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Lists the language pairs supported by the back-end
@@ -840,13 +869,14 @@ export def "transform-list-languagepairs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<source: list<string>, target: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transform/list/languagepairs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the tools available for a language pair
@@ -862,6 +892,7 @@ export def "transform-list-pair get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<tools: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -869,7 +900,7 @@ export def "transform-list-pair get" [
   let full_url = (build-url $base $"/transform/list/pair/($from)/($to)/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the tools and language pairs available for the given tool category
@@ -884,6 +915,7 @@ export def "transform-list-tool get-by-tool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -891,7 +923,7 @@ export def "transform-list-tool get-by-tool" [
   let full_url = (build-url $base $"/transform/list/tool/($tool)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the tools and language pairs available for the given tool category
@@ -907,6 +939,7 @@ export def "transform-list-tool get-by-tool-from" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -914,7 +947,7 @@ export def "transform-list-tool get-by-tool-from" [
   let full_url = (build-url $base $"/transform/list/tool/($tool)/($from)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the tools and language pairs available for the given tool category
@@ -931,6 +964,7 @@ export def "transform-list-tool get-by-tool-from-to" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -938,7 +972,7 @@ export def "transform-list-tool get-by-tool-from-to" [
   let full_url = (build-url $base $"/transform/list/tool/($tool)/($from)/($to)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the dictionary meaning of a word
@@ -955,6 +989,7 @@ export def "transform-word-from-to list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<source: string, translations: table<info: string, phrase: string, sources: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -962,7 +997,7 @@ export def "transform-word-from-to list" [
   let full_url = (build-url $base $"/transform/word/from/($from_lang)/to/($to_lang)/($word)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the dictionary meaning of a word
@@ -980,6 +1015,7 @@ export def "transform-word-from-to get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<source: string, translations: table<info: string, phrase: string, sources: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
@@ -987,5 +1023,5 @@ export def "transform-word-from-to get" [
   let full_url = (build-url $base $"/transform/word/from/($from_lang)/to/($to_lang)/($word)/($provider)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

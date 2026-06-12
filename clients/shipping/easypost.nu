@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def file-format-completer [] { ["epl2" "pdf" "png" "zpl"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "shipments createShipment" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "shipments createShipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shipment: record # shape: {to_address?: record, from_address?: record, parcel?: record, carrier_accounts?: list}
 ]: any -> record<id: string, to_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, from_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, parcel: record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string>, rates: table<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, selected_rate: record<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, tracking_code: string, postage_label: record> {
   let input = $in
@@ -113,7 +115,7 @@ export def "shipments createShipment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List shipments
@@ -128,6 +130,7 @@ export def "shipments listShipments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int
   --before-id: string
   --after-id: string
@@ -138,7 +141,7 @@ export def "shipments listShipments" [
   let full_url = (build-url $base "/shipments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a shipment
@@ -154,13 +157,14 @@ export def "shipments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, to_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, from_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, parcel: record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string>, rates: table<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, selected_rate: record<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, tracking_code: string, postage_label: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipments/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Buy a shipment
@@ -177,6 +181,7 @@ export def "shipments-buy buyShipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rate: record # shape: {id?: string}
   --insurance: string
 ]: any -> record<id: string, to_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, from_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, parcel: record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string>, rates: table<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, selected_rate: record<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, tracking_code: string, postage_label: record> {
@@ -188,7 +193,7 @@ export def "shipments-buy buyShipment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Convert a shipment label format
@@ -204,6 +209,7 @@ export def "shipments-label convertShipmentLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-format: string@file-format-completer
 ]: nothing -> record<id: string, to_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, from_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, parcel: record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string>, rates: table<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, selected_rate: record<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, tracking_code: string, postage_label: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -212,7 +218,7 @@ export def "shipments-label convertShipmentLabel" [
   let full_url = (build-url $base $"/shipments/($id)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund a shipment label
@@ -228,13 +234,14 @@ export def "shipments-refund refundShipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, to_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, from_address: record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>, parcel: record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string>, rates: table<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, selected_rate: record<id: string, service: string, carrier: string, rate: string, currency: string, delivery_days: int>, tracking_code: string, postage_label: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/shipments/($id)/refund")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an address
@@ -250,6 +257,7 @@ export def "addresses createAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {id?: string, name?: string, company?: string, street1?: string, street2?: string, city?: string, state?: string, zip?: string, country?: string, phone?: string, email?: string}
 ]: any -> record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string> {
   let input = $in
@@ -260,7 +268,7 @@ export def "addresses createAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List addresses
@@ -275,13 +283,14 @@ export def "addresses listAddresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<addresses: table<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an address
@@ -297,13 +306,14 @@ export def "addresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, company: string, street1: string, street2: string, city: string, state: string, zip: string, country: string, phone: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/addresses/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a parcel
@@ -319,6 +329,7 @@ export def "parcels createParcel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parcel: record # shape: {id?: string, length?: float, width?: float, height?: float, weight?: float, predefined_package?: string}
 ]: any -> record<id: string, length: float, width: float, height: float, weight: float, predefined_package: string> {
   let input = $in
@@ -329,7 +340,7 @@ export def "parcels createParcel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a tracker
@@ -345,6 +356,7 @@ export def "trackers createTracker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tracker: record # shape: {tracking_code?: string, carrier?: string}
 ]: any -> record<id: string, tracking_code: string, status: string, carrier: string, tracking_details: list<record>> {
   let input = $in
@@ -355,7 +367,7 @@ export def "trackers createTracker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List trackers
@@ -370,13 +382,14 @@ export def "trackers listTrackers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<trackers: table<id: string, tracking_code: string, status: string, carrier: string, tracking_details: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/trackers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a tracker
@@ -392,13 +405,14 @@ export def "trackers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, tracking_code: string, status: string, carrier: string, tracking_details: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/trackers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a refund
@@ -414,6 +428,7 @@ export def "refunds createRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refund: record # shape: {carrier?: string, tracking_codes?: list}
 ]: any -> any {
   let input = $in
@@ -424,7 +439,7 @@ export def "refunds createRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a report
@@ -440,6 +455,7 @@ export def "reports createReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # format: date
   --end-date: string # format: date
 ]: any -> any {
@@ -451,5 +467,5 @@ export def "reports createReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

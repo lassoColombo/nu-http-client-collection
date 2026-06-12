@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["basic"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "tasks createTask" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "tasks createTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merchant: string
   --executor: string
   --destination: any
@@ -127,7 +129,7 @@ export def "tasks createTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Tasks In Batch
@@ -143,6 +145,7 @@ export def "tasks-batch createTaskBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tasks: list # item shape: {merchant?: string, executor?: string, destination?: any, recipients?: list, completeAfter?: int, completeBefore?: int, pickupTask?: bool, dependencies?: list, notes?: string, quantity?: int, serviceTime?: int, autoAssign?: record, container?: record, metadata?: list, appearance?: record}
 ]: any -> record<status: string, jobId: string> {
   let input = $in
@@ -153,7 +156,7 @@ export def "tasks-batch createTaskBatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Tasks
@@ -168,6 +171,7 @@ export def "tasks-all listTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: int # Start of the search range in Unix milliseconds. (format: int64)
   --qp-to: int # End of the search range in Unix milliseconds. (format: int64)
   --lastId: string # Cursor returned from a previous call to walk pagination.
@@ -184,7 +188,7 @@ export def "tasks-all listTasks" [
   let full_url = (build-url $base "/tasks/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Single Task
@@ -200,13 +204,14 @@ export def "tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, shortId: string, organization: string, timeCreated: int, timeLastModified: int, executor: string, merchant: string, creator: string, worker: string, destination: record<id: string, address: record<unparsed: string, number: string, street: string, city: string, state: string, postalCode: string, country: string, apartment: string>, location: list<float>, notes: string, warnings: list<string>>, recipients: table<id: string, name: string, phone: string, notes: string, skipSMSNotifications: bool, organization: string>, completeAfter: int, completeBefore: int, pickupTask: bool, dependencies: list<string>, notes: string, quantity: int, serviceTime: int, state: int, completionDetails: record<success: bool, time: int, notes: string, photoUploadIds: list<string>, signatureUploadId: string, events: list<record>>, feedback: table<time: int, rating: int, comments: string>, metadata: table<name: string, type: string, value: any, visibility: list>, trackingURL: string, trackingViewed: bool, eta: int, delayTime: int, appearance: record<triangleColor: string>, container: record<type: string, organization: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Task
@@ -223,6 +228,7 @@ export def "tasks updateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notes: string
   --completeAfter: int # format: int64
   --completeBefore: int # format: int64
@@ -239,7 +245,7 @@ export def "tasks updateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Task
@@ -255,13 +261,14 @@ export def "tasks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Task By Short ID
@@ -277,13 +284,14 @@ export def "tasks-short-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, shortId: string, organization: string, timeCreated: int, timeLastModified: int, executor: string, merchant: string, creator: string, worker: string, destination: record<id: string, address: record<unparsed: string, number: string, street: string, city: string, state: string, postalCode: string, country: string, apartment: string>, location: list<float>, notes: string, warnings: list<string>>, recipients: table<id: string, name: string, phone: string, notes: string, skipSMSNotifications: bool, organization: string>, completeAfter: int, completeBefore: int, pickupTask: bool, dependencies: list<string>, notes: string, quantity: int, serviceTime: int, state: int, completionDetails: record<success: bool, time: int, notes: string, photoUploadIds: list<string>, signatureUploadId: string, events: list<record>>, feedback: table<time: int, rating: int, comments: string>, metadata: table<name: string, type: string, value: any, visibility: list>, trackingURL: string, trackingViewed: bool, eta: int, delayTime: int, appearance: record<triangleColor: string>, container: record<type: string, organization: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/shortId/($shortId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clone Task
@@ -299,13 +307,14 @@ export def "tasks-clone cloneTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, shortId: string, organization: string, timeCreated: int, timeLastModified: int, executor: string, merchant: string, creator: string, worker: string, destination: record<id: string, address: record<unparsed: string, number: string, street: string, city: string, state: string, postalCode: string, country: string, apartment: string>, location: list<float>, notes: string, warnings: list<string>>, recipients: table<id: string, name: string, phone: string, notes: string, skipSMSNotifications: bool, organization: string>, completeAfter: int, completeBefore: int, pickupTask: bool, dependencies: list<string>, notes: string, quantity: int, serviceTime: int, state: int, completionDetails: record<success: bool, time: int, notes: string, photoUploadIds: list<string>, signatureUploadId: string, events: list<record>>, feedback: table<time: int, rating: int, comments: string>, metadata: table<name: string, type: string, value: any, visibility: list>, trackingURL: string, trackingViewed: bool, eta: int, delayTime: int, appearance: record<triangleColor: string>, container: record<type: string, organization: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tasks/($taskId)/clone")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force-Complete Task
@@ -322,6 +331,7 @@ export def "tasks-complete forceCompleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --completionDetails: record # shape: {success?: bool, notes?: string}
 ]: any -> any {
   let input = $in
@@ -332,7 +342,7 @@ export def "tasks-complete forceCompleteTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign Tasks To Worker
@@ -348,6 +358,7 @@ export def "containers-workers assignTasksToWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tasks: list
   --considerDependencies: oneof<nothing, bool>
 ]: any -> any {
@@ -359,5 +370,5 @@ export def "containers-workers assignTasksToWorker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

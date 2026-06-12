@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "films list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -98,6 +99,7 @@ export def "films list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
   --limit: int # amount of results (default 50) (maximum 250) (format: int64)
 ]: nothing -> table<id: string, title: string, original_title: string, original_title_romanised: string, description: string, director: string, producer: string, release_date: string, running_time: string, rt_score: string, people: list<string>, species: list<string>, locations: list<string>, vehicles: list<string>, url: string> {
@@ -107,7 +109,7 @@ export def "films list" [
   let full_url = (build-url $base "/films" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Film ID
@@ -122,6 +124,7 @@ export def "films get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
 ]: nothing -> table<id: string, title: string, original_title: string, original_title_romanised: string, description: string, director: string, producer: string, release_date: string, running_time: string, rt_score: string, people: list<string>, species: list<string>, locations: list<string>, vehicles: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -130,7 +133,7 @@ export def "films get" [
   let full_url = (build-url $base $"/films/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all people
@@ -144,6 +147,7 @@ export def "people list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
   --limit: int # amount of results (default 50) (maximum 250) (format: int64)
 ]: nothing -> table<id: string, name: string, gender: string, age: string, eye_color: string, hair_color: string, films: list<string>, species: string, url: string> {
@@ -153,7 +157,7 @@ export def "people list" [
   let full_url = (build-url $base "/people" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # People ID
@@ -168,6 +172,7 @@ export def "people get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
 ]: nothing -> table<id: string, name: string, gender: string, age: string, eye_color: string, hair_color: string, films: list<string>, species: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -176,7 +181,7 @@ export def "people get" [
   let full_url = (build-url $base $"/people/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all locations
@@ -190,6 +195,7 @@ export def "locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
   --limit: int # amount of results (default 50) (maximum 250) (format: int64)
 ]: nothing -> table<id: string, name: string, climate: string, terrain: string, surface_water: string, residents: list<string>, films: list<string>, url: string> {
@@ -199,7 +205,7 @@ export def "locations list" [
   let full_url = (build-url $base "/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Location ID
@@ -214,6 +220,7 @@ export def "locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -222,7 +229,7 @@ export def "locations get" [
   let full_url = (build-url $base $"/locations/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Species
@@ -236,6 +243,7 @@ export def "species list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
   --limit: int # amount of results (default 50) (maximum 250) (format: int64)
 ]: nothing -> table<id: string, name: string, classification: string, eye_color: string, hair_color: string, people: list<string>, films: list<string>, url: string> {
@@ -245,7 +253,7 @@ export def "species list" [
   let full_url = (build-url $base "/species" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Species ID
@@ -260,6 +268,7 @@ export def "species get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
 ]: nothing -> table<id: string, name: string, classification: string, eye_color: string, hair_color: string, people: list<string>, films: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -268,7 +277,7 @@ export def "species get" [
   let full_url = (build-url $base $"/species/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Vehicles
@@ -282,6 +291,7 @@ export def "vehicles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
   --limit: int # amount of results (default 50) (maximum 250) (format: int64)
 ]: nothing -> table<id: string, name: string, description: string, vehicle_class: string, length: string, pilot: string, films: list<string>, url: string> {
@@ -291,7 +301,7 @@ export def "vehicles list" [
   let full_url = (build-url $base "/vehicles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Vehicle ID
@@ -306,6 +316,7 @@ export def "vehicles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # comma-separated list of fields to include in the response
 ]: nothing -> table<id: string, name: string, description: string, vehicle_class: string, length: string, pilot: string, films: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -314,5 +325,5 @@ export def "vehicles get" [
   let full_url = (build-url $base $"/vehicles/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

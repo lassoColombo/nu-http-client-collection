@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["api-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-imports listBulkImports" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "bulk-imports listBulkImports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max number of operations to return per page. (format: int32, default: 100, e.g. 10)
   --paginationToken: string # Pagination token to continue a previous listing operation.
   --X-Pinecone-Api-Version: string # Required date-based version header
@@ -112,7 +114,7 @@ export def "bulk-imports listBulkImports" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start import
@@ -128,6 +130,7 @@ export def "bulk-imports startBulkImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --integrationId: string # The id of the [storage integration](https://docs.pinecone.io/guides/operations/integrations/manage-storage-integrations) that should be used to access the data.
   uri: string # The URI of the bucket (or container) and import directory containing the namespaces and Parquet files you want to import. For example, `s3://BUCKET_NAME/IMPORT_DIR` for Amazon S3, `gs://BUCKET_NAME/IMPORT_DIR` for Google Cloud Storage, or `https://STORAGE_ACCOUNT.blob.core.windows.net/CONTAINER_NAME/IMPORT_DIR` for Azure Blob Storage. For more information, see [Import records](https://docs.pinecone.io/guides/index-data/import-data#prepare-your-data).
@@ -143,7 +146,7 @@ export def "bulk-imports startBulkImport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe an import
@@ -159,6 +162,7 @@ export def "bulk-imports describeBulkImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<id: string, uri: string, status: string, createdAt: string, finishedAt: string, percentComplete: float, recordsImported: int, error: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -168,7 +172,7 @@ export def "bulk-imports describeBulkImport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel an import
@@ -184,6 +188,7 @@ export def "bulk-imports cancelBulkImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -193,7 +198,7 @@ export def "bulk-imports cancelBulkImport" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get index stats
@@ -208,6 +213,7 @@ export def "describe-index-stats describeIndexStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --filter: record # If this parameter is present, the operation only returns statistics for vectors that satisfy the filter. See [Understanding metadata](https://docs.pinecone.io/guides/index-data/indexing-overview#metadata).  Serverless indexes do not support filtering `describe_index_stats` by metadata.
 ]: any -> record<namespaces: record, dimension: int, indexFullness: float, totalVectorCount: int, metric: string, vectorType: string, memory_fullness: float, storage_fullness: float> {
@@ -221,7 +227,7 @@ export def "describe-index-stats describeIndexStats" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search with a vector
@@ -239,6 +245,7 @@ export def "query queryVectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --namespace: string # The namespace to query. (e.g. example-namespace)
   topK: int # The number of results to return for each query. (format: int64, e.g. 10)
@@ -262,7 +269,7 @@ export def "query queryVectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete records
@@ -277,6 +284,7 @@ export def "vectors-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --ids: list # Vectors to delete. (e.g. [id-0, id-1])
   --deleteAll: oneof<nothing, bool> # This indicates that all vectors in the index namespace should be deleted. (default: false, e.g. false)
@@ -293,7 +301,7 @@ export def "vectors-delete post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch records
@@ -308,6 +316,7 @@ export def "vectors-fetch fetchVectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The vector IDs to fetch. Does not accept values containing spaces.
   --namespace: string # The namespace to fetch records from. If not provided, the default namespace is used.
   --X-Pinecone-Api-Version: string # Required date-based version header
@@ -320,7 +329,7 @@ export def "vectors-fetch fetchVectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch records by metadata
@@ -335,6 +344,7 @@ export def "vectors-fetch-by-metadata metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --namespace: string # The namespace to fetch records from. (e.g. example-namespace)
   --filter: record # Metadata filter expression to select vectors. See [Understanding metadata](https://docs.pinecone.io/guides/index-data/indexing-overview#metadata). (e.g. {genre: {$in: [comedy, documentary, drama]}, year: {$eq: 2019}})
@@ -351,7 +361,7 @@ export def "vectors-fetch-by-metadata metadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List record IDs
@@ -366,6 +376,7 @@ export def "vectors-list listVectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # The vector IDs to fetch. Does not accept values containing spaces.
   --limit: int # Max number of IDs to return per page. (format: int64, default: 100)
   --paginationToken: string # Pagination token to continue a previous listing operation.
@@ -380,7 +391,7 @@ export def "vectors-list listVectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a record
@@ -396,6 +407,7 @@ export def "vectors-update updateVector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --id: string # Vector's unique id. (e.g. example-vector-1)
   --values: list # Vector data. (e.g. [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
@@ -415,7 +427,7 @@ export def "vectors-update updateVector" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upsert records
@@ -431,6 +443,7 @@ export def "vectors-upsert upsertVectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   vectors: list # An array containing the vectors to upsert. Recommended batch limit is up to 1000 vectors. — item shape: {id: string, values?: list, sparseValues?: record, metadata?: record}
   --namespace: string # The namespace where you upsert records. (e.g. example-namespace)
@@ -445,7 +458,7 @@ export def "vectors-upsert upsertVectors" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List namespaces
@@ -460,6 +473,7 @@ export def "namespaces listNamespacesOperation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Max number namespaces to return per page. (format: int32, e.g. 10)
   --paginationToken: string # Pagination token to continue a previous listing operation.
   --prefix: string # Prefix of the namespaces to list. Acts as a filter to return only namespaces that start with this prefix. (e.g. prefixExample)
@@ -473,7 +487,7 @@ export def "namespaces listNamespacesOperation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a namespace
@@ -489,6 +503,7 @@ export def "namespaces createNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the namespace. (e.g. example-namespace)
   --schema: record # Schema for the behavior of Pinecone's internal metadata index. By default, all metadata is indexed; when `schema` is present, only fields which are present in the `fields` object with a `filterable: true` are indexed. Note that `filterable: false` is not currently supported. (e.g. {fields: {description: {filterable: true}, genre: {filterable: true}, year: {filterable: true}}}) — shape: {fields: record}
@@ -503,7 +518,7 @@ export def "namespaces createNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describe a namespace
@@ -519,6 +534,7 @@ export def "namespaces describeNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<name: string, record_count: int, schema: record<fields: record>, indexed_fields: record<fields: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -528,7 +544,7 @@ export def "namespaces describeNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a namespace
@@ -544,6 +560,7 @@ export def "namespaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -553,7 +570,7 @@ export def "namespaces delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert text
@@ -569,6 +586,7 @@ export def "records-namespaces-upsert upsertRecordsNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --body: record
 ]: any -> any {
@@ -581,7 +599,7 @@ export def "records-namespaces-upsert upsertRecordsNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-ndjson" $body
 }
 
 # Search with text
@@ -599,6 +617,7 @@ export def "records-namespaces-search searchRecordsNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --body-query: record # . — shape: {top_k: int, filter?: record, inputs?: record, vector?: record, id?: string, match_terms?: record}
   --body-fields: list # The fields to return in the search results. If not specified, the response will include all fields. (e.g. [chunk_text])
@@ -614,5 +633,5 @@ export def "records-namespaces-search searchRecordsNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

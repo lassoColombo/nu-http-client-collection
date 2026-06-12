@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "creator-roles list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "creator-roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<id: int, name: string, slug: string>> {
@@ -108,7 +110,7 @@ export def "creator-roles list" [
   let full_url = (build-url $base "/creator-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of game creators.
@@ -123,6 +125,7 @@ export def "creators list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<games_count: int, id: int, image: string, image_background: string, name: string, slug: string>> {
@@ -132,7 +135,7 @@ export def "creators list" [
   let full_url = (build-url $base "/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the creator.
@@ -148,13 +151,14 @@ export def "creators read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image: string, image_background: string, name: string, rating: string, rating_top: int, reviews_count: int, slug: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/creators/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of game developers.
@@ -169,6 +173,7 @@ export def "developers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<games_count: int, id: int, image_background: string, name: string, slug: string>> {
@@ -178,7 +183,7 @@ export def "developers list" [
   let full_url = (build-url $base "/developers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the developer.
@@ -194,13 +199,14 @@ export def "developers read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/developers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of games.
@@ -215,6 +221,7 @@ export def "games list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # Search query.
@@ -245,7 +252,7 @@ export def "games list" [
   let full_url = (build-url $base "/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of DLC's for the game, GOTY and other editions, companion apps, etc.
@@ -261,6 +268,7 @@ export def "games-additions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<added: int, added_by_status: record, background_image: string, esrb_rating: record, id: int, metacritic: int, name: string, platforms: list, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, released: string, reviews_text_count: string, slug: string, suggestions_count: int, tba: bool, updated: string>> {
@@ -270,7 +278,7 @@ export def "games-additions list" [
   let full_url = (build-url $base $"/games/($game_pk)/additions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of individual creators that were part of the development team.
@@ -286,6 +294,7 @@ export def "games-development-team list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -296,7 +305,7 @@ export def "games-development-team list" [
   let full_url = (build-url $base $"/games/($game_pk)/development-team" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of games that are part of the same series.
@@ -312,6 +321,7 @@ export def "games-game-series list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<added: int, added_by_status: record, background_image: string, esrb_rating: record, id: int, metacritic: int, name: string, platforms: list, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, released: string, reviews_text_count: string, slug: string, suggestions_count: int, tba: bool, updated: string>> {
@@ -321,7 +331,7 @@ export def "games-game-series list" [
   let full_url = (build-url $base $"/games/($game_pk)/game-series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of parent games for DLC's and editions.
@@ -337,6 +347,7 @@ export def "games-parent-games list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<added: int, added_by_status: record, background_image: string, esrb_rating: record, id: int, metacritic: int, name: string, platforms: list, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, released: string, reviews_text_count: string, slug: string, suggestions_count: int, tba: bool, updated: string>> {
@@ -346,7 +357,7 @@ export def "games-parent-games list" [
   let full_url = (build-url $base $"/games/($game_pk)/parent-games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get screenshots for the game.
@@ -362,6 +373,7 @@ export def "games-screenshots list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -372,7 +384,7 @@ export def "games-screenshots list" [
   let full_url = (build-url $base $"/games/($game_pk)/screenshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get links to the stores that sell the game.
@@ -388,6 +400,7 @@ export def "games-stores list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -398,7 +411,7 @@ export def "games-stores list" [
   let full_url = (build-url $base $"/games/($game_pk)/stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the game.
@@ -414,13 +427,14 @@ export def "games read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<achievements_count: int, added: int, added_by_status: record, additions_count: int, alternative_names: list<string>, background_image: string, background_image_additional: string, creators_count: int, description: string, esrb_rating: record<id: int, name: string, slug: string>, game_series_count: int, id: int, metacritic: int, metacritic_platforms: table<metascore: int, url: string>, metacritic_url: string, movies_count: int, name: string, name_original: string, parent_achievements_count: string, parents_count: int, platforms: table<platform: record, released_at: string, requirements: record>, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, reactions: record, reddit_count: int, reddit_description: string, reddit_logo: string, reddit_name: string, reddit_url: string, released: string, reviews_text_count: string, screenshots_count: int, slug: string, suggestions_count: int, tba: bool, twitch_count: string, updated: string, website: string, youtube_count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of game achievements.
@@ -436,13 +450,14 @@ export def "games-achievements read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, id: int, image: string, name: string, percent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/achievements")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of game trailers.
@@ -458,13 +473,14 @@ export def "games-movies read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record, id: int, name: string, preview: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/movies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of most recent posts from the game's subreddit.
@@ -480,13 +496,14 @@ export def "games-reddit read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, id: int, image: string, name: string, text: string, url: string, username: string, username_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/reddit")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of visually similar games, available only for business and enterprise API users.
@@ -502,13 +519,14 @@ export def "games-suggested read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<achievements_count: int, added: int, added_by_status: record, additions_count: int, alternative_names: list<string>, background_image: string, background_image_additional: string, creators_count: int, description: string, esrb_rating: record<id: int, name: string, slug: string>, game_series_count: int, id: int, metacritic: int, metacritic_platforms: table<metascore: int, url: string>, metacritic_url: string, movies_count: int, name: string, name_original: string, parent_achievements_count: string, parents_count: int, platforms: table<platform: record, released_at: string, requirements: record>, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, reactions: record, reddit_count: int, reddit_description: string, reddit_logo: string, reddit_name: string, reddit_url: string, released: string, reviews_text_count: string, screenshots_count: int, slug: string, suggestions_count: int, tba: bool, twitch_count: string, updated: string, website: string, youtube_count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/suggested")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get streams on Twitch associated with the game, available only for business and enterprise API users.
@@ -524,13 +542,14 @@ export def "games-twitch read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, description: string, external_id: int, id: int, language: string, name: string, published: string, thumbnail: string, view_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/twitch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get videos from YouTube associated with the game, available only for business and enterprise API users.
@@ -546,13 +565,14 @@ export def "games-youtube read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<channel_id: string, channel_title: string, comments_count: int, created: string, description: string, dislike_count: int, external_id: string, favorite_count: int, id: int, like_count: int, name: string, thumbnails: record, view_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/games/($id)/youtube")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of video game genres.
@@ -567,6 +587,7 @@ export def "genres list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -577,7 +598,7 @@ export def "genres list" [
   let full_url = (build-url $base "/genres" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the genre.
@@ -593,13 +614,14 @@ export def "genres read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/genres/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of video game platforms.
@@ -614,6 +636,7 @@ export def "platforms list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -624,7 +647,7 @@ export def "platforms list" [
   let full_url = (build-url $base "/platforms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of parent platforms.
@@ -639,6 +662,7 @@ export def "platforms-lists-parents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -649,7 +673,7 @@ export def "platforms-lists-parents list" [
   let full_url = (build-url $base "/platforms/lists/parents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the platform.
@@ -665,13 +689,14 @@ export def "platforms read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image: string, image_background: string, name: string, slug: string, year_end: int, year_start: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/platforms/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of video game publishers.
@@ -686,6 +711,7 @@ export def "publishers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<games_count: int, id: int, image_background: string, name: string, slug: string>> {
@@ -695,7 +721,7 @@ export def "publishers list" [
   let full_url = (build-url $base "/publishers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the publisher.
@@ -711,13 +737,14 @@ export def "publishers read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/publishers/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of video game storefronts.
@@ -732,6 +759,7 @@ export def "stores list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -742,7 +770,7 @@ export def "stores list" [
   let full_url = (build-url $base "/stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the store.
@@ -758,13 +786,14 @@ export def "stores read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, domain: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stores/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of tags.
@@ -779,6 +808,7 @@ export def "tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<games_count: int, id: int, image_background: string, language: string, name: string, slug: string>> {
@@ -788,7 +818,7 @@ export def "tags list" [
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of the tag.
@@ -804,11 +834,12 @@ export def "tags read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tags/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

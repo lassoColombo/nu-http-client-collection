@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -73,7 +74,7 @@ def benefitDocType-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" "C
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-aadhaar-generate-otp generatereKycAadharOTPUsingPOST" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "account-aadhaar-generate-otp generatereKycAadharOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -116,7 +118,7 @@ export def "account-aadhaar-generate-otp generatereKycAadharOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify Aadhaar OTP to complete KYC/re-KYC verification.
@@ -131,6 +133,7 @@ export def "account-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
   --otp: string
@@ -147,7 +150,7 @@ export def "account-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST-by-" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get List of Benefits associated with HealthID.
@@ -162,6 +165,7 @@ export def "account-benefits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer XToken)
 ]: nothing -> any {
@@ -172,7 +176,7 @@ export def "account-benefits get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change password via Aadhar for heath id.
@@ -187,6 +191,7 @@ export def "account-change-passwd-by-aadhaar changePasswordViaAadharUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
   --newPassword: string
@@ -203,7 +208,7 @@ export def "account-change-passwd-by-aadhaar changePasswordViaAadharUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change password via mobile for heath id.
@@ -218,6 +223,7 @@ export def "account-change-passwd-by-mobile changePasswordViaMobileUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
   --newPassword: string
@@ -234,7 +240,7 @@ export def "account-change-passwd-by-mobile changePasswordViaMobileUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Aadhaar OTP on registrered mobile number.
@@ -249,6 +255,7 @@ export def "account-change-passwd-generate-aadhaar-otp generateAadharOTPUsingGET
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -259,7 +266,7 @@ export def "account-change-passwd-generate-aadhaar-otp generateAadharOTPUsingGET
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate Mobile OTP to start registration.
@@ -274,6 +281,7 @@ export def "account-change-passwd-generate-mobile-otp generateMobileOTPUsingGET"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -284,7 +292,7 @@ export def "account-change-passwd-generate-mobile-otp generateMobileOTPUsingGET"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change password via password for heath id.
@@ -299,6 +307,7 @@ export def "account-change-password changePasswordViaUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
   --newPassword: string
@@ -314,7 +323,7 @@ export def "account-change-password changePasswordViaUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Health ID card in PDF format
@@ -329,6 +338,7 @@ export def "account-get-card generateCardUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -339,7 +349,7 @@ export def "account-get-card generateCardUsingGET" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate Health ID card PNG
@@ -354,6 +364,7 @@ export def "account-get-png-card generatePngCardUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -364,7 +375,7 @@ export def "account-get-png-card generatePngCardUsingGET" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate Health ID card SVG
@@ -379,6 +390,7 @@ export def "account-get-svg-card generateSvgCardUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -389,7 +401,7 @@ export def "account-get-svg-card generateSvgCardUsingGET" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete account
@@ -404,6 +416,7 @@ export def "account-profile delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -414,7 +427,7 @@ export def "account-profile delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account information.
@@ -429,6 +442,7 @@ export def "account-profile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer XToken)
 ]: nothing -> any {
@@ -439,7 +453,7 @@ export def "account-profile get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update account information
@@ -454,6 +468,7 @@ export def "account-profile updateAccountInformationUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
   --address: string
@@ -485,7 +500,7 @@ export def "account-profile updateAccountInformationUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Quick Response code in PNG format for this account.
@@ -500,6 +515,7 @@ export def "account-qr-code get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer XToken)
@@ -511,7 +527,7 @@ export def "account-qr-code get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate auth token
@@ -526,6 +542,7 @@ export def "account-token validateTokenUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --authToken: string
 ]: any -> any {
@@ -539,7 +556,7 @@ export def "account-token validateTokenUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate using Health ID number / Health ID and password
@@ -554,6 +571,7 @@ export def "auth-auth-password authenticateWithPasswordUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthId: string
   --password: string
@@ -568,7 +586,7 @@ export def "auth-auth-password authenticateWithPasswordUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate request to generate Mobile OTP using Health ID number / Health ID
@@ -583,6 +601,7 @@ export def "auth-auth-with-mobile authenticateUserUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthid: string
 ]: any -> any {
@@ -596,7 +615,7 @@ export def "auth-auth-with-mobile authenticateUserUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate using verified Mobile Number and user data
@@ -611,6 +630,7 @@ export def "auth-auth-with-mobile-token authWithMobileTokenUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --gender: string
   --healthId: string
@@ -629,7 +649,7 @@ export def "auth-auth-with-mobile-token authWithMobileTokenUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Auth token public key.
@@ -644,6 +664,7 @@ export def "auth-cert certUsingGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -653,7 +674,7 @@ export def "auth-cert certUsingGET" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authentication with Aadhaar Biometric based auth transaction.
@@ -668,6 +689,7 @@ export def "auth-confirm-with-aadhaar-bio confirmWithAadhaarBioUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --authType: string@authType-completer
   --bioType: string
@@ -684,7 +706,7 @@ export def "auth-confirm-with-aadhaar-bio confirmWithAadhaarBioUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authentication with Aadhaar OTP based auth transaction.
@@ -699,6 +721,7 @@ export def "auth-confirm-with-aadhaar-otp confirmWithAadhaarOtpUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   otp: string
   txnId: string # format: uuid
@@ -713,7 +736,7 @@ export def "auth-confirm-with-aadhaar-otp confirmWithAadhaarOtpUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate using demographic data of user.
@@ -728,6 +751,7 @@ export def "auth-confirm-with-demographics confirmWithDemographicsUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --gender: string
   --name: string
@@ -744,7 +768,7 @@ export def "auth-confirm-with-demographics confirmWithDemographicsUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authentication with Mobile OTP based auth transaction.
@@ -759,6 +783,7 @@ export def "auth-confirm-with-mobile-otp confirmWithMobileUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --otp: string
   --txnId: string
@@ -773,7 +798,7 @@ export def "auth-confirm-with-mobile-otp confirmWithMobileUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authentication with PASSWORD based auth transaction.
@@ -788,6 +813,7 @@ export def "auth-confirm-with-password authAccountPasswordRequestUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   password: string
   txnId: string # format: uuid
@@ -802,7 +828,7 @@ export def "auth-confirm-with-password authAccountPasswordRequestUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initiate authentication process for given Health ID
@@ -817,6 +843,7 @@ export def "auth-init initiateAuthUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   authMethod: string@authMethod-completer
   --healthid: string
@@ -831,7 +858,7 @@ export def "auth-init initiateAuthUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend Aadhaar/Mobile OTP for Authentication Transaction.
@@ -846,6 +873,7 @@ export def "auth-resend-auth-otp resendAuthMobileOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   txnId: string
 ]: any -> any {
@@ -859,7 +887,7 @@ export def "auth-resend-auth-otp resendAuthMobileOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify aadhar OTP sent as part of forgetHealth id.
@@ -874,6 +902,7 @@ export def "forgot-health-id-aadhaar retrievalHealthIdByAadharUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   otp: string
   txnId: string # format: uuid
@@ -888,7 +917,7 @@ export def "forgot-health-id-aadhaar retrievalHealthIdByAadharUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Aadhaar OTP on registrered mobile number
@@ -903,6 +932,7 @@ export def "forgot-health-id-aadhaar-generate-otp generateAadharOTPUsingPOST-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
 ]: any -> any {
@@ -916,7 +946,7 @@ export def "forgot-health-id-aadhaar-generate-otp generateAadharOTPUsingPOST-by-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Mobile OTP sent as  part of forgetHealth id.
@@ -931,6 +961,7 @@ export def "forgot-health-id-mobile retrievalHealthIdByMobileUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --dayOfBirth: string
   --firstName: string
@@ -953,7 +984,7 @@ export def "forgot-health-id-mobile retrievalHealthIdByMobileUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Mobile OTP to start registration
@@ -968,6 +999,7 @@ export def "forgot-health-id-mobile-generate-otp generateMobileOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --mobile: string
 ]: any -> any {
@@ -981,7 +1013,7 @@ export def "forgot-health-id-mobile-generate-otp generateMobileOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of districts in a given  State as per LGD.
@@ -996,6 +1028,7 @@ export def "ha-lgd-districts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stateCode: string # stateCode
   --Accept-Language: string
 ]: nothing -> any {
@@ -1007,7 +1040,7 @@ export def "ha-lgd-districts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of states as per LGD.
@@ -1022,6 +1055,7 @@ export def "ha-lgd-states get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1031,7 +1065,7 @@ export def "ha-lgd-states get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete tag against HealthId.
@@ -1046,6 +1080,7 @@ export def "ha-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --body: record
 ]: any -> any {
@@ -1058,7 +1093,7 @@ export def "ha-tags delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get list of Tags against HealthID.
@@ -1073,6 +1108,7 @@ export def "ha-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
@@ -1083,7 +1119,7 @@ export def "ha-tags get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add tag against HealthId.
@@ -1098,6 +1134,7 @@ export def "ha-tags addTagUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthId: string
   --tags: record
@@ -1112,7 +1149,7 @@ export def "ha-tags addTagUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate token for heath facility id.
@@ -1127,6 +1164,7 @@ export def "health-facility-authenticate authenticateHealthFacilityUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --hfrUid: string
   --password: string
@@ -1141,7 +1179,7 @@ export def "health-facility-authenticate authenticateHealthFacilityUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change password for heath facility id.
@@ -1156,6 +1194,7 @@ export def "health-facility-change-password changePasswordUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --hfrUid: string
   --newPassword: string
@@ -1171,7 +1210,7 @@ export def "health-facility-change-password changePasswordUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Health ID card SVG
@@ -1186,6 +1225,7 @@ export def "health-facility-create-health-id-with-pre-verified createAadhaarAcco
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --email: string
   --firstName: string
@@ -1206,7 +1246,7 @@ export def "health-facility-create-health-id-with-pre-verified createAadhaarAcco
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generates password for heath facility id.
@@ -1221,6 +1261,7 @@ export def "health-facility-generate-password generatePasswordUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --hfrUid: string
 ]: any -> any {
@@ -1234,7 +1275,7 @@ export def "health-facility-generate-password generatePasswordUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate health hacility OTP on registrered mobile number
@@ -1249,6 +1290,7 @@ export def "health-facility-generate-otp generateFacilityOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --X-Token: string # Auth Token (e.g. Bearer XToken)
   --aadhaar: string
@@ -1263,7 +1305,7 @@ export def "health-facility-generate-otp generateFacilityOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # generateSvgCard
@@ -1278,6 +1320,7 @@ export def "health-facility-get-svg-card generateSvgCardUsingGET-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --Health-ID: string # Your health id (e.g. demo@ndhm)
   --X-Token: string # Auth Token (e.g. Bearer X-Token)
@@ -1289,7 +1332,7 @@ export def "health-facility-get-svg-card generateSvgCardUsingGET-by-" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset password for heath facility id.
@@ -1304,6 +1347,7 @@ export def "health-facility-reset-password resetPasswordUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --hfrUid: string
 ]: any -> any {
@@ -1317,7 +1361,7 @@ export def "health-facility-reset-password resetPasswordUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Aadhaar OTP on registrered mobile number
@@ -1332,6 +1376,7 @@ export def "hid-benefit-aadhaar-generate-otp generateAadharOTPUsingPOST-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
 ]: any -> any {
@@ -1345,7 +1390,7 @@ export def "hid-benefit-aadhaar-generate-otp generateAadharOTPUsingPOST-by-" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create health id using Aadhaar Number Otp.
@@ -1360,6 +1405,7 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp verifyAadharOtpUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --autoGeneratedBenefitId: oneof<nothing, bool>
   --benefitId: string
@@ -1380,7 +1426,7 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp verifyAadharOtpUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create health id using Biometric Authentication.
@@ -1395,6 +1441,7 @@ export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
   --autoGeneratedBenefitId: oneof<nothing, bool>
@@ -1416,7 +1463,7 @@ export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create health id using Aadhaar Demo Auth.
@@ -1431,6 +1478,7 @@ export def "hid-benefit-create-health-id-demo-auth createHealthIdByDemoAuthUsing
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadharNumber: string
   --autoGeneratedBenefitId: oneof<nothing, bool>
@@ -1453,7 +1501,7 @@ export def "hid-benefit-create-health-id-demo-auth createHealthIdByDemoAuthUsing
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # De-Linked with hid.
@@ -1468,6 +1516,7 @@ export def "hid-benefit-delink delinkHidBenefitUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --benefitName: string
   --uidToken: string
@@ -1482,7 +1531,7 @@ export def "hid-benefit-delink delinkHidBenefitUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Linked with hid.
@@ -1497,6 +1546,7 @@ export def "hid-benefit-link linkHidBenefitUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --benefitId: string
   --benefitName: string
@@ -1514,7 +1564,7 @@ export def "hid-benefit-link linkHidBenefitUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create health id using mobile Authentication.
@@ -1529,6 +1579,7 @@ export def "hid-benefit-mobile-create-health-id createHealthIdByMobileUsingPOST"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --autoGeneratedBenefitId: oneof<nothing, bool>
   --benefitDocType: string@benefitDocType-completer
@@ -1555,7 +1606,7 @@ export def "hid-benefit-mobile-create-health-id createHealthIdByMobileUsingPOST"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate mobile OTP on registrered mobile number
@@ -1570,6 +1621,7 @@ export def "hid-benefit-mobile-generate-otp generateMobileOtpUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --mobile: string
 ]: any -> any {
@@ -1583,7 +1635,7 @@ export def "hid-benefit-mobile-generate-otp generateMobileOtpUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create health id using notify Benefit.
@@ -1598,6 +1650,7 @@ export def "hid-benefit-notify-benefit notifyBenefitUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadharNumberOrUidToken: string
   --autoGeneratedBenefitId: oneof<nothing, bool>
@@ -1621,7 +1674,7 @@ export def "hid-benefit-notify-benefit notifyBenefitUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search health id number using aadhar or aadhar token.
@@ -1636,6 +1689,7 @@ export def "hid-benefit-search-aadhaar findByAadharUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
 ]: any -> any {
@@ -1649,7 +1703,7 @@ export def "hid-benefit-search-aadhaar findByAadharUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search benefit using health id number.
@@ -1664,6 +1718,7 @@ export def "hid-benefit-search-health-id-number findByHealthIdUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --benefitId: string
   --healthId: string
@@ -1678,7 +1733,7 @@ export def "hid-benefit-search-health-id-number findByHealthIdUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update mobile number for account.
@@ -1693,6 +1748,7 @@ export def "hid-benefit-update-mobile updateMobileInformationUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthIdNumber: string
   --mobile: string
@@ -1707,7 +1763,7 @@ export def "hid-benefit-update-mobile updateMobileInformationUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update account information
@@ -1722,6 +1778,7 @@ export def "hid-benefit-update-profile updateAccountInformationUsingPOST-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --address: string
   --dayOfBirth: string
@@ -1753,7 +1810,7 @@ export def "hid-benefit-update-profile updateAccountInformationUsingPOST-by-" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update health id status .
@@ -1768,6 +1825,7 @@ export def "hid-benefit-update-status updateStatusUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthIdNumber: string
 ]: any -> any {
@@ -1781,7 +1839,7 @@ export def "hid-benefit-update-status updateStatusUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Aadhaar OTP on registrered mobile number to create Health ID.
@@ -1796,6 +1854,7 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verifyAadharO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --email: string
   --firstName: string
@@ -1819,7 +1878,7 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verifyAadharO
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Health ID using pre-verified Aadhaar & Mobile.
@@ -1834,6 +1893,7 @@ export def "registration-aadhaar-create-health-id-with-pre-verified createAadhaa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --email: string
   --firstName: string
@@ -1854,7 +1914,7 @@ export def "registration-aadhaar-create-health-id-with-pre-verified createAadhaa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Mobile OTP for verification.
@@ -1869,6 +1929,7 @@ export def "registration-aadhaar-generate-mobile-otp generateMobileOTPForTxnUsin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --mobile: string
   --txnId: string
@@ -1883,7 +1944,7 @@ export def "registration-aadhaar-generate-mobile-otp generateMobileOTPForTxnUsin
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Aadhaar OTP on registrered mobile number
@@ -1898,6 +1959,7 @@ export def "registration-aadhaar-generate-otp generateAadharOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
 ]: any -> any {
@@ -1911,7 +1973,7 @@ export def "registration-aadhaar-generate-otp generateAadharOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend Aadhaar OTP on registrered mobile number to create Health ID.
@@ -1926,6 +1988,7 @@ export def "registration-aadhaar-resend-aadhaar-otp resendAadharOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   txnId: string
 ]: any -> any {
@@ -1939,7 +2002,7 @@ export def "registration-aadhaar-resend-aadhaar-otp resendAadharOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search health id number using aadhar.
@@ -1954,6 +2017,7 @@ export def "registration-aadhaar-search-aadhar post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
 ]: any -> any {
@@ -1967,7 +2031,7 @@ export def "registration-aadhaar-search-aadhar post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Aadhaar using biometrics.
@@ -1982,6 +2046,7 @@ export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --aadhaar: string
   --bioType: string
@@ -1998,7 +2063,7 @@ export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Mobile OTP in an existing transaction.
@@ -2013,6 +2078,7 @@ export def "registration-aadhaar-verify-mobile-otp verifyMobileOTPForTxnUsingPOS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --otp: string
   --txnId: string
@@ -2027,7 +2093,7 @@ export def "registration-aadhaar-verify-mobile-otp verifyMobileOTPForTxnUsingPOS
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Aadhaar OTP and continue for mobile verification.
@@ -2042,6 +2108,7 @@ export def "registration-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --otp: string
   --restrictions: string
@@ -2057,7 +2124,7 @@ export def "registration-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Health ID with verified mobile token
@@ -2072,6 +2139,7 @@ export def "registration-mobile-create-health-id verifyUserViaMobileUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --address: string
   --dayOfBirth: string
@@ -2107,7 +2175,7 @@ export def "registration-mobile-create-health-id verifyUserViaMobileUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Mobile OTP to start registration
@@ -2122,6 +2190,7 @@ export def "registration-mobile-generate-otp generateMobileOTPUsingPOST-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --mobile: string
 ]: any -> any {
@@ -2135,7 +2204,7 @@ export def "registration-mobile-generate-otp generateMobileOTPUsingPOST-by-" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend Mobile OTP for Health ID registration
@@ -2150,6 +2219,7 @@ export def "registration-mobile-resend-otp resentOtpUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   txnId: string
 ]: any -> any {
@@ -2163,7 +2233,7 @@ export def "registration-mobile-resend-otp resentOtpUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify Mobile OTP sent as part of registration transaction.
@@ -2178,6 +2248,7 @@ export def "registration-mobile-verify-otp verifyMobileOTPUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --otp: string
   --txnId: string
@@ -2192,7 +2263,7 @@ export def "registration-mobile-verify-otp verifyMobileOTPUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search a user by Health IDs.
@@ -2207,6 +2278,7 @@ export def "search-exists-by-health-id searchUserByUseridUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthId: string
 ]: any -> any {
@@ -2220,7 +2292,7 @@ export def "search-exists-by-health-id searchUserByUseridUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search a user by Health ID Number.
@@ -2235,6 +2307,7 @@ export def "search-search-by-health-id searchUserByAccountUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --healthId: string
 ]: any -> any {
@@ -2248,7 +2321,7 @@ export def "search-search-by-health-id searchUserByAccountUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search users with a mobile number.
@@ -2263,6 +2336,7 @@ export def "search-search-by-mobile searchUserByMobileUsingPOST" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept-Language: string
   --gender: string
   --mobile: string
@@ -2279,5 +2353,5 @@ export def "search-search-by-mobile searchUserByMobileUsingPOST" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

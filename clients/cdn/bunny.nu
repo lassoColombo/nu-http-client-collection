@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def Order-completer [] { ["Ascending" "Descending"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "country GetCountryList" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,13 +105,14 @@ export def "country GetCountryList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Name: string, IsoCode: string, IsEU: bool, TaxRate: float, TaxPrefix: string, FlagUrl: string, PopList: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/country")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List DNS Zones
@@ -125,6 +127,7 @@ export def "dnszone Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1
   --perPage: int # format: int32, default: 1000
   --search: string # The search term that will be used to filter the results (nullable)
@@ -135,7 +138,7 @@ export def "dnszone Index" [
   let full_url = (build-url $base "/dnszone" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add DNS Zone
@@ -151,6 +154,7 @@ export def "dnszone Add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Domain: string # The domain that will be added.
   --Records: list # Optional array of DNS records to add when creating the zone. (nullable) — item shape: {Type?: any, Ttl?: int, Value?: string, Name?: string, Weight?: int, Priority?: int, Flags?: int, Tag?: string, Port?: int, PullZoneId?: int, ScriptId?: int, Accelerated?: bool, MonitorType?: any, GeolocationLatitude?: float, GeolocationLongitude?: float, LatencyZone?: string, SmartRoutingType?: any, Disabled?: bool, EnviromentalVariables?: list, Comment?: string, AutoSslIssuance?: bool}
 ]: any -> any {
@@ -162,7 +166,7 @@ export def "dnszone Add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get DNS Zone
@@ -178,13 +182,14 @@ export def "dnszone Index2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Id: int, Domain: string, Records: table<Id: int, Type: int, Ttl: int, Value: string, Name: string, Weight: int, Priority: int, Port: int, Flags: int, Tag: string, Accelerated: bool, AcceleratedPullZoneId: int, LinkName: string, IPGeoLocationInfo: any, GeolocationInfo: any, MonitorStatus: int, MonitorType: int, GeolocationLatitude: float, GeolocationLongitude: float, EnviromentalVariables: list, LatencyZone: string, SmartRoutingType: int, Disabled: bool, Comment: string, AutoSslIssuance: bool, AccelerationStatus: int>, DateModified: string, DateCreated: string, NameserversDetected: bool, CustomNameserversEnabled: bool, Nameserver1: string, Nameserver2: string, SoaEmail: string, NameserversNextCheck: string, LoggingEnabled: bool, LoggingIPAnonymizationEnabled: bool, LogAnonymizationType: any, DnsSecEnabled: bool, CertificateKeyType: any> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update DNS Zones
@@ -200,6 +205,7 @@ export def "dnszone Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CustomNameserversEnabled: oneof<nothing, bool> # nullable
   --Nameserver1: string # nullable
   --Nameserver2: string # nullable
@@ -217,7 +223,7 @@ export def "dnszone Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete DNS Zone
@@ -233,13 +239,14 @@ export def "dnszone Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /dnszone/{id}/export
@@ -254,13 +261,14 @@ export def "dnszone-export Export" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($id)/export")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check the DNS zone availability
@@ -275,6 +283,7 @@ export def "dnszone-checkavailability CheckAvailability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Determines the name of the zone that we are checking (nullable)
 ]: any -> any {
   let input = $in
@@ -285,7 +294,7 @@ export def "dnszone-checkavailability CheckAvailability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add DNS Record
@@ -302,6 +311,7 @@ export def "dnszone-records AddRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Type: any # nullable
   --Ttl: int # nullable, format: int32
   --Value: string # nullable
@@ -332,7 +342,7 @@ export def "dnszone-records AddRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update DNS Record
@@ -350,6 +360,7 @@ export def "dnszone-records UpdateRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Type: any # nullable
   --Ttl: int # nullable, format: int32
   --Value: string # nullable
@@ -381,7 +392,7 @@ export def "dnszone-records UpdateRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete DNS Record
@@ -398,13 +409,14 @@ export def "dnszone-records DeleteRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($zoneId)/records/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import DNS Records
@@ -420,13 +432,14 @@ export def "dnszone-import Import" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<RecordsSuccessful: int, RecordsFailed: int, RecordsSkipped: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($zoneId)/import")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issue new wildcard certificate
@@ -442,6 +455,7 @@ export def "dnszone-certificate-issue IssueWildcardCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Domain: string # nullable
 ]: any -> any {
   let input = $in
@@ -452,7 +466,7 @@ export def "dnszone-certificate-issue IssueWildcardCertificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Pull Zones
@@ -467,6 +481,7 @@ export def "pullzone IndexAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. When set to 0 (default), all items are returned as a plain array. When set to a value greater than 0, items are returned in a paginated response object. (format: int32, default: 0)
   --perPage: int # format: int32, default: 1000
   --search: string # The search term that will be used to filter the results (nullable)
@@ -478,7 +493,7 @@ export def "pullzone IndexAll" [
   let full_url = (build-url $base "/pullzone" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Pull Zone
@@ -495,6 +510,7 @@ export def "pullzone Add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --OriginUrl: string # Sets the origin URL of the Pull Zone (nullable)
   --AllowedReferrers: list # Sets the list of referrer hostnames that are allowed to access the pull zone. Requests containing the header Referer: hostname that is not on the list will be rejected. If empty, all the referrers are allowed (nullable)
   --BlockedReferrers: list # Sets the list of referrer hostnames that are blocked from accessing the pull zone. (nullable)
@@ -649,7 +665,7 @@ export def "pullzone Add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Count Pull Zones
@@ -664,13 +680,14 @@ export def "pullzone-count Count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Count: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pullzone/count")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pull Zone
@@ -686,6 +703,7 @@ export def "pullzone Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCertificate: oneof<nothing, bool> # Determines if the result hostnames should contain the SSL certificate (default: false)
 ]: nothing -> record<Id: int, Name: string, OriginUrl: string, Enabled: bool, Suspended: bool, Hostnames: table<Id: int, Value: string, ForceSSL: bool, IsSystemHostname: bool, IsManagedHostname: bool, HasCertificate: bool, Certificate: string, CertificateKey: string, CertificateKeyType: any, CertificateProvisionType: any>, StorageZoneId: int, EdgeScriptId: int, EdgeScriptExecutionPhase: any, MiddlewareScriptId: int, MagicContainersAppId: string, MagicContainersEndpointId: string, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockedIps: list<string>, EnableGeoZoneUS: bool, EnableGeoZoneEU: bool, EnableGeoZoneASIA: bool, EnableGeoZoneSA: bool, EnableGeoZoneAF: bool, ZoneSecurityEnabled: bool, ZoneSecurityKey: string, ZoneSecurityIncludeHashRemoteIP: bool, IgnoreQueryStrings: bool, MonthlyBandwidthLimit: int, MonthlyBandwidthUsed: int, MonthlyCharges: float, AddHostHeader: bool, OriginHostHeader: string, Type: any, AccessControlOriginHeaderExtensions: list<string>, EnableAccessControlOriginHeader: bool, DisableCookies: bool, BudgetRedirectedCountries: list<string>, BlockedCountries: list<string>, EnableOriginShield: bool, CacheControlMaxAgeOverride: int, CacheControlPublicMaxAgeOverride: int, BurstSize: int, RequestLimit: int, BlockRootPathAccess: bool, BlockPostRequests: bool, LimitRatePerSecond: float, LimitRateAfter: float, ConnectionLimitPerIPCount: int, PriceOverride: float, OptimizerPricing: float, AddCanonicalHeader: bool, EnableLogging: bool, EnableCacheSlice: bool, EnableSmartCache: bool, EdgeRules: table<Guid: string, ActionType: any, ActionParameter1: string, ActionParameter2: string, ActionParameter3: string, Triggers: list, ExtraActions: list, TriggerMatchingType: any, Description: string, Enabled: bool, OrderIndex: int, ReadOnly: bool>, EnableWebPVary: bool, EnableAvifVary: bool, EnableCountryCodeVary: bool, EnableCountryStateCodeVary: bool, EnableMobileVary: bool, EnableCookieVary: bool, CookieVaryParameters: list<string>, EnableHostnameVary: bool, CnameDomain: string, AWSSigningEnabled: bool, AWSSigningKey: string, AWSSigningSecret: string, AWSSigningRegionName: string, LoggingIPAnonymizationEnabled: bool, EnableTLS1: bool, EnableTLS1_1: bool, VerifyOriginSSL: bool, ErrorPageEnableCustomCode: bool, ErrorPageCustomCode: string, ErrorPageEnableStatuspageWidget: bool, ErrorPageStatuspageCode: string, ErrorPageWhitelabel: bool, OriginShieldZoneCode: string, LogForwardingEnabled: bool, LogForwardingHostname: string, LogForwardingPort: int, LogForwardingToken: string, LogForwardingProtocol: any, LoggingSaveToStorage: bool, LoggingStorageZoneId: int, FollowRedirects: bool, VideoLibraryId: int, DnsRecordId: int, DnsZoneId: int, DnsRecordValue: string, OptimizerEnabled: bool, OptimizerTunnelEnabled: bool, OptimizerDesktopMaxWidth: int, OptimizerMobileMaxWidth: int, OptimizerImageQuality: int, OptimizerMobileImageQuality: int, OptimizerEnableWebP: bool, OptimizerPrerenderHtml: bool, OptimizerEnableManipulationEngine: bool, OptimizerMinifyCSS: bool, OptimizerMinifyJavaScript: bool, OptimizerWatermarkEnabled: bool, OptimizerWatermarkUrl: string, OptimizerWatermarkPosition: any, OptimizerWatermarkOffset: float, OptimizerWatermarkMinImageSize: int, OptimizerAutomaticOptimizationEnabled: bool, PermaCacheStorageZoneId: int, PermaCacheType: any, OriginRetries: int, OriginConnectTimeout: int, OriginResponseTimeout: int, UseStaleWhileUpdating: bool, UseStaleWhileOffline: bool, OriginRetry5XXResponses: bool, OriginRetryConnectionTimeout: bool, OriginRetryResponseTimeout: bool, OriginRetryDelay: int, QueryStringVaryParameters: list<string>, OriginShieldEnableConcurrencyLimit: bool, OriginShieldMaxConcurrentRequests: int, EnableSafeHop: bool, CacheErrorResponses: bool, OriginShieldQueueMaxWaitTime: int, OriginShieldMaxQueuedRequests: int, OptimizerClasses: table<Name: string, Properties: record>, OptimizerForceClasses: bool, OptimizerStaticHtmlEnabled: bool, OptimizerStaticHtmlWordPressPath: string, OptimizerStaticHtmlWordPressBypassCookie: string, UseBackgroundUpdate: bool, EnableAutoSSL: bool, EnableQueryStringOrdering: bool, LogAnonymizationType: any, LogFormat: int, LogForwardingFormat: int, ShieldDDosProtectionType: int, ShieldDDosProtectionEnabled: bool, OriginType: any, EnableRequestCoalescing: bool, RequestCoalescingTimeout: int, OriginLinkValue: string, DisableLetsEncrypt: bool, EnableBunnyImageAi: bool, BunnyAiImageBlueprints: table<Name: string, Properties: record>, PreloadingScreenEnabled: bool, PreloadingScreenShowOnFirstVisit: bool, PreloadingScreenCode: string, PreloadingScreenLogoUrl: string, PreloadingScreenCodeEnabled: bool, PreloadingScreenTheme: any, PreloadingScreenDelay: int, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, RoutingFilters: list<string>, BlockNoneReferrer: bool, StickySessionType: any, StickySessionCookieName: string, StickySessionClientHeaders: string, UserId: string, CacheVersion: int, OptimizerEnableUpscaling: bool, EnableWebSockets: bool, MaxWebSocketConnections: int, EnableExtendedLogging: bool, CacheKeyHeaders: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -694,7 +712,7 @@ export def "pullzone Index" [
   let full_url = (build-url $base $"/pullzone/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Pull Zone
@@ -712,6 +730,7 @@ export def "pullzone UpdatePullZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --OriginUrl: string # Sets the origin URL of the Pull Zone (nullable)
   --AllowedReferrers: list # Sets the list of referrer hostnames that are allowed to access the pull zone. Requests containing the header Referer: hostname that is not on the list will be rejected. If empty, all the referrers are allowed (nullable)
   --BlockedReferrers: list # Sets the list of referrer hostnames that are blocked from accessing the pull zone. (nullable)
@@ -865,7 +884,7 @@ export def "pullzone UpdatePullZone" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Pull Zone
@@ -881,13 +900,14 @@ export def "pullzone Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pullzone/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Edge Rule
@@ -904,13 +924,14 @@ export def "pullzone-edgerules DeleteEdgeRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pullzone/($pullZoneId)/edgerules/($edgeRuleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add/Update Edge Rule
@@ -928,6 +949,7 @@ export def "pullzone-edgerules-add-or-update AddEdgeRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Guid: string # The unique GUID of the edge rule (nullable)
   --ActionType: any # The action type of the edge rule. ForceSSL = 0, Redirect = 1, OriginUrl = 2, OverrideCacheTime = 3, BlockRequest = 4, SetResponseHeader = 5, SetRequestHeader = 6, ForceDownload = 7, DisableTokenAuthentication = 8, EnableTokenAuthentication = 9, OverrideCacheTimePublic = 10, IgnoreQueryString = 11, DisableOptimizer = 12, ForceCompression = 13, SetStatusCode = 14, BypassPermaCache = 15, OverrideBrowserCacheTime = 16
   --ActionParameter1: string # The Action parameter 1. The value depends on other parameters of the edge rule. (nullable)
@@ -949,7 +971,7 @@ export def "pullzone-edgerules-add-or-update AddEdgeRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set Edge Rule Enabled
@@ -966,6 +988,7 @@ export def "pullzone-edgerules-set-edge-rule-enabled SetEdgeRuleEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: int # format: int64
   --Value: oneof<nothing, bool>
 ]: any -> any {
@@ -977,7 +1000,7 @@ export def "pullzone-edgerules-set-edge-rule-enabled SetEdgeRuleEnabled" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change hostname private key type
@@ -993,6 +1016,7 @@ export def "pullzone-update-private-key-type UpdatePrivateKeyType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string
   KeyType: int@KeyType-completer # 0 = Ecdsa 1 = Rsa
 ]: any -> any {
@@ -1004,7 +1028,7 @@ export def "pullzone-update-private-key-type UpdatePrivateKeyType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Load Free Certificate
@@ -1019,6 +1043,7 @@ export def "pullzone-load-free-certificate LoadFreeCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hostname: string # The hostname that the certificate will be loaded for (nullable)
   --useOnlyHttp01: oneof<nothing, bool> # If false and a Bunny DNS Zone exists for the domain, DNS01 validation we be attempted. This has no effect on wildcard domains, as this can only use DNS01 (default: true)
 ]: nothing -> any {
@@ -1028,7 +1053,7 @@ export def "pullzone-load-free-certificate LoadFreeCertificate" [
   let full_url = (build-url $base "/pullzone/loadFreeCertificate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request External DNS Certificate
@@ -1043,6 +1068,7 @@ export def "pullzone-request-external-dns-certificate RequestExternalDnsCertific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string
 ]: any -> any {
   let input = $in
@@ -1053,7 +1079,7 @@ export def "pullzone-request-external-dns-certificate RequestExternalDnsCertific
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete External DNS Certificate
@@ -1068,6 +1094,7 @@ export def "pullzone-complete-external-dns-certificate CompleteExternalDnsCertif
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string
 ]: any -> any {
   let input = $in
@@ -1078,7 +1105,7 @@ export def "pullzone-complete-external-dns-certificate CompleteExternalDnsCertif
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge Cache
@@ -1094,6 +1121,7 @@ export def "pullzone-purge-cache PurgeCachePostByTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CacheTag: string # nullable
 ]: any -> any {
   let input = $in
@@ -1104,7 +1132,7 @@ export def "pullzone-purge-cache PurgeCachePostByTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check the pull zone availability
@@ -1119,6 +1147,7 @@ export def "pullzone-checkavailability CheckAvailability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Determines the name of the zone that we are checking (nullable)
 ]: any -> any {
   let input = $in
@@ -1129,7 +1158,7 @@ export def "pullzone-checkavailability CheckAvailability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Custom Certificate
@@ -1145,6 +1174,7 @@ export def "pullzone-add-certificate AddCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname to which the hostname will be added
   Certificate: string # The Base64 encoded binary data of the certificate file
   CertificateKey: string # The Base64 encoded binary data of the certificate key file
@@ -1157,7 +1187,7 @@ export def "pullzone-add-certificate AddCertificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Certificate
@@ -1173,6 +1203,7 @@ export def "pullzone-remove-certificate RemoveCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname from which the certificate will be removed
 ]: any -> any {
   let input = $in
@@ -1183,7 +1214,7 @@ export def "pullzone-remove-certificate RemoveCertificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Custom Hostname
@@ -1199,6 +1230,7 @@ export def "pullzone-add-hostname AddHostname" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be added
 ]: any -> any {
   let input = $in
@@ -1209,7 +1241,7 @@ export def "pullzone-add-hostname AddHostname" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Custom Hostname
@@ -1225,6 +1257,7 @@ export def "pullzone-remove-hostname RemoveHostname" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be removed
 ]: any -> any {
   let input = $in
@@ -1235,7 +1268,7 @@ export def "pullzone-remove-hostname RemoveHostname" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set Force SSL
@@ -1251,6 +1284,7 @@ export def "pullzone-set-force-ssl SetForceSSL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be updated
   --ForceSSL: oneof<nothing, bool> # Set to true to force SSL on the given pull zone hostname
 ]: any -> any {
@@ -1262,7 +1296,7 @@ export def "pullzone-set-force-ssl SetForceSSL" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset Token Key
@@ -1278,6 +1312,7 @@ export def "pullzone-reset-security-key ResetSecurityKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SecurityKey: string # nullable
 ]: any -> any {
   let input = $in
@@ -1288,7 +1323,7 @@ export def "pullzone-reset-security-key ResetSecurityKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Allowed Referer
@@ -1304,6 +1339,7 @@ export def "pullzone-add-allowed-referrer AddAllowedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be added as an allowed referer
 ]: any -> any {
   let input = $in
@@ -1314,7 +1350,7 @@ export def "pullzone-add-allowed-referrer AddAllowedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Allowed Referer
@@ -1330,6 +1366,7 @@ export def "pullzone-remove-allowed-referrer RemoveAllowedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be removed as an allowed referer
 ]: any -> any {
   let input = $in
@@ -1340,7 +1377,7 @@ export def "pullzone-remove-allowed-referrer RemoveAllowedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Blocked Referer
@@ -1356,6 +1393,7 @@ export def "pullzone-add-blocked-referrer AddBlockedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be added as a blocked referer
 ]: any -> any {
   let input = $in
@@ -1366,7 +1404,7 @@ export def "pullzone-add-blocked-referrer AddBlockedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Blocked Referer
@@ -1382,6 +1420,7 @@ export def "pullzone-remove-blocked-referrer RemoveBlockedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be removed as an allowed referer
 ]: any -> any {
   let input = $in
@@ -1392,7 +1431,7 @@ export def "pullzone-remove-blocked-referrer RemoveBlockedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Blocked IP
@@ -1408,6 +1447,7 @@ export def "pullzone-add-blocked-ip AddBlockedIp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   BlockedIp: string # The IP that will be blocked from accessing the pull zone
 ]: any -> any {
   let input = $in
@@ -1418,7 +1458,7 @@ export def "pullzone-add-blocked-ip AddBlockedIp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Blocked IP
@@ -1434,6 +1474,7 @@ export def "pullzone-remove-blocked-ip RemoveBlockedIp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   BlockedIp: string # The IP that will be removed fromt he block list
 ]: any -> any {
   let input = $in
@@ -1444,7 +1485,7 @@ export def "pullzone-remove-blocked-ip RemoveBlockedIp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge URL
@@ -1459,6 +1500,7 @@ export def "purge IndexPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The URL that will be purged from cache. (nullable)
   --async: oneof<nothing, bool> # (Optional) Determines if the call should wait for the purge logic to complete (default: false)
   --exactPath: oneof<nothing, bool> # (Optional) When true and the URL ends with '/', purges only the exact path without adding a wildcard suffix. Only applies when the pull zone has IgnoreQueryStrings disabled. (default: false)
@@ -1469,7 +1511,7 @@ export def "purge IndexPost" [
   let full_url = (build-url $base "/purge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Region list
@@ -1484,13 +1526,14 @@ export def "region Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Id: int, Name: string, PricePerGigabyte: float, RegionCode: string, ContinentCode: string, CountryCode: string, Latitude: float, Longitude: float, AllowLatencyRouting: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/region")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Storage Zones
@@ -1505,6 +1548,7 @@ export def "storagezone IndexAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number to return. When set to 0 (default), all items are returned as a plain array. When set to a value greater than 0, items are returned in a paginated response object. (format: int32, default: 0)
   --perPage: int # format: int32, default: 1000
   --includeDeleted: oneof<nothing, bool> # default: false
@@ -1516,7 +1560,7 @@ export def "storagezone IndexAll" [
   let full_url = (build-url $base "/storagezone" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Storage Zone
@@ -1531,6 +1575,7 @@ export def "storagezone Add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # The name of the storage zone
   Region: string # The code of the main storage zone region (Possible values: DE, NY, LA, SG)
   --ReplicationRegions: list # The code of the main storage zone region (Possible values: DE, NY, LA, SG, SYD) (nullable)
@@ -1545,7 +1590,7 @@ export def "storagezone Add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check the storage zone availability
@@ -1560,6 +1605,7 @@ export def "storagezone-checkavailability CheckAvailability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Determines the name of the zone that we are checking (nullable)
 ]: any -> any {
   let input = $in
@@ -1570,7 +1616,7 @@ export def "storagezone-checkavailability CheckAvailability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Storage Zone
@@ -1586,13 +1632,14 @@ export def "storagezone Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Id: int, UserId: string, Name: string, Password: string, DateModified: string, Deleted: bool, StorageUsed: int, FilesStored: int, Region: string, ReplicationRegions: list<string>, PullZones: table<Id: int, Name: string, OriginUrl: string, Enabled: bool, Suspended: bool, Hostnames: list, StorageZoneId: int, EdgeScriptId: int, EdgeScriptExecutionPhase: any, MiddlewareScriptId: int, MagicContainersAppId: string, MagicContainersEndpointId: string, AllowedReferrers: list, BlockedReferrers: list, BlockedIps: list, EnableGeoZoneUS: bool, EnableGeoZoneEU: bool, EnableGeoZoneASIA: bool, EnableGeoZoneSA: bool, EnableGeoZoneAF: bool, ZoneSecurityEnabled: bool, ZoneSecurityKey: string, ZoneSecurityIncludeHashRemoteIP: bool, IgnoreQueryStrings: bool, MonthlyBandwidthLimit: int, MonthlyBandwidthUsed: int, MonthlyCharges: float, AddHostHeader: bool, OriginHostHeader: string, Type: any, AccessControlOriginHeaderExtensions: list, EnableAccessControlOriginHeader: bool, DisableCookies: bool, BudgetRedirectedCountries: list, BlockedCountries: list, EnableOriginShield: bool, CacheControlMaxAgeOverride: int, CacheControlPublicMaxAgeOverride: int, BurstSize: int, RequestLimit: int, BlockRootPathAccess: bool, BlockPostRequests: bool, LimitRatePerSecond: float, LimitRateAfter: float, ConnectionLimitPerIPCount: int, PriceOverride: float, OptimizerPricing: float, AddCanonicalHeader: bool, EnableLogging: bool, EnableCacheSlice: bool, EnableSmartCache: bool, EdgeRules: list, EnableWebPVary: bool, EnableAvifVary: bool, EnableCountryCodeVary: bool, EnableCountryStateCodeVary: bool, EnableMobileVary: bool, EnableCookieVary: bool, CookieVaryParameters: list, EnableHostnameVary: bool, CnameDomain: string, AWSSigningEnabled: bool, AWSSigningKey: string, AWSSigningSecret: string, AWSSigningRegionName: string, LoggingIPAnonymizationEnabled: bool, EnableTLS1: bool, EnableTLS1_1: bool, VerifyOriginSSL: bool, ErrorPageEnableCustomCode: bool, ErrorPageCustomCode: string, ErrorPageEnableStatuspageWidget: bool, ErrorPageStatuspageCode: string, ErrorPageWhitelabel: bool, OriginShieldZoneCode: string, LogForwardingEnabled: bool, LogForwardingHostname: string, LogForwardingPort: int, LogForwardingToken: string, LogForwardingProtocol: any, LoggingSaveToStorage: bool, LoggingStorageZoneId: int, FollowRedirects: bool, VideoLibraryId: int, DnsRecordId: int, DnsZoneId: int, DnsRecordValue: string, OptimizerEnabled: bool, OptimizerTunnelEnabled: bool, OptimizerDesktopMaxWidth: int, OptimizerMobileMaxWidth: int, OptimizerImageQuality: int, OptimizerMobileImageQuality: int, OptimizerEnableWebP: bool, OptimizerPrerenderHtml: bool, OptimizerEnableManipulationEngine: bool, OptimizerMinifyCSS: bool, OptimizerMinifyJavaScript: bool, OptimizerWatermarkEnabled: bool, OptimizerWatermarkUrl: string, OptimizerWatermarkPosition: any, OptimizerWatermarkOffset: float, OptimizerWatermarkMinImageSize: int, OptimizerAutomaticOptimizationEnabled: bool, PermaCacheStorageZoneId: int, PermaCacheType: any, OriginRetries: int, OriginConnectTimeout: int, OriginResponseTimeout: int, UseStaleWhileUpdating: bool, UseStaleWhileOffline: bool, OriginRetry5XXResponses: bool, OriginRetryConnectionTimeout: bool, OriginRetryResponseTimeout: bool, OriginRetryDelay: int, QueryStringVaryParameters: list, OriginShieldEnableConcurrencyLimit: bool, OriginShieldMaxConcurrentRequests: int, EnableSafeHop: bool, CacheErrorResponses: bool, OriginShieldQueueMaxWaitTime: int, OriginShieldMaxQueuedRequests: int, OptimizerClasses: list, OptimizerForceClasses: bool, OptimizerStaticHtmlEnabled: bool, OptimizerStaticHtmlWordPressPath: string, OptimizerStaticHtmlWordPressBypassCookie: string, UseBackgroundUpdate: bool, EnableAutoSSL: bool, EnableQueryStringOrdering: bool, LogAnonymizationType: any, LogFormat: int, LogForwardingFormat: int, ShieldDDosProtectionType: int, ShieldDDosProtectionEnabled: bool, OriginType: any, EnableRequestCoalescing: bool, RequestCoalescingTimeout: int, OriginLinkValue: string, DisableLetsEncrypt: bool, EnableBunnyImageAi: bool, BunnyAiImageBlueprints: list, PreloadingScreenEnabled: bool, PreloadingScreenShowOnFirstVisit: bool, PreloadingScreenCode: string, PreloadingScreenLogoUrl: string, PreloadingScreenCodeEnabled: bool, PreloadingScreenTheme: any, PreloadingScreenDelay: int, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, RoutingFilters: list, BlockNoneReferrer: bool, StickySessionType: any, StickySessionCookieName: string, StickySessionClientHeaders: string, UserId: string, CacheVersion: int, OptimizerEnableUpscaling: bool, EnableWebSockets: bool, MaxWebSocketConnections: int, EnableExtendedLogging: bool, CacheKeyHeaders: string>, ReadOnlyPassword: string, Rewrite404To200: bool, Custom404FilePath: string, StorageHostname: string, ZoneTier: any, ReplicationChangeInProgress: bool, PriceOverride: float, Discount: int, StorageZoneType: any> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storagezone/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Storage Zone
@@ -1608,6 +1655,7 @@ export def "storagezone Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ReplicationZones: list # The list of replication zones enabld for the storage zone (nullable)
   --OriginUrl: string # The origin URL of the storage zone (nullable)
   --Custom404FilePath: string # The path to the custom file that will be returned in a case of 404 (nullable)
@@ -1621,7 +1669,7 @@ export def "storagezone Update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Storage Zone
@@ -1637,6 +1685,7 @@ export def "storagezone Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteLinkedPullZones: oneof<nothing, bool> # Deletes all pull zones linked to this storage zone (default behavior) (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1645,7 +1694,7 @@ export def "storagezone Delete" [
   let full_url = (build-url $base $"/storagezone/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset Password
@@ -1661,13 +1710,14 @@ export def "storagezone-reset-password ResetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/storagezone/($id)/resetPassword")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset Read-Only Password
@@ -1682,6 +1732,7 @@ export def "storagezone-reset-read-only-password ResetReadOnlyPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # The ID of the storage zone that should have the read-only password reset (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1690,7 +1741,7 @@ export def "storagezone-reset-read-only-password ResetReadOnlyPassword" [
   let full_url = (build-url $base "/storagezone/resetReadOnlyPassword" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Allowed Referer
@@ -1706,6 +1757,7 @@ export def "videolibrary-add-allowed-referrer AddAllowedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be added as an allowed referer
 ]: any -> any {
   let input = $in
@@ -1716,7 +1768,7 @@ export def "videolibrary-add-allowed-referrer AddAllowedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Blocked Referer
@@ -1732,6 +1784,7 @@ export def "videolibrary-add-blocked-referrer AddBlockedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be added as a blocked referer
 ]: any -> any {
   let input = $in
@@ -1742,7 +1795,7 @@ export def "videolibrary-add-blocked-referrer AddBlockedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Video Library
@@ -1757,6 +1810,7 @@ export def "videolibrary AddVideoLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # The name of the Video Library.
   --ReplicationRegions: list # The geo-replication regions of the underlying storage zone (nullable)
   --PlayerVersion: int # (Optional) Sets player version used for this library (nullable, format: int32)
@@ -1785,7 +1839,7 @@ export def "videolibrary AddVideoLibrary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Video Libraries
@@ -1800,6 +1854,7 @@ export def "videolibrary ListVideoLibraries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 0
   --perPage: int # format: int32, default: 1000
   --search: string # The search term that will be used to filter the results (nullable)
@@ -1810,7 +1865,7 @@ export def "videolibrary ListVideoLibraries" [
   let full_url = (build-url $base "/videolibrary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Watermark
@@ -1826,13 +1881,14 @@ export def "videolibrary-watermark AddWatermark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Watermark
@@ -1848,13 +1904,14 @@ export def "videolibrary-watermark DeleteWatermark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Video Library
@@ -1870,13 +1927,14 @@ export def "videolibrary DeleteVideoLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Library
@@ -1892,13 +1950,14 @@ export def "videolibrary GetVideoLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Id: int, Name: string, VideoCount: int, TrafficUsage: int, StorageUsage: int, DateCreated: string, DateModified: string, ReplicationRegions: list<string>, ApiKey: string, ReadOnlyApiKey: string, HasWatermark: bool, WatermarkPositionLeft: int, WatermarkPositionTop: int, WatermarkWidth: int, PullZoneId: int, StorageZoneId: int, WatermarkHeight: int, EnabledResolutions: string, ViAiPublisherId: string, VastTagUrl: string, WebhookUrl: string, CaptionsFontSize: int, CaptionsFontColor: string, CaptionsBackground: string, UILanguage: string, AllowEarlyPlay: bool, PlayerTokenAuthenticationEnabled: bool, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockNoneReferrer: bool, EnableMP4Fallback: bool, KeepOriginalFiles: bool, AllowDirectPlay: bool, EnableDRM: bool, DrmVersion: any, AppleFairPlayDrm: any, GoogleWidevineDrm: any, Bitrate240p: int, Bitrate360p: int, Bitrate480p: int, Bitrate720p: int, Bitrate1080p: int, Bitrate1440p: int, Bitrate2160p: int, ApiAccessKey: string, ShowHeatmap: bool, EnableContentTagging: bool, PullZoneType: any, CustomHTML: string, Controls: string, PlaybackSpeeds: string, PlayerKeyColor: string, FontFamily: string, WatermarkVersion: int, EnableTranscribing: bool, EnableTranscribingTitleGeneration: bool, EnableTranscribingDescriptionGeneration: bool, EnableTranscribingChaptersGeneration: bool, EnableTranscribingMomentsGeneration: bool, TranscribingCaptionLanguages: list<string>, EnableCaptionsInPlaylist: bool, RememberPlayerPosition: bool, EnableMultiAudioTrackSupport: bool, UseSeparateAudioStream: bool, JitEncodingEnabled: bool, EncodingTier: any, OutputCodecs: string, DrmBasePriceOverride: float, DrmCostPerLicenseOverride: float, TranscribingPriceOverride: float, PremiumEncodingPriceOverride: float, MonthlyChargesTranscribing: float, MonthlyChargesPremiumEncoding: float, MonthlyChargesEnterpriseDrm: float, FeatureFlags: string, PlayerVersion: int, RemoveMetadataFromFallbackVideos: bool, ScaleVideoUsingBothDimensions: bool, ExposeOriginals: bool, ExposeVideoMetadata: bool, EnableCompactControls: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Video Library
@@ -1914,6 +1973,7 @@ export def "videolibrary UpdateVideoLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # (Optional) Sets name of the video library (nullable)
   --CustomHTML: string # (Optional) Sets the player custom HTML code (nullable)
   --PlayerKeyColor: string # (Optional) Sets the player key control color (nullable)
@@ -1982,7 +2042,7 @@ export def "videolibrary UpdateVideoLibrary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Languages
@@ -1997,13 +2057,14 @@ export def "videolibrary-languages GetVideoLibraryLanguages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<ShortCode: string, Name: string, SupportPlayerTranslation: bool, SupportTranscribing: bool, TranscribingAccuracy: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/videolibrary/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Allowed Referer
@@ -2019,6 +2080,7 @@ export def "videolibrary-remove-allowed-referrer RemoveAllowedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be removed as an allowed referer
 ]: any -> any {
   let input = $in
@@ -2029,7 +2091,7 @@ export def "videolibrary-remove-allowed-referrer RemoveAllowedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Blocked Referer
@@ -2045,6 +2107,7 @@ export def "videolibrary-remove-blocked-referrer RemoveBlockedReferrer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Hostname: string # The hostname that will be removed as a blocked referer
 ]: any -> any {
   let input = $in
@@ -2055,7 +2118,7 @@ export def "videolibrary-remove-blocked-referrer RemoveBlockedReferrer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset API Key
@@ -2071,13 +2134,14 @@ export def "videolibrary-reset-api-key ResetVideoLibraryApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/resetApiKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset Read Only API Key
@@ -2093,13 +2157,14 @@ export def "videolibrary-reset-read-only-api-key ResetVideoLibraryReadOnlyApiKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/resetReadOnlyApiKey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Library Transcribing Statistics
@@ -2115,6 +2180,7 @@ export def "videolibrary-transcribing-statistics Statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 14 days will be returned (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, current date will be used (nullable, format: date-time)
 ]: nothing -> record<TotalTranscriptionSeconds: int, TranscriptionSecondsChart: record> {
@@ -2124,7 +2190,7 @@ export def "videolibrary-transcribing-statistics Statistics" [
   let full_url = (build-url $base $"/videolibrary/($id)/transcribing/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Live Thumbnail
@@ -2140,13 +2206,14 @@ export def "videolibrary-live-thumbnail AddThumbnail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/live/thumbnail")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Live Thumbnail
@@ -2162,13 +2229,14 @@ export def "videolibrary-live-thumbnail DeleteThumbnail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/live/thumbnail")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Live Watermark
@@ -2184,13 +2252,14 @@ export def "videolibrary-live-watermark AddWatermark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/live/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Live Watermark
@@ -2206,13 +2275,14 @@ export def "videolibrary-live-watermark DeleteWatermark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/videolibrary/($id)/live/watermark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Library DRM Statistics
@@ -2228,6 +2298,7 @@ export def "videolibrary-drm-statistics Statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 14 days will be returned (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, current date will be used (nullable, format: date-time)
 ]: nothing -> record<TotalLicensesIssued: int, LicensesIssuedChart: record> {
@@ -2237,7 +2308,7 @@ export def "videolibrary-drm-statistics Statistics" [
   let full_url = (build-url $base $"/videolibrary/($id)/drm/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close the account
@@ -2252,6 +2323,7 @@ export def "user-closeaccount CloseAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Password: string # nullable
   --Reason: string # nullable
 ]: any -> record<Success: bool, Message: string> {
@@ -2263,7 +2335,7 @@ export def "user-closeaccount CloseAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /user/audit/{date}
@@ -2278,6 +2350,7 @@ export def "user-audit GetUserAuditLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Product: list # nullable
   --ResourceType: list # nullable
   --ResourceId: list # nullable
@@ -2292,7 +2365,7 @@ export def "user-audit GetUserAuditLog" [
   let full_url = (build-url $base $"/user/audit/($date)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Storage Zone Regions
@@ -2307,13 +2380,14 @@ export def "storagezone-regions GetStorageZoneRegions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Id: string, Name: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/storagezone/regions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Storage Zone Statistics
@@ -2329,6 +2403,7 @@ export def "storagezone-statistics StorageZoneStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
 ]: nothing -> record<StorageUsedChart: record, FileCountChart: record> {
@@ -2338,7 +2413,7 @@ export def "storagezone-statistics StorageZoneStatistics" [
   let full_url = (build-url $base $"/storagezone/($id)/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get optimizer statistics
@@ -2354,6 +2429,7 @@ export def "pullzone-optimizer-statistics GetOptimizerStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
@@ -2364,7 +2440,7 @@ export def "pullzone-optimizer-statistics GetOptimizerStatistics" [
   let full_url = (build-url $base $"/pullzone/($pullZoneId)/optimizer/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Origin Shield Queue Statistics
@@ -2380,6 +2456,7 @@ export def "pullzone-originshield-queuestatistics GetOriginShieldConcurrencyStat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
@@ -2390,7 +2467,7 @@ export def "pullzone-originshield-queuestatistics GetOriginShieldConcurrencyStat
   let full_url = (build-url $base $"/pullzone/($pullZoneId)/originshield/queuestatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SafeHop Statistics
@@ -2406,6 +2483,7 @@ export def "pullzone-safehop-statistics GetSafeHopStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
@@ -2416,7 +2494,7 @@ export def "pullzone-safehop-statistics GetSafeHopStatistics" [
   let full_url = (build-url $base $"/pullzone/($pullZoneId)/safehop/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Statistics
@@ -2431,6 +2509,7 @@ export def "statistics GetStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --pullZone: int # (Optional) If set, the statistics will be only returned for the given Pull Zone (format: int64, default: -1)
@@ -2452,7 +2531,7 @@ export def "statistics GetStatistics" [
   let full_url = (build-url $base "/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Global Search
@@ -2467,6 +2546,7 @@ export def "search GlobalSearchEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # nullable
   --qp-from: int # format: int32, default: 0
   --size: int # format: int32, default: 20
@@ -2477,7 +2557,7 @@ export def "search GlobalSearchEndpoint" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get DNS Query Statistics
@@ -2493,6 +2573,7 @@ export def "dnszone-statistics Statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned (nullable, format: date-time)
 ]: nothing -> record<TotalQueriesServed: int, QueriesServedChart: record, NormalQueriesServedChart: record, SmartQueriesServedChart: record, QueriesByTypeChart: record> {
@@ -2502,7 +2583,7 @@ export def "dnszone-statistics Statistics" [
   let full_url = (build-url $base $"/dnszone/($id)/statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable DNSSEC on a DNS Zone
@@ -2518,13 +2599,14 @@ export def "dnszone-dnssec EnableDnsSecDnsZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Enabled: bool, DsRecord: string, Digest: string, DigestType: string, Algorithm: int, PublicKey: string, KeyTag: int, Flags: int, DsConfigured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($id)/dnssec")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable DNSSEC on a DNS Zone
@@ -2540,13 +2622,14 @@ export def "dnszone-dnssec DisableDnsSecDnsZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Enabled: bool, DsRecord: string, Digest: string, DigestType: string, Algorithm: int, PublicKey: string, KeyTag: int, Flags: int, DsConfigured: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($id)/dnssec")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a background scan for pre-existing DNS records. Can use ZoneId for existing zones or Domain for pre-zone creation scenarios.
@@ -2561,6 +2644,7 @@ export def "dnszone-records-scan TriggerScan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ZoneId: int # The ID of the DNS Zone to scan. Either ZoneId or Domain must be provided, but not both. (nullable, format: int64)
   --Domain: string # The domain name to scan. Either ZoneId or Domain must be provided, but not both. Can be used even before creating the DNS zone. (nullable)
 ]: any -> record<JobId: string, Status: int> {
@@ -2572,7 +2656,7 @@ export def "dnszone-records-scan TriggerScan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the latest DNS record scan result for a DNS Zone
@@ -2588,13 +2672,14 @@ export def "dnszone-records-scan GetLatestScan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<JobId: string, ZoneId: int, Domain: string, AccountId: string, Status: int, CreatedAt: string, CompletedAt: string, Records: table<Name: string, Type: any, Ttl: int, Value: string, Priority: int, Weight: int, Port: int, IsProxied: bool>, Error: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dnszone/($zoneId)/records/scan")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Billing Details
@@ -2609,13 +2694,14 @@ export def "billing GetBillingDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Balance: float, ThisMonthCharges: float, LastRechargeBalance: float, BillingRecords: table<Id: int, PaymentId: string, Amount: float, Payer: string, Timestamp: string, Type: any, InvoiceAvailable: bool, DocumentDownloadUrl: string, DetailedDocumentDownloadUrl: string>, BillingHistoryChart: record, MonthlyChargesEUTraffic: float, MonthlyChargesUSTraffic: float, MonthlyChargesASIATraffic: float, MonthlyChargesAFTraffic: float, MonthlyChargesSATraffic: float, MonthlyChargesStorage: float, MonthlyChargesDNS: float, MonthlyChargesOptimizer: float, MonthlyChargesTranscribe: float, MonthlyChargesPremiumEncoding: float, MonthlyChargesExtraPullZones: float, MonthlyChargesExtraStorageZones: float, MonthlyChargesExtraDnsZones: float, MonthlyChargesExtraVideoLibraries: float, MonthlyChargesScripting: float, MonthlyChargesScriptingRequests: float, MonthlyChargesScriptingCpu: float, MonthlyChargesDrm: float, MonthlyChargesMagicContainers: float, MonthlyMcCpu: any, MonthlyMcMemory: any, MonthlyMcIp: any, MonthlyMcIngressTraffic: any, MonthlyMcEgressTraffic: any, MonthlyMcVolumes: any, MonthlyChargesShield: float, MonthlyChargesTaxes: float, MonthlyChargesWebSockets: float, MonthlyChargesDB: float, MonthlyDBWrites: any, MonthlyDBReads: any, MonthlyDBStorage: any, MonthlyDBReplica: any, MonthlyBandwidthUsed: int, MonthlyDnsSmartQueriesServed: int, MonthlyDnsNormalQueriesServed: int, MonthlyTranscriptionMinutes: int, MonthlyPremiumEncodingBillableMinutes: int, MonthlyDRMLicensesIssued: int, MonthlyScriptingRequests: int, MonthlyScriptingCpuTime: int, BillingEnabled: bool, MinimumMonthlyCommit: float, VATRate: float, NextMonthVATRate: float, AutomaticPaymentImageUrl: string, AutomaticPaymentCardType: string, AutomaticPaymentIdentifier: string, AutomaticPaymentAmount: float, AutomaticRechargeTreshold: float, AutomaticRechargeEnabled: bool, AutomaticPaymentFailureCount: int, SavedPaymentMethods: table<Token: string, ImageUrl: string, ExpirationDate: string, LastFour: string, Email: string>, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, OptimizerMonthlyPrice: float, DrmBaseMonthlyPrice: float, DrmCostPerLicense: float> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Payment Request Invoice PDF
@@ -2631,13 +2717,14 @@ export def "billing-payment-request-invoice-pdf DownloadPaymentRequestInvoicePdf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/billing/payment-request-invoice/($id)/pdf")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pending Payment Requests
@@ -2652,13 +2739,14 @@ export def "billing-payment-requests GetPaymentRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Id: int, Amount: float, DateGenerated: string, DateDue: string, Description: string, Paid: bool, DatePaid: string, BillingInvoiceId: int, BillingInvoiceDownloadLink: string, BankTransferReference: string, TaxRate: float, TaxedAmount: float> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing/payment-requests")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Billing Summary Document
@@ -2674,13 +2762,14 @@ export def "billing-summary-pdf GetBillingSummaryPdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/billing/summary/($billingRecordId)/pdf")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Billing Summary
@@ -2695,13 +2784,14 @@ export def "billing-summary GetSummaryEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<PullZoneId: int, MonthlyUsage: float, MonthlyBandwidthUsed: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing/summary")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List API Keys
@@ -2716,6 +2806,7 @@ export def "apikey GetApiKeysByAccountEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 1
   --perPage: int # format: int32, default: 1000
 ]: nothing -> record<Items: table<Id: int, Key: string, Roles: list>, CurrentPage: int, TotalItems: int, HasMoreItems: bool> {
@@ -2725,7 +2816,7 @@ export def "apikey GetApiKeysByAccountEndpoint" [
   let full_url = (build-url $base "/apikey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get affiliate details
@@ -2740,11 +2831,12 @@ export def "billing-affiliate AffiliateDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<AffiliateBalance: float, AffiliateUrl: string, ClaimBonusPercentage: float, MinimumPayoutAmount: float, AffiliateClicksChart: record, AffiliateSignupsChart: record, AffiliateConversionsChart: record> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing/affiliate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

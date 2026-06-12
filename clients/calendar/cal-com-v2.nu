@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -82,7 +83,7 @@ def grant-type-completer [] { ["authorization_code"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-keys-refresh refresh" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +116,7 @@ export def "api-keys-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --apiKeyDaysValid: float # For how many days is managed organization api key valid. Defaults to 30 days. (default: 30, e.g. 60)
   --apiKeyNeverExpires: oneof<nothing, bool> # If true, organization api key never expires. (e.g. true)
@@ -129,7 +131,7 @@ export def "api-keys-refresh refresh" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a booking
@@ -145,6 +147,7 @@ export def "bookings createBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
@@ -176,7 +179,7 @@ export def "bookings createBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all bookings
@@ -191,6 +194,7 @@ export def "bookings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list # Filter bookings by status. If you want to filter by multiple statuses, separate them with a comma. (e.g. ?status=upcoming,past)
   --attendeeEmail: string # Filter bookings by the attendee's email address. (e.g. example@domain.com)
   --attendeeName: string # Filter bookings by the attendee's name. (e.g. John Doe)
@@ -222,7 +226,7 @@ export def "bookings list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a booking by seat UID
@@ -238,6 +242,7 @@ export def "bookings-by-seat get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
@@ -250,7 +255,7 @@ export def "bookings-by-seat get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a booking
@@ -266,6 +271,7 @@ export def "bookings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
@@ -278,7 +284,7 @@ export def "bookings get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the recordings for the booking
@@ -294,6 +300,7 @@ export def "bookings-recordings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, error: record, data: table<id: string, roomName: string, startTs: float, status: string, maxParticipants: float, duration: float, shareToken: string, downloadLink: string, error: string>> {
@@ -304,7 +311,7 @@ export def "bookings-recordings get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Cal Video real time transcript download links for the booking
@@ -320,6 +327,7 @@ export def "bookings-transcripts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: list<string>, error: record> {
@@ -330,7 +338,7 @@ export def "bookings-transcripts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reschedule a booking
@@ -346,6 +354,7 @@ export def "bookings-reschedule rescheduleBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
@@ -366,7 +375,7 @@ export def "bookings-reschedule rescheduleBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a booking
@@ -382,6 +391,7 @@ export def "bookings-cancel cancelBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
@@ -400,7 +410,7 @@ export def "bookings-cancel cancelBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark a booking absence
@@ -417,6 +427,7 @@ export def "bookings-mark-absent markNoShow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --host: oneof<nothing, bool> # Whether the host was absent (e.g. false)
@@ -432,7 +443,7 @@ export def "bookings-mark-absent markNoShow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reassign a booking to auto-selected host
@@ -448,6 +459,7 @@ export def "bookings-reassign reassignBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<status: string, data: record<status: string, data: record>>> {
@@ -458,7 +470,7 @@ export def "bookings-reassign reassignBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reassign a booking to a specific host
@@ -475,6 +487,7 @@ export def "bookings-reassign reassignBookingToUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --reason: string # Reason for reassigning the booking (e.g. Host has to take another call)
@@ -489,7 +502,7 @@ export def "bookings-reassign reassignBookingToUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Confirm a booking
@@ -505,6 +518,7 @@ export def "bookings-confirm confirmBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: any, error: record> {
@@ -515,7 +529,7 @@ export def "bookings-confirm confirmBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Decline a booking
@@ -531,6 +545,7 @@ export def "bookings-decline declineBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --reason: string # Reason for declining a booking that requires a confirmation (e.g. Host has to take another call)
@@ -545,7 +560,7 @@ export def "bookings-decline declineBooking" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get 'Add to Calendar' links for a booking
@@ -561,6 +576,7 @@ export def "bookings-calendar-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: record, data: table<label: string, link: string>> {
@@ -571,7 +587,7 @@ export def "bookings-calendar-links get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get booking references
@@ -587,6 +603,7 @@ export def "bookings-references get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Filter booking references by type (e.g. google_calendar)
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -599,7 +616,7 @@ export def "bookings-references get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Video Meeting Sessions. Only supported for Cal Video
@@ -615,6 +632,7 @@ export def "bookings-conferencing-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: table<id: string, room: string, startTime: float, duration: float, ongoing: bool, maxParticipants: float, participants: list>, error: record> {
@@ -625,7 +643,7 @@ export def "bookings-conferencing-sessions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update booking location for an existing booking
@@ -641,6 +659,7 @@ export def "bookings-location updateBookingLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --location: any # One of the event type locations. If instead of passing one of the location objects as required by schema you are still passing a string please use an object.
@@ -655,7 +674,7 @@ export def "bookings-location updateBookingLocation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all attendees for a booking
@@ -671,6 +690,7 @@ export def "bookings-attendees list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: table<name: string, email: string, displayEmail: string, timeZone: string, language: string, absent: bool, phoneNumber: string, id: float>> {
@@ -681,7 +701,7 @@ export def "bookings-attendees list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an attendee to a booking
@@ -697,6 +717,7 @@ export def "bookings-attendees addAttendee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   name: string # The name of the attendee. (e.g. John Doe)
@@ -715,7 +736,7 @@ export def "bookings-attendees addAttendee" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a specific attendee for a booking
@@ -732,6 +753,7 @@ export def "bookings-attendees get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<name: string, email: string, displayEmail: string, timeZone: string, language: string, absent: bool, phoneNumber: string, id: float>> {
@@ -742,7 +764,7 @@ export def "bookings-attendees get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an attendee from a booking
@@ -759,6 +781,7 @@ export def "bookings-attendees removeAttendee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, bookingId: float, name: string, email: string, timeZone: string>> {
@@ -769,7 +792,7 @@ export def "bookings-attendees removeAttendee" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add guests to an existing booking
@@ -786,6 +809,7 @@ export def "bookings-guests addGuests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-08-13. This header is required as this endpoint does not exist in older API versions.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   guests: list # Array of guests to add to the booking. Maximum 10 guests per request. (e.g. [{email: john.doe@example.com, name: John Doe, timeZone: America/New_York}, {email: jane.smith@example.com, name: Jane Smith}]) — item shape: {email: string, name?: string, timeZone?: string, phoneNumber?: string, language?: "ar"|"ca"|"de"|"es"|"eu"|"he"|"id"|"ja"|"lv"|"pl"|"ro"|"sr"|"th"|"vi"|"az"|"cs"|"el"|"es-419"|"fi"|"hr"|"it"|"km"|"nl"|"pt"|"ru"|"sv"|"tr"|"zh-CN"|"bg"|"da"|"en"|"et"|"fr"|"hu"|"iw"|"ko"|"no"|"pt-BR"|"sk"|"ta"|"uk"|"zh-TW"|"bn"}
@@ -800,7 +824,7 @@ export def "bookings-guests addGuests" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List calendar connections
@@ -815,6 +839,7 @@ export def "calendars-connections listConnections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<connections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -824,7 +849,7 @@ export def "calendars-connections listConnections" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List events for a connection
@@ -840,6 +865,7 @@ export def "calendars-connections-events listConnectionEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start of the date range (ISO 8601 date or date-time) (e.g. 2026-03-01)
   --qp-to: string # End of the date range (ISO 8601 date or date-time) (e.g. 2026-03-31)
   --timeZone: string # IANA time zone for the request (e.g. America/New_York)
@@ -854,7 +880,7 @@ export def "calendars-connections-events listConnectionEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create event on a connection
@@ -871,6 +897,7 @@ export def "calendars-connections-events createConnectionEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarId: string
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   title: string # Title of the calendar event
@@ -890,7 +917,7 @@ export def "calendars-connections-events createConnectionEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get event for a connection
@@ -907,6 +934,7 @@ export def "calendars-connections-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarId: string
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<start: record<time: string, timeZone: string>, end: record<time: string, timeZone: string>, id: string, title: string, description: string, locations: list<any>, attendees: list<record>, status: string, hosts: list<record>, calendarEventOwner: record<email: string, name: string>, source: string>> {
@@ -918,7 +946,7 @@ export def "calendars-connections-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update event for a connection
@@ -938,6 +966,7 @@ export def "calendars-connections-events updateConnectionEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarId: string
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --start: record # Start date and time of the calendar event with timezone information — shape: {time?: string, timeZone?: string}
@@ -958,7 +987,7 @@ export def "calendars-connections-events updateConnectionEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete event for a connection
@@ -975,6 +1004,7 @@ export def "calendars-connections-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --calendarId: string
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> any {
@@ -986,7 +1016,7 @@ export def "calendars-connections-events delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get free/busy for a connection
@@ -1002,6 +1032,7 @@ export def "calendars-connections-freebusy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start of the date range (ISO 8601 date or date-time) (e.g. 2026-03-10)
   --qp-to: string # End of the date range (ISO 8601 date or date-time) (e.g. 2026-03-10)
   --timeZone: string # IANA time zone (e.g. America/New_York)
@@ -1015,7 +1046,7 @@ export def "calendars-connections-freebusy get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting details from calendar
@@ -1032,6 +1063,7 @@ export def "calendars-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<start: record<time: string, timeZone: string>, end: record<time: string, timeZone: string>, id: string, title: string, description: string, locations: list<any>, attendees: list<record>, status: string, hosts: list<record>, calendarEventOwner: record<email: string, name: string>, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1041,7 +1073,7 @@ export def "calendars-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update meeting details in calendar
@@ -1061,6 +1093,7 @@ export def "calendars-events updateCalendarEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --start: record # Start date and time of the calendar event with timezone information — shape: {time?: string, timeZone?: string}
   --end: record # End date and time of the calendar event with timezone information — shape: {time?: string, timeZone?: string}
@@ -1079,7 +1112,7 @@ export def "calendars-events updateCalendarEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a calendar event
@@ -1096,6 +1129,7 @@ export def "calendars-events delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1105,7 +1139,7 @@ export def "calendars-events delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get meeting details from calendar
@@ -1122,6 +1156,7 @@ export def "calendars-event get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<start: record<time: string, timeZone: string>, end: record<time: string, timeZone: string>, id: string, title: string, description: string, locations: list<any>, attendees: list<record>, status: string, hosts: list<record>, calendarEventOwner: record<email: string, name: string>, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1131,7 +1166,7 @@ export def "calendars-event get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update meeting details in calendar
@@ -1151,6 +1186,7 @@ export def "calendars-event updateCalendarEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --start: record # Start date and time of the calendar event with timezone information — shape: {time?: string, timeZone?: string}
   --end: record # End date and time of the calendar event with timezone information — shape: {time?: string, timeZone?: string}
@@ -1169,7 +1205,7 @@ export def "calendars-event updateCalendarEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List calendar events
@@ -1185,6 +1221,7 @@ export def "calendars-events listCalendarEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start of the date range (ISO 8601 date or date-time) (e.g. 2026-03-01)
   --qp-to: string # End of the date range (ISO 8601 date or date-time) (e.g. 2026-03-31)
   --timeZone: string # IANA time zone for the request (e.g. America/New_York)
@@ -1199,7 +1236,7 @@ export def "calendars-events listCalendarEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a calendar event
@@ -1216,6 +1253,7 @@ export def "calendars-events createCalendarEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   title: string # Title of the calendar event
   start: any # Start date and time with time zone
@@ -1233,7 +1271,7 @@ export def "calendars-events createCalendarEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get free/busy times
@@ -1249,6 +1287,7 @@ export def "calendars-freebusy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start of the date range (ISO 8601 date or date-time) (e.g. 2026-03-10)
   --qp-to: string # End of the date range (ISO 8601 date or date-time) (e.g. 2026-03-10)
   --timeZone: string # IANA time zone (e.g. America/New_York)
@@ -1262,7 +1301,7 @@ export def "calendars-freebusy get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save an ICS feed
@@ -1277,6 +1316,7 @@ export def "calendars-ics-feed-save createIcsFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   urls: list # An array of ICS URLs (e.g. [https://cal.com/ics/feed.ics, http://cal.com/ics/feed.ics])
   --readOnly: oneof<nothing, bool> # Whether to allowing writing to the calendar or not (default: true, e.g. false)
@@ -1291,7 +1331,7 @@ export def "calendars-ics-feed-save createIcsFeed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check an ICS feed
@@ -1306,6 +1346,7 @@ export def "calendars-ics-feed-check checkIcsFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1315,7 +1356,7 @@ export def "calendars-ics-feed-check checkIcsFeed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get busy times
@@ -1331,6 +1372,7 @@ export def "calendars-busy-times get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loggedInUsersTz: string # Deprecated: Use timeZone instead. The timezone of the user represented as a string (DEPRECATED, e.g. America/New_York)
   --timeZone: string # The timezone for the busy times query represented as a string (e.g. America/New_York)
   --dateFrom: string # The starting date for the busy times query (e.g. 2023-10-01)
@@ -1347,7 +1389,7 @@ export def "calendars-busy-times get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all calendars
@@ -1362,6 +1404,7 @@ export def "calendars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<connectedCalendars: list<record>, destinationCalendar: record<id: record, integration: string, externalId: string, primaryEmail: string, userId: float, eventTypeId: float, credentialId: float, delegationCredentialId: string, name: string, primary: bool, readOnly: bool, email: string, integrationTitle: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1371,7 +1414,7 @@ export def "calendars get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OAuth connect URL
@@ -1387,6 +1430,7 @@ export def "calendars-connect redirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isDryRun: oneof<nothing, bool>
   --redir: string # Redirect URL after successful calendar authorization.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -1399,7 +1443,7 @@ export def "calendars-connect redirect" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save Google or Outlook calendar credentials
@@ -1415,6 +1459,7 @@ export def "calendars-save save" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string
   --code: string
 ]: nothing -> any {
@@ -1424,7 +1469,7 @@ export def "calendars-save save" [
   let full_url = (build-url $base $"/v2/calendars/($calendar)/save" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save Apple calendar credentials
@@ -1440,6 +1485,7 @@ export def "calendars-credentials syncCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   username: string
   password: string
@@ -1454,7 +1500,7 @@ export def "calendars-credentials syncCredentials" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check a calendar connection
@@ -1470,6 +1516,7 @@ export def "calendars-check check" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1479,7 +1526,7 @@ export def "calendars-check check" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disconnect a calendar
@@ -1495,6 +1542,7 @@ export def "calendars-disconnect post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   id: int # Credential ID of the calendar to delete, as returned by the /calendars endpoint (e.g. 10)
 ]: any -> record<status: string, data: record<id: float, type: string, userId: float, teamId: float, appId: string, invalid: bool>> {
@@ -1508,7 +1556,7 @@ export def "calendars-disconnect post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Connect your conferencing application
@@ -1524,6 +1572,7 @@ export def "conferencing-connect connect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, type: string, userId: float, invalid: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1533,7 +1582,7 @@ export def "conferencing-connect connect" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OAuth conferencing app auth URL
@@ -1549,6 +1598,7 @@ export def "conferencing-oauth-auth-url redirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --returnTo: string
   --onErrorReturnTo: string
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -1561,7 +1611,7 @@ export def "conferencing-oauth-auth-url redirect" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Conferencing app OAuth callback
@@ -1577,6 +1627,7 @@ export def "conferencing-oauth-callback save" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string
   --code: string
 ]: nothing -> any {
@@ -1586,7 +1637,7 @@ export def "conferencing-oauth-callback save" [
   let full_url = (build-url $base $"/v2/conferencing/($app)/oauth/callback" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List your conferencing applications
@@ -1601,6 +1652,7 @@ export def "conferencing listInstalledConferencingApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: table<id: float, type: string, userId: float, invalid: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1610,7 +1662,7 @@ export def "conferencing listInstalledConferencingApps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set your default conferencing application
@@ -1626,6 +1678,7 @@ export def "conferencing-default default" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1635,7 +1688,7 @@ export def "conferencing-default default" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get your default conferencing application
@@ -1650,6 +1703,7 @@ export def "conferencing-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<appSlug: string, appLink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1659,7 +1713,7 @@ export def "conferencing-default get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disconnect your conferencing application
@@ -1675,6 +1729,7 @@ export def "conferencing-disconnect disconnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1684,7 +1739,7 @@ export def "conferencing-disconnect disconnect" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all managed users
@@ -1700,6 +1755,7 @@ export def "oauth-clients-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # The number of items to return (e.g. 10)
   --offset: float # The number of items to skip (e.g. 0)
   --emails: list # Filter managed users by email. If you want to filter by multiple emails, separate them with a comma. (e.g. ?emails=email1@example.com,email2@example.com)
@@ -1713,7 +1769,7 @@ export def "oauth-clients-users list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a managed user
@@ -1729,6 +1785,7 @@ export def "oauth-clients-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
   email: string # e.g. alice@example.com
   name: string # Managed user's name is used in emails (e.g. Alice Smith)
@@ -1750,7 +1807,7 @@ export def "oauth-clients-users createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a managed user
@@ -1767,6 +1824,7 @@ export def "oauth-clients-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: record<id: float, email: string, username: string, name: string, bio: string, timeZone: string, weekStart: string, createdDate: string, timeFormat: float, defaultScheduleId: float, locale: string, avatarUrl: string, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1776,7 +1834,7 @@ export def "oauth-clients-users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a managed user
@@ -1793,6 +1851,7 @@ export def "oauth-clients-users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
   --email: string
   --name: string
@@ -1815,7 +1874,7 @@ export def "oauth-clients-users updateUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a managed user
@@ -1832,6 +1891,7 @@ export def "oauth-clients-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: record<id: float, email: string, username: string, name: string, bio: string, timeZone: string, weekStart: string, createdDate: string, timeFormat: float, defaultScheduleId: float, locale: string, avatarUrl: string, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1841,7 +1901,7 @@ export def "oauth-clients-users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force refresh tokens
@@ -1858,6 +1918,7 @@ export def "oauth-clients-users-force-refresh forceRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: record<accessToken: string, refreshToken: string, accessTokenExpiresAt: float, refreshTokenExpiresAt: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1867,7 +1928,7 @@ export def "oauth-clients-users-force-refresh forceRefresh" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh managed user tokens
@@ -1883,6 +1944,7 @@ export def "oauth-refresh refreshTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key.
   refreshToken: string # Managed user's refresh token.
 ]: any -> record<status: string, data: record<accessToken: string, refreshToken: string, accessTokenExpiresAt: float, refreshTokenExpiresAt: float>> {
@@ -1896,7 +1958,7 @@ export def "oauth-refresh refreshTokens" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a webhook
@@ -1912,6 +1974,7 @@ export def "oauth-clients-webhooks createOAuthClientWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -1930,7 +1993,7 @@ export def "oauth-clients-webhooks createOAuthClientWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks
@@ -1946,6 +2009,7 @@ export def "oauth-clients-webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --take: float # Maximum number of items to return (default: 250, e.g. 25)
   --skip: float # Number of items to skip (default: 0, e.g. 0)
   --x-cal-secret-key: string # OAuth client secret key
@@ -1958,7 +2022,7 @@ export def "oauth-clients-webhooks list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all webhooks
@@ -1974,6 +2038,7 @@ export def "oauth-clients-webhooks delete-by-clientId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1983,7 +2048,7 @@ export def "oauth-clients-webhooks delete-by-clientId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -2000,6 +2065,7 @@ export def "oauth-clients-webhooks updateOAuthClientWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -2018,7 +2084,7 @@ export def "oauth-clients-webhooks updateOAuthClientWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook
@@ -2035,6 +2101,7 @@ export def "oauth-clients-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, oAuthClientId: string, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2044,7 +2111,7 @@ export def "oauth-clients-webhooks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook
@@ -2061,6 +2128,7 @@ export def "oauth-clients-webhooks delete-by-webhookId-clientId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-cal-secret-key: string # OAuth client secret key
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, oAuthClientId: string, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2070,7 +2138,7 @@ export def "oauth-clients-webhooks delete-by-webhookId-clientId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an OAuth client
@@ -2085,6 +2153,7 @@ export def "oauth-clients createOAuthClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --logo: string
   name: string
@@ -2107,7 +2176,7 @@ export def "oauth-clients createOAuthClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all OAuth clients
@@ -2122,6 +2191,7 @@ export def "oauth-clients list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
 ]: nothing -> record<status: string, data: table<id: string, name: string, secret: string, permissions: list, logo: record, redirectUris: list, organizationId: float, createdAt: string, areEmailsEnabled: bool, areDefaultEventTypesEnabled: bool, areCalendarEventsEnabled: bool, bookingRedirectUri: string, bookingCancelRedirectUri: string, bookingRescheduleRedirectUri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2131,7 +2201,7 @@ export def "oauth-clients list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an OAuth client
@@ -2147,6 +2217,7 @@ export def "oauth-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
 ]: nothing -> record<status: string, data: record<id: string, name: string, secret: string, permissions: list<string>, logo: record, redirectUris: list<string>, organizationId: float, createdAt: string, areEmailsEnabled: bool, areDefaultEventTypesEnabled: bool, areCalendarEventsEnabled: bool, bookingRedirectUri: string, bookingCancelRedirectUri: string, bookingRescheduleRedirectUri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2156,7 +2227,7 @@ export def "oauth-clients get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an OAuth client
@@ -2172,6 +2243,7 @@ export def "oauth-clients updateOAuthClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --logo: string
   --name: string
@@ -2193,7 +2265,7 @@ export def "oauth-clients updateOAuthClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an OAuth client
@@ -2209,6 +2281,7 @@ export def "oauth-clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
 ]: nothing -> record<status: string, data: record<id: string, name: string, secret: string, permissions: list<string>, logo: record, redirectUris: list<string>, organizationId: float, createdAt: string, areEmailsEnabled: bool, areDefaultEventTypesEnabled: bool, areCalendarEventsEnabled: bool, bookingRedirectUri: string, bookingCancelRedirectUri: string, bookingRescheduleRedirectUri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2218,7 +2291,7 @@ export def "oauth-clients delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update destination calendars
@@ -2233,6 +2306,7 @@ export def "destination-calendars updateDestinationCalendars" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   integration: string@integration-completer # The calendar service you want to integrate, as returned by the /calendars endpoint (e.g. apple_calendar)
   externalId: string # Unique identifier used to represent the specific calendar, as returned by the /calendars endpoint (e.g. https://caldav.icloud.com/26962146906/calendars/1644422A-1945-4438-BBC0-4F0Q23A57R7S/)
@@ -2248,7 +2322,7 @@ export def "destination-calendars updateDestinationCalendars" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an event type
@@ -2265,6 +2339,7 @@ export def "event-types createEventType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-06-14. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   lengthInMinutes: float # e.g. 60
@@ -2320,7 +2395,7 @@ export def "event-types createEventType" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all event types
@@ -2335,6 +2410,7 @@ export def "event-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # The username of the user to get event types for. If only username provided will get all event types.
   --eventSlug: string # Slug of event type to return. Notably, if eventSlug is provided then username must be provided too, because multiple users can have event with same slug.
   --usernames: string # Get dynamic event type for multiple usernames separated by comma. e.g `usernames=alice,bob`
@@ -2354,7 +2430,7 @@ export def "event-types list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an event type
@@ -2370,6 +2446,7 @@ export def "event-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-06-14. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: any> {
@@ -2380,7 +2457,7 @@ export def "event-types get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an event type
@@ -2398,6 +2475,7 @@ export def "event-types updateEventType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-06-14. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --lengthInMinutes: float # e.g. 60
@@ -2453,7 +2531,7 @@ export def "event-types updateEventType" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an event type
@@ -2469,6 +2547,7 @@ export def "event-types delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-06-14. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, lengthInMinutes: float, title: string, slug: string>> {
@@ -2479,7 +2558,7 @@ export def "event-types delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook
@@ -2495,6 +2574,7 @@ export def "event-types-webhooks createEventTypeWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -2513,7 +2593,7 @@ export def "event-types-webhooks createEventTypeWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks
@@ -2529,6 +2609,7 @@ export def "event-types-webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --take: float # Maximum number of items to return (default: 250, e.g. 25)
   --skip: float # Number of items to skip (default: 0, e.g. 0)
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -2541,7 +2622,7 @@ export def "event-types-webhooks list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all webhooks
@@ -2557,6 +2638,7 @@ export def "event-types-webhooks delete-by-eventTypeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2566,7 +2648,7 @@ export def "event-types-webhooks delete-by-eventTypeId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -2583,6 +2665,7 @@ export def "event-types-webhooks updateEventTypeWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -2601,7 +2684,7 @@ export def "event-types-webhooks updateEventTypeWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook
@@ -2618,6 +2701,7 @@ export def "event-types-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, eventTypeId: float, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2627,7 +2711,7 @@ export def "event-types-webhooks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook
@@ -2644,6 +2728,7 @@ export def "event-types-webhooks delete-by-webhookId-eventTypeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, eventTypeId: float, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2653,7 +2738,7 @@ export def "event-types-webhooks delete-by-webhookId-eventTypeId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a private link for an event type
@@ -2669,6 +2754,7 @@ export def "event-types-private-links createPrivateLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --expiresAt: string # Expiration date for time-based links (format: date-time, e.g. 2024-12-31T23:59:59.000Z)
   --maxUsageCount: float # Maximum number of times the link can be used. If omitted and expiresAt is not provided, defaults to 1 (one time use). (default: 1, e.g. 10)
@@ -2683,7 +2769,7 @@ export def "event-types-private-links createPrivateLink" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all private links for an event type
@@ -2699,6 +2785,7 @@ export def "event-types-private-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2708,7 +2795,7 @@ export def "event-types-private-links get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a private link for an event type
@@ -2725,6 +2812,7 @@ export def "event-types-private-links updatePrivateLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --expiresAt: string # New expiration date for time-based links (format: date-time, e.g. 2024-12-31T23:59:59.000Z)
   --maxUsageCount: float # New maximum number of times the link can be used (e.g. 10)
@@ -2739,7 +2827,7 @@ export def "event-types-private-links updatePrivateLink" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a private link for an event type
@@ -2756,6 +2844,7 @@ export def "event-types-private-links delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<linkId: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2765,7 +2854,7 @@ export def "event-types-private-links delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get my profile
@@ -2780,6 +2869,7 @@ export def "me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, username: string, email: string, name: string, avatarUrl: string, bio: string, timeFormat: float, defaultScheduleId: float, weekStart: string, timeZone: string, organizationId: float, organization: record<isPlatform: bool, id: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2789,7 +2879,7 @@ export def "me get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update my profile
@@ -2804,6 +2894,7 @@ export def "me updateMe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --email: string
   --name: string
@@ -2826,7 +2917,7 @@ export def "me updateMe" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get OAuth2 client
@@ -2842,13 +2933,14 @@ export def "auth-oauth2-clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, data: record<client_id: string, redirect_uris: list<string>, name: string, logo: string, is_trusted: bool, client_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/auth/oauth2/clients/($clientId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange authorization code or refresh token for tokens
@@ -2863,6 +2955,7 @@ export def "auth-oauth2-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # The client identifier (e.g. my-client-id)
   --grant-type: string@grant-type-completer # The grant type — must be 'authorization_code' (e.g. authorization_code)
   --code: string # The authorization code received from the authorize endpoint (e.g. abc123)
@@ -2879,7 +2972,7 @@ export def "auth-oauth2-token token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a schedule
@@ -2896,6 +2989,7 @@ export def "schedules createSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
   name: string # e.g. Catch up hours
@@ -2914,7 +3008,7 @@ export def "schedules createSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all schedules
@@ -2929,6 +3023,7 @@ export def "schedules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record<status: string, data: table<id: float, ownerId: float, name: string, timeZone: string, availability: list, isDefault: bool, overrides: list>, error: record> {
@@ -2939,7 +3034,7 @@ export def "schedules list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default schedule
@@ -2954,6 +3049,7 @@ export def "schedules-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record<status: string, data: record<id: float, ownerId: float, name: string, timeZone: string, availability: list<record>, isDefault: bool, overrides: list<record>>> {
@@ -2964,7 +3060,7 @@ export def "schedules-default get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a schedule
@@ -2980,6 +3076,7 @@ export def "schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record<status: string, data: record<id: float, ownerId: float, name: string, timeZone: string, availability: list<record>, isDefault: bool, overrides: list<record>>, error: record> {
@@ -2990,7 +3087,7 @@ export def "schedules get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a schedule
@@ -3008,6 +3105,7 @@ export def "schedules updateSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
   --name: string # e.g. One-on-one coaching
@@ -3026,7 +3124,7 @@ export def "schedules updateSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a schedule
@@ -3042,6 +3140,7 @@ export def "schedules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --cal-api-version: string # Must be set to 2024-06-11. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record<status: string> {
@@ -3052,7 +3151,7 @@ export def "schedules delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a selected calendar
@@ -3067,6 +3166,7 @@ export def "selected-calendars addSelectedCalendar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   integration: string
   externalId: string
@@ -3083,7 +3183,7 @@ export def "selected-calendars addSelectedCalendar" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a selected calendar
@@ -3098,6 +3198,7 @@ export def "selected-calendars delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integration: string
   --externalId: string
   --credentialId: string
@@ -3112,7 +3213,7 @@ export def "selected-calendars delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available time slots for an event type
@@ -3127,6 +3228,7 @@ export def "slots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookingUidToReschedule: string # The unique identifier of the booking being rescheduled. When provided will ensure that the original booking time appears within the returned available slots when rescheduling. (e.g. abc123def456)
   --start: string #        Time starting from which available slots should be checked.        Must be in UTC timezone as ISO 8601 datestring.        You can pass date without hours which defaults to start of day or specify hours:       2024-08-13 (will have hours 00:00:00 aka at very beginning of the date) or you can specify hours manually like 2024-08-13T09:00:00Z. (e.g. 2050-09-05)
   --end: string #      Time until which available slots should be checked.      Must be in UTC timezone as ISO 8601 datestring.      You can pass date without hours which defaults to end of day or specify hours:     2024-08-20 (will have hours 23:59:59 aka at the very end of the date) or you can specify hours manually like 2024-08-20T18:00:00Z. (e.g. 2050-09-06)
@@ -3149,7 +3251,7 @@ export def "slots get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reserve a slot
@@ -3164,6 +3266,7 @@ export def "slots-reservations reserveSlot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-09-04. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --x-cal-client-id: string # For platform customers - OAuth client ID
@@ -3182,7 +3285,7 @@ export def "slots-reservations reserveSlot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get reserved slot
@@ -3198,6 +3301,7 @@ export def "slots-reservations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-09-04. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record<status: string, data: record<status: string, data: record<status: string, data: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3207,7 +3311,7 @@ export def "slots-reservations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a reserved slot
@@ -3223,6 +3327,7 @@ export def "slots-reservations updateReservedSlot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-09-04. If not set to this value, the endpoint will default to an older version.
   eventTypeId: float # The ID of the event type for which slot should be reserved. (e.g. 1)
   slotStart: string # ISO 8601 datestring in UTC timezone representing available slot. (e.g. 2024-09-04T09:00:00Z)
@@ -3239,7 +3344,7 @@ export def "slots-reservations updateReservedSlot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a reserved slot
@@ -3255,6 +3360,7 @@ export def "slots-reservations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cal-api-version: string # Must be set to 2024-09-04. If not set to this value, the endpoint will default to an older version.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3264,7 +3370,7 @@ export def "slots-reservations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Stripe connect URL
@@ -3279,6 +3385,7 @@ export def "stripe-connect redirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<authUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3288,7 +3395,7 @@ export def "stripe-connect redirect" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save Stripe credentials
@@ -3303,6 +3410,7 @@ export def "stripe-save save" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string
   --code: string
 ]: nothing -> record<url: string> {
@@ -3312,7 +3420,7 @@ export def "stripe-save save" [
   let full_url = (build-url $base "/v2/stripe/save" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Stripe connection
@@ -3327,6 +3435,7 @@ export def "stripe-check check" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3336,7 +3445,7 @@ export def "stripe-check check" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request email verification code
@@ -3351,6 +3460,7 @@ export def "verified-resources-emails-verification-code-request requestEmailVeri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   email: string # Email to verify. (e.g. acme@example.com)
 ]: any -> record<status: string> {
@@ -3364,7 +3474,7 @@ export def "verified-resources-emails-verification-code-request requestEmailVeri
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request phone number verification code
@@ -3379,6 +3489,7 @@ export def "verified-resources-phones-verification-code-request requestPhoneVeri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   phone: string # Phone number to verify. (e.g. +372 5555 6666)
 ]: any -> record<status: string> {
@@ -3392,7 +3503,7 @@ export def "verified-resources-phones-verification-code-request requestPhoneVeri
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify an email
@@ -3407,6 +3518,7 @@ export def "verified-resources-emails-verification-code-verify verifyEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   email: string # Email to verify. (e.g. example@acme.com)
   code: string # verification code sent to the email to verify (e.g. 1ABG2C)
@@ -3421,7 +3533,7 @@ export def "verified-resources-emails-verification-code-verify verifyEmail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify a phone number
@@ -3436,6 +3548,7 @@ export def "verified-resources-phones-verification-code-verify verifyPhoneNumber
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   phone: string # phone number to verify. (e.g. +37255556666)
   code: string # verification code sent to the phone number to verify (e.g. 1ABG2C)
@@ -3450,7 +3563,7 @@ export def "verified-resources-phones-verification-code-verify verifyPhoneNumber
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get list of verified emails
@@ -3465,6 +3578,7 @@ export def "verified-resources-emails list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --take: float # Maximum number of items to return (default: 250, e.g. 25)
   --skip: float # Number of items to skip (default: 0, e.g. 0)
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -3477,7 +3591,7 @@ export def "verified-resources-emails list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of verified phone numbers
@@ -3492,6 +3606,7 @@ export def "verified-resources-phones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --take: float # Maximum number of items to return (default: 250, e.g. 25)
   --skip: float # Number of items to skip (default: 0, e.g. 0)
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
@@ -3504,7 +3619,7 @@ export def "verified-resources-phones list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get verified email by id
@@ -3520,6 +3635,7 @@ export def "verified-resources-emails get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, email: string, userId: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3529,7 +3645,7 @@ export def "verified-resources-emails get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get verified phone number by id
@@ -3545,6 +3661,7 @@ export def "verified-resources-phones get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record<status: string, data: record<id: float, phoneNumber: string, userId: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3554,7 +3671,7 @@ export def "verified-resources-phones get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook
@@ -3569,6 +3686,7 @@ export def "webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -3587,7 +3705,7 @@ export def "webhooks createWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all webhooks
@@ -3602,6 +3720,7 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --take: float # Maximum number of items to return (default: 250, e.g. 25)
   --skip: float # Number of items to skip (default: 0, e.g. 0)
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
@@ -3614,7 +3733,7 @@ export def "webhooks list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -3630,6 +3749,7 @@ export def "webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
   --active: oneof<nothing, bool>
@@ -3648,7 +3768,7 @@ export def "webhooks updateWebhook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook
@@ -3664,6 +3784,7 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, userId: float, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3673,7 +3794,7 @@ export def "webhooks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a webhook
@@ -3689,6 +3810,7 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
 ]: nothing -> record<status: string, data: record<payloadTemplate: string, triggers: list<string>, userId: float, id: float, subscriberUrl: string, active: bool, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3698,5 +3820,5 @@ export def "webhooks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

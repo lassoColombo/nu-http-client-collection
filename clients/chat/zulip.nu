@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -95,7 +96,7 @@ def op-completer-1 [] { ["start" "stop"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-api-key fetch-api-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -128,6 +129,7 @@ export def "fetch-api-key fetch-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string # The username to be used for authentication (typically, the email address, but depending on configuration, it could be an LDAP username).  See the `require_email_format_usernames` parameter documented in [GET /server_settings](/api/get-server-settings) for details.  (e.g. iago@zulip.com)
   password: string # The user's Zulip password (or LDAP password, if LDAP authentication is in use).  (e.g. abcd1234)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string, email: string, user_id: int> {
@@ -139,7 +141,7 @@ export def "fetch-api-key fetch-api-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an API key (JWT)
@@ -154,6 +156,7 @@ export def "jwt-fetch-api-key jwt-fetch-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # A JSON Web Token for the target user.  The token payload must contain a custom `email` claim with the target user's email address, e.g., `{"email": "<target user email>"}`.  (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImhhbWxldEB6dWxpcC5jb20ifQ.EsHxSVt54zPR-ywgPH54TB1FYmrGKsfq7hsQEhp_9w0)
   --include-profile: oneof<nothing, bool> # Whether to include a `user` object containing the target user's profile details in the response.  (default: false, e.g. false)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string, email: string, user: record<user_id: any, delivery_email: any, email: any, full_name: any, date_joined: any, is_active: any, is_owner: any, is_admin: any, is_guest: any, is_bot: any, bot_type: any, bot_owner_id: any, role: any, timezone: any, avatar_url: any, avatar_version: any, is_imported_stub: any, is_deleted: bool>> {
@@ -165,7 +168,7 @@ export def "jwt-fetch-api-key jwt-fetch-api-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an API key (development only)
@@ -180,6 +183,7 @@ export def "dev-fetch-api-key dev-fetch-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string # The email address for the user that owns the API key.  (e.g. iago@zulip.com)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string, email: string, user_id: int> {
   let input = $in
@@ -190,7 +194,7 @@ export def "dev-fetch-api-key dev-fetch-api-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List users (development only)
@@ -205,13 +209,14 @@ export def "dev-list-users dev-list-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, direct_admins: table<email: string, realm_url: string>, direct_users: table<email: string, realm_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dev_list_users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from an event queue
@@ -226,6 +231,7 @@ export def "events get-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queue-id: string # The ID of an event queue that was previously registered via `POST /api/v1/register` (see [Register a queue](/api/register-queue)).  (e.g. fb67bf8a-c031-47cc-84cf-ed80accacda8)
   --last-event-id: int # The highest event ID in this queue that you've received and wish to acknowledge. See the [code for `call_on_each_event`](https://github.com/zulip/python-zulip-api/blob/main/zulip/zulip/__init__.py) in the [zulip Python module](https://github.com/zulip/python-zulip-api) for an example implementation of correctly processing each event exactly once.  (e.g. -1)
   --dont-block: oneof<nothing, bool> # Set to `true` if the client is requesting a nonblocking reply. If not specified, the request will block until either a new event is available or a few minutes have passed, in which case the server will send the client a heartbeat event.  (default: false, e.g. true)
@@ -236,7 +242,7 @@ export def "events get-events" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an event queue
@@ -251,6 +257,7 @@ export def "events delete-queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   queue_id: string # The ID of an event queue that was previously registered via `POST /api/v1/register` (see [Register a queue](/api/register-queue)).  (e.g. fb67bf8a-c031-47cc-84cf-ed80accacda8)
 ]: any -> any {
   let input = $in
@@ -261,7 +268,7 @@ export def "events delete-queue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get channel ID
@@ -276,6 +283,7 @@ export def "get-stream-id get-stream-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream: string # The name of the channel to access.  (e.g. Denmark)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, stream_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -284,7 +292,7 @@ export def "get-stream-id get-stream-id" [
   let full_url = (build-url $base "/get_stream_id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark all messages as read
@@ -301,13 +309,14 @@ export def "mark-all-as-read mark-all-as-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, complete: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mark_all_as_read")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark messages in a channel as read
@@ -324,6 +333,7 @@ export def "mark-stream-as-read mark-stream-as-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stream_id: int # The ID of the channel to access.  (e.g. 43)
 ]: any -> any {
   let input = $in
@@ -334,7 +344,7 @@ export def "mark-stream-as-read mark-stream-as-read" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Mark messages in a topic as read
@@ -351,6 +361,7 @@ export def "mark-topic-as-read mark-topic-as-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stream_id: int # The ID of the channel to access.  (e.g. 43)
   topic_name: string # The name of the topic whose messages should be marked as read.  Note: When the value of `realm_empty_topic_display_name` found in the [POST /register](/api/register-queue) response is used for this parameter, it is interpreted as an empty string.  **Changes**: Before Zulip 10.0 (feature level 334), empty string was not a valid topic name for channel messages.  (e.g. new coffee machine)
 ]: any -> any {
@@ -362,7 +373,7 @@ export def "mark-topic-as-read mark-topic-as-read" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get attachments
@@ -377,13 +388,14 @@ export def "attachments get-attachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, attachments: table<id: int, name: string, path_id: string, size: int, create_time: int, message_ids: list>, upload_space_used: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attachments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an attachment
@@ -399,13 +411,14 @@ export def "attachments remove-attachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/attachments/($attachment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a bot's stored data
@@ -420,6 +433,7 @@ export def "bot-storage get-bot-storage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keys: string # A JSON-encoded list of keys for data in the bot's storage.  If not provided, then all data that's stored for the bot is returned.
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, storage: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -428,7 +442,7 @@ export def "bot-storage get-bot-storage" [
   let full_url = (build-url $base "/bot_storage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a bot's stored data
@@ -443,6 +457,7 @@ export def "bot-storage update-bot-storage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   storage: record # A JSON-encoded dictionary mapping string keys to string values that will be added to the bot's storage.  If the bot's storage already has a specific key, then the value stored for that key will be updated for the new value.  (e.g. {foo: bar})
 ]: any -> any {
   let input = $in
@@ -453,7 +468,7 @@ export def "bot-storage update-bot-storage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a bot's stored data
@@ -468,6 +483,7 @@ export def "bot-storage remove-bot-storage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keys: list # A JSON-encoded list of keys to delete from the bot's storage.  If not provided, then all data that's stored for the bot is deleted.  (e.g. [foo])
 ]: any -> any {
   let input = $in
@@ -478,7 +494,7 @@ export def "bot-storage remove-bot-storage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get drafts
@@ -493,13 +509,14 @@ export def "drafts get-drafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, count: int, drafts: table<id: int, type: string, to: list, topic: string, content: string, timestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/drafts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create drafts
@@ -515,6 +532,7 @@ export def "drafts create-drafts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --drafts: list # A JSON-encoded list of containing new draft objects.  (e.g. [{type: stream, to: [1], topic: questions, content: What are the contribution guidelines for this project?, timestamp: 1595479019}]) — item shape: {type: ""|"stream"|"private", to: list, topic: string, content: string, timestamp?: int}
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, ids: list<int>> {
   let input = $in
@@ -525,7 +543,7 @@ export def "drafts create-drafts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit a draft
@@ -541,6 +559,7 @@ export def "drafts edit-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   draft: any
 ]: any -> any {
   let input = $in
@@ -551,7 +570,7 @@ export def "drafts edit-draft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a draft
@@ -567,13 +586,14 @@ export def "drafts delete-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/drafts/($draft_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all navigation views
@@ -588,13 +608,14 @@ export def "navigation-views get-navigation-views" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, navigation_views: table<fragment: string, is_pinned: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/navigation_views")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a navigation view
@@ -609,6 +630,7 @@ export def "navigation-views add-navigation-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fragment: string # A unique identifier for the view, used to determine navigation behavior when clicked.  Clients should use this value to navigate to the corresponding URL hash.  (e.g. narrow/is/alerted)
   --is-pinned: oneof<nothing, bool> # Determines whether the view appears directly in the sidebar or is hidden in the "More Views" menu.  - `true` - Pinned and visible in the sidebar. - `false` - Hidden and accessible via the "More Views" menu.  (e.g. true)
   --name: string # The user-facing name for custom navigation views. Omit this field for built-in views.  (nullable, e.g. Alert Words)
@@ -621,7 +643,7 @@ export def "navigation-views add-navigation-view" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update the navigation view
@@ -637,6 +659,7 @@ export def "navigation-views edit-navigation-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-pinned: oneof<nothing, bool> # Determines whether the view is pinned (true) or hidden in the menu (false).  (e.g. true)
   --name: string # The user-facing name for custom navigation views. Omit this field for built-in views.  (e.g. Watched Phrases)
 ]: any -> record<result: any, msg: any> {
@@ -648,7 +671,7 @@ export def "navigation-views edit-navigation-view" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a navigation view
@@ -664,13 +687,14 @@ export def "navigation-views remove-navigation-view" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/navigation_views/($fragment)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all saved snippets
@@ -685,13 +709,14 @@ export def "saved-snippets get-saved-snippets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, saved_snippets: table<id: int, title: string, content: string, date_created: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/saved_snippets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a saved snippet
@@ -706,6 +731,7 @@ export def "saved-snippets create-saved-snippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # The title of the saved snippet.  (e.g. Example title)
   content: string # The content of the saved snippet in [Zulip-flavored Markdown](/help/format-your-message-using-markdown) format.  Clients should insert this content into a message when using a saved snippet.  (e.g. Welcome to the organization.)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, saved_snippet_id: int> {
@@ -717,7 +743,7 @@ export def "saved-snippets create-saved-snippet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit a saved snippet
@@ -733,6 +759,7 @@ export def "saved-snippets edit-saved-snippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # The title of the saved snippet.  (e.g. Welcome message)
   --content: string # The content of the saved snippet in the original [Zulip-flavored Markdown](/help/format-your-message-using-markdown) format.  Clients should insert this content into a message when using a saved snippet.  (e.g. Welcome to the organization.)
 ]: any -> any {
@@ -744,7 +771,7 @@ export def "saved-snippets edit-saved-snippet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a saved snippet
@@ -760,13 +787,14 @@ export def "saved-snippets delete-saved-snippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/saved_snippets/($saved_snippet_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reminders
@@ -781,13 +809,14 @@ export def "reminders get-reminders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, reminders: table<reminder_id: int, type: string, to: list, content: string, rendered_content: string, scheduled_delivery_timestamp: int, failed: bool, reminder_target_message_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a message reminder
@@ -802,6 +831,7 @@ export def "reminders create-message-reminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message-id: int # The ID of the previously sent message to reference in the reminder message.  (e.g. 1)
   --scheduled-delivery-timestamp: int # The UNIX timestamp for when the reminder will be sent, in UTC seconds.  (e.g. 5681662420)
   --note: string # A note associated with the reminder shown in the Notification Bot message.  **Changes**: New in Zulip 11.0 (feature level 415).  (e.g. This is a reminder note.)
@@ -814,7 +844,7 @@ export def "reminders create-message-reminder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a reminder
@@ -830,13 +860,14 @@ export def "reminders delete-reminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/reminders/($reminder_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get scheduled messages
@@ -851,13 +882,14 @@ export def "scheduled-messages get-scheduled-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, scheduled_messages: table<scheduled_message_id: any, type: any, to: any, topic: any, content: any, rendered_content: any, scheduled_delivery_timestamp: any, failed: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scheduled_messages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a scheduled message
@@ -872,6 +904,7 @@ export def "scheduled-messages create-scheduled-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer # The type of scheduled message to be sent. `"direct"` for a direct message and `"stream"` or `"channel"` for a channel message.  Note that, while `"private"` is supported for scheduling direct messages, clients are encouraged to use to the modern convention of `"direct"` to indicate this message type, because support for `"private"` may eventually be removed.  **Changes**: In Zulip 9.0 (feature level 248), `"channel"` was added as an additional value for this parameter to indicate the type of a channel message.  (e.g. direct)
   --body-to: any # The scheduled message's tentative target audience.  For channel messages, the integer ID of the channel. For direct messages, a list containing integer user IDs.  (e.g. [9, 10])
   content: string # The content of the message.  Clients should use the `max_message_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum message size.  (e.g. Hello)
@@ -887,7 +920,7 @@ export def "scheduled-messages create-scheduled-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit a scheduled message
@@ -903,6 +936,7 @@ export def "scheduled-messages update-scheduled-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # The type of scheduled message to be sent. `"direct"` for a direct message and `"stream"` or `"channel"` for a channel message.  When updating the type of the scheduled message, the `to` parameter is required. And, if updating the type of the scheduled message to `"stream"`/`"channel"`, then the `topic` parameter is also required.  Note that, while `"private"` is supported for scheduling direct messages, clients are encouraged to use to the modern convention of `"direct"` to indicate this message type, because support for `"private"` may eventually be removed.  **Changes**: In Zulip 9.0 (feature level 248), `"channel"` was added as an additional value for this parameter to indicate the type of a channel message.  (e.g. stream)
   --body-to: any # The scheduled message's tentative target audience.  For channel messages, the integer ID of the channel. For direct messages, a list containing integer user IDs.  Required when updating the `type` of the scheduled message.  (e.g. 11)
   --content: string # The updated content of the scheduled message.  Clients should use the `max_message_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum message size.  (e.g. Hello)
@@ -917,7 +951,7 @@ export def "scheduled-messages update-scheduled-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a scheduled message
@@ -933,13 +967,14 @@ export def "scheduled-messages delete-scheduled-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/scheduled_messages/($scheduled_message_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a default channel
@@ -954,6 +989,7 @@ export def "default-streams add-default-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stream_id: int # The ID of the target channel.  (e.g. 10)
 ]: any -> any {
   let input = $in
@@ -964,7 +1000,7 @@ export def "default-streams add-default-stream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a default channel
@@ -979,6 +1015,7 @@ export def "default-streams remove-default-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stream_id: int # The ID of the target channel.  (e.g. 10)
 ]: any -> any {
   let input = $in
@@ -989,7 +1026,7 @@ export def "default-streams remove-default-stream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get messages
@@ -1005,6 +1042,7 @@ export def "messages get-messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: string # Integer message ID to anchor fetching of new messages. Supports special string values for when the client wants the server to compute the anchor to use:  - `newest`: The most recent message. - `oldest`: The oldest message. - `first_unread`: The oldest unread message matching the   query, if any; otherwise, the most recent message. - `date`: The first message on or after the datetime indicated by the   [`anchor_date`](#parameter-anchor_date), if any; otherwise, the most   recent message.  **Changes**: The `date` value is new in Zulip 12.0 (feature level 445).  String values are new in Zulip 3.0 (feature level 1). The `first_unread` functionality was supported in Zulip 2.1.x and older by not sending `anchor` and using `use_first_unread_anchor`.  In Zulip 2.1.x and older, `oldest` can be emulated with `"anchor": 0`, and `newest` with `"anchor": 10000000000000000` (that specific large value works around a bug in Zulip 2.1.x and older in the `found_newest` return value).  (e.g. 43)
   --include-anchor: oneof<nothing, bool> # Whether a message with the specified ID matching the narrow should be included.  **Changes**: New in Zulip 6.0 (feature level 155).  (default: true, e.g. false)
   --anchor-date: string # The date or datetime to use for finding the anchor message when `anchor` is `date`. Accepted formats include ISO 8601 date-only strings (e.g. `2005-04-18`) as well as full datetime strings (e.g. `2005-04-18T12:34:56Z`). If only a date is provided, the datetime is set to midnight (00:00) on that day in UTC. If no timezone is provided, UTC is assumed.  **Changes**: New in Zulip 12.0 (feature level 445).  (e.g. 2005-04-18T12:34:56Z)
@@ -1023,7 +1061,7 @@ export def "messages get-messages" [
   let full_url = (build-url $base "/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a message
@@ -1038,6 +1076,7 @@ export def "messages send-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer # The type of message to be sent.  `"direct"` for a direct message and `"stream"` or `"channel"` for a channel message.  **Changes**: In Zulip 9.0 (feature level 248), `"channel"` was added as an additional value for this parameter to request a channel message.  In Zulip 7.0 (feature level 174), `"direct"` was added as the preferred way to request a direct message, deprecating the original `"private"`. While `"private"` is still supported for requesting direct messages, clients are encouraged to use to the modern convention with servers that support it, because support for `"private"` will eventually be removed.  (e.g. direct)
   --body-to: any # The channel or users receiving the message.  For channel messages, this is either the name or integer ID of the channel.  For direct messages, this is either a list containing integer user IDs or a list containing string Zulip API email addresses. The ID or email address of the user sending the message can be included in the list, but will be ignored by the server, unless the user sending the message is the only recipient of the message.  **Changes**: In Zulip 2.0.0, support for using user/channel IDs was added.  (e.g. [9, 10])
   content: string # The content of the message.  Clients should use the `max_message_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum message size.  (e.g. Hello)
@@ -1054,7 +1093,7 @@ export def "messages send-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a message's edit history
@@ -1070,6 +1109,7 @@ export def "messages-history get-message-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-empty-topic-name: oneof<nothing, bool> # Whether the topic names i.e. `topic` and `prev_topic` fields in the `message_history` objects returned can be empty string.  If `false`, the value of `realm_empty_topic_display_name` found in the [`POST /register`](/api/register-queue) response is returned replacing the empty string as the topic name.  **Changes**: New in Zulip 10.0 (feature level 334).  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, message_history: table<topic: string, prev_topic: string, stream: int, prev_stream: int, content: string, rendered_content: string, prev_content: string, prev_rendered_content: string, user_id: int, content_html_diff: string, timestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1078,7 +1118,7 @@ export def "messages-history get-message-history" [
   let full_url = (build-url $base $"/messages/($message_id)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update personal message flags
@@ -1093,6 +1133,7 @@ export def "messages-flags update-message-flags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   messages: list # An array containing the IDs of the target messages.  (e.g. [4, 8, 15])
   op: string@op-completer # Whether to `add` the flag or `remove` it.  (e.g. add)
   flag: string # The flag that should be added/removed.  (e.g. read)
@@ -1105,7 +1146,7 @@ export def "messages-flags update-message-flags" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update personal message flags for narrow
@@ -1120,6 +1161,7 @@ export def "messages-flags-narrow update-message-flags-for-narrow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   anchor: any
   --include-anchor: oneof<nothing, bool> # Whether a message with the specified ID matching the narrow should be included in the update range.  (default: true, e.g. false)
   num_before: int # Limit the number of messages preceding the anchor in the update range. The server may decrease this to bound transaction sizes.  (e.g. 4)
@@ -1136,7 +1178,7 @@ export def "messages-flags-narrow update-message-flags-for-narrow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Render a message
@@ -1151,6 +1193,7 @@ export def "messages-render render-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The content of the message.  Clients should use the `max_message_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum message size.  (e.g. Hello)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, rendered: string> {
   let input = $in
@@ -1161,7 +1204,7 @@ export def "messages-render render-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an emoji reaction
@@ -1177,6 +1220,7 @@ export def "messages-reactions add-reaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emoji_name: string # The target emoji's human-readable name.  To find an emoji's name, hover over a message to reveal three icons on the right, then click the smiley face icon. Images of available reaction emojis appear. Hover over the emoji you want, and note that emoji's text name.  (e.g. octopus)
   --emoji-code: string # A unique identifier, defining the specific emoji codepoint requested, within the namespace of the `reaction_type`.  For most API clients, you won't need this, but it's important for Zulip apps to handle rare corner cases when adding/removing votes on an emoji reaction added previously by another user.  If the existing reaction was added when the Zulip server was using a previous version of the emoji data mapping between Unicode codepoints and human-readable names, sending the `emoji_code` in the data for the original reaction allows the Zulip server to correctly interpret your upvote as an upvote rather than a reaction with a "different" emoji.  (e.g. 1f419)
   --reaction-type: string # A string indicating the type of emoji. Each emoji `reaction_type` has an independent namespace for values of `emoji_code`.  If an API client is adding/removing a vote on an existing reaction, it should pass this parameter using the value the server provided for the existing reaction for specificity. Supported values:  - `unicode_emoji` : In this namespace, `emoji_code` will be a   dash-separated hex encoding of the sequence of Unicode codepoints   that define this emoji in the Unicode specification.  - `realm_emoji` : In this namespace, `emoji_code` will be the ID of   the uploaded [custom emoji](/help/custom-emoji).  - `zulip_extra_emoji` : These are special emoji included with Zulip.   In this namespace, `emoji_code` will be the name of the emoji (e.g.   "zulip").  **Changes**: In Zulip 3.0 (feature level 2), this parameter became optional for [custom emoji](/help/custom-emoji); previously, this endpoint assumed `unicode_emoji` if this parameter was not specified.  (e.g. unicode_emoji)
@@ -1189,7 +1233,7 @@ export def "messages-reactions add-reaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove an emoji reaction
@@ -1205,6 +1249,7 @@ export def "messages-reactions remove-reaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emoji-name: string # The target emoji's human-readable name.  To find an emoji's name, hover over a message to reveal three icons on the right, then click the smiley face icon. Images of available reaction emojis appear. Hover over the emoji you want, and note that emoji's text name.  (e.g. octopus)
   --emoji-code: string # A unique identifier, defining the specific emoji codepoint requested, within the namespace of the `reaction_type`.  For most API clients, you won't need this, but it's important for Zulip apps to handle rare corner cases when adding/removing votes on an emoji reaction added previously by another user.  If the existing reaction was added when the Zulip server was using a previous version of the emoji data mapping between Unicode codepoints and human-readable names, sending the `emoji_code` in the data for the original reaction allows the Zulip server to correctly interpret your upvote as an upvote rather than a reaction with a "different" emoji.  (e.g. 1f419)
   --reaction-type: string # A string indicating the type of emoji. Each emoji `reaction_type` has an independent namespace for values of `emoji_code`.  If an API client is adding/removing a vote on an existing reaction, it should pass this parameter using the value the server provided for the existing reaction for specificity. Supported values:  - `unicode_emoji` : In this namespace, `emoji_code` will be a   dash-separated hex encoding of the sequence of Unicode codepoints   that define this emoji in the Unicode specification.  - `realm_emoji` : In this namespace, `emoji_code` will be the ID of   the uploaded [custom emoji](/help/custom-emoji).  - `zulip_extra_emoji` : These are special emoji included with Zulip.   In this namespace, `emoji_code` will be the name of the emoji (e.g.   "zulip").  **Changes**: In Zulip 3.0 (feature level 2), this parameter became optional for [custom emoji](/help/custom-emoji); previously, this endpoint assumed `unicode_emoji` if this parameter was not specified.  (e.g. unicode_emoji)
@@ -1217,7 +1262,7 @@ export def "messages-reactions remove-reaction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a message's read receipts
@@ -1233,13 +1278,14 @@ export def "messages-read-receipts get-read-receipts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, user_ids: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/messages/($message_id)/read_receipts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if messages match a narrow
@@ -1254,6 +1300,7 @@ export def "messages-matches-narrow check-messages-match-narrow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --msg-ids: string # List of IDs for the messages to check.
   --narrow: string # A structure defining the narrow to check against. See how to [construct a narrow](/api/construct-narrow).  **Changes**: See [changes section](/api/construct-narrow#changes) of search/narrow filter documentation.
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, messages: record> {
@@ -1263,7 +1310,7 @@ export def "messages-matches-narrow check-messages-match-narrow" [
   let full_url = (build-url $base "/messages/matches_narrow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a single message
@@ -1279,6 +1326,7 @@ export def "messages get-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apply-markdown: oneof<nothing, bool> # If `true`, message content is returned in the rendered HTML format. If `false`, message content is returned in the raw [Zulip-flavored Markdown format](/help/format-your-message-using-markdown) text that user entered.  **Changes**: New in Zulip 5.0 (feature level 120).  (default: true, e.g. false)
   --allow-empty-topic-name: oneof<nothing, bool> # Whether the client supports processing the empty string as a topic in the topic name fields in the returned data, including in returned edit_history data.  If `false`, the server will use the value of `realm_empty_topic_display_name` found in the [`POST /register`](/api/register-queue) response instead of empty string to represent the empty string topic in its response.  **Changes**: New in Zulip 10.0 (feature level 334). Previously, the empty string was not a valid topic.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, raw_content: string, message: record<avatar_url: any, client: any, content: any, content_type: any, display_recipient: any, edit_history: any, id: any, is_me_message: any, last_edit_timestamp: any, last_moved_timestamp: any, reactions: any, recipient_id: any, sender_email: any, sender_full_name: any, sender_id: any, sender_realm_str: any, stream_id: any, subject: any, submessages: any, timestamp: any, topic_links: any, type: any, flags: list<string>>> {
@@ -1288,7 +1336,7 @@ export def "messages get-message" [
   let full_url = (build-url $base $"/messages/($message_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a message
@@ -1304,6 +1352,7 @@ export def "messages update-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string # The topic to move the message(s) to, to request changing the topic.  Clients should use the `max_topic_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum topic length  Should only be sent when changing the topic, and will throw an error if the target message is not a channel message.  Note: When the value of `realm_empty_topic_display_name` found in the [POST /register](/api/register-queue) response is used for this parameter, it is interpreted as an empty string.  When [topics are required](/help/require-topics), this parameter can't be `"(no topic)"`, an empty string, or the value of `realm_empty_topic_display_name`.  You can [resolve topics](/help/resolve-a-topic) by editing the topic to `✔ {original_topic}` with the `propagate_mode` parameter set to `"change_all"`. The empty string topic cannot be marked as resolved.  **Changes**: Before Zulip 10.0 (feature level 334), empty string was not a valid topic name for channel messages.  New in Zulip 2.0.0. Previous Zulip releases encoded this as `subject`, which is currently a deprecated alias.  (e.g. Castle)
   --propagate-mode: string@propagate-mode-completer # Which message(s) should be edited:  - `"change_later"`: The target message and all following messages. - `"change_one"`: Only the target message. - `"change_all"`: All messages in this topic.  Only the default value of `"change_one"` is valid when editing only the content of a message.  This parameter determines both which messages get moved and also whether clients that are currently narrowed to the topic containing the message should navigate or adjust their compose box recipient to point to the post-edit channel/topic.  (default: change_one, e.g. change_all)
   --send-notification-to-old-thread: oneof<nothing, bool> # Whether to send an automated message to the old topic to notify users where the messages were moved to.  **Changes**: Before Zulip 6.0 (feature level 152), this parameter had a default of `true` and was ignored unless the channel was changed.  New in Zulip 3.0 (feature level 9).  (default: false, e.g. true)
@@ -1320,7 +1369,7 @@ export def "messages update-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a message
@@ -1336,13 +1385,14 @@ export def "messages delete-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/messages/($message_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Report a message
@@ -1358,6 +1408,7 @@ export def "messages-report report-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   report_type: string # The reason that best describes why the current user is reporting the target message for moderation.  Must be one of the `key` values in the `server_report_message_types` field in the [`POST /register`](/api/register-queue) response.  **Changes**: Prior to Zulip 12.0 (feature level 435), the allowed values for this parameter were limited to: `"harassment"`, `"inappropriate"`, `"norms"`, `"other"`, `"spam"`.  (e.g. harassment)
   --description: string # A short description with additional context about why the current user is reporting the target message for moderation.  Clients should limit this string to 1000 Unicode code points.  If the `report_type` parameter is `"other"`, this parameter is required, and its value cannot be an empty string.  (e.g. This message insults and mocks Frodo, which is against the code of conduct.)
 ]: any -> any {
@@ -1369,7 +1420,7 @@ export def "messages-report report-message" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Upload a file
@@ -1384,6 +1435,7 @@ export def "user-uploads upload-file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string # format: binary, e.g. /path/to/file
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, uri: string, url: string, filename: string> {
   let input = $in
@@ -1394,7 +1446,7 @@ export def "user-uploads upload-file" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Check thumbnail status
@@ -1411,13 +1463,14 @@ export def "thumbnail-status check-thumbnail-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, has_thumbnail: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/thumbnail/status/($realm_id_str)/($filename)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get public temporary URL for an uploaded file
@@ -1434,13 +1487,14 @@ export def "user-uploads get-file-temporary-url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user_uploads/($realm_id_str)/($filename)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users
@@ -1455,6 +1509,7 @@ export def "users get-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-gravatar: oneof<nothing, bool> # Whether the client supports computing gravatars URLs. If enabled, `avatar_url` will be included in the response only if there is a Zulip avatar, and will be `null` for users who are using gravatar as their avatar. This option significantly reduces the compressed size of user data, since gravatar URLs are long, random strings and thus do not compress well. The `client_gravatar` field is set to `true` if clients can compute their own gravatars.  **Changes**: The default value of this parameter was `false` prior to Zulip 5.0 (feature level 92).  (default: true, e.g. false)
   --include-custom-profile-fields: oneof<nothing, bool> # Whether the client wants [custom profile field](/help/custom-profile-fields) data to be included in the response.  **Changes**: New in Zulip 2.1.0. Previous versions do not offer these data via the API.  (default: false, e.g. true)
   --user-ids: string # Limits the results to the specified user IDs. If not provided, the server will return all accessible users in the organization.  **Changes**: New in Zulip 11.0 (feature level 384).
@@ -1465,7 +1520,7 @@ export def "users get-users" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user
@@ -1480,6 +1535,7 @@ export def "users create-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the new user.  (e.g. username@example.com)
   password: string # The password of the new user.  (e.g. abcd1234)
   full_name: string # The full name of the new user.  (e.g. New User)
@@ -1492,7 +1548,7 @@ export def "users create-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reactivate a user
@@ -1508,13 +1564,14 @@ export def "users-reactivate reactivate-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/reactivate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user status
@@ -1530,6 +1587,7 @@ export def "users-status update-status-for-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-text: string # The text content of the status message. Sending the empty string will clear the user's status.  **Note**: The limit on the size of the message is 60 Unicode code points.  (e.g. on vacation)
   --emoji-name: string # The name for the emoji to associate with this status.  **Changes**: New in Zulip 5.0 (feature level 86).  (e.g. car)
   --emoji-code: string # A unique identifier, defining the specific emoji codepoint requested, within the namespace of the `reaction_type`.  **Changes**: New in Zulip 5.0 (feature level 86).  (e.g. 1f697)
@@ -1543,7 +1601,7 @@ export def "users-status update-status-for-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a user's status
@@ -1559,13 +1617,14 @@ export def "users-status get-user-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, status: record<away: bool, status_text: string, emoji_name: string, emoji_code: string, reaction_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's presence
@@ -1581,13 +1640,14 @@ export def "users-presence get-user-presence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, server_timestamp: float, presence: record<active_timestamp: int, idle_timestamp: int, website: record<status: string, timestamp: int>, aggregated: record<status: string, timestamp: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id_or_email)/presence")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get own user
@@ -1602,13 +1662,14 @@ export def "users-me get-own-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, avatar_url: string, avatar_version: int, email: string, full_name: string, is_admin: bool, is_owner: bool, role: int, is_guest: bool, is_bot: bool, is_active: bool, timezone: string, date_joined: string, max_message_id: int, user_id: int, delivery_email: string, is_imported_stub: bool, profile_data: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate own user
@@ -1623,13 +1684,14 @@ export def "users-me deactivate-own-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Regenerate your API key
@@ -1644,13 +1706,14 @@ export def "users-me-api-key-regenerate regenerate-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/api_key/regenerate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all alert words
@@ -1665,13 +1728,14 @@ export def "users-me-alert-words get-alert-words" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, alert_words: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/alert_words")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add alert words
@@ -1686,6 +1750,7 @@ export def "users-me-alert-words add-alert-words" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alert_words: list # An array of strings to be added to the user's set of configured alert words. Strings already present in the user's set of alert words already are ignored.  Alert words are case insensitive.  (e.g. [foo, bar])
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, alert_words: list<string>> {
   let input = $in
@@ -1696,7 +1761,7 @@ export def "users-me-alert-words add-alert-words" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove alert words
@@ -1711,6 +1776,7 @@ export def "users-me-alert-words remove-alert-words" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   alert_words: list # An array of strings to be removed from the user's set of configured alert words. Strings that are not in the user's set of alert words are ignored.  (e.g. [foo])
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, alert_words: list<string>> {
   let input = $in
@@ -1721,7 +1787,7 @@ export def "users-me-alert-words remove-alert-words" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update your presence
@@ -1737,6 +1803,7 @@ export def "users-me-presence update-presence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --last-update-id: int # The identifier that specifies what presence data the client already has received, which allows the server to only return more recent user presence data.  This should be set to `-1` during initialization of the client in order to fetch all user presence data, unless the client is obtaining initial user presence metadata from the [`POST /register`](/api/register-queue) endpoint.  In subsequent queries to this endpoint, this value should be set to the most recent value of `presence_last_update_id` returned by the server in this endpoint's response, which implements incremental fetching of user presence data.  When this parameter is passed, the user presence data in the response will always be in the modern format.  **Changes**: New in Zulip 9.0 (feature level 263). Previously, the server sent user presence data for all users who had been active in the last two weeks unconditionally.  (e.g. 5)
   --history-limit-days: int # Limits how far back in time to fetch user presence data. If not specified, defaults to 14 days. A value of N means that the oldest presence data fetched will be from at most N days ago.  Note that this is only useful during the initial user presence data fetch, as subsequent fetches should use the `last_update_id` parameter, which will act as the limit on how much presence data is returned. `history_limit_days` is ignored if `last_update_id` is passed with a value greater than `0`, indicating that the client already has some presence data.  **Changes**: New in Zulip 10.0 (feature level 288).  (e.g. 365)
   --new-user-input: oneof<nothing, bool> # Whether the user has interacted with the client (e.g. moved the mouse, used the keyboard, etc.) since the previous presence request from this client.  The server uses data from this parameter to implement certain [usage statistics](/help/analytics).  User interface clients that might run in the background, without the user ever interacting with them, should be careful to only pass `true` if the user has actually interacted with the client in order to avoid corrupting usage statistics graphs.  (default: false, e.g. false)
@@ -1752,7 +1819,7 @@ export def "users-me-presence update-presence" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update your profile data
@@ -1768,6 +1835,7 @@ export def "users-me-profile-data update-profile-data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: list # An array of objects describing updates to the custom profile field data for the user.  (e.g. [{id: 4, value: 0}, {id: 5, value: 1909-04-05}]) — item shape: {id: int, value: any}
 ]: any -> any {
   let input = $in
@@ -1778,7 +1846,7 @@ export def "users-me-profile-data update-profile-data" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove your profile data
@@ -1793,6 +1861,7 @@ export def "users-me-profile-data remove-profile-data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: list # An array of custom profile field IDs to remove any data set for the user.  (e.g. [1])
 ]: any -> any {
   let input = $in
@@ -1803,7 +1872,7 @@ export def "users-me-profile-data remove-profile-data" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update your status
@@ -1819,6 +1888,7 @@ export def "users-me-status update-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-text: string # The text content of the status message. Sending the empty string will clear the user's status.  **Note**: The limit on the size of the message is 60 Unicode code points.  (e.g. on vacation)
   --away: oneof<nothing, bool> # Whether the user should be marked as "away".  **Changes**: Deprecated in Zulip 6.0 (feature level 148); starting with that feature level, `away` is a legacy way to access the user's `presence_enabled` setting, with `away = !presence_enabled`. To be removed in a future release.  (DEPRECATED, e.g. true)
   --emoji-name: string # The name for the emoji to associate with this status.  **Changes**: New in Zulip 5.0 (feature level 86).  (e.g. car)
@@ -1833,7 +1903,7 @@ export def "users-me-status update-status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get topics in a channel
@@ -1849,6 +1919,7 @@ export def "users-me-topics get-stream-topics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-empty-topic-name: oneof<nothing, bool> # Whether the client supports processing the empty string as a topic name in the returned data.  If `false`, the value of `realm_empty_topic_display_name` found in the [`POST /register`](/api/register-queue) response is returned replacing the empty string as the topic name.  **Changes**: New in Zulip 10.0 (feature level 334). Previously, the empty string was not a valid topic.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, topics: table<max_id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1857,7 +1928,7 @@ export def "users-me-topics get-stream-topics" [
   let full_url = (build-url $base $"/users/me/($stream_id)/topics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subscribed channels
@@ -1872,6 +1943,7 @@ export def "users-me-subscriptions get-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-subscribers: string@include-subscribers-completer # Whether each returned channel object should include a `subscribers` field containing a list of the user IDs of its subscribers.  Client apps supporting organizations with many thousands of users should not pass `true`, because the full subscriber matrix may be several megabytes of data. The `partial` value, combined with the `subscriber_count` and fetching subscribers for individual channels as needed, is recommended to support client app features where channel subscriber data is useful.  If a client passes `partial` for this parameter, the server may, for some channels, return a subset of the channel's subscribers in the `partial_subscribers` field instead of the `subscribers` field, which always contains the complete set of subscribers.  The server guarantees that it will always return a `subscribers` field for channels with fewer than 250 total subscribers. When returning a `partial_subscribers` field, the server guarantees that all bot users and users active within the last 14 days will be included. For other cases, the server may use its discretion to determine which channels and users to include, balancing between payload size and usefulness of the data provided to the client.  **Changes**: The `partial` value is new in Zulip 11.0 (feature level 412).  New in Zulip 2.1.0.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, subscriptions: table<stream_id: int, name: string, description: string, rendered_description: string, date_created: int, creator_id: int, invite_only: bool, subscribers: list, partial_subscribers: list, desktop_notifications: bool, email_notifications: bool, wildcard_mentions_notify: bool, push_notifications: bool, audible_notifications: bool, pin_to_top: bool, is_muted: bool, in_home_view: bool, is_announcement_only: bool, is_web_public: bool, color: string, stream_post_policy: int, message_retention_days: int, history_public_to_subscribers: bool, first_message_id: int, folder_id: int, topics_policy: string, is_recently_active: bool, stream_weekly_traffic: int, can_add_subscribers_group: record, can_remove_subscribers_group: record, can_administer_channel_group: record, can_delete_any_message_group: record, can_delete_own_message_group: record, can_move_messages_out_of_channel_group: record, can_move_messages_within_channel_group: record, can_send_message_group: record, can_subscribe_group: record, can_resolve_topics_group: record, can_create_topic_group: record, is_archived: bool, subscriber_count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1880,7 +1952,7 @@ export def "users-me-subscriptions get-subscriptions" [
   let full_url = (build-url $base "/users/me/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe to a channel
@@ -1896,6 +1968,7 @@ export def "users-me-subscriptions subscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscriptions: list # A list of dictionaries containing the key `name` and value specifying the name of the channel to subscribe. If the channel does not exist a new channel is created. The description of the channel created can be specified by setting the dictionary key `description` with an appropriate value.  (e.g. [{name: Verona, description: Italian city}]) — item shape: {name: string, description?: string}
   --principals: any # A list of user IDs (preferred) or Zulip API email addresses of the users to be subscribed to or unsubscribed from the channels specified in the `subscriptions` parameter.  If not provided, then the requesting user/bot will be subscribed/unsubscribed from the specified channels.  **Changes**: Before Zulip 3.0 (feature level 9), only the Zulip API email address string format was supported.  (e.g. [11])
   --authorization-errors-fatal: oneof<nothing, bool> # A boolean specifying whether authorization errors (such as when the requesting user is not authorized to access a private channel) should be considered fatal or not. When `true`, an authorization error is reported as such. When set to `false`, the response will be a 200 and any channels where the request encountered an authorization error will be listed in the `unauthorized` key.  (default: true, e.g. false)
@@ -1928,7 +2001,7 @@ export def "users-me-subscriptions subscribe" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update subscriptions
@@ -1944,6 +2017,7 @@ export def "users-me-subscriptions update-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete: list # A list of channel names to unsubscribe from.  (e.g. [Verona, Denmark])
   --add: list # A list of objects describing which channels to subscribe to, optionally including per-user subscription parameters (e.g. color) and if the channel is to be created, its description.  (e.g. [{name: Verona}, {name: Denmark, color: #e79ab5, description: A Scandinavian country}]) — item shape: {name?: string, color?: string, description?: string}
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, subscribed: record, already_subscribed: record, not_removed: list<string>, removed: list<string>, new_subscription_messages_sent: bool> {
@@ -1955,7 +2029,7 @@ export def "users-me-subscriptions update-subscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unsubscribe from a channel
@@ -1970,6 +2044,7 @@ export def "users-me-subscriptions unsubscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscriptions: list # A list of channel names to unsubscribe from. This parameter is called `streams` in our Python API.  (e.g. [Verona, Denmark])
   --principals: any # A list of user IDs (preferred) or Zulip API email addresses of the users to be subscribed to or unsubscribed from the channels specified in the `subscriptions` parameter.  If not provided, then the requesting user/bot will be subscribed/unsubscribed from the specified channels.  **Changes**: Before Zulip 3.0 (feature level 9), only the Zulip API email address string format was supported.  (e.g. [11])
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, not_removed: list<string>, removed: list<string>> {
@@ -1981,7 +2056,7 @@ export def "users-me-subscriptions unsubscribe" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Topic muting
@@ -1998,6 +2073,7 @@ export def "users-me-subscriptions-muted-topics mute-topic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stream-id: int # The ID of the channel to access.  Clients must provide either `stream` or `stream_id` as a parameter to this endpoint, but not both.  **Changes**: New in Zulip 2.0.0.  (e.g. 43)
   --stream: string # The name of the channel to access.  Clients must provide either `stream` or `stream_id` as a parameter to this endpoint, but not both. Clients should use `stream_id` instead of the `stream` parameter when possible.  (e.g. Denmark)
   topic: string # The topic to (un)mute. Note that the request will succeed regardless of whether any messages have been sent to the specified topic.  Clients should use the `max_topic_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum topic length.  (e.g. dinner)
@@ -2011,7 +2087,7 @@ export def "users-me-subscriptions-muted-topics mute-topic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Send a test notification to mobile device(s)
@@ -2028,6 +2104,7 @@ export def "mobile-push-test-notification test-notify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The push token for the device to which to send the test notification.  If this parameter is not submitted, the test notification will be sent to all of the user's devices registered on the server.  A mobile client should pass this parameter, to avoid triggering a test notification for other clients.  (e.g. 111222)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any> {
   let input = $in
@@ -2038,7 +2115,7 @@ export def "mobile-push-test-notification test-notify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Send an E2EE test notification to mobile device(s)
@@ -2053,6 +2130,7 @@ export def "mobile-push-e2ee-test-notification e2ee-test-notify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: int # The ID for the device to which to send the test notification.  If this parameter is not submitted, the E2EE test notification will be sent to all of the user's devices registered on the server.  A mobile client should pass this parameter, to avoid triggering a test notification for other clients.  See [`POST /register_client_device`](/api/register-client-device) for details on device ID.  **Changes**: New in Zulip 12.0 (feature level 468).  Previously, `push_account_id` was used.  (e.g. 1144)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any> {
   let input = $in
@@ -2063,7 +2141,7 @@ export def "mobile-push-e2ee-test-notification e2ee-test-notify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Register E2EE push device
@@ -2078,6 +2156,7 @@ export def "mobile-push-register register-push-device" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   device_id: int # The ID of the device to configure for push notifications.  See [`POST /register_client_device`](/api/register-client-device) for how to obtain a device ID.  (e.g. 1)
   --push-key-id: int # A random unsigned 32-bit integer generated by the client as an identifier for `push_key`. It will be included in mobile push notifications along with encrypted payloads to identify the `push_key` to decrypt.  (e.g. 2408)
   --push-key: string # Key that the client would like the server to use to encrypt notifications, encoded with Base64.  The key is a byte sequence beginning with a single byte that encodes which cryptosystem to use, followed by the key to use for that cryptosystem. This byte sequence is encoded using standard Base64 encoding as defined in RFC 4648.  The client should avoid sharing the key anywhere else: in particular it should generate a fresh key for each server, and to the extent possible keep the key out of any backups of the client's data.  Supported cryptosystems are:  - `0x31`: LibSodium's [SecretBox][libsodium-secretbox] symmetric key encryption   system. Keys are 32 bytes, which the server will use with libsodium's   `crypto_secretbox_easy`. See the [NaCl documentation][nacl-secretbox], which   details how this system uses `XSalsa20` and `Poly1305` to provide authenticated   encryption.  [libsodium-secretbox]: https://libsodium.gitbook.io/doc/secret-key_cryptography/secretbox [nacl-secretbox]: https://nacl.cr.yp.to/secretbox.html  **Changes**: New in Zulip 12.0 (feature level 432). This replaced the `push_public_key` parameter which had a prototype asymmetric cryptosystem, and did not have a natural way to support multiple cryptosystems.  (e.g. MTaUDJDMWypQ1WufZ1NRTHSSvgYtXh1qVNSjN3aBiEFt)
@@ -2094,7 +2173,7 @@ export def "mobile-push-register register-push-device" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Register E2EE push device to bouncer
@@ -2109,6 +2188,7 @@ export def "remotes-push-e2ee-register register-remote-push-device" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   realm_uuid: string # The UUID of the realm to which the push device being registered belongs.  (e.g. 9aa61d0b-8ce5-488d-8e9e-fedc346e6836)
   token_id: string # The `token_id` value provided by the mobile client to [register E2EE push device](/api/register-push-device).  **Changes**: New in Zulip 12.0 (feature level 468), replacing `push_account_id`.  (e.g. +wKIhyAx/Eg=)
   encrypted_push_registration: string # The `encrypted_push_registration` value provided by the mobile client to [register E2EE push device](/api/register-push-device).  (e.g. encrypted-push-registration-data)
@@ -2122,7 +2202,7 @@ export def "remotes-push-e2ee-register register-remote-push-device" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Register a logged-in device
@@ -2137,13 +2217,14 @@ export def "register-client-device register-client-device" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, device_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/register_client_device")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a registered device
@@ -2158,6 +2239,7 @@ export def "remove-client-device remove-client-device" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   device_id: int # The ID of the device to remove.  (e.g. 2)
 ]: any -> any {
   let input = $in
@@ -2168,7 +2250,7 @@ export def "remove-client-device remove-client-device" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update personal preferences for a topic
@@ -2183,6 +2265,7 @@ export def "user-topics update-user-topic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stream_id: int # The ID of the channel to access.  (e.g. 1)
   topic: string # The topic for which the personal preferences needs to be updated. Note that the request will succeed regardless of whether any messages have been sent to the specified topic.  Clients should use the `max_topic_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum topic length.  Note: When the value of `realm_empty_topic_display_name` found in the [POST /register](/api/register-queue) response is used for this parameter, it is interpreted as an empty string.  **Changes**: Before Zulip 10.0 (feature level 334), empty string was not a valid topic name for channel messages.  (e.g. dinner)
   visibility_policy: int@visibility-policy-completer # Controls which visibility policy to set.  - 0 = None. Removes the visibility policy previously set for the topic. - 1 = Muted. [Mutes the topic](/help/mute-a-topic) in a channel. - 2 = Unmuted. [Unmutes the topic](/help/mute-a-topic) in a muted channel. - 3 = Followed. [Follows the topic](/help/follow-a-topic).  In an unmuted channel, a topic visibility policy of unmuted will have the same effect as the "None" visibility policy.  **Changes**: In Zulip 7.0 (feature level 219), added followed as a visibility policy option.  (e.g. 1)
@@ -2195,7 +2278,7 @@ export def "user-topics update-user-topic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Mute a user
@@ -2211,13 +2294,14 @@ export def "users-me-muted-users mute-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/me/muted_users/($muted_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unmute a user
@@ -2233,13 +2317,14 @@ export def "users-me-muted-users unmute-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/me/muted_users/($muted_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an APNs device token
@@ -2256,6 +2341,7 @@ export def "users-me-apns-device-token add-apns-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token provided by the device.  (e.g. c0ffee)
   appid: string # The ID of the Zulip app that is making the request.  **Changes**: In Zulip 8.0 (feature level 223), this parameter was made required. Previously, if it was unspecified, the server would use a default value (based on the `ZULIP_IOS_APP_ID` server setting, which defaulted to `"org.zulip.Zulip"`).  (e.g. org.zulip.Zulip)
 ]: any -> any {
@@ -2267,7 +2353,7 @@ export def "users-me-apns-device-token add-apns-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove an APNs device token
@@ -2284,6 +2370,7 @@ export def "users-me-apns-device-token remove-apns-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token provided by the device.  (e.g. c0ffee)
 ]: any -> any {
   let input = $in
@@ -2294,7 +2381,7 @@ export def "users-me-apns-device-token remove-apns-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an FCM registration token
@@ -2311,6 +2398,7 @@ export def "users-me-android-gcm-reg-id add-fcm-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token provided by the device.  (e.g. android-token)
 ]: any -> any {
   let input = $in
@@ -2321,7 +2409,7 @@ export def "users-me-android-gcm-reg-id add-fcm-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove an FCM registration token
@@ -2338,6 +2426,7 @@ export def "users-me-android-gcm-reg-id remove-fcm-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token provided by the device.  (e.g. android-token)
 ]: any -> any {
   let input = $in
@@ -2348,7 +2437,7 @@ export def "users-me-android-gcm-reg-id remove-fcm-token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get subscription status
@@ -2365,13 +2454,14 @@ export def "users-subscriptions get-subscription-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, is_subscribed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/subscriptions/($stream_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's subscribed channels
@@ -2387,13 +2477,14 @@ export def "users-channels get-user-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, subscribed_channel_ids: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($user_id)/channels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload custom emoji
@@ -2409,6 +2500,7 @@ export def "realm-emoji upload-custom-emoji" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string # format: binary, e.g. /path/to/img.png
 ]: any -> any {
   let input = $in
@@ -2419,7 +2511,7 @@ export def "realm-emoji upload-custom-emoji" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Deactivate custom emoji
@@ -2435,13 +2527,14 @@ export def "realm-emoji deactivate-custom-emoji" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/realm/emoji/($emoji_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all custom emoji
@@ -2456,13 +2549,14 @@ export def "realm-emoji get-custom-emoji" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, emoji: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/realm/emoji")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get presence of all users
@@ -2477,13 +2571,14 @@ export def "realm-presence get-presence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, server_timestamp: float, presences: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/realm/presence")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get allowed domains
@@ -2498,13 +2593,14 @@ export def "realm-domains get-realm-domains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, domains: table<domain: string, allow_subdomains: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/realm/domains")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an allowed domain
@@ -2519,6 +2615,7 @@ export def "realm-domains add-realm-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # The new domain.  **Changes**: In Zulip 4.0 (feature level 63), the unnecessary JSON-encoding of this parameter was removed.  (e.g. example.com)
   --allow-subdomains: oneof<nothing, bool> # Whether subdomains are allowed for this domain.  (e.g. false)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, new_domain: list<any>> {
@@ -2530,7 +2627,7 @@ export def "realm-domains add-realm-domain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update an allowed domain
@@ -2546,6 +2643,7 @@ export def "realm-domains patch-realm-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow-subdomains: oneof<nothing, bool> # Whether subdomains are allowed for this domain.  (e.g. true)
 ]: any -> any {
   let input = $in
@@ -2556,7 +2654,7 @@ export def "realm-domains patch-realm-domain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove an allowed domain
@@ -2572,13 +2670,14 @@ export def "realm-domains delete-realm-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/realm/domains/($domain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all custom profile fields
@@ -2593,13 +2692,14 @@ export def "realm-profile-fields get-custom-profile-fields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, custom_fields: table<id: int, type: int, order: int, name: string, hint: string, field_data: string, display_in_profile_summary: bool, required: bool, editable_by_user: bool, use_for_user_matching: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/realm/profile_fields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reorder custom profile fields
@@ -2614,6 +2714,7 @@ export def "realm-profile-fields reorder-custom-profile-fields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   order: list # A list of the IDs of all the custom profile fields defined in this organization, in the desired new order.  (e.g. [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
 ]: any -> any {
   let input = $in
@@ -2624,7 +2725,7 @@ export def "realm-profile-fields reorder-custom-profile-fields" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a custom profile field
@@ -2639,6 +2740,7 @@ export def "realm-profile-fields create-custom-profile-field" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the custom profile field, which will appear both in user-facing settings UI for configuring custom profile fields and in UI displaying a user's profile.  (e.g. Favorite programming language)
   --hint: string # The help text to be displayed for the custom profile field in user-facing settings UI for configuring custom profile fields.  (e.g. Your favorite programming language.)
   field_type: int # The field type can be any of the supported custom profile field types. See the [custom profile fields documentation](/help/custom-profile-fields) for more details on what each type means.  - **1**: Short text - **2**: Paragraph - **3**: Dropdown - **4**: Date - **5**: Link - **6**: Users - **7**: External account - **8**: Pronouns  **Changes**: Field type `8` added in Zulip 6.0 (feature level 151).  (e.g. 3)
@@ -2656,7 +2758,7 @@ export def "realm-profile-fields create-custom-profile-field" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update realm-level defaults of user settings
@@ -2671,6 +2773,7 @@ export def "realm-user-settings-defaults update-realm-user-settings-defaults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starred-message-counts: oneof<nothing, bool> # Whether clients should display the [number of starred messages](/help/star-a-message#display-the-number-of-starred-messages).  (e.g. true)
   --receives-typing-notifications: oneof<nothing, bool> # Whether the user is configured to receive typing notifications from other users. The server will only deliver typing notifications events to users who for whom this is enabled.  **Changes**: New in Zulip 9.0 (feature level 253). Previously, there were only options to disable sending typing notifications.  (e.g. true)
   --web-suggest-update-timezone: oneof<nothing, bool> # Whether the user should be shown an alert, offering to update their [profile time zone](/help/change-your-timezone), when the time displayed for the profile time zone differs from the current time displayed by the time zone configured on their device.  **Changes**: New in Zulip 10.0 (feature level 329).  (e.g. true)
@@ -2739,7 +2842,7 @@ export def "realm-user-settings-defaults update-realm-user-settings-defaults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Bulk update subscription settings
@@ -2755,6 +2858,7 @@ export def "users-me-subscriptions-properties update-subscription-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscription_data: list # A list of objects that describe the changes that should be applied in each subscription. Each object represents a subscription, and must have a `stream_id` key that identifies the channel, as well as the `property` being modified and its new `value`.  (e.g. [{stream_id: 1, property: pin_to_top, value: true}, {stream_id: 3, property: color, value: #f00f00}]) — item shape: {stream_id: int, property: "color"|"is_muted"|"in_home_view"|"pin_to_top"|"desktop_notifications"|"audible_notifications"|"push_notifications"|"email_notifications"|"wildcard_mentions_notify", value: any}
 ]: any -> any {
   let input = $in
@@ -2765,7 +2869,7 @@ export def "users-me-subscriptions-properties update-subscription-settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a subscription setting
@@ -2781,6 +2885,7 @@ export def "users-me-subscriptions update-subscription-property" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   property: string@property-completer # One of the channel properties described below:  - `"color"`: The hex value of the user's display color for the channel.  - `"is_muted"`: Whether the channel is [muted](/help/mute-a-channel).<br>   **Changes**: As of Zulip 6.0 (feature level 139), updating either   `"is_muted"` or `"in_home_view"` generates two [subscription update   events](/api/get-events#subscription-update), one for each property,   that are sent to clients. Prior to this feature level, updating either   property only generated a subscription update event for   `"in_home_view"`. <br>   Prior to Zulip 2.1.0, this feature was represented   by the more confusingly named `"in_home_view"` (with the   opposite value: `in_home_view=!is_muted`); for   backwards-compatibility, modern Zulip still accepts that property.  - `"pin_to_top"`: Whether to pin the channel at the top of the channel list.  - `"desktop_notifications"`: Whether to show desktop notifications   for all messages sent to the channel.  - `"audible_notifications"`: Whether to play a sound   notification for all messages sent to the channel.  - `"push_notifications"`: Whether to trigger a mobile push   notification for all messages sent to the channel.  - `"email_notifications"`: Whether to trigger an email   notification for all messages sent to the channel.  - `"wildcard_mentions_notify"`: Whether wildcard mentions trigger   notifications as though they were personal mentions in this channel.  (e.g. pin_to_top)
   value: any # The new value of the property being modified.  If the property is `"color"`, then `value` is a string representing the hex value of the user's display color for the channel. For all other above properties, `value` is a boolean.  (e.g. true)
 ]: any -> any {
@@ -2792,7 +2897,7 @@ export def "users-me-subscriptions update-subscription-property" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a user by email
@@ -2808,6 +2913,7 @@ export def "users get-user-by-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-gravatar: oneof<nothing, bool> # Whether the client supports computing gravatars URLs. If enabled, `avatar_url` will be included in the response only if there is a Zulip avatar, and will be `null` for users who are using gravatar as their avatar. This option significantly reduces the compressed size of user data, since gravatar URLs are long, random strings and thus do not compress well. The `client_gravatar` field is set to `true` if clients can compute their own gravatars.  **Changes**: The default value of this parameter was `false` prior to Zulip 5.0 (feature level 92).  (default: true, e.g. false)
   --include-custom-profile-fields: oneof<nothing, bool> # Whether the client wants [custom profile field](/help/custom-profile-fields) data to be included in the response.  **Changes**: New in Zulip 2.1.0. Previous versions do not offer these data via the API.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, user: record<user_id: any, delivery_email: any, email: any, full_name: any, date_joined: any, is_active: any, is_owner: any, is_admin: any, is_guest: any, is_bot: any, bot_type: any, bot_owner_id: any, role: any, timezone: any, avatar_url: any, avatar_version: any, is_imported_stub: any, is_deleted: any, profile_data: record>> {
@@ -2817,7 +2923,7 @@ export def "users get-user-by-email" [
   let full_url = (build-url $base $"/users/($email)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user by email
@@ -2834,6 +2940,7 @@ export def "users update-user-by-email" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --full-name: string # The user's full name.  **Changes**: Removed unnecessary JSON-encoding of this parameter in Zulip 5.0 (feature level 106).  (e.g. NewName)
   --role: int # New [role](/api/roles-and-permissions) for the user. Roles are encoded as:  - Organization owner: 100 - Organization administrator: 200 - Organization moderator: 300 - Member: 400 - Guest: 600  Only organization owners can add or remove the owner role.  The owner role cannot be removed from the only organization owner.  **Changes**: New in Zulip 3.0 (feature level 8), replacing the previous pair of `is_admin` and `is_guest` boolean parameters. Organization moderator role added in Zulip 4.0 (feature level 60).  (e.g. 400)
   --profile-data: list # An array of objects describing updates to the [custom profile field](/help/custom-profile-fields) data for the user.  (e.g. [{id: 4, value: 0}, {id: 5, value: 1909-04-05}]) — item shape: {id: int, value: any}
@@ -2847,7 +2954,7 @@ export def "users update-user-by-email" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a user
@@ -2863,6 +2970,7 @@ export def "users get-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-gravatar: oneof<nothing, bool> # Whether the client supports computing gravatars URLs. If enabled, `avatar_url` will be included in the response only if there is a Zulip avatar, and will be `null` for users who are using gravatar as their avatar. This option significantly reduces the compressed size of user data, since gravatar URLs are long, random strings and thus do not compress well. The `client_gravatar` field is set to `true` if clients can compute their own gravatars.  **Changes**: The default value of this parameter was `false` prior to Zulip 5.0 (feature level 92).  (default: true, e.g. false)
   --include-custom-profile-fields: oneof<nothing, bool> # Whether the client wants [custom profile field](/help/custom-profile-fields) data to be included in the response.  **Changes**: New in Zulip 2.1.0. Previous versions do not offer these data via the API.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, user: record<user_id: any, delivery_email: any, email: any, full_name: any, date_joined: any, is_active: any, is_owner: any, is_admin: any, is_guest: any, is_bot: any, bot_type: any, bot_owner_id: any, role: any, timezone: any, avatar_url: any, avatar_version: any, is_imported_stub: any, is_deleted: any, profile_data: record>> {
@@ -2872,7 +2980,7 @@ export def "users get-user" [
   let full_url = (build-url $base $"/users/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -2889,6 +2997,7 @@ export def "users update-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --full-name: string # The user's full name.  **Changes**: Removed unnecessary JSON-encoding of this parameter in Zulip 5.0 (feature level 106).  (e.g. NewName)
   --role: int # New [role](/api/roles-and-permissions) for the user. Roles are encoded as:  - Organization owner: 100 - Organization administrator: 200 - Organization moderator: 300 - Member: 400 - Guest: 600  Only organization owners can add or remove the owner role.  The owner role cannot be removed from the only organization owner.  **Changes**: New in Zulip 3.0 (feature level 8), replacing the previous pair of `is_admin` and `is_guest` boolean parameters. Organization moderator role added in Zulip 4.0 (feature level 60).  (e.g. 400)
   --profile-data: list # An array of objects describing updates to the [custom profile field](/help/custom-profile-fields) data for the user.  (e.g. [{id: 4, value: 0}, {id: 5, value: 1909-04-05}]) — item shape: {id: int, value: any}
@@ -2902,7 +3011,7 @@ export def "users update-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deactivate a user
@@ -2918,6 +3027,7 @@ export def "users deactivate-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: string # Additional actions for the server to perform while deactivating the user.  As with the actual deactivation, actions are first applied to any bots controlled by the target user, and then to the target user.  **Changes**: New in Zulip 12.0 (feature level 459).
   --deactivation-notification-comment: string # If not `null`, requests that the deactivated user receive a notification email about their account deactivation.  If not `""`, encodes custom text written by the administrator to be included in the notification email.  **Changes**: New in Zulip 5.0 (feature level 135).  (e.g. Farewell! )
 ]: any -> any {
@@ -2930,7 +3040,7 @@ export def "users deactivate-user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get linkifiers
@@ -2945,13 +3055,14 @@ export def "realm-linkifiers get-linkifiers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, linkifiers: table<pattern: string, url_template: string, id: int, example_input: string, reverse_template: string, alternative_url_templates: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/realm/linkifiers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reorder linkifiers
@@ -2966,6 +3077,7 @@ export def "realm-linkifiers reorder-linkifiers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ordered_linkifier_ids: list # A list of the IDs of all the linkifiers defined in this organization, in the desired new order.  (e.g. [3, 2, 1, 5])
 ]: any -> any {
   let input = $in
@@ -2976,7 +3088,7 @@ export def "realm-linkifiers reorder-linkifiers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a linkifier
@@ -2991,6 +3103,7 @@ export def "realm-filters add-linkifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pattern: string # The [Python regular expression](https://docs.python.org/3/howto/regex.html) that should trigger the linkifier.  (e.g. #(?P<id>[0-9]+))
   url_template: string # The [RFC 6570](https://www.rfc-editor.org/rfc/rfc6570.html) compliant URL template used for the link. If you used named groups in `pattern`, you can insert their content here with `{name_of_group}`.  **Changes**: New in Zulip 7.0 (feature level 176). This replaced the `url_format_string` parameter, which was a format string in which named groups' content could be inserted with `%(name_of_group)s`.  (e.g. https://github.com/zulip/zulip/issues/{id})
   --example-input: string # An example input string that matches the linkifier's pattern. This is required for reverse linkifiers.  **Changes**: New in Zulip 12.0 (feature level 471).  (nullable, e.g. #1234)
@@ -3005,7 +3118,7 @@ export def "realm-filters add-linkifier" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a linkifier
@@ -3021,13 +3134,14 @@ export def "realm-filters remove-linkifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/realm/filters/($filter_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a linkifier
@@ -3043,6 +3157,7 @@ export def "realm-filters update-linkifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pattern: string # The [Python regular expression](https://docs.python.org/3/howto/regex.html) that should trigger the linkifier.  (e.g. #(?P<id>[0-9]+))
   url_template: string # The [RFC 6570](https://www.rfc-editor.org/rfc/rfc6570.html) compliant URL template used for the link. If you used named groups in `pattern`, you can insert their content here with `{name_of_group}`.  **Changes**: New in Zulip 7.0 (feature level 176). This replaced the `url_format_string` parameter, which was a format string in which named groups' content could be inserted with `%(name_of_group)s`.  (e.g. https://github.com/zulip/zulip/issues/{id})
   --example-input: string # An example input string that matches the linkifier's pattern. This is required for reverse linkifiers. Passing an empty string will set this field back to null.  **Changes**: New in Zulip 12.0 (feature level 471).  (nullable, e.g. #1234)
@@ -3057,7 +3172,7 @@ export def "realm-filters update-linkifier" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add a code playground
@@ -3072,6 +3187,7 @@ export def "realm-playgrounds add-code-playground" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The user-visible display name of the playground which can be used to pick the target playground, especially when multiple playground options exist for that programming language.  (e.g. Python playground)
   pygments_language: string # The name of the Pygments language lexer for that programming language.  (e.g. Python)
   url_template: string # The [RFC 6570](https://www.rfc-editor.org/rfc/rfc6570.html) compliant URL template for the playground. The template should contain exactly one variable named `code`, which determines how the extracted code should be substituted in the playground URL.  **Changes**: New in Zulip 8.0 (feature level 196). This replaced the `url_prefix` parameter, which was used to construct URLs by just concatenating `url_prefix` and `code`.  (e.g. https://python.example.com?code={code})
@@ -3084,7 +3200,7 @@ export def "realm-playgrounds add-code-playground" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove a code playground
@@ -3100,13 +3216,14 @@ export def "realm-playgrounds remove-code-playground" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/realm/playgrounds/($playground_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all data exports
@@ -3121,13 +3238,14 @@ export def "export-realm get-realm-exports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, exports: table<id: int, acting_user_id: int, export_time: float, deleted_timestamp: float, failed_timestamp: float, export_url: string, pending: bool, export_from_prior_server: bool, export_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/realm")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a data export
@@ -3142,6 +3260,7 @@ export def "export-realm export-realm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --export-type: string@export-type-completer # Whether the data export should be public, full with consent, or full without consent.  - `public` = Public data only export. - `full_with_consent` = Public and private data export (with consent), which includes   private data for users who have granted consent. - `full_without_consent` = All public and private data export, which includes private data for   all users. This option requires the organization to have   the `owner_full_content_access` feature enabled.  If not specified, defaults to `public`.  **Changes**: Zulip 12.0 (feature level 449) changed the type of this field from int to string with `1` being replaced by `public` and `2` being replaced by `full_with_consent`. The option `full_without_consent` was added for full exports without member consent.  **Changes**: New in Zulip 10.0 (feature level 304). Previously, all export requests were public data exports.  (default: public, e.g. full_with_consent)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, id: int> {
   let input = $in
@@ -3152,7 +3271,7 @@ export def "export-realm export-realm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get data export consent state
@@ -3167,13 +3286,14 @@ export def "export-realm-consents get-realm-export-consents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, export_consents: table<user_id: int, consented: bool, email_address_visibility: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/realm/consents")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all invitations
@@ -3188,13 +3308,14 @@ export def "invites get-invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, invites: table<id: int, invited_by_user_id: int, invited: int, expiry_date: int, invited_as: int, email: string, notify_referrer_on_join: bool, link_url: string, is_multiuse: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send invitations
@@ -3209,6 +3330,7 @@ export def "invites send-invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invitee_emails: string # The string containing the email addresses, separated by commas or newlines, that will be sent an invitation.  (e.g. example@zulip.com, logan@zulip.com)
   --invite-expires-in-minutes: int # The number of minutes before the invitation will expire. If `null`, the invitation will never expire. If unspecified, the server will use a default value (based on the `INVITATION_LINK_VALIDITY_MINUTES` server setting, which defaults to 14400, i.e. 10 days) for when the invitation will expire.  **Changes**: New in Zulip 6.0 (feature level 126). Previously, there was an `invite_expires_in_days` parameter, which specified the duration in days instead of minutes.  (nullable, e.g. 14400)
   --invite-as: int@invite-as-completer # The [organization-level role](/api/roles-and-permissions) of the user that is created when the invitation is accepted. Possible values are:  - 100 = Organization owner - 200 = Organization administrator - 300 = Organization moderator - 400 = Member - 600 = Guest  Users can only create invitation links for [roles with equal or stricter restrictions](/api/roles-and-permissions#permission-levels) as their own. For example, a moderator cannot invite someone to be an owner or administrator, but they can invite them to be a moderator or member.  **Changes**: In Zulip 4.0 (feature level 61), added support for inviting users as moderators.  (default: 400, e.g. 600)
@@ -3226,7 +3348,7 @@ export def "invites send-invites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a reusable invitation link
@@ -3241,6 +3363,7 @@ export def "invites-multiuse create-invite-link" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --invite-expires-in-minutes: int # The number of minutes before the invitation will expire. If `null`, the invitation will never expire. If unspecified, the server will use a default value (based on the `INVITATION_LINK_VALIDITY_MINUTES` server setting, which defaults to 14400, i.e. 10 days) for when the invitation will expire.  **Changes**: New in Zulip 6.0 (feature level 126). Previously, there was an `invite_expires_in_days` parameter, which specified the duration in days instead of minutes.  (nullable, e.g. 14400)
   --invite-as: int@invite-as-completer # The [organization-level role](/api/roles-and-permissions) of the user that is created when the invitation is accepted. Possible values are:  - 100 = Organization owner - 200 = Organization administrator - 300 = Organization moderator - 400 = Member - 600 = Guest  Users can only create invitation links for [roles with equal or stricter restrictions](/api/roles-and-permissions#permission-levels) as their own. For example, a moderator cannot invite someone to be an owner or administrator, but they can invite them to be a moderator or member.  **Changes**: In Zulip 4.0 (feature level 61), added support for inviting users as moderators.  (default: 400, e.g. 600)
   --stream-ids: list # A list containing the [IDs of the channels](/api/get-stream-id) that the newly created user will be automatically subscribed to if the invitation is accepted, in addition to any default channels that the new user may be subscribed to based on the `include_realm_default_subscriptions` parameter.  Requested channels must either be default channels for the organization, or ones the acting user has permission to add subscribers to.  This list must be empty if the current user has the unlikely configuration of being able to create reusable invitation links while lacking permission to [subscribe other users to channels][can-subscribe-others].  **Changes**: Prior to Zulip 10.0 (feature level 342), default channels that the acting user did not directly have permission to add subscribers to would be rejected.  [can-subscribe-others]: /help/configure-who-can-invite-to-channels  (default: [], e.g. [1, 10])
@@ -3256,7 +3379,7 @@ export def "invites-multiuse create-invite-link" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Revoke an email invitation
@@ -3272,13 +3395,14 @@ export def "invites revoke-email-invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invites/($invite_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke a reusable invitation link
@@ -3294,13 +3418,14 @@ export def "invites-multiuse revoke-invite-link" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invites/multiuse/($invite_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend an email invitation
@@ -3316,13 +3441,14 @@ export def "invites-resend resend-email-invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/invites/($invite_id)/resend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test welcome bot custom message
@@ -3337,6 +3463,7 @@ export def "realm-test-welcome-bot-custom-message test-welcome-bot-custom-messag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   welcome_message_custom_text: string # Custom message text, in Zulip Markdown format, to be used for this test message.  Maximum length is 8000 Unicode code points.  (e.g. Welcome to Zulip! We're excited to have you on board.)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, message_id: int> {
   let input = $in
@@ -3347,7 +3474,7 @@ export def "realm-test-welcome-bot-custom-message test-welcome-bot-custom-messag
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Register an event queue
@@ -3362,6 +3489,7 @@ export def "register register-queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apply-markdown: oneof<nothing, bool> # Set to `true` if you would like the content to be rendered in HTML format (otherwise the API will return the raw text that the user entered)  (default: false, e.g. true)
   --client-gravatar: oneof<nothing, bool> # Whether the client supports computing gravatars URLs. If enabled, `avatar_url` will be included in the response only if there is a Zulip avatar, and will be `null` for users who are using gravatar as their avatar. This option significantly reduces the compressed size of user data, since gravatar URLs are long, random strings and thus do not compress well. The `client_gravatar` field is set to `true` if clients can compute their own gravatars.  The default value is `true` for authenticated requests and `false` for [unauthenticated requests](/help/public-access-option). Passing `true` in an unauthenticated request is an error.  **Changes**: Before Zulip 6.0 (feature level 149), this parameter was silently ignored and processed as though it were `false` in unauthenticated requests.  (e.g. false)
   --include-subscribers: string@include-subscribers-completer # Whether each returned channel object should include a `subscribers` field containing a list of the user IDs of its subscribers.  Client apps supporting organizations with many thousands of users should not pass `true`, because the full subscriber matrix may be several megabytes of data. The `partial` value, combined with the `subscriber_count` and fetching subscribers for individual channels as needed, is recommended to support client app features where channel subscriber data is useful.  If a client passes `partial` for this parameter, the server may, for some channels, return a subset of the channel's subscribers in the `partial_subscribers` field instead of the `subscribers` field, which always contains the complete set of subscribers.  The server guarantees that it will always return a `subscribers` field for channels with fewer than 250 total subscribers. When returning a `partial_subscribers` field, the server guarantees that all bot users and users active within the last 14 days will be included. For other cases, the server may use its discretion to determine which channels and users to include, balancing between payload size and usefulness of the data provided to the client.  Passing `true` in an [unauthenticated request](/help/public-access-option) is an error.  **Changes**: The `partial` value is new in Zulip 11.0 (feature level 412).  Before Zulip 6.0 (feature level 149), this parameter was silently ignored and processed as though it were `false` in unauthenticated requests.  New in Zulip 2.1.0.  (default: false, e.g. true)
@@ -3382,7 +3510,7 @@ export def "register register-queue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get server settings
@@ -3397,13 +3525,14 @@ export def "server-settings get-server-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, authentication_methods: record<password: bool, dev: bool, email: bool, ldap: bool, remoteuser: bool, github: bool, azuread: bool, gitlab: bool, apple: bool, google: bool, saml: bool, openid_connect: bool, discord: bool>, external_authentication_methods: table<name: string, display_name: string, display_icon: string, login_url: string, signup_url: string>, zulip_feature_level: int, zulip_version: string, zulip_merge_base: string, push_notifications_enabled: bool, is_incompatible: bool, email_auth_enabled: bool, require_email_format_usernames: bool, realm_uri: string, realm_url: string, realm_name: string, realm_icon: string, realm_description: string, realm_web_public_access_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/server_settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update settings
@@ -3419,6 +3548,7 @@ export def "settings update-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target-users: record # An object specifying the collection of users whose settings should be modified, for modification of other users' settings by an organization administrator. When this parameter is absent, this API endpoint always modifies the current user's own settings.  **Changes**: New in Zulip 12.0 (feature level 444).  (e.g. {user_ids: [6, 8], group_ids: [24], skip_if_already_edited: false}) — shape: {user_ids?: list, group_ids?: list, skip_if_already_edited?: bool}
   --full-name: string # A new display name for the user.  (e.g. NewName)
   --email: string # Asks the server to initiate a confirmation sequence to change the user's email address to the indicated value. The user will need to demonstrate control of the new email address by clicking a confirmation link sent to that address.  (e.g. newname@example.com)
@@ -3497,7 +3627,7 @@ export def "settings update-settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get channel subscribers
@@ -3513,13 +3643,14 @@ export def "streams-members get-subscribers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, subscribers: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/streams/($stream_id)/members")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all channels
@@ -3535,6 +3666,7 @@ export def "streams get-streams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-public: oneof<nothing, bool> # Include all public channels.  (default: true, e.g. false)
   --include-web-public: oneof<nothing, bool> # Include all web-public channels.  (default: false, e.g. true)
   --include-subscribed: oneof<nothing, bool> # Include all channels that the user is subscribed to.  (default: true, e.g. false)
@@ -3551,7 +3683,7 @@ export def "streams get-streams" [
   let full_url = (build-url $base "/streams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a channel by ID
@@ -3567,13 +3699,14 @@ export def "streams get-stream-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, stream: record<stream_id: any, name: any, is_archived: any, description: any, date_created: any, creator_id: any, invite_only: any, rendered_description: any, is_web_public: any, stream_post_policy: any, message_retention_days: any, history_public_to_subscribers: any, topics_policy: any, first_message_id: any, folder_id: any, is_recently_active: any, is_announcement_only: any, can_add_subscribers_group: any, can_remove_subscribers_group: any, can_administer_channel_group: any, can_delete_any_message_group: any, can_delete_own_message_group: any, can_move_messages_out_of_channel_group: any, can_move_messages_within_channel_group: any, can_send_message_group: any, can_subscribe_group: any, can_resolve_topics_group: any, can_create_topic_group: any, subscriber_count: any, stream_weekly_traffic: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/streams/($stream_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a channel
@@ -3589,13 +3722,14 @@ export def "streams archive-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/streams/($stream_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a channel
@@ -3611,6 +3745,7 @@ export def "streams update-stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The new [description](/help/change-the-channel-description) for the channel, in [Zulip-flavored Markdown](/help/format-your-message-using-markdown) format.  Clients should use the `max_stream_description_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel description length.  **Changes**: Removed unnecessary JSON-encoding of this parameter in Zulip 4.0 (feature level 64).  (e.g. Discuss Italian history and travel destinations.)
   --new-name: string # The new name for the channel.  Clients should use the `max_stream_name_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel name length.  **Changes**: Removed unnecessary JSON-encoding of this parameter in Zulip 4.0 (feature level 64).  (e.g. Italy)
   --is-private: oneof<nothing, bool> # Change whether the channel is a private channel.  (e.g. true)
@@ -3641,7 +3776,7 @@ export def "streams update-stream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get channel's email address
@@ -3657,6 +3792,7 @@ export def "streams-email-address get-stream-email-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sender-id: int # The ID of a user or bot which should appear as the sender when messages are sent to the channel using the returned channel email address.  `sender_id` can be:  - ID of the current user. - ID of the Email gateway bot. (Default value) - ID of a bot owned by the current user.  **Changes**: New in Zulip 10.0 (feature level 335).  Previously, the sender was always Email gateway bot.  (e.g. 1)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3665,7 +3801,7 @@ export def "streams-email-address get-stream-email-address" [
   let full_url = (build-url $base $"/streams/($stream_id)/email_address" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a topic
@@ -3681,6 +3817,7 @@ export def "streams-delete-topic delete-topic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   topic_name: string # The name of the topic to delete.  Note: When the value of `realm_empty_topic_display_name` found in the [POST /register](/api/register-queue) response is used for this parameter, it is interpreted as an empty string.  **Changes**: Before Zulip 10.0 (feature level 334), empty string was not a valid topic name for channel messages.  (e.g. new coffee machine)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, complete: bool> {
   let input = $in
@@ -3691,7 +3828,7 @@ export def "streams-delete-topic delete-topic" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set "typing" status
@@ -3706,6 +3843,7 @@ export def "typing set-typing-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # Type of the message being composed.  **Changes**: In Zulip 9.0 (feature level 248), `"channel"` was added as an additional value for this parameter to indicate a channel message is being composed.  In Zulip 8.0 (feature level 215), stopped supporting `"private"` as a valid value for this parameter.  In Zulip 7.0 (feature level 174), `"direct"` was added as the preferred way to indicate a direct message is being composed, becoming the default value for this parameter and deprecating the original `"private"`.  New in Zulip 4.0 (feature level 58). Previously, typing notifications were only for direct messages.  (default: direct, e.g. direct)
   op: string@op-completer-1 # Whether the user has started (`"start"`) or stopped (`"stop"`) typing.  (e.g. start)
   --body-to: list # User IDs of the recipients of the message being typed. Required for the `"direct"` type. Ignored in the case of `"stream"` or `"channel"` type.  Clients should send a JSON-encoded list of user IDs, even if there is only one recipient.  **Changes**: In Zulip 8.0 (feature level 215), stopped using this parameter for the `"stream"` type. Previously, in the case of the `"stream"` type, it accepted a single-element list containing the ID of the channel. A new parameter, `stream_id`, is now used for this. Note that the `"channel"` type did not exist at this feature level.  Support for typing notifications for channel' messages is new in Zulip 4.0 (feature level 58). Previously, typing notifications were only for direct messages.  Before Zulip 2.0.0, this parameter accepted only a JSON-encoded list of email addresses. Support for the email address-based format was removed in Zulip 3.0 (feature level 11).  (e.g. [9, 10])
@@ -3720,7 +3858,7 @@ export def "typing set-typing-status" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set "typing" status for message editing
@@ -3736,6 +3874,7 @@ export def "messages-typing set-typing-status-for-message-edit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   op: string@op-completer-1 # Whether the user has started (`"start"`) or stopped (`"stop"`) editing.  (e.g. start)
 ]: any -> any {
   let input = $in
@@ -3746,7 +3885,7 @@ export def "messages-typing set-typing-status-for-message-edit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a channel
@@ -3761,6 +3900,7 @@ export def "channels-create create-channel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new channel.  Clients should use the `max_stream_name_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel name length.  (e.g. music)
   --description: string # The [description](/help/change-the-channel-description) to use for the new channel being created, in text/markdown format.  Clients should use the `max_stream_description_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel description length.  (e.g. Channel for discussing all things music!)
   subscribers: list # A list of user IDs of the users to be subscribed to the new channel.  (e.g. [17, 12])
@@ -3792,7 +3932,7 @@ export def "channels-create create-channel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a user group
@@ -3807,6 +3947,7 @@ export def "user-groups-create create-user-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the user group.  (e.g. marketing)
   description: string # The description of the user group.  (e.g. The marketing team.)
   members: list # An array containing the user IDs of the initial members for the new user group.  (e.g. [1, 2, 3, 4])
@@ -3826,7 +3967,7 @@ export def "user-groups-create create-user-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update user group members
@@ -3842,6 +3983,7 @@ export def "user-groups-members update-user-group-members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete: list # The list of user IDs to be removed from the user group.  (e.g. [10])
   --add: list # The list of user IDs to be added to the user group.  (e.g. [12, 13])
   --delete-subgroups: list # The list of user group IDs to be removed from the user group.  **Changes**: New in Zulip 10.0 (feature level 311).  (e.g. [9])
@@ -3855,7 +3997,7 @@ export def "user-groups-members update-user-group-members" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get user group members
@@ -3871,6 +4013,7 @@ export def "user-groups-members get-user-group-members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direct-member-only: oneof<nothing, bool> # Whether to consider only the direct members of user group and not members of its subgroups. Default is `false`.  (e.g. false)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, members: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3879,7 +4022,7 @@ export def "user-groups-members get-user-group-members" [
   let full_url = (build-url $base $"/user_groups/($user_group_id)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user group
@@ -3895,6 +4038,7 @@ export def "user-groups update-user-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name of the group.  **Changes**: Before Zulip 7.0 (feature level 165), this was a required field.  (e.g. marketing team)
   --description: string # The new description of the group.  **Changes**: Before Zulip 7.0 (feature level 165), this was a required field.  (e.g. The marketing team.)
   --can-add-members-group: any
@@ -3913,7 +4057,7 @@ export def "user-groups update-user-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get user groups
@@ -3928,6 +4072,7 @@ export def "user-groups get-user-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-deactivated-groups: oneof<nothing, bool> # Whether to include deactivated user groups in the response.  **Changes**: In Zulip 10.0 (feature level 294), renamed `allow_deactivated` to `include_deactivated_groups`.  New in Zulip 10.0 (feature level 290). Previously, deactivated user groups did not exist and thus would never be included in the response.  (default: false, e.g. true)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, user_groups: table<description: string, id: int, date_created: int, creator_id: int, members: list, direct_subgroup_ids: list, name: string, is_system_group: bool, can_add_members_group: record, can_join_group: record, can_leave_group: record, can_manage_group: record, can_mention_group: record, can_remove_members_group: record, deactivated: bool>> {
   let input = $in
@@ -3938,7 +4083,7 @@ export def "user-groups get-user-groups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update subgroups of a user group
@@ -3954,6 +4099,7 @@ export def "user-groups-subgroups update-user-group-subgroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete: list # The list of user group IDs to be removed from the user group.  (e.g. [10])
   --add: list # The list of user group IDs to be added to the user group.  (e.g. [10])
 ]: any -> any {
@@ -3965,7 +4111,7 @@ export def "user-groups-subgroups update-user-group-subgroups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get subgroups of a user group
@@ -3981,6 +4127,7 @@ export def "user-groups-subgroups get-user-group-subgroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direct-subgroup-only: oneof<nothing, bool> # Whether to consider only direct subgroups of the user group or subgroups of subgroups also.  (default: false, e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, subgroups: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3989,7 +4136,7 @@ export def "user-groups-subgroups get-user-group-subgroups" [
   let full_url = (build-url $base $"/user_groups/($user_group_id)/subgroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user group membership status
@@ -4006,6 +4153,7 @@ export def "user-groups-members get-is-user-group-member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --direct-member-only: oneof<nothing, bool> # Whether to consider only the direct members of user group and not members of its subgroups. Default is `false`.  (e.g. false)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, is_user_group_member: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4014,7 +4162,7 @@ export def "user-groups-members get-is-user-group-member" [
   let full_url = (build-url $base $"/user_groups/($user_group_id)/members/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate a user group
@@ -4030,13 +4178,14 @@ export def "user-groups-deactivate deactivate-user-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user_groups/($user_group_id)/deactivate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a channel folder
@@ -4051,6 +4200,7 @@ export def "channel-folders-create create-channel-folder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the channel folder.  Clients should use the `max_channel_folder_name_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel folder name length.  Value cannot be an empty string.  (e.g. marketing)
   --description: string # The description of the channel folder.  Clients should use the `max_channel_folder_description_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel folder description length.  Note that this parameter must be passed as part of the request, but can be an empty string if no description for the new channel folder is desired.  (e.g. Channels for marketing.)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, channel_folder_id: int> {
@@ -4062,7 +4212,7 @@ export def "channel-folders-create create-channel-folder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get channel folders
@@ -4077,6 +4227,7 @@ export def "channel-folders get-channel-folders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-archived: oneof<nothing, bool> # Whether to include archived channel folders in the response.  (default: false, e.g. true)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, channel_folders: table<id: int, name: string, order: int, date_created: int, creator_id: int, description: string, rendered_description: string, is_archived: bool>> {
   let input = $in
@@ -4087,7 +4238,7 @@ export def "channel-folders get-channel-folders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reorder channel folders
@@ -4102,6 +4253,7 @@ export def "channel-folders patch-channel-folders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   order: list # A list of channel folder IDs representing the new order.  This list must include the IDs of [all the organization's channel folders](/api/get-channel-folders), including archived folders.  (e.g. [2, 1])
 ]: any -> any {
   let input = $in
@@ -4112,7 +4264,7 @@ export def "channel-folders patch-channel-folders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update a channel folder
@@ -4128,6 +4280,7 @@ export def "channel-folders update-channel-folder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name of the channel folder.  Clients should use the `max_channel_folder_name_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel folder name length.  Value cannot be an empty string.  (e.g. backend)
   --description: string # The new description of the channel folder.  Clients should use the `max_channel_folder_description_length` returned by the [`POST /register`](/api/register-queue) endpoint to determine the maximum channel folder description length.  (e.g. Backend channels.)
   --is-archived: oneof<nothing, bool> # Whether to archive or unarchive the channel folder.  (e.g. true)
@@ -4140,7 +4293,7 @@ export def "channel-folders update-channel-folder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a bot's API key
@@ -4156,13 +4309,14 @@ export def "bots-api-key get-bot-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/bots/($bot_id)/api_key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Regenerate a bot's API key
@@ -4178,13 +4332,14 @@ export def "bots-api-key-regenerate regenerate-bot-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, api_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/bots/($bot_id)/api_key/regenerate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # (Ignored)
@@ -4198,6 +4353,7 @@ export def "real-time post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-types: list # A JSON-encoded array indicating which types of events you're interested in. Values that you might find useful include:  - **message** (messages) - **subscription** (changes in your subscriptions) - **realm_user** (changes to users in the organization and   their properties, such as their name).  If you do not specify this parameter, you will receive all events, and have to filter out the events not relevant to your client in your client code. For most applications, one is only interested in messages, so one specifies: `"event_types": ["message"]`  Event types not supported by the server are ignored, in order to simplify the implementation of client apps that support multiple server versions.  (e.g. [message])
   --narrow: list # A JSON-encoded array of arrays of length 2 indicating the [narrow filter(s)](/api/construct-narrow) for which you'd like to receive events for.  For example, to receive events for direct messages (including group direct messages) received by the user, one can use `"narrow": [["is", "dm"]]`.  Unlike the API for [fetching messages](/api/get-messages), this narrow parameter is simply a filter on messages that the user receives through their channel subscriptions (or because they are a recipient of a direct message).  This means that a client that requests a `narrow` filter of `[["channel", "Denmark"]]` will receive events for new messages sent to that channel while the user is subscribed to that channel. The client will not receive any message events at all if the user is not subscribed to `"Denmark"`.  Newly created bot users are not usually subscribed to any channels, so bots using this API need to be [subscribed](/api/subscribe) to any channels whose messages you'd like them to process using this endpoint.  See the `all_public_streams` parameter for how to process all public channel messages in an organization.  **Changes**: See [changes section](/api/construct-narrow#changes) of search/narrow filter documentation.  (default: [], e.g. [[channel, Denmark]])
   --all-public-streams: oneof<nothing, bool> # Whether you would like to request message events from all public channels. Useful for workflow bots that you'd like to see all new messages sent to public channels. (You can also subscribe the user to private channels).  (default: false, e.g. true)
@@ -4210,7 +4366,7 @@ export def "real-time post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Error handling
@@ -4225,13 +4381,14 @@ export def "rest-error-handling rest-error-handling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-error-handling")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Outgoing webhooks
@@ -4246,13 +4403,14 @@ export def "zulip-outgoing-webhook zulip-outgoing-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bot_email: string, bot_full_name: string, data: string, trigger: string, token: string, message: record<avatar_url: any, client: any, content: any, content_type: any, display_recipient: any, edit_history: any, id: any, is_me_message: any, last_edit_timestamp: any, last_moved_timestamp: any, reactions: any, recipient_id: any, sender_email: any, sender_full_name: any, sender_id: any, sender_realm_str: any, stream_id: any, subject: any, submessages: any, timestamp: any, topic_links: any, type: any, rendered_content: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/zulip-outgoing-webhook")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create BigBlueButton video call
@@ -4267,6 +4425,7 @@ export def "calls-bigbluebutton-create create-big-blue-button-video-call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --meeting-name: string # Meeting name for the BigBlueButton video call.  (e.g. test_channel meeting)
   --voice-only: oneof<nothing, bool> # Configures whether the call is voice-only; if true, disables cameras for all users. Only the call creator/moderator can edit this configuration.  **Changes**: New in Zulip 10.0 (feature level 337).  (e.g. true)
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, url: string> {
@@ -4276,7 +4435,7 @@ export def "calls-bigbluebutton-create create-big-blue-button-video-call" [
   let full_url = (build-url $base "/calls/bigbluebutton/create" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Nextcloud Talk video call
@@ -4291,6 +4450,7 @@ export def "calls-nextcloud-talk-create create-nextcloud-talk-video-call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   room_name: string # Room name for the Nextcloud Talk conversation.  (e.g. #Test > team check-in)
 ]: any -> record<result: any, msg: any, ignored_parameters_unsupported: any, url: string> {
   let input = $in
@@ -4301,7 +4461,7 @@ export def "calls-nextcloud-talk-create create-nextcloud-talk-video-call" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Webex video call
@@ -4316,13 +4476,14 @@ export def "calls-webex-create create-webex-video-call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls/webex/create")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Constructor Groups video call
@@ -4337,11 +4498,12 @@ export def "calls-constructorgroups-create create-constructor-groups-video-call"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: any, msg: any, ignored_parameters_unsupported: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls/constructorgroups/create")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

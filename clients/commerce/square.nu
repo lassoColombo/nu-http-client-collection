@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -86,7 +87,7 @@ def resume-change-timing-completer [] { ["END_OF_BILLING_CYCLE" "IMMEDIATE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-revoke RevokeToken" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -119,6 +120,7 @@ export def "oauth2-revoke RevokeToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # The Square-issued ID for your application, which is available on the **OAuth** page in the [Developer Dashboard](https://developer.squareup.com/apps). (nullable)
   --access-token: string # The access token of the merchant whose token you want to revoke. Do not provide a value for `merchant_id` if you provide this parameter. (nullable)
   --merchant-id: string # The ID of the merchant whose token you want to revoke. Do not provide a value for `access_token` if you provide this parameter. (nullable)
@@ -132,7 +134,7 @@ export def "oauth2-revoke RevokeToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ObtainToken
@@ -147,6 +149,7 @@ export def "oauth2-token ObtainToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The Square-issued ID of your application, which is available as the **Application ID** on the **OAuth** page in the [Developer Console](https://developer.squareup.com/apps).  Required for the code flow and PKCE flow for any grant type.
   --client-secret: string # The secret key for your application, which is available as the **Application secret** on the **OAuth** page in the [Developer Console](https://developer.squareup.com/apps).  Required for the code flow for any grant type. Don't confuse your client secret with your personal access token. (nullable)
   --code: string # The authorization code to exchange for an OAuth access token. This is the `code` value that Square sent to your redirect URL in the authorization response.  Required for the code flow and PKCE flow if `grant_type` is `authorization_code`. (nullable)
@@ -167,7 +170,7 @@ export def "oauth2-token ObtainToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveTokenStatus
@@ -182,13 +185,14 @@ export def "oauth2-token-status RetrieveTokenStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scopes: list<string>, expires_at: string, client_id: string, merchant_id: string, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # V1ListOrders
@@ -206,6 +210,7 @@ export def "orders V1ListOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order in which payments are listed in the response.
   --limit: int # The maximum number of payments to return in a single response. This value cannot exceed 200.
   --batch-token: string # A pagination cursor to retrieve the next set of results for your original query to the endpoint.
@@ -216,7 +221,7 @@ export def "orders V1ListOrders" [
   let full_url = (build-url $base $"/v1/($location_id)/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # V1RetrieveOrder
@@ -235,13 +240,14 @@ export def "orders V1RetrieveOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, id: string, buyer_email: string, recipient_name: string, recipient_phone_number: string, state: string, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, subtotal_money: record<amount: int, currency_code: string>, total_shipping_money: record<amount: int, currency_code: string>, total_tax_money: record<amount: int, currency_code: string>, total_price_money: record<amount: int, currency_code: string>, total_discount_money: record<amount: int, currency_code: string>, created_at: string, updated_at: string, expires_at: string, payment_id: string, buyer_note: string, completed_note: string, refunded_note: string, canceled_note: string, tender: record<id: string, type: string, name: string, employee_id: string, receipt_url: string, card_brand: string, pan_suffix: string, entry_method: string, payment_note: string, total_money: record<amount: int, currency_code: string>, tendered_money: record<amount: int, currency_code: string>, tendered_at: string, settled_at: string, change_back_money: record<amount: int, currency_code: string>, refunded_money: record<amount: int, currency_code: string>, is_exchange: bool>, order_history: table<action: string, created_at: string>, promo_code: string, btc_receive_address: string, btc_price_satoshi: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/($location_id)/orders/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # V1UpdateOrder
@@ -260,6 +266,7 @@ export def "orders V1UpdateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer
   --shipped-tracking-number: string # The tracking number of the shipment associated with the order. Only valid if action is COMPLETE. (nullable)
   --completed-note: string # A merchant-specified note about the completion of the order. Only valid if action is COMPLETE. (nullable)
@@ -274,7 +281,7 @@ export def "orders V1UpdateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RegisterDomain
@@ -289,6 +296,7 @@ export def "apple-pay-domains RegisterDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   domain_name: string # A domain name as described in RFC-1034 that will be registered with ApplePay.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, status: string> {
   let input = $in
@@ -299,7 +307,7 @@ export def "apple-pay-domains RegisterDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListBankAccounts
@@ -314,6 +322,7 @@ export def "bank-accounts ListBankAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor returned by a previous call to this endpoint. Use it in the next `ListBankAccounts` request to retrieve the next set of results.  See the [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination) guide for more information.
   --limit: int # Upper limit on the number of bank accounts to return in the response. Currently, 1000 is the largest supported limit. You can specify a limit of up to 1000 bank accounts. This is also the default limit.
   --location-id: string # Location ID. You can specify this optional filter to retrieve only the linked bank accounts belonging to a specific location.
@@ -325,7 +334,7 @@ export def "bank-accounts ListBankAccounts" [
   let full_url = (build-url $base "/v2/bank-accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateBankAccount
@@ -340,6 +349,7 @@ export def "bank-accounts CreateBankAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # Unique ID. For more information, see the [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   source_id: string # The ID of the source that represents the bank account information to be stored. This field accepts the payment token created by WebSDK
   --customer-id: string # The ID of the customer associated with the bank account to be stored.
@@ -352,7 +362,7 @@ export def "bank-accounts CreateBankAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetBankAccountByV1Id
@@ -368,13 +378,14 @@ export def "bank-accounts-by-v1-id GetBankAccountByV1Id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, bank_account: record<id: string, account_number_suffix: string, country: string, currency: string, account_type: string, holder_name: string, primary_bank_identification_number: string, secondary_bank_identification_number: string, debit_mandate_reference_id: string, reference_id: string, location_id: string, status: string, creditable: bool, debitable: bool, fingerprint: string, version: int, bank_name: string, customer_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bank-accounts/by-v1-id/($v1_bank_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetBankAccount
@@ -390,13 +401,14 @@ export def "bank-accounts GetBankAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bank_account: record<id: string, account_number_suffix: string, country: string, currency: string, account_type: string, holder_name: string, primary_bank_identification_number: string, secondary_bank_identification_number: string, debit_mandate_reference_id: string, reference_id: string, location_id: string, status: string, creditable: bool, debitable: bool, fingerprint: string, version: int, bank_name: string, customer_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bank-accounts/($bank_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DisableBankAccount
@@ -412,13 +424,14 @@ export def "bank-accounts-disable DisableBankAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bank_account: record<id: string, account_number_suffix: string, country: string, currency: string, account_type: string, holder_name: string, primary_bank_identification_number: string, secondary_bank_identification_number: string, debit_mandate_reference_id: string, reference_id: string, location_id: string, status: string, creditable: bool, debitable: bool, fingerprint: string, version: int, bank_name: string, customer_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bank-accounts/($bank_account_id)/disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListBookings
@@ -433,6 +446,7 @@ export def "bookings ListBookings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results per page to return in a paged response.
   --cursor: string # The pagination cursor from the preceding response to return the next page of the results. Do not set this when retrieving the first page of the results.
   --customer-id: string # The [customer](entity:Customer) for whom to retrieve bookings. If this is not set, bookings for all customers are retrieved.
@@ -447,7 +461,7 @@ export def "bookings ListBookings" [
   let full_url = (build-url $base "/v2/bookings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateBooking
@@ -463,6 +477,7 @@ export def "bookings CreateBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique key to make this request an idempotent operation.
   booking: record # Represents a booking as a time-bound service contract for a seller's staff member to provide a specified service at a given location to a requesting customer in one or more appointment segments. — shape: {version?: int, status?: "PENDING"|"CANCELLED_BY_CUSTOMER"|"CANCELLED_BY_SELLER"|"DECLINED"|"ACCEPTED"|"NO_SHOW", start_at?: string, location_id?: string, customer_id?: string, customer_note?: string, seller_note?: string, appointment_segments?: list, location_type?: "BUSINESS_LOCATION"|"CUSTOMER_LOCATION"|"PHONE", creator_details?: record, source?: "FIRST_PARTY_MERCHANT"|"FIRST_PARTY_BUYER"|"THIRD_PARTY_BUYER"|"API", address?: record}
 ]: any -> record<booking: record<id: string, version: int, status: string, created_at: string, updated_at: string, start_at: string, location_id: string, customer_id: string, customer_note: string, seller_note: string, appointment_segments: list<record>, transition_time_minutes: int, all_day: bool, location_type: string, creator_details: record<creator_type: string, team_member_id: string, customer_id: string>, source: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -474,7 +489,7 @@ export def "bookings CreateBooking" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchAvailability
@@ -490,6 +505,7 @@ export def "bookings-availability-search SearchAvailability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # The query used to search for buyer-accessible availabilities of bookings. — shape: {filter: record}
 ]: any -> record<availabilities: table<start_at: string, location_id: string, appointment_segments: list>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -500,7 +516,7 @@ export def "bookings-availability-search SearchAvailability" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkRetrieveBookings
@@ -515,6 +531,7 @@ export def "bookings-bulk-retrieve BulkRetrieveBookings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   booking_ids: list # A non-empty list of [Booking](entity:Booking) IDs specifying bookings to retrieve.
 ]: any -> record<bookings: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -525,7 +542,7 @@ export def "bookings-bulk-retrieve BulkRetrieveBookings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveBusinessBookingProfile
@@ -540,13 +557,14 @@ export def "bookings-business-booking-profile RetrieveBusinessBookingProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<business_booking_profile: record<seller_id: string, created_at: string, booking_enabled: bool, customer_timezone_choice: string, booking_policy: string, allow_user_cancel: bool, business_appointment_settings: record<location_types: list, alignment_time: string, min_booking_lead_time_seconds: int, max_booking_lead_time_seconds: int, any_team_member_booking_enabled: bool, multiple_service_booking_enabled: bool, max_appointments_per_day_limit_type: string, max_appointments_per_day_limit: int, cancellation_window_seconds: int, cancellation_fee_money: record, cancellation_policy: string, cancellation_policy_text: string, skip_booking_flow_staff_selection: bool>, support_seller_level_writes: bool>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/bookings/business-booking-profile")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListBookingCustomAttributeDefinitions
@@ -561,6 +579,7 @@ export def "bookings-custom-attribute-definitions ListBookingCustomAttributeDefi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<custom_attribute_definitions: table<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -570,7 +589,7 @@ export def "bookings-custom-attribute-definitions ListBookingCustomAttributeDefi
   let full_url = (build-url $base "/v2/bookings/custom-attribute-definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateBookingCustomAttributeDefinition
@@ -586,6 +605,7 @@ export def "bookings-custom-attribute-definitions CreateBookingCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -597,7 +617,7 @@ export def "bookings-custom-attribute-definitions CreateBookingCustomAttributeDe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteBookingCustomAttributeDefinition
@@ -613,13 +633,14 @@ export def "bookings-custom-attribute-definitions DeleteBookingCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bookings/custom-attribute-definitions/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveBookingCustomAttributeDefinition
@@ -635,6 +656,7 @@ export def "bookings-custom-attribute-definitions RetrieveBookingCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The current version of the custom attribute definition, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -643,7 +665,7 @@ export def "bookings-custom-attribute-definitions RetrieveBookingCustomAttribute
   let full_url = (build-url $base $"/v2/bookings/custom-attribute-definitions/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateBookingCustomAttributeDefinition
@@ -660,6 +682,7 @@ export def "bookings-custom-attribute-definitions UpdateBookingCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -671,7 +694,7 @@ export def "bookings-custom-attribute-definitions UpdateBookingCustomAttributeDe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkDeleteBookingCustomAttributes
@@ -686,6 +709,7 @@ export def "bookings-custom-attributes-bulk-delete BulkDeleteBookingCustomAttrib
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map containing 1 to 25 individual Delete requests. For each request, provide an arbitrary ID that is unique for this `BulkDeleteBookingCustomAttributes` request and the information needed to delete a custom attribute.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -696,7 +720,7 @@ export def "bookings-custom-attributes-bulk-delete BulkDeleteBookingCustomAttrib
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpsertBookingCustomAttributes
@@ -711,6 +735,7 @@ export def "bookings-custom-attributes-bulk-upsert BulkUpsertBookingCustomAttrib
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map containing 1 to 25 individual upsert requests. For each request, provide an arbitrary ID that is unique for this `BulkUpsertBookingCustomAttributes` request and the information needed to create or update a custom attribute.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -721,7 +746,7 @@ export def "bookings-custom-attributes-bulk-upsert BulkUpsertBookingCustomAttrib
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLocationBookingProfiles
@@ -736,6 +761,7 @@ export def "bookings-location-booking-profiles ListLocationBookingProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in a paged response.
   --cursor: string # The pagination cursor from the preceding response to return the next page of the results. Do not set this when retrieving the first page of the results.
 ]: nothing -> record<location_booking_profiles: table<location_id: string, booking_site_url: string, online_booking_enabled: bool>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -745,7 +771,7 @@ export def "bookings-location-booking-profiles ListLocationBookingProfiles" [
   let full_url = (build-url $base "/v2/bookings/location-booking-profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveLocationBookingProfile
@@ -761,13 +787,14 @@ export def "bookings-location-booking-profiles RetrieveLocationBookingProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<location_booking_profile: record<location_id: string, booking_site_url: string, online_booking_enabled: bool>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bookings/location-booking-profiles/($location_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListTeamMemberBookingProfiles
@@ -782,6 +809,7 @@ export def "bookings-team-member-booking-profiles ListTeamMemberBookingProfiles"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookable-only: oneof<nothing, bool> # Indicates whether to include only bookable team members in the returned result (`true`) or not (`false`). (default: false)
   --limit: int # The maximum number of results to return in a paged response.
   --cursor: string # The pagination cursor from the preceding response to return the next page of the results. Do not set this when retrieving the first page of the results.
@@ -793,7 +821,7 @@ export def "bookings-team-member-booking-profiles ListTeamMemberBookingProfiles"
   let full_url = (build-url $base "/v2/bookings/team-member-booking-profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BulkRetrieveTeamMemberBookingProfiles
@@ -808,6 +836,7 @@ export def "bookings-team-member-booking-profiles-bulk-retrieve BulkRetrieveTeam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   team_member_ids: list # A non-empty list of IDs of team members whose booking profiles you want to retrieve.
 ]: any -> record<team_member_booking_profiles: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -818,7 +847,7 @@ export def "bookings-team-member-booking-profiles-bulk-retrieve BulkRetrieveTeam
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveTeamMemberBookingProfile
@@ -834,13 +863,14 @@ export def "bookings-team-member-booking-profiles RetrieveTeamMemberBookingProfi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<team_member_booking_profile: record<team_member_id: string, description: string, display_name: string, is_bookable: bool, profile_image_url: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bookings/team-member-booking-profiles/($team_member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveBooking
@@ -856,13 +886,14 @@ export def "bookings RetrieveBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<booking: record<id: string, version: int, status: string, created_at: string, updated_at: string, start_at: string, location_id: string, customer_id: string, customer_note: string, seller_note: string, appointment_segments: list<record>, transition_time_minutes: int, all_day: bool, location_type: string, creator_details: record<creator_type: string, team_member_id: string, customer_id: string>, source: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bookings/($booking_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateBooking
@@ -879,6 +910,7 @@ export def "bookings UpdateBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique key to make this request an idempotent operation. (nullable)
   booking: record # Represents a booking as a time-bound service contract for a seller's staff member to provide a specified service at a given location to a requesting customer in one or more appointment segments. — shape: {version?: int, status?: "PENDING"|"CANCELLED_BY_CUSTOMER"|"CANCELLED_BY_SELLER"|"DECLINED"|"ACCEPTED"|"NO_SHOW", start_at?: string, location_id?: string, customer_id?: string, customer_note?: string, seller_note?: string, appointment_segments?: list, location_type?: "BUSINESS_LOCATION"|"CUSTOMER_LOCATION"|"PHONE", creator_details?: record, source?: "FIRST_PARTY_MERCHANT"|"FIRST_PARTY_BUYER"|"THIRD_PARTY_BUYER"|"API", address?: record}
 ]: any -> record<booking: record<id: string, version: int, status: string, created_at: string, updated_at: string, start_at: string, location_id: string, customer_id: string, customer_note: string, seller_note: string, appointment_segments: list<record>, transition_time_minutes: int, all_day: bool, location_type: string, creator_details: record<creator_type: string, team_member_id: string, customer_id: string>, source: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -890,7 +922,7 @@ export def "bookings UpdateBooking" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CancelBooking
@@ -906,6 +938,7 @@ export def "bookings-cancel CancelBooking" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique key to make this request an idempotent operation. (nullable)
   --booking-version: int # The revision number for the booking used for optimistic concurrency. (nullable)
 ]: any -> record<booking: record<id: string, version: int, status: string, created_at: string, updated_at: string, start_at: string, location_id: string, customer_id: string, customer_note: string, seller_note: string, appointment_segments: list<record>, transition_time_minutes: int, all_day: bool, location_type: string, creator_details: record<creator_type: string, team_member_id: string, customer_id: string>, source: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -917,7 +950,7 @@ export def "bookings-cancel CancelBooking" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListBookingCustomAttributes
@@ -933,6 +966,7 @@ export def "bookings-custom-attributes ListBookingCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --with-definitions: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each custom attribute. Set this parameter to `true` to get the name and description of each custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
@@ -943,7 +977,7 @@ export def "bookings-custom-attributes ListBookingCustomAttributes" [
   let full_url = (build-url $base $"/v2/bookings/($booking_id)/custom-attributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteBookingCustomAttribute
@@ -960,13 +994,14 @@ export def "bookings-custom-attributes DeleteBookingCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/bookings/($booking_id)/custom-attributes/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveBookingCustomAttribute
@@ -983,6 +1018,7 @@ export def "bookings-custom-attributes RetrieveBookingCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-definition: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of the custom attribute. Set this parameter to `true` to get the name and description of the custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
   --version: int # The current version of the custom attribute, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -992,7 +1028,7 @@ export def "bookings-custom-attributes RetrieveBookingCustomAttribute" [
   let full_url = (build-url $base $"/v2/bookings/($booking_id)/custom-attributes/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertBookingCustomAttribute
@@ -1010,6 +1046,7 @@ export def "bookings-custom-attributes UpsertBookingCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute: record # A custom attribute value. Each custom attribute value has a corresponding `CustomAttributeDefinition` object. — shape: {key?: string, value?: any, version?: int, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", definition?: record}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -1021,7 +1058,7 @@ export def "bookings-custom-attributes UpsertBookingCustomAttribute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListCards
@@ -1036,6 +1073,7 @@ export def "cards ListCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --customer-id: string # Limit results to cards associated with the customer supplied. By default, all cards owned by the merchant are returned.
   --include-disabled: oneof<nothing, bool> # Includes disabled cards. By default, all enabled cards owned by the merchant are returned. (default: false)
@@ -1048,7 +1086,7 @@ export def "cards ListCards" [
   let full_url = (build-url $base "/v2/cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateCard
@@ -1064,6 +1102,7 @@ export def "cards CreateCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this CreateCard request. Keys can be any valid string and must be unique for every request.  Max: 45 characters  See [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   source_id: string # The ID of the source which represents the card information to be stored. This can be a card nonce or a payment id.
   --verification-token: string # An identifying token generated by [Payments.verifyBuyer()](https://developer.squareup.com/reference/sdks/web/payments/objects/Payments#Payments.verifyBuyer). Verification tokens encapsulate customer device information and 3-D Secure challenge results to indicate that Square has verified the buyer identity.  See the [SCA Overview](https://developer.squareup.com/docs/sca-overview).
@@ -1077,7 +1116,7 @@ export def "cards CreateCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveCard
@@ -1093,13 +1132,14 @@ export def "cards RetrieveCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, card: record<id: string, card_brand: string, last_4: string, exp_month: int, exp_year: int, cardholder_name: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, fingerprint: string, customer_id: string, merchant_id: string, reference_id: string, enabled: bool, card_type: string, prepaid_type: string, bin: string, created_at: string, disabled_at: string, version: int, card_co_brand: string, issuer_alert: string, issuer_alert_at: string, hsa_fsa: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/cards/($card_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DisableCard
@@ -1115,13 +1155,14 @@ export def "cards-disable DisableCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, card: record<id: string, card_brand: string, last_4: string, exp_month: int, exp_year: int, cardholder_name: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, fingerprint: string, customer_id: string, merchant_id: string, reference_id: string, enabled: bool, card_type: string, prepaid_type: string, bin: string, created_at: string, disabled_at: string, version: int, card_co_brand: string, issuer_alert: string, issuer_alert_at: string, hsa_fsa: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/cards/($card_id)/disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListCashDrawerShifts
@@ -1136,6 +1177,7 @@ export def "cash-drawers-shifts ListCashDrawerShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location to query for a list of cash drawer shifts.
   --sort-order: string@sort-order-completer # The order in which cash drawer shifts are listed in the response, based on their opened_at field. Default value: ASC
   --begin-time: string # The inclusive start time of the query on opened_at, in ISO 8601 format.
@@ -1149,7 +1191,7 @@ export def "cash-drawers-shifts ListCashDrawerShifts" [
   let full_url = (build-url $base "/v2/cash-drawers/shifts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCashDrawerShift
@@ -1165,6 +1207,7 @@ export def "cash-drawers-shifts RetrieveCashDrawerShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location to retrieve cash drawer shifts from.
 ]: nothing -> record<cash_drawer_shift: record<id: string, state: string, opened_at: string, ended_at: string, closed_at: string, description: string, opened_cash_money: record<amount: int, currency: string>, cash_payment_money: record<amount: int, currency: string>, cash_refunds_money: record<amount: int, currency: string>, cash_paid_in_money: record<amount: int, currency: string>, cash_paid_out_money: record<amount: int, currency: string>, expected_cash_money: record<amount: int, currency: string>, closed_cash_money: record<amount: int, currency: string>, device: record<id: string, name: string>, created_at: string, updated_at: string, location_id: string, team_member_ids: list<string>, opening_team_member_id: string, ending_team_member_id: string, closing_team_member_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1173,7 +1216,7 @@ export def "cash-drawers-shifts RetrieveCashDrawerShift" [
   let full_url = (build-url $base $"/v2/cash-drawers/shifts/($shift_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListCashDrawerShiftEvents
@@ -1189,6 +1232,7 @@ export def "cash-drawers-shifts-events ListCashDrawerShiftEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location to list cash drawer shifts for.
   --limit: int # Number of resources to be returned in a page of results (200 by default, 1000 max).
   --cursor: string # Opaque cursor for fetching the next page of results.
@@ -1199,7 +1243,7 @@ export def "cash-drawers-shifts-events ListCashDrawerShiftEvents" [
   let full_url = (build-url $base $"/v2/cash-drawers/shifts/($shift_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BatchDeleteCatalogObjects
@@ -1214,6 +1258,7 @@ export def "catalog-batch-delete BatchDeleteCatalogObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   object_ids: list # The IDs of the CatalogObjects to be deleted. When an object is deleted, other objects in the graph that depend on that object will be deleted as well (for example, deleting a CatalogItem will delete its CatalogItemVariation.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, deleted_object_ids: list<string>, deleted_at: string> {
   let input = $in
@@ -1224,7 +1269,7 @@ export def "catalog-batch-delete BatchDeleteCatalogObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchRetrieveCatalogObjects
@@ -1239,6 +1284,7 @@ export def "catalog-batch-retrieve BatchRetrieveCatalogObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   object_ids: list # The IDs of the CatalogObjects to be retrieved.
   --include-related-objects: oneof<nothing, bool> # If `true`, the response will include additional objects that are related to the requested objects. Related objects are defined as any objects referenced by ID by the results in the `objects` field of the response. These objects are put in the `related_objects` field. Setting this to `true` is helpful when the objects are needed for immediate display to a user. This process only goes one level deep. Objects referenced by the related objects will not be included. For example,  if the `objects` field of the response contains a CatalogItem, its associated CatalogCategory objects, CatalogTax objects, CatalogImage objects and CatalogModifierLists will be returned in the `related_objects` field of the response. If the `objects` field of the response contains a CatalogItemVariation, its parent CatalogItem will be returned in the `related_objects` field of the response.  Default value: `false` (nullable)
   --catalog-version: int # The specific version of the catalog objects to be included in the response.  This allows you to retrieve historical versions of objects. The specified version value is matched against the [CatalogObject](entity:CatalogObject)s' `version` attribute. If not included, results will be from the current version of the catalog. (nullable, format: int64)
@@ -1253,7 +1299,7 @@ export def "catalog-batch-retrieve BatchRetrieveCatalogObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchUpsertCatalogObjects
@@ -1269,6 +1315,7 @@ export def "catalog-batch-upsert BatchUpsertCatalogObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A value you specify that uniquely identifies this request among all your requests. A common way to create a valid idempotency key is to use a Universally unique identifier (UUID).  If you're unsure whether a particular request was successful, you can reattempt it with the same idempotency key without worrying about creating duplicate objects.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   batches: list # A batch of CatalogObjects to be inserted/updated atomically. The objects within a batch will be inserted in an all-or-nothing fashion, i.e., if an error occurs attempting to insert or update an object within a batch, the entire batch will be rejected. However, an error in one batch will not affect other batches within the same request.  For each object, its `updated_at` field is ignored and replaced with a current [timestamp](https://developer.squareup.com/docs/build-basics/working-with-dates), and its `is_deleted` field must not be set to `true`.  To modify an existing object, supply its ID. To create a new object, use an ID starting with `#`. These IDs may be used to create relationships between an object and attributes of other objects that reference it. For example, you can create a CatalogItem with ID `#ABC` and a CatalogItemVariation with its `item_id` attribute set to `#ABC` in order to associate the CatalogItemVariation with its parent CatalogItem.  Any `#`-prefixed IDs are valid only within a single atomic batch, and will be replaced by server-generated IDs.  Each batch may contain up to 1,000 objects. The total number of objects across all batches for a single request may not exceed 10,000. If either of these limits is violated, an error will be returned and no objects will be inserted or updated. — item shape: {objects: list}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, objects: table<type: string, id: string, updated_at: string, version: int, is_deleted: bool, custom_attribute_values: record, catalog_v1_ids: list, present_at_all_locations: bool, present_at_location_ids: list, absent_at_location_ids: list, item_data: record, category_data: record, item_variation_data: record, tax_data: record, discount_data: record, modifier_list_data: record, modifier_data: record, time_period_data: record, product_set_data: record, pricing_rule_data: record, image_data: record, measurement_unit_data: record, subscription_plan_data: record, item_option_data: record, item_option_value_data: record, custom_attribute_definition_data: record, quick_amounts_settings_data: record, subscription_plan_variation_data: record, availability_period_data: record>, updated_at: string, id_mappings: table<client_object_id: string, object_id: string>> {
@@ -1280,7 +1327,7 @@ export def "catalog-batch-upsert BatchUpsertCatalogObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateCatalogImage
@@ -1296,6 +1343,7 @@ export def "catalog-images CreateCatalogImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record # e.g. {idempotency_key: 528dea59-7bfb-43c1-bd48-4a6bba7dd61f86, image: {id: #TEMP_ID, image_data: {caption: A picture of a cup of coffee}, type: IMAGE}, object_id: ND6EA5AAJEO5WL3JNNIAQA32} — shape: {idempotency_key: string, object_id?: string, image: record, is_primary?: bool}
   --image-file: string # format: binary
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, image: record<type: string, id: string, updated_at: string, version: int, is_deleted: bool, custom_attribute_values: record, catalog_v1_ids: list<record>, present_at_all_locations: bool, present_at_location_ids: list<string>, absent_at_location_ids: list<string>, item_data: record<name: string, description: string, abbreviation: string, label_color: string, is_taxable: bool, category_id: string, buyer_facing_name: string, tax_ids: list, modifier_list_info: list, variations: list, product_type: string, skip_modifier_screen: bool, item_options: list, ecom_uri: string, ecom_image_uris: list, image_ids: list, sort_name: string, categories: list, description_html: string, description_plaintext: string, kitchen_name: string, channels: list, is_archived: bool, ecom_seo_data: record, food_and_beverage_details: record, reporting_category: record, is_alcoholic: bool>, category_data: record<name: string, image_ids: list, category_type: string, parent_category: record, is_top_level: bool, channels: list, availability_period_ids: list, online_visibility: bool, root_category: string, ecom_seo_data: record, path_to_root: list>, item_variation_data: record<item_id: string, name: string, sku: string, upc: string, ordinal: int, pricing_type: string, price_money: record, location_overrides: list, track_inventory: bool, inventory_alert_type: string, inventory_alert_threshold: int, user_data: string, service_duration: int, available_for_booking: bool, item_option_values: list, measurement_unit_id: string, sellable: bool, stockable: bool, image_ids: list, team_member_ids: list, stockable_conversion: record, kitchen_name: string>, tax_data: record<name: string, calculation_phase: string, inclusion_type: string, percentage: string, applies_to_custom_amounts: bool, enabled: bool, applies_to_product_set_id: string>, discount_data: record<name: string, discount_type: string, percentage: string, amount_money: record, pin_required: bool, label_color: string, modify_tax_basis: string, maximum_amount_money: record>, modifier_list_data: record<name: string, ordinal: int, selection_type: string, modifiers: list, image_ids: list, allow_quantities: bool, is_conversational: bool, modifier_type: string, max_length: int, text_required: bool, internal_name: string, min_selected_modifiers: int, max_selected_modifiers: int, hidden_from_customer: bool>, modifier_data: record<name: string, price_money: record, on_by_default: bool, ordinal: int, modifier_list_id: string, location_overrides: list, kitchen_name: string, image_id: string, hidden_online: bool>, time_period_data: record<event: string>, product_set_data: record<name: string, product_ids_any: list, product_ids_all: list, quantity_exact: int, quantity_min: int, quantity_max: int, all_products: bool>, pricing_rule_data: record<name: string, time_period_ids: list, discount_id: string, match_products_id: string, apply_products_id: string, exclude_products_id: string, valid_from_date: string, valid_from_local_time: string, valid_until_date: string, valid_until_local_time: string, exclude_strategy: string, minimum_order_subtotal_money: record, customer_group_ids_any: list>, image_data: record<name: string, url: string, caption: string, photo_studio_order_id: string>, measurement_unit_data: record<measurement_unit: record, precision: int>, subscription_plan_data: record<name: string, phases: list, subscription_plan_variations: list, eligible_item_ids: list, eligible_category_ids: list, all_items: bool>, item_option_data: record<name: string, display_name: string, description: string, show_colors: bool, values: list>, item_option_value_data: record<item_option_id: string, name: string, description: string, color: string, ordinal: int>, custom_attribute_definition_data: record<type: string, name: string, description: string, source_application: record, allowed_object_types: list, seller_visibility: string, app_visibility: string, string_config: record, number_config: record, selection_config: record, custom_attribute_usage_count: int, key: string>, quick_amounts_settings_data: record<option: string, eligible_for_auto_amounts: bool, amounts: list>, subscription_plan_variation_data: record<name: string, phases: list, subscription_plan_id: string, monthly_billing_anchor_date: int, can_prorate: bool, successor_plan_variation_id: string>, availability_period_data: record<start_local_time: string, end_local_time: string, day_of_week: string>>> {
@@ -1307,7 +1355,7 @@ export def "catalog-images CreateCatalogImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # UpdateCatalogImage
@@ -1324,6 +1372,7 @@ export def "catalog-images UpdateCatalogImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record # e.g. {idempotency_key: 528dea59-7bfb-43c1-bd48-4a6bba7dd61f86, image: {image_data: {caption: A picture of a cup of coffee, name: Coffee}, type: IMAGE}, object_id: ND6EA5AAJEO5WL3JNNIAQA32} — shape: {idempotency_key: string}
   --image-file: string # format: binary
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, image: record<type: string, id: string, updated_at: string, version: int, is_deleted: bool, custom_attribute_values: record, catalog_v1_ids: list<record>, present_at_all_locations: bool, present_at_location_ids: list<string>, absent_at_location_ids: list<string>, item_data: record<name: string, description: string, abbreviation: string, label_color: string, is_taxable: bool, category_id: string, buyer_facing_name: string, tax_ids: list, modifier_list_info: list, variations: list, product_type: string, skip_modifier_screen: bool, item_options: list, ecom_uri: string, ecom_image_uris: list, image_ids: list, sort_name: string, categories: list, description_html: string, description_plaintext: string, kitchen_name: string, channels: list, is_archived: bool, ecom_seo_data: record, food_and_beverage_details: record, reporting_category: record, is_alcoholic: bool>, category_data: record<name: string, image_ids: list, category_type: string, parent_category: record, is_top_level: bool, channels: list, availability_period_ids: list, online_visibility: bool, root_category: string, ecom_seo_data: record, path_to_root: list>, item_variation_data: record<item_id: string, name: string, sku: string, upc: string, ordinal: int, pricing_type: string, price_money: record, location_overrides: list, track_inventory: bool, inventory_alert_type: string, inventory_alert_threshold: int, user_data: string, service_duration: int, available_for_booking: bool, item_option_values: list, measurement_unit_id: string, sellable: bool, stockable: bool, image_ids: list, team_member_ids: list, stockable_conversion: record, kitchen_name: string>, tax_data: record<name: string, calculation_phase: string, inclusion_type: string, percentage: string, applies_to_custom_amounts: bool, enabled: bool, applies_to_product_set_id: string>, discount_data: record<name: string, discount_type: string, percentage: string, amount_money: record, pin_required: bool, label_color: string, modify_tax_basis: string, maximum_amount_money: record>, modifier_list_data: record<name: string, ordinal: int, selection_type: string, modifiers: list, image_ids: list, allow_quantities: bool, is_conversational: bool, modifier_type: string, max_length: int, text_required: bool, internal_name: string, min_selected_modifiers: int, max_selected_modifiers: int, hidden_from_customer: bool>, modifier_data: record<name: string, price_money: record, on_by_default: bool, ordinal: int, modifier_list_id: string, location_overrides: list, kitchen_name: string, image_id: string, hidden_online: bool>, time_period_data: record<event: string>, product_set_data: record<name: string, product_ids_any: list, product_ids_all: list, quantity_exact: int, quantity_min: int, quantity_max: int, all_products: bool>, pricing_rule_data: record<name: string, time_period_ids: list, discount_id: string, match_products_id: string, apply_products_id: string, exclude_products_id: string, valid_from_date: string, valid_from_local_time: string, valid_until_date: string, valid_until_local_time: string, exclude_strategy: string, minimum_order_subtotal_money: record, customer_group_ids_any: list>, image_data: record<name: string, url: string, caption: string, photo_studio_order_id: string>, measurement_unit_data: record<measurement_unit: record, precision: int>, subscription_plan_data: record<name: string, phases: list, subscription_plan_variations: list, eligible_item_ids: list, eligible_category_ids: list, all_items: bool>, item_option_data: record<name: string, display_name: string, description: string, show_colors: bool, values: list>, item_option_value_data: record<item_option_id: string, name: string, description: string, color: string, ordinal: int>, custom_attribute_definition_data: record<type: string, name: string, description: string, source_application: record, allowed_object_types: list, seller_visibility: string, app_visibility: string, string_config: record, number_config: record, selection_config: record, custom_attribute_usage_count: int, key: string>, quick_amounts_settings_data: record<option: string, eligible_for_auto_amounts: bool, amounts: list>, subscription_plan_variation_data: record<name: string, phases: list, subscription_plan_id: string, monthly_billing_anchor_date: int, can_prorate: bool, successor_plan_variation_id: string>, availability_period_data: record<start_local_time: string, end_local_time: string, day_of_week: string>>> {
@@ -1335,7 +1384,7 @@ export def "catalog-images UpdateCatalogImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # CatalogInfo
@@ -1350,13 +1399,14 @@ export def "catalog-info CatalogInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, limits: record<batch_upsert_max_objects_per_batch: int, batch_upsert_max_total_objects: int, batch_retrieve_max_object_ids: int, search_max_page_limit: int, batch_delete_max_object_ids: int, update_item_taxes_max_item_ids: int, update_item_taxes_max_taxes_to_enable: int, update_item_taxes_max_taxes_to_disable: int, update_item_modifier_lists_max_item_ids: int, update_item_modifier_lists_max_modifier_lists_to_enable: int, update_item_modifier_lists_max_modifier_lists_to_disable: int>, standard_unit_description_group: record<standard_unit_descriptions: list<record>, language_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/catalog/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListCatalog
@@ -1371,6 +1421,7 @@ export def "catalog-list ListCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor returned in the previous response. Leave unset for an initial request. The page size is currently set to be 100. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --types: string # An optional case-insensitive, comma-separated list of object types to retrieve.  The valid values are defined in the [CatalogObjectType](entity:CatalogObjectType) enum, for example, `ITEM`, `ITEM_VARIATION`, `CATEGORY`, `DISCOUNT`, `TAX`, `MODIFIER`, `MODIFIER_LIST`, `IMAGE`, etc.  If this is unspecified, the operation returns objects of all the top level types at the version of the Square API used to make the request. Object types that are nested onto other object types are not included in the defaults.  At the current API version the default object types are: ITEM, CATEGORY, TAX, DISCOUNT, MODIFIER_LIST,  PRICING_RULE, PRODUCT_SET, TIME_PERIOD, MEASUREMENT_UNIT, SUBSCRIPTION_PLAN, ITEM_OPTION, CUSTOM_ATTRIBUTE_DEFINITION, QUICK_AMOUNT_SETTINGS.
   --catalog-version: int # The specific version of the catalog objects to be included in the response. This allows you to retrieve historical versions of objects. The specified version value is matched against the [CatalogObject](entity:CatalogObject)s' `version` attribute.  If not included, results will be from the current version of the catalog. (format: int64)
@@ -1381,7 +1432,7 @@ export def "catalog-list ListCatalog" [
   let full_url = (build-url $base "/v2/catalog/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertCatalogObject
@@ -1397,6 +1448,7 @@ export def "catalog-object UpsertCatalogObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A value you specify that uniquely identifies this request among all your requests. A common way to create a valid idempotency key is to use a Universally unique identifier (UUID).  If you're unsure whether a particular request was successful, you can reattempt it with the same idempotency key without worrying about creating duplicate objects.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   object: record # The wrapper object for the catalog entries of a given object type.  Depending on the `type` attribute value, a `CatalogObject` instance assumes a type-specific data to yield the corresponding type of catalog object.  For example, if `type=ITEM`, the `CatalogObject` instance must have the ITEM-specific data set on the `item_data` attribute. The resulting `CatalogObject` instance is also a `CatalogItem` instance.  In general, if `type=<OBJECT_TYPE>`, the `CatalogObject` instance must have the `<OBJECT_TYPE>`-specific data set on the `<object_type>_data` attribute. The resulting `CatalogObject` instance is also a `Catalog<ObjectType>` instance.  For a more detailed discussion of the Catalog data model, please see the [Design a Catalog](https://developer.squareup.com/docs/catalog-api/design-a-catalog) guide. (e.g. {catalog_object: {absent_at_location_ids: [{{ LOCATIONID-1 }}, {{ LOCATIONID-N }}], category_data: {{ CatalogCategory object only if type=CATEGORY }}, connect_v1_ids: {catalog_v1_id: {{ itemID from Catalog v1 }}, location_id: {{ location where v1 ID is used }}}, discount_data: {{ CatalogDiscount object only if type=DISCOUNT }}, id: {{ set by Catalog during object creation }}, is_deleted: {{ [true | false] }}, item_data: {{ CatalogItem object only if type=ITEM }}, item_variation_data: {{ CatalogItemVariation object only if type=ITEM_VARIATION }}, modifier_data: {{ CatalogModifier object only if type=MODIFIER }}, modifier_list_data: {{ CatalogModifierList object only if type=MODIFIER_LIST }}, present_at_all_locations: {{ [true | false] }}, present_at_location_ids: [{{ LOCATIONID-1 }}, {{ LOCATIONID-N }}], tax_data: {{ CatalogTax object only if type=TAX }}, type: {{ [ITEM | ITEM_VARIATION | MODIFIER | MODIFIER_LIST | CATEGORY | DISCOUNT | TAX] }}, updated_at: {{ date & time of most recent update }}, version: {{ version of the CatalogObject }}}}) — shape: {type: "ITEM"|"IMAGE"|"CATEGORY"|"ITEM_VARIATION"|"TAX"|"DISCOUNT"|"MODIFIER_LIST"|"MODIFIER"|"PRICING_RULE"|"PRODUCT_SET"|"TIME_PERIOD"|"MEASUREMENT_UNIT"|"SUBSCRIPTION_PLAN_VARIATION"|"ITEM_OPTION"|"ITEM_OPTION_VAL"|"CUSTOM_ATTRIBUTE_DEFINITION"|"QUICK_AMOUNTS_SETTINGS"|"SUBSCRIPTION_PLAN"|"AVAILABILITY_PERIOD", id: string, version?: int, is_deleted?: bool, custom_attribute_values?: record, catalog_v1_ids?: list, present_at_all_locations?: bool, present_at_location_ids?: list, absent_at_location_ids?: list, item_data?: record, category_data?: record, item_variation_data?: record, tax_data?: record, discount_data?: record, modifier_list_data?: record, modifier_data?: record, time_period_data?: record, product_set_data?: record, pricing_rule_data?: record, image_data?: record, measurement_unit_data?: record, subscription_plan_data?: record, item_option_data?: record, item_option_value_data?: record, custom_attribute_definition_data?: record, quick_amounts_settings_data?: record, subscription_plan_variation_data?: record, availability_period_data?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, catalog_object: record<type: string, id: string, updated_at: string, version: int, is_deleted: bool, custom_attribute_values: record, catalog_v1_ids: list<record>, present_at_all_locations: bool, present_at_location_ids: list<string>, absent_at_location_ids: list<string>, item_data: record<name: string, description: string, abbreviation: string, label_color: string, is_taxable: bool, category_id: string, buyer_facing_name: string, tax_ids: list, modifier_list_info: list, variations: list, product_type: string, skip_modifier_screen: bool, item_options: list, ecom_uri: string, ecom_image_uris: list, image_ids: list, sort_name: string, categories: list, description_html: string, description_plaintext: string, kitchen_name: string, channels: list, is_archived: bool, ecom_seo_data: record, food_and_beverage_details: record, reporting_category: record, is_alcoholic: bool>, category_data: record<name: string, image_ids: list, category_type: string, parent_category: record, is_top_level: bool, channels: list, availability_period_ids: list, online_visibility: bool, root_category: string, ecom_seo_data: record, path_to_root: list>, item_variation_data: record<item_id: string, name: string, sku: string, upc: string, ordinal: int, pricing_type: string, price_money: record, location_overrides: list, track_inventory: bool, inventory_alert_type: string, inventory_alert_threshold: int, user_data: string, service_duration: int, available_for_booking: bool, item_option_values: list, measurement_unit_id: string, sellable: bool, stockable: bool, image_ids: list, team_member_ids: list, stockable_conversion: record, kitchen_name: string>, tax_data: record<name: string, calculation_phase: string, inclusion_type: string, percentage: string, applies_to_custom_amounts: bool, enabled: bool, applies_to_product_set_id: string>, discount_data: record<name: string, discount_type: string, percentage: string, amount_money: record, pin_required: bool, label_color: string, modify_tax_basis: string, maximum_amount_money: record>, modifier_list_data: record<name: string, ordinal: int, selection_type: string, modifiers: list, image_ids: list, allow_quantities: bool, is_conversational: bool, modifier_type: string, max_length: int, text_required: bool, internal_name: string, min_selected_modifiers: int, max_selected_modifiers: int, hidden_from_customer: bool>, modifier_data: record<name: string, price_money: record, on_by_default: bool, ordinal: int, modifier_list_id: string, location_overrides: list, kitchen_name: string, image_id: string, hidden_online: bool>, time_period_data: record<event: string>, product_set_data: record<name: string, product_ids_any: list, product_ids_all: list, quantity_exact: int, quantity_min: int, quantity_max: int, all_products: bool>, pricing_rule_data: record<name: string, time_period_ids: list, discount_id: string, match_products_id: string, apply_products_id: string, exclude_products_id: string, valid_from_date: string, valid_from_local_time: string, valid_until_date: string, valid_until_local_time: string, exclude_strategy: string, minimum_order_subtotal_money: record, customer_group_ids_any: list>, image_data: record<name: string, url: string, caption: string, photo_studio_order_id: string>, measurement_unit_data: record<measurement_unit: record, precision: int>, subscription_plan_data: record<name: string, phases: list, subscription_plan_variations: list, eligible_item_ids: list, eligible_category_ids: list, all_items: bool>, item_option_data: record<name: string, display_name: string, description: string, show_colors: bool, values: list>, item_option_value_data: record<item_option_id: string, name: string, description: string, color: string, ordinal: int>, custom_attribute_definition_data: record<type: string, name: string, description: string, source_application: record, allowed_object_types: list, seller_visibility: string, app_visibility: string, string_config: record, number_config: record, selection_config: record, custom_attribute_usage_count: int, key: string>, quick_amounts_settings_data: record<option: string, eligible_for_auto_amounts: bool, amounts: list>, subscription_plan_variation_data: record<name: string, phases: list, subscription_plan_id: string, monthly_billing_anchor_date: int, can_prorate: bool, successor_plan_variation_id: string>, availability_period_data: record<start_local_time: string, end_local_time: string, day_of_week: string>>, id_mappings: table<client_object_id: string, object_id: string>> {
@@ -1408,7 +1460,7 @@ export def "catalog-object UpsertCatalogObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteCatalogObject
@@ -1424,13 +1476,14 @@ export def "catalog-object DeleteCatalogObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, deleted_object_ids: list<string>, deleted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/catalog/object/($object_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCatalogObject
@@ -1446,6 +1499,7 @@ export def "catalog-object RetrieveCatalogObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-related-objects: oneof<nothing, bool> # If `true`, the response will include additional objects that are related to the requested objects. Related objects are defined as any objects referenced by ID by the results in the `objects` field of the response. These objects are put in the `related_objects` field. Setting this to `true` is helpful when the objects are needed for immediate display to a user. This process only goes one level deep. Objects referenced by the related objects will not be included. For example,  if the `objects` field of the response contains a CatalogItem, its associated CatalogCategory objects, CatalogTax objects, CatalogImage objects and CatalogModifierLists will be returned in the `related_objects` field of the response. If the `objects` field of the response contains a CatalogItemVariation, its parent CatalogItem will be returned in the `related_objects` field of the response.  Default value: `false` (default: false)
   --catalog-version: int # Requests objects as of a specific version of the catalog. This allows you to retrieve historical versions of objects. The value to retrieve a specific version of an object can be found in the version field of [CatalogObject](entity:CatalogObject)s. If not included, results will be from the current version of the catalog. (format: int64)
   --include-category-path-to-root: oneof<nothing, bool> # Specifies whether or not to include the `path_to_root` list for each returned category instance. The `path_to_root` list consists of `CategoryPathToRootNode` objects and specifies the path that starts with the immediate parent category of the returned category and ends with its root category. If the returned category is a top-level category, the `path_to_root` list is empty and is not returned in the response payload. (default: false)
@@ -1456,7 +1510,7 @@ export def "catalog-object RetrieveCatalogObject" [
   let full_url = (build-url $base $"/v2/catalog/object/($object_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SearchCatalogObjects
@@ -1472,6 +1526,7 @@ export def "catalog-search SearchCatalogObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor returned in the previous response. Leave unset for an initial request. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --object-types: list # The desired set of object types to appear in the search results.  If this is unspecified, the operation returns objects of all the top level types at the version of the Square API used to make the request. Object types that are nested onto other object types are not included in the defaults.  At the current API version the default object types are: ITEM, CATEGORY, TAX, DISCOUNT, MODIFIER_LIST,  PRICING_RULE, PRODUCT_SET, TIME_PERIOD, MEASUREMENT_UNIT, SUBSCRIPTION_PLAN, ITEM_OPTION, CUSTOM_ATTRIBUTE_DEFINITION, QUICK_AMOUNT_SETTINGS.  Note that if you wish for the query to return objects belonging to nested types (i.e., COMPONENT, IMAGE, ITEM_OPTION_VAL, ITEM_VARIATION, or MODIFIER), you must explicitly include all the types of interest in this field.
   --include-deleted-objects: oneof<nothing, bool> # If `true`, deleted objects will be included in the results. Defaults to `false`. Deleted objects will have their `is_deleted` field set to `true`. If `include_deleted_objects` is `true`, then the `include_category_path_to_root` request parameter must be `false`. Both properties cannot be `true` at the same time.
@@ -1489,7 +1544,7 @@ export def "catalog-search SearchCatalogObjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchCatalogItems
@@ -1505,6 +1560,7 @@ export def "catalog-search-catalog-items SearchCatalogItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text-filter: string # The text filter expression to return items or item variations containing specified text in the `name`, `description`, or `abbreviation` attribute value of an item, or in the `name`, `sku`, or `upc` attribute value of an item variation.
   --category-ids: list # The category id query expression to return items containing the specified category IDs.
   --stock-levels: list # The stock-level query expression to return item variations with the specified stock levels. See [SearchCatalogItemsRequestStockLevel](#type-searchcatalogitemsrequeststocklevel) for possible values
@@ -1524,7 +1580,7 @@ export def "catalog-search-catalog-items SearchCatalogItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateItemModifierLists
@@ -1539,6 +1595,7 @@ export def "catalog-update-item-modifier-lists UpdateItemModifierLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   item_ids: list # The IDs of the catalog items associated with the CatalogModifierList objects being updated.
   --modifier-lists-to-enable: list # The IDs of the CatalogModifierList objects to enable for the CatalogItem. At least one of `modifier_lists_to_enable` or `modifier_lists_to_disable` must be specified. (nullable)
   --modifier-lists-to-disable: list # The IDs of the CatalogModifierList objects to disable for the CatalogItem. At least one of `modifier_lists_to_enable` or `modifier_lists_to_disable` must be specified. (nullable)
@@ -1551,7 +1608,7 @@ export def "catalog-update-item-modifier-lists UpdateItemModifierLists" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateItemTaxes
@@ -1566,6 +1623,7 @@ export def "catalog-update-item-taxes UpdateItemTaxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   item_ids: list # IDs for the CatalogItems associated with the CatalogTax objects being updated. No more than 1,000 IDs may be provided.
   --taxes-to-enable: list # IDs of the CatalogTax objects to enable. At least one of `taxes_to_enable` or `taxes_to_disable` must be specified. (nullable)
   --taxes-to-disable: list # IDs of the CatalogTax objects to disable. At least one of `taxes_to_enable` or `taxes_to_disable` must be specified. (nullable)
@@ -1578,7 +1636,7 @@ export def "catalog-update-item-taxes UpdateItemTaxes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListChannels
@@ -1593,6 +1651,7 @@ export def "channels ListChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reference-type: string@reference-type-completer # Type of reference associated to channel
   --reference-id: string # id of reference associated to channel
   --status: string@status-completer # Status of channel
@@ -1605,7 +1664,7 @@ export def "channels ListChannels" [
   let full_url = (build-url $base "/v2/channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BulkRetrieveChannels
@@ -1620,6 +1679,7 @@ export def "channels-bulk-retrieve BulkRetrieveChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   channel_ids: list
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, responses: record> {
   let input = $in
@@ -1630,7 +1690,7 @@ export def "channels-bulk-retrieve BulkRetrieveChannels" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveChannel
@@ -1646,13 +1706,14 @@ export def "channels RetrieveChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, channel: record<id: string, merchant_id: string, name: string, version: int, reference: record<type: string, id: string>, status: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/channels/($channel_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListCustomers
@@ -1667,6 +1728,7 @@ export def "customers ListCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results. If the specified limit is less than 1 or greater than 100, Square returns a `400 VALUE_TOO_LOW` or `400 VALUE_TOO_HIGH` error. The default value is 100.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --sort-field: string@sort-field-completer # Indicates how customers should be sorted.  The default value is `DEFAULT`.
@@ -1679,7 +1741,7 @@ export def "customers ListCustomers" [
   let full_url = (build-url $base "/v2/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateCustomer
@@ -1696,6 +1758,7 @@ export def "customers CreateCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The idempotency key for the request.	For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
   --given-name: string # The given name (that is, the first name) associated with the customer profile.  The maximum length for this value is 300 characters.
   --family-name: string # The family name (that is, the last name) associated with the customer profile.  The maximum length for this value is 300 characters.
@@ -1717,7 +1780,7 @@ export def "customers CreateCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkCreateCustomers
@@ -1732,6 +1795,7 @@ export def "customers-bulk-create BulkCreateCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customers: record # A map of 1 to 100 individual create requests, represented by `idempotency key: { customer data }` key-value pairs.  Each key is an [idempotency key](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) that uniquely identifies the create request. Each value contains the customer data used to create the customer profile.
 ]: any -> record<responses: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -1742,7 +1806,7 @@ export def "customers-bulk-create BulkCreateCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkDeleteCustomers
@@ -1757,6 +1821,7 @@ export def "customers-bulk-delete BulkDeleteCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_ids: list # The IDs of the [customer profiles](entity:Customer) to delete.
 ]: any -> record<responses: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -1767,7 +1832,7 @@ export def "customers-bulk-delete BulkDeleteCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkRetrieveCustomers
@@ -1782,6 +1847,7 @@ export def "customers-bulk-retrieve BulkRetrieveCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_ids: list # The IDs of the [customer profiles](entity:Customer) to retrieve.
 ]: any -> record<responses: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -1792,7 +1858,7 @@ export def "customers-bulk-retrieve BulkRetrieveCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpdateCustomers
@@ -1807,6 +1873,7 @@ export def "customers-bulk-update BulkUpdateCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customers: record # A map of 1 to 100 individual update requests, represented by `customer ID: { customer data }` key-value pairs.  Each key is the ID of the [customer profile](entity:Customer) to update. To update a customer profile that was created by merging existing profiles, provide the ID of the newly created profile.  Each value contains the updated customer data. Only new or changed fields are required. To add or update a field, specify the new value. To remove a field, specify `null`.
 ]: any -> record<responses: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -1817,7 +1884,7 @@ export def "customers-bulk-update BulkUpdateCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListCustomerCustomAttributeDefinitions
@@ -1832,6 +1899,7 @@ export def "customers-custom-attribute-definitions ListCustomerCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<custom_attribute_definitions: table<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -1841,7 +1909,7 @@ export def "customers-custom-attribute-definitions ListCustomerCustomAttributeDe
   let full_url = (build-url $base "/v2/customers/custom-attribute-definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateCustomerCustomAttributeDefinition
@@ -1857,6 +1925,7 @@ export def "customers-custom-attribute-definitions CreateCustomerCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -1868,7 +1937,7 @@ export def "customers-custom-attribute-definitions CreateCustomerCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteCustomerCustomAttributeDefinition
@@ -1884,13 +1953,14 @@ export def "customers-custom-attribute-definitions DeleteCustomerCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/custom-attribute-definitions/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCustomerCustomAttributeDefinition
@@ -1906,6 +1976,7 @@ export def "customers-custom-attribute-definitions RetrieveCustomerCustomAttribu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The current version of the custom attribute definition, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1914,7 +1985,7 @@ export def "customers-custom-attribute-definitions RetrieveCustomerCustomAttribu
   let full_url = (build-url $base $"/v2/customers/custom-attribute-definitions/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateCustomerCustomAttributeDefinition
@@ -1931,6 +2002,7 @@ export def "customers-custom-attribute-definitions UpdateCustomerCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -1942,7 +2014,7 @@ export def "customers-custom-attribute-definitions UpdateCustomerCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpsertCustomerCustomAttributes
@@ -1957,6 +2029,7 @@ export def "customers-custom-attributes-bulk-upsert BulkUpsertCustomerCustomAttr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map containing 1 to 25 individual upsert requests. For each request, provide an arbitrary ID that is unique for this `BulkUpsertCustomerCustomAttributes` request and the information needed to create or update a custom attribute.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -1967,7 +2040,7 @@ export def "customers-custom-attributes-bulk-upsert BulkUpsertCustomerCustomAttr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListCustomerGroups
@@ -1982,6 +2055,7 @@ export def "customers-groups ListCustomerGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results. If the limit is less than 1 or greater than 50, Square returns a `400 VALUE_TOO_LOW` or `400 VALUE_TOO_HIGH` error. The default value is 50.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, groups: table<id: string, name: string, created_at: string, updated_at: string>, cursor: string> {
@@ -1991,7 +2065,7 @@ export def "customers-groups ListCustomerGroups" [
   let full_url = (build-url $base "/v2/customers/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateCustomerGroup
@@ -2007,6 +2081,7 @@ export def "customers-groups CreateCustomerGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The idempotency key for the request. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
   group: record # Represents a group of customer profiles.   Customer groups can be created, be modified, and have their membership defined using  the Customers API or within the Customer Directory in the Square Seller Dashboard or Point of Sale. — shape: {name: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, group: record<id: string, name: string, created_at: string, updated_at: string>> {
@@ -2018,7 +2093,7 @@ export def "customers-groups CreateCustomerGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteCustomerGroup
@@ -2034,13 +2109,14 @@ export def "customers-groups DeleteCustomerGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCustomerGroup
@@ -2056,13 +2132,14 @@ export def "customers-groups RetrieveCustomerGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, group: record<id: string, name: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateCustomerGroup
@@ -2079,6 +2156,7 @@ export def "customers-groups UpdateCustomerGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   group: record # Represents a group of customer profiles.   Customer groups can be created, be modified, and have their membership defined using  the Customers API or within the Customer Directory in the Square Seller Dashboard or Point of Sale. — shape: {name: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, group: record<id: string, name: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -2089,7 +2167,7 @@ export def "customers-groups UpdateCustomerGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchCustomers
@@ -2105,6 +2183,7 @@ export def "customers-search SearchCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Include the pagination cursor in subsequent calls to this endpoint to retrieve the next set of results associated with the original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results. If the specified limit is invalid, Square returns a `400 VALUE_TOO_LOW` or `400 VALUE_TOO_HIGH` error. The default value is 100.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination). (format: int64)
   --body-query: record # Represents filtering and sorting criteria for a [SearchCustomers](api-endpoint:Customers-SearchCustomers) request. — shape: {filter?: record, sort?: record}
@@ -2118,7 +2197,7 @@ export def "customers-search SearchCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListCustomerSegments
@@ -2133,6 +2212,7 @@ export def "customers-segments ListCustomerSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by previous calls to `ListCustomerSegments`. This cursor is used to retrieve the next set of query results.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results. If the specified limit is less than 1 or greater than 50, Square returns a `400 VALUE_TOO_LOW` or `400 VALUE_TOO_HIGH` error. The default value is 50.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, segments: table<id: string, name: string, created_at: string, updated_at: string>, cursor: string> {
@@ -2142,7 +2222,7 @@ export def "customers-segments ListCustomerSegments" [
   let full_url = (build-url $base "/v2/customers/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCustomerSegment
@@ -2158,13 +2238,14 @@ export def "customers-segments RetrieveCustomerSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, segment: record<id: string, name: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/segments/($segment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteCustomer
@@ -2180,6 +2261,7 @@ export def "customers DeleteCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The current version of the customer profile.  As a best practice, you should include this parameter to enable [optimistic concurrency](https://developer.squareup.com/docs/build-basics/common-api-patterns/optimistic-concurrency) control.  For more information, see [Delete a customer profile](https://developer.squareup.com/docs/customers-api/use-the-api/keep-records#delete-customer-profile). (format: int64)
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2188,7 +2270,7 @@ export def "customers DeleteCustomer" [
   let full_url = (build-url $base $"/v2/customers/($customer_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCustomer
@@ -2204,13 +2286,14 @@ export def "customers RetrieveCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, customer: record<id: string, created_at: string, updated_at: string, given_name: string, family_name: string, nickname: string, company_name: string, email_address: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, phone_number: string, birthday: string, reference_id: string, note: string, preferences: record<email_unsubscribed: bool>, creation_source: string, group_ids: list<string>, segment_ids: list<string>, version: int, tax_ids: record<eu_vat: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/($customer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateCustomer
@@ -2228,6 +2311,7 @@ export def "customers UpdateCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --given-name: string # The given name (that is, the first name) associated with the customer profile.  The maximum length for this value is 300 characters. (nullable)
   --family-name: string # The family name (that is, the last name) associated with the customer profile.  The maximum length for this value is 300 characters. (nullable)
   --company-name: string # A business name associated with the customer profile.  The maximum length for this value is 500 characters. (nullable)
@@ -2249,7 +2333,7 @@ export def "customers UpdateCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateCustomerCard
@@ -2268,6 +2352,7 @@ export def "customers-cards CreateCustomerCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   card_nonce: string # A card nonce representing the credit card to link to the customer.  Card nonces are generated by the Square payment form when customers enter their card information. For more information, see [Walkthrough: Integrate Square Payments in a Website](https://developer.squareup.com/docs/web-payments/take-card-payment).  __NOTE:__ Card nonces generated by digital wallets (such as Apple Pay) cannot be used to create a customer card.
   --billing-address: record # Represents a postal address in a country.  For more information, see [Working with Addresses](https://developer.squareup.com/docs/build-basics/working-with-addresses). — shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, locality?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, postal_code?: string, country?: "ZZ"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", first_name?: string, last_name?: string}
   --cardholder-name: string # The full name printed on the credit card.
@@ -2281,7 +2366,7 @@ export def "customers-cards CreateCustomerCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteCustomerCard
@@ -2300,13 +2385,14 @@ export def "customers-cards DeleteCustomerCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/($customer_id)/cards/($card_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListCustomerCustomAttributes
@@ -2322,6 +2408,7 @@ export def "customers-custom-attributes ListCustomerCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --with-definitions: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each custom attribute. Set this parameter to `true` to get the name and description of each custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
@@ -2332,7 +2419,7 @@ export def "customers-custom-attributes ListCustomerCustomAttributes" [
   let full_url = (build-url $base $"/v2/customers/($customer_id)/custom-attributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteCustomerCustomAttribute
@@ -2349,13 +2436,14 @@ export def "customers-custom-attributes DeleteCustomerCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/($customer_id)/custom-attributes/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveCustomerCustomAttribute
@@ -2372,6 +2460,7 @@ export def "customers-custom-attributes RetrieveCustomerCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-definition: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of the custom attribute. Set this parameter to `true` to get the name and description of the custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
   --version: int # The current version of the custom attribute, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -2381,7 +2470,7 @@ export def "customers-custom-attributes RetrieveCustomerCustomAttribute" [
   let full_url = (build-url $base $"/v2/customers/($customer_id)/custom-attributes/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertCustomerCustomAttribute
@@ -2399,6 +2488,7 @@ export def "customers-custom-attributes UpsertCustomerCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute: record # A custom attribute value. Each custom attribute value has a corresponding `CustomAttributeDefinition` object. — shape: {key?: string, value?: any, version?: int, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", definition?: record}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -2410,7 +2500,7 @@ export def "customers-custom-attributes UpsertCustomerCustomAttribute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RemoveGroupFromCustomer
@@ -2427,13 +2517,14 @@ export def "customers-groups RemoveGroupFromCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/($customer_id)/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # AddGroupToCustomer
@@ -2450,13 +2541,14 @@ export def "customers-groups AddGroupToCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/customers/($customer_id)/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListDevices
@@ -2471,6 +2563,7 @@ export def "devices ListDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --sort-order: string@sort-order-completer # The order in which results are listed. - `ASC` - Oldest to newest. - `DESC` - Newest to oldest (default).
   --limit: int # The number of results to return in a single page.
@@ -2482,7 +2575,7 @@ export def "devices ListDevices" [
   let full_url = (build-url $base "/v2/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListDeviceCodes
@@ -2497,6 +2590,7 @@ export def "devices-codes ListDeviceCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  See [Paginating results](https://developer.squareup.com/docs/working-with-apis/pagination) for more information.
   --location-id: string # If specified, only returns DeviceCodes of the specified location. Returns DeviceCodes of all locations if empty.
   --product-type: string@product-type-completer # If specified, only returns DeviceCodes targeting the specified product type. Returns DeviceCodes of all product types if empty.
@@ -2508,7 +2602,7 @@ export def "devices-codes ListDeviceCodes" [
   let full_url = (build-url $base "/v2/devices/codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateDeviceCode
@@ -2524,6 +2618,7 @@ export def "devices-codes CreateDeviceCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this CreateDeviceCode request. Keys can be any valid string but must be unique for every CreateDeviceCode request.  See [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   device_code: record # shape: {name?: string, product_type: "TERMINAL_API", location_id?: string, status?: "UNKNOWN"|"UNPAIRED"|"PAIRED"|"EXPIRED"}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, device_code: record<id: string, name: string, code: string, device_id: string, product_type: string, location_id: string, status: string, pair_by: string, created_at: string, status_changed_at: string, paired_at: string>> {
@@ -2535,7 +2630,7 @@ export def "devices-codes CreateDeviceCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetDeviceCode
@@ -2551,13 +2646,14 @@ export def "devices-codes GetDeviceCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, device_code: record<id: string, name: string, code: string, device_id: string, product_type: string, location_id: string, status: string, pair_by: string, created_at: string, status_changed_at: string, paired_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/devices/codes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetDevice
@@ -2573,13 +2669,14 @@ export def "devices GetDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, device: record<id: string, attributes: record<type: string, manufacturer: string, model: string, name: string, manufacturers_id: string, updated_at: string, version: string, merchant_token: string>, components: list<record>, status: record<category: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/devices/($device_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListDisputes
@@ -2594,6 +2691,7 @@ export def "disputes ListDisputes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --states: string@states-completer # The dispute states used to filter the result. If not specified, the endpoint returns all disputes.
   --location-id: string # The ID of the location for which to return a list of disputes. If not specified, the endpoint returns disputes associated with all locations.
@@ -2604,7 +2702,7 @@ export def "disputes ListDisputes" [
   let full_url = (build-url $base "/v2/disputes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveDispute
@@ -2620,13 +2718,14 @@ export def "disputes RetrieveDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, dispute: record<dispute_id: string, id: string, amount_money: record<amount: int, currency: string>, reason: string, state: string, due_at: string, disputed_payment: record<payment_id: string>, evidence_ids: list<string>, card_brand: string, created_at: string, updated_at: string, brand_dispute_id: string, reported_date: string, reported_at: string, version: int, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # AcceptDispute
@@ -2642,13 +2741,14 @@ export def "disputes-accept AcceptDispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, dispute: record<dispute_id: string, id: string, amount_money: record<amount: int, currency: string>, reason: string, state: string, due_at: string, disputed_payment: record<payment_id: string>, evidence_ids: list<string>, card_brand: string, created_at: string, updated_at: string, brand_dispute_id: string, reported_date: string, reported_at: string, version: int, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)/accept")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListDisputeEvidence
@@ -2664,6 +2764,7 @@ export def "disputes-evidence ListDisputeEvidence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<evidence: table<evidence_id: string, id: string, dispute_id: string, evidence_file: record, evidence_text: string, uploaded_at: string, evidence_type: string>, errors: table<category: string, code: string, detail: string, field: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2672,7 +2773,7 @@ export def "disputes-evidence ListDisputeEvidence" [
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)/evidence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateDisputeEvidenceFile
@@ -2689,6 +2790,7 @@ export def "disputes-evidence-files CreateDisputeEvidenceFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record # Defines the parameters for a `CreateDisputeEvidenceFile` request. — shape: {idempotency_key: string, evidence_type?: "GENERIC_EVIDENCE"|"ONLINE_OR_APP_ACCESS_LOG"|"AUTHORIZATION_DOCUMENTATION"|"CANCELLATION_OR_REFUND_DOCUMENTATION"|"CARDHOLDER_COMMUNICATION"|"CARDHOLDER_INFORMATION"|"PURCHASE_ACKNOWLEDGEMENT"|"DUPLICATE_CHARGE_DOCUMENTATION"|"PRODUCT_OR_SERVICE_DESCRIPTION"|"RECEIPT"|"SERVICE_RECEIVED_DOCUMENTATION"|"PROOF_OF_DELIVERY_DOCUMENTATION"|"RELATED_TRANSACTION_DOCUMENTATION"|"REBUTTAL_EXPLANATION"|"TRACKING_NUMBER", content_type?: string}
   --image-file: string # format: binary
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, evidence: record<evidence_id: string, id: string, dispute_id: string, evidence_file: record<filename: string, filetype: string>, evidence_text: string, uploaded_at: string, evidence_type: string>> {
@@ -2700,7 +2802,7 @@ export def "disputes-evidence-files CreateDisputeEvidenceFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # CreateDisputeEvidenceText
@@ -2716,6 +2818,7 @@ export def "disputes-evidence-text CreateDisputeEvidenceText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique key identifying the request. For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   --evidence-type: string@evidence-type-completer # The type of the dispute evidence.
   evidence_text: string # The evidence string.
@@ -2728,7 +2831,7 @@ export def "disputes-evidence-text CreateDisputeEvidenceText" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteDisputeEvidence
@@ -2745,13 +2848,14 @@ export def "disputes-evidence DeleteDisputeEvidence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)/evidence/($evidence_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveDisputeEvidence
@@ -2768,13 +2872,14 @@ export def "disputes-evidence RetrieveDisputeEvidence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, evidence: record<evidence_id: string, id: string, dispute_id: string, evidence_file: record<filename: string, filetype: string>, evidence_text: string, uploaded_at: string, evidence_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)/evidence/($evidence_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SubmitEvidence
@@ -2790,13 +2895,14 @@ export def "disputes-submit-evidence SubmitEvidence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, dispute: record<dispute_id: string, id: string, amount_money: record<amount: int, currency: string>, reason: string, state: string, due_at: string, disputed_payment: record<payment_id: string>, evidence_ids: list<string>, card_brand: string, created_at: string, updated_at: string, brand_dispute_id: string, reported_date: string, reported_at: string, version: int, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/disputes/($dispute_id)/submit-evidence")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListEmployees
@@ -2813,6 +2919,7 @@ export def "employees ListEmployees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string
   --status: string@status-completer # Specifies the EmployeeStatus to filter the employee by.
   --limit: int # The number of employees to be returned on each page.
@@ -2824,7 +2931,7 @@ export def "employees ListEmployees" [
   let full_url = (build-url $base "/v2/employees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveEmployee
@@ -2842,13 +2949,14 @@ export def "employees RetrieveEmployee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<employee: record<id: string, first_name: string, last_name: string, email: string, phone_number: string, location_ids: list<string>, status: string, is_owner: bool, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/employees/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # SearchEvents
@@ -2864,6 +2972,7 @@ export def "events SearchEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of events for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of events to return in a single page. The response might contain fewer events. The default value is 100, which is also the maximum allowed value.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).  Default: 100
   --body-query: record # Contains query criteria for the search. — shape: {filter?: record, sort?: record}
@@ -2876,7 +2985,7 @@ export def "events SearchEvents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DisableEvents
@@ -2891,13 +3000,14 @@ export def "events-disable DisableEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/events/disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # EnableEvents
@@ -2912,13 +3022,14 @@ export def "events-enable EnableEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/events/enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListEventTypes
@@ -2933,6 +3044,7 @@ export def "events-types ListEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version for which to list event types. Setting this field overrides the default version used by the application.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, event_types: list<string>, metadata: table<event_type: string, api_version_introduced: string, release_status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2941,7 +3053,7 @@ export def "events-types ListEventTypes" [
   let full_url = (build-url $base "/v2/events/types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListGiftCards
@@ -2956,6 +3068,7 @@ export def "gift-cards ListGiftCards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # If a [type](entity:GiftCardType) is provided, the endpoint returns gift cards of the specified type. Otherwise, the endpoint returns gift cards of all types.
   --state: string # If a [state](entity:GiftCardStatus) is provided, the endpoint returns the gift cards in the specified state. Otherwise, the endpoint returns the gift cards of all states.
   --limit: int # If a limit is provided, the endpoint returns only the specified number of results per page. The maximum value is 200. The default value is 30. For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
@@ -2968,7 +3081,7 @@ export def "gift-cards ListGiftCards" [
   let full_url = (build-url $base "/v2/gift-cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateGiftCard
@@ -2984,6 +3097,7 @@ export def "gift-cards CreateGiftCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique identifier for this request, used to ensure idempotency. For more information,  see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
   location_id: string # The ID of the [location](entity:Location) where the gift card should be registered for  reporting purposes. Gift cards can be redeemed at any of the seller's locations.
   gift_card: record # Represents a Square gift card. — shape: {type: "PHYSICAL"|"DIGITAL", gan_source?: "SQUARE"|"OTHER", state?: "ACTIVE"|"DEACTIVATED"|"BLOCKED"|"PENDING", balance_money?: record, gan?: string}
@@ -2996,7 +3110,7 @@ export def "gift-cards CreateGiftCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListGiftCardActivities
@@ -3011,6 +3125,7 @@ export def "gift-cards-activities ListGiftCardActivities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gift-card-id: string # If a gift card ID is provided, the endpoint returns activities related  to the specified gift card. Otherwise, the endpoint returns all gift card activities for  the seller.
   --type: string # If a [type](entity:GiftCardActivityType) is provided, the endpoint returns gift card activities of the specified type.  Otherwise, the endpoint returns all types of gift card activities.
   --location-id: string # If a location ID is provided, the endpoint returns gift card activities for the specified location.  Otherwise, the endpoint returns gift card activities for all locations.
@@ -3026,7 +3141,7 @@ export def "gift-cards-activities ListGiftCardActivities" [
   let full_url = (build-url $base "/v2/gift-cards/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateGiftCardActivity
@@ -3042,6 +3157,7 @@ export def "gift-cards-activities CreateGiftCardActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies the `CreateGiftCardActivity` request.
   gift_card_activity: record # Represents an action performed on a [gift card](entity:GiftCard) that affects its state or balance.  A gift card activity contains information about a specific activity type. For example, a `REDEEM` activity includes a `redeem_activity_details` field that contains information about the redemption. — shape: {type: "ACTIVATE"|"LOAD"|"REDEEM"|"CLEAR_BALANCE"|"DEACTIVATE"|"ADJUST_INCREMENT"|"ADJUST_DECREMENT"|"REFUND"|"UNLINKED_ACTIVITY_REFUND"|"IMPORT"|"BLOCK"|"UNBLOCK"|"IMPORT_REVERSAL"|"TRANSFER_BALANCE_FROM"|"TRANSFER_BALANCE_TO", location_id: string, gift_card_id?: string, gift_card_gan?: string, gift_card_balance_money?: record, load_activity_details?: record, activate_activity_details?: record, redeem_activity_details?: record, clear_balance_activity_details?: record, deactivate_activity_details?: record, adjust_increment_activity_details?: record, adjust_decrement_activity_details?: record, refund_activity_details?: record, unlinked_activity_refund_activity_details?: record, import_activity_details?: record, block_activity_details?: record, unblock_activity_details?: record, import_reversal_activity_details?: record, transfer_balance_to_activity_details?: record, transfer_balance_from_activity_details?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card_activity: record<id: string, type: string, location_id: string, created_at: string, gift_card_id: string, gift_card_gan: string, gift_card_balance_money: record<amount: int, currency: string>, load_activity_details: record<amount_money: record, order_id: string, line_item_uid: string, reference_id: string, buyer_payment_instrument_ids: list>, activate_activity_details: record<amount_money: record, order_id: string, line_item_uid: string, reference_id: string, buyer_payment_instrument_ids: list>, redeem_activity_details: record<amount_money: record, payment_id: string, reference_id: string, status: string>, clear_balance_activity_details: record<reason: string>, deactivate_activity_details: record<reason: string>, adjust_increment_activity_details: record<amount_money: record, reason: string>, adjust_decrement_activity_details: record<amount_money: record, reason: string>, refund_activity_details: record<redeem_activity_id: string, amount_money: record, reference_id: string, payment_id: string>, unlinked_activity_refund_activity_details: record<amount_money: record, reference_id: string, payment_id: string>, import_activity_details: record<amount_money: record>, block_activity_details: record<reason: string>, unblock_activity_details: record<reason: string>, import_reversal_activity_details: record<amount_money: record>, transfer_balance_to_activity_details: record<transfer_from_gift_card_id: string, amount_money: record>, transfer_balance_from_activity_details: record<transfer_to_gift_card_id: string, amount_money: record>>> {
@@ -3053,7 +3169,7 @@ export def "gift-cards-activities CreateGiftCardActivity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveGiftCardFromGAN
@@ -3068,6 +3184,7 @@ export def "gift-cards-from-gan RetrieveGiftCardFromGAN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gan: string # The gift card account number (GAN) of the gift card to retrieve. The maximum length of a GAN is 255 digits to account for third-party GANs that have been imported. Square-issued gift cards have 16-digit GANs.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<id: string, type: string, gan_source: string, state: string, balance_money: record<amount: int, currency: string>, gan: string, created_at: string, customer_ids: list<string>>> {
   let input = $in
@@ -3078,7 +3195,7 @@ export def "gift-cards-from-gan RetrieveGiftCardFromGAN" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveGiftCardFromNonce
@@ -3093,6 +3210,7 @@ export def "gift-cards-from-nonce RetrieveGiftCardFromNonce" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   nonce: string # The payment token of the gift card to retrieve. Payment tokens are generated by the  Web Payments SDK or In-App Payments SDK.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<id: string, type: string, gan_source: string, state: string, balance_money: record<amount: int, currency: string>, gan: string, created_at: string, customer_ids: list<string>>> {
   let input = $in
@@ -3103,7 +3221,7 @@ export def "gift-cards-from-nonce RetrieveGiftCardFromNonce" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # LinkCustomerToGiftCard
@@ -3119,6 +3237,7 @@ export def "gift-cards-link-customer LinkCustomerToGiftCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_id: string # The ID of the customer to link to the gift card.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<id: string, type: string, gan_source: string, state: string, balance_money: record<amount: int, currency: string>, gan: string, created_at: string, customer_ids: list<string>>> {
   let input = $in
@@ -3129,7 +3248,7 @@ export def "gift-cards-link-customer LinkCustomerToGiftCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnlinkCustomerFromGiftCard
@@ -3145,6 +3264,7 @@ export def "gift-cards-unlink-customer UnlinkCustomerFromGiftCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_id: string # The ID of the customer to unlink from the gift card.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<id: string, type: string, gan_source: string, state: string, balance_money: record<amount: int, currency: string>, gan: string, created_at: string, customer_ids: list<string>>> {
   let input = $in
@@ -3155,7 +3275,7 @@ export def "gift-cards-unlink-customer UnlinkCustomerFromGiftCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveGiftCard
@@ -3171,13 +3291,14 @@ export def "gift-cards RetrieveGiftCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<id: string, type: string, gan_source: string, state: string, balance_money: record<amount: int, currency: string>, gan: string, created_at: string, customer_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/gift-cards/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeprecatedRetrieveInventoryAdjustment
@@ -3195,13 +3316,14 @@ export def "inventory-adjustment DeprecatedRetrieveInventoryAdjustment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, adjustment: record<id: string, reference_id: string, from_state: string, to_state: string, location_id: string, catalog_object_id: string, catalog_object_type: string, quantity: string, total_price_money: record<amount: int, currency: string>, occurred_at: string, created_at: string, source: record<product: string, application_id: string, name: string>, employee_id: string, team_member_id: string, transaction_id: string, refund_id: string, purchase_order_id: string, goods_receipt_id: string, adjustment_group: record<id: string, root_adjustment_id: string, from_state: string, to_state: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/inventory/adjustment/($adjustment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveInventoryAdjustment
@@ -3217,13 +3339,14 @@ export def "inventory-adjustments RetrieveInventoryAdjustment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, adjustment: record<id: string, reference_id: string, from_state: string, to_state: string, location_id: string, catalog_object_id: string, catalog_object_type: string, quantity: string, total_price_money: record<amount: int, currency: string>, occurred_at: string, created_at: string, source: record<product: string, application_id: string, name: string>, employee_id: string, team_member_id: string, transaction_id: string, refund_id: string, purchase_order_id: string, goods_receipt_id: string, adjustment_group: record<id: string, root_adjustment_id: string, from_state: string, to_state: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/inventory/adjustments/($adjustment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeprecatedBatchChangeInventory
@@ -3241,6 +3364,7 @@ export def "inventory-batch-change DeprecatedBatchChangeInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A client-supplied, universally unique identifier (UUID) for the request.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) in the [API Development 101](https://developer.squareup.com/docs/buildbasics) section for more information.
   --changes: list # The set of physical counts and inventory adjustments to be made. Changes are applied based on the client-supplied timestamp and may be sent out of order. (nullable) — item shape: {type?: "PHYSICAL_COUNT"|"ADJUSTMENT"|"TRANSFER", physical_count?: record, adjustment?: record, transfer?: record, measurement_unit?: record}
   --ignore-unchanged-counts: oneof<nothing, bool> # Indicates whether the current physical count should be ignored if the quantity is unchanged since the last physical count. Default: `true`. (nullable)
@@ -3253,7 +3377,7 @@ export def "inventory-batch-change DeprecatedBatchChangeInventory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeprecatedBatchRetrieveInventoryChanges
@@ -3270,6 +3394,7 @@ export def "inventory-batch-retrieve-changes DeprecatedBatchRetrieveInventoryCha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-object-ids: list # The filter to return results by `CatalogObject` ID. The filter is only applicable when set. The default value is null. (nullable)
   --location-ids: list # The filter to return results by `Location` ID. The filter is only applicable when set. The default value is null. (nullable)
   --types: list # The filter to return results by `InventoryChangeType` values other than `TRANSFER`. The default value is `[PHYSICAL_COUNT, ADJUSTMENT]`. (nullable)
@@ -3287,7 +3412,7 @@ export def "inventory-batch-retrieve-changes DeprecatedBatchRetrieveInventoryCha
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeprecatedBatchRetrieveInventoryCounts
@@ -3304,6 +3429,7 @@ export def "inventory-batch-retrieve-counts DeprecatedBatchRetrieveInventoryCoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-object-ids: list # The filter to return results by `CatalogObject` ID. The filter is applicable only when set.  The default is null. (nullable)
   --location-ids: list # The filter to return results by `Location` ID. This filter is applicable only when set. The default is null. (nullable)
   --updated-after: string # The filter to return results with their `calculated_at` value after the given time as specified in an RFC 3339 timestamp. The default value is the UNIX epoch of (`1970-01-01T00:00:00Z`). (nullable)
@@ -3319,7 +3445,7 @@ export def "inventory-batch-retrieve-counts DeprecatedBatchRetrieveInventoryCoun
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchChangeInventory
@@ -3335,6 +3461,7 @@ export def "inventory-changes-batch-create BatchChangeInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A client-supplied, universally unique identifier (UUID) for the request.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) in the [API Development 101](https://developer.squareup.com/docs/buildbasics) section for more information.
   --changes: list # The set of physical counts and inventory adjustments to be made. Changes are applied based on the client-supplied timestamp and may be sent out of order. (nullable) — item shape: {type?: "PHYSICAL_COUNT"|"ADJUSTMENT"|"TRANSFER", physical_count?: record, adjustment?: record, transfer?: record, measurement_unit?: record}
   --ignore-unchanged-counts: oneof<nothing, bool> # Indicates whether the current physical count should be ignored if the quantity is unchanged since the last physical count. Default: `true`. (nullable)
@@ -3347,7 +3474,7 @@ export def "inventory-changes-batch-create BatchChangeInventory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchRetrieveInventoryChanges
@@ -3362,6 +3489,7 @@ export def "inventory-changes-batch-retrieve BatchRetrieveInventoryChanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-object-ids: list # The filter to return results by `CatalogObject` ID. The filter is only applicable when set. The default value is null. (nullable)
   --location-ids: list # The filter to return results by `Location` ID. The filter is only applicable when set. The default value is null. (nullable)
   --types: list # The filter to return results by `InventoryChangeType` values other than `TRANSFER`. The default value is `[PHYSICAL_COUNT, ADJUSTMENT]`. (nullable)
@@ -3379,7 +3507,7 @@ export def "inventory-changes-batch-retrieve BatchRetrieveInventoryChanges" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchRetrieveInventoryCounts
@@ -3394,6 +3522,7 @@ export def "inventory-counts-batch-retrieve BatchRetrieveInventoryCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-object-ids: list # The filter to return results by `CatalogObject` ID. The filter is applicable only when set.  The default is null. (nullable)
   --location-ids: list # The filter to return results by `Location` ID. This filter is applicable only when set. The default is null. (nullable)
   --updated-after: string # The filter to return results with their `calculated_at` value after the given time as specified in an RFC 3339 timestamp. The default value is the UNIX epoch of (`1970-01-01T00:00:00Z`). (nullable)
@@ -3409,7 +3538,7 @@ export def "inventory-counts-batch-retrieve BatchRetrieveInventoryCounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeprecatedRetrieveInventoryPhysicalCount
@@ -3427,13 +3556,14 @@ export def "inventory-physical-count DeprecatedRetrieveInventoryPhysicalCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, count: record<id: string, reference_id: string, catalog_object_id: string, catalog_object_type: string, state: string, location_id: string, quantity: string, source: record<product: string, application_id: string, name: string>, employee_id: string, team_member_id: string, occurred_at: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/inventory/physical-count/($physical_count_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveInventoryPhysicalCount
@@ -3449,13 +3579,14 @@ export def "inventory-physical-counts RetrieveInventoryPhysicalCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, count: record<id: string, reference_id: string, catalog_object_id: string, catalog_object_type: string, state: string, location_id: string, quantity: string, source: record<product: string, application_id: string, name: string>, employee_id: string, team_member_id: string, occurred_at: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/inventory/physical-counts/($physical_count_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveInventoryTransfer
@@ -3471,13 +3602,14 @@ export def "inventory-transfers RetrieveInventoryTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, transfer: record<id: string, reference_id: string, state: string, from_location_id: string, to_location_id: string, catalog_object_id: string, catalog_object_type: string, quantity: string, occurred_at: string, created_at: string, source: record<product: string, application_id: string, name: string>, employee_id: string, team_member_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/inventory/transfers/($transfer_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveInventoryCount
@@ -3493,6 +3625,7 @@ export def "inventory RetrieveInventoryCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-ids: string # The [Location](entity:Location) IDs to look up as a comma-separated list. An empty list queries all locations.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for the original query.  See the [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination) guide for more information.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, counts: table<catalog_object_id: string, catalog_object_type: string, state: string, location_id: string, quantity: string, calculated_at: string, is_estimated: bool>, cursor: string> {
@@ -3502,7 +3635,7 @@ export def "inventory RetrieveInventoryCount" [
   let full_url = (build-url $base $"/v2/inventory/($catalog_object_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveInventoryChanges
@@ -3520,6 +3653,7 @@ export def "inventory-changes RetrieveInventoryChanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-ids: string # The [Location](entity:Location) IDs to look up as a comma-separated list. An empty list queries all locations.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for the original query.  See the [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination) guide for more information.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, changes: table<type: string, physical_count: record, adjustment: record, transfer: record, measurement_unit: record, measurement_unit_id: string>, cursor: string> {
@@ -3529,7 +3663,7 @@ export def "inventory-changes RetrieveInventoryChanges" [
   let full_url = (build-url $base $"/v2/inventory/($catalog_object_id)/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListInvoices
@@ -3544,6 +3678,7 @@ export def "invoices ListInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location for which to list invoices.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint.  Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of invoices to return (200 is the maximum `limit`).  If not provided, the server uses a default limit of 100 invoices.
@@ -3554,7 +3689,7 @@ export def "invoices ListInvoices" [
   let full_url = (build-url $base "/v2/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateInvoice
@@ -3570,6 +3705,7 @@ export def "invoices CreateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invoice: record # Stores information about an invoice. You use the Invoices API to create and manage invoices. For more information, see [Invoices API Overview](https://developer.squareup.com/docs/invoices-api/overview). — shape: {version?: int, location_id?: string, order_id?: string, primary_recipient?: record, payment_requests?: list, delivery_method?: "EMAIL"|"SHARE_MANUALLY"|"SMS", invoice_number?: string, title?: string, description?: string, scheduled_at?: string, next_payment_amount_money?: record, status?: "DRAFT"|"UNPAID"|"SCHEDULED"|"PARTIALLY_PAID"|"PAID"|"PARTIALLY_REFUNDED"|"REFUNDED"|"CANCELED"|"FAILED"|"PAYMENT_PENDING", accepted_payment_methods?: record, custom_fields?: list, sale_or_service_date?: string, payment_conditions?: string, store_payment_method_enabled?: bool}
   --idempotency-key: string # A unique string that identifies the `CreateInvoice` request. If you do not  provide `idempotency_key` (or provide an empty string as the value), the endpoint  treats each request as independent.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<invoice: record<id: string, version: int, location_id: string, order_id: string, primary_recipient: record<customer_id: string, given_name: string, family_name: string, email_address: string, address: record, phone_number: string, company_name: string, tax_ids: record>, payment_requests: list<record>, delivery_method: string, invoice_number: string, title: string, description: string, scheduled_at: string, public_url: string, next_payment_amount_money: record<amount: int, currency: string>, status: string, timezone: string, created_at: string, updated_at: string, accepted_payment_methods: record<card: bool, square_gift_card: bool, bank_account: bool, buy_now_pay_later: bool, cash_app_pay: bool>, custom_fields: list<record>, subscription_id: string, sale_or_service_date: string, payment_conditions: string, store_payment_method_enabled: bool, attachments: list<record>, creator_team_member_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -3581,7 +3717,7 @@ export def "invoices CreateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchInvoices
@@ -3597,6 +3733,7 @@ export def "invoices-search SearchInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # Describes query criteria for searching invoices. — shape: {filter: record, sort?: record}
   --limit: int # The maximum number of invoices to return (200 is the maximum `limit`).  If not provided, the server uses a default limit of 100 invoices.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint.  Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -3609,7 +3746,7 @@ export def "invoices-search SearchInvoices" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteInvoice
@@ -3625,6 +3762,7 @@ export def "invoices DeleteInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The version of the [invoice](entity:Invoice) to delete. If you do not know the version, you can call [GetInvoice](api-endpoint:Invoices-GetInvoice) or  [ListInvoices](api-endpoint:Invoices-ListInvoices).
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3633,7 +3771,7 @@ export def "invoices DeleteInvoice" [
   let full_url = (build-url $base $"/v2/invoices/($invoice_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetInvoice
@@ -3649,13 +3787,14 @@ export def "invoices GetInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<invoice: record<id: string, version: int, location_id: string, order_id: string, primary_recipient: record<customer_id: string, given_name: string, family_name: string, email_address: string, address: record, phone_number: string, company_name: string, tax_ids: record>, payment_requests: list<record>, delivery_method: string, invoice_number: string, title: string, description: string, scheduled_at: string, public_url: string, next_payment_amount_money: record<amount: int, currency: string>, status: string, timezone: string, created_at: string, updated_at: string, accepted_payment_methods: record<card: bool, square_gift_card: bool, bank_account: bool, buy_now_pay_later: bool, cash_app_pay: bool>, custom_fields: list<record>, subscription_id: string, sale_or_service_date: string, payment_conditions: string, store_payment_method_enabled: bool, attachments: list<record>, creator_team_member_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/invoices/($invoice_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateInvoice
@@ -3672,6 +3811,7 @@ export def "invoices UpdateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invoice: record # Stores information about an invoice. You use the Invoices API to create and manage invoices. For more information, see [Invoices API Overview](https://developer.squareup.com/docs/invoices-api/overview). — shape: {version?: int, location_id?: string, order_id?: string, primary_recipient?: record, payment_requests?: list, delivery_method?: "EMAIL"|"SHARE_MANUALLY"|"SMS", invoice_number?: string, title?: string, description?: string, scheduled_at?: string, next_payment_amount_money?: record, status?: "DRAFT"|"UNPAID"|"SCHEDULED"|"PARTIALLY_PAID"|"PAID"|"PARTIALLY_REFUNDED"|"REFUNDED"|"CANCELED"|"FAILED"|"PAYMENT_PENDING", accepted_payment_methods?: record, custom_fields?: list, sale_or_service_date?: string, payment_conditions?: string, store_payment_method_enabled?: bool}
   --idempotency-key: string # A unique string that identifies the `UpdateInvoice` request. If you do not provide `idempotency_key` (or provide an empty string as the value), the endpoint treats each request as independent.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
   --fields-to-clear: list # The list of fields to clear. Although this field is currently supported, we recommend using null values or the `remove` field when possible. For examples, see [Update an Invoice](https://developer.squareup.com/docs/invoices-api/update-invoices). (nullable)
@@ -3684,7 +3824,7 @@ export def "invoices UpdateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateInvoiceAttachment
@@ -3701,6 +3841,7 @@ export def "invoices-attachments CreateInvoiceAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record # Represents a [CreateInvoiceAttachment](api-endpoint:Invoices-CreateInvoiceAttachment) request. (e.g. {description: Service contract, idempotency_key: ae5e84f9-4742-4fc1-ba12-a3ce3748f1c3}) — shape: {idempotency_key?: string, description?: string}
   --image-file: string # format: binary
 ]: any -> record<attachment: record<id: string, filename: string, description: string, filesize: int, hash: string, mime_type: string, uploaded_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -3712,7 +3853,7 @@ export def "invoices-attachments CreateInvoiceAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # DeleteInvoiceAttachment
@@ -3729,13 +3870,14 @@ export def "invoices-attachments DeleteInvoiceAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/invoices/($invoice_id)/attachments/($attachment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CancelInvoice
@@ -3751,6 +3893,7 @@ export def "invoices-cancel CancelInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   version: int # The version of the [invoice](entity:Invoice) to cancel. If you do not know the version, you can call  [GetInvoice](api-endpoint:Invoices-GetInvoice) or [ListInvoices](api-endpoint:Invoices-ListInvoices).
 ]: any -> record<invoice: record<id: string, version: int, location_id: string, order_id: string, primary_recipient: record<customer_id: string, given_name: string, family_name: string, email_address: string, address: record, phone_number: string, company_name: string, tax_ids: record>, payment_requests: list<record>, delivery_method: string, invoice_number: string, title: string, description: string, scheduled_at: string, public_url: string, next_payment_amount_money: record<amount: int, currency: string>, status: string, timezone: string, created_at: string, updated_at: string, accepted_payment_methods: record<card: bool, square_gift_card: bool, bank_account: bool, buy_now_pay_later: bool, cash_app_pay: bool>, custom_fields: list<record>, subscription_id: string, sale_or_service_date: string, payment_conditions: string, store_payment_method_enabled: bool, attachments: list<record>, creator_team_member_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -3761,7 +3904,7 @@ export def "invoices-cancel CancelInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PublishInvoice
@@ -3777,6 +3920,7 @@ export def "invoices-publish PublishInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   version: int # The version of the [invoice](entity:Invoice) to publish. This must match the current version of the invoice; otherwise, the request is rejected.
   --idempotency-key: string # A unique string that identifies the `PublishInvoice` request. If you do not  provide `idempotency_key` (or provide an empty string as the value), the endpoint  treats each request as independent.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<invoice: record<id: string, version: int, location_id: string, order_id: string, primary_recipient: record<customer_id: string, given_name: string, family_name: string, email_address: string, address: record, phone_number: string, company_name: string, tax_ids: record>, payment_requests: list<record>, delivery_method: string, invoice_number: string, title: string, description: string, scheduled_at: string, public_url: string, next_payment_amount_money: record<amount: int, currency: string>, status: string, timezone: string, created_at: string, updated_at: string, accepted_payment_methods: record<card: bool, square_gift_card: bool, bank_account: bool, buy_now_pay_later: bool, cash_app_pay: bool>, custom_fields: list<record>, subscription_id: string, sale_or_service_date: string, payment_conditions: string, store_payment_method_enabled: bool, attachments: list<record>, creator_team_member_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -3788,7 +3932,7 @@ export def "invoices-publish PublishInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListBreakTypes
@@ -3803,6 +3947,7 @@ export def "labor-break-types ListBreakTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # Filter the returned `BreakType` results to only those that are associated with the specified location.
   --limit: int # The maximum number of `BreakType` results to return per page. The number can range between 1 and 200. The default is 200.
   --cursor: string # A pointer to the next page of `BreakType` results to fetch.
@@ -3813,7 +3958,7 @@ export def "labor-break-types ListBreakTypes" [
   let full_url = (build-url $base "/v2/labor/break-types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateBreakType
@@ -3829,6 +3974,7 @@ export def "labor-break-types CreateBreakType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string value to ensure the idempotency of the operation.
   break_type: record # A template for a type of [break](entity:Break) that can be added to a [timecard](entity:Timecard), including the expected duration and paid status. — shape: {id?: string, location_id: string, break_name: string, expected_duration: string, is_paid: bool, version?: int}
 ]: any -> record<break_type: record<id: string, location_id: string, break_name: string, expected_duration: string, is_paid: bool, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -3840,7 +3986,7 @@ export def "labor-break-types CreateBreakType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteBreakType
@@ -3856,13 +4002,14 @@ export def "labor-break-types DeleteBreakType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/break-types/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetBreakType
@@ -3878,13 +4025,14 @@ export def "labor-break-types GetBreakType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<break_type: record<id: string, location_id: string, break_name: string, expected_duration: string, is_paid: bool, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/break-types/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateBreakType
@@ -3901,6 +4049,7 @@ export def "labor-break-types UpdateBreakType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   break_type: record # A template for a type of [break](entity:Break) that can be added to a [timecard](entity:Timecard), including the expected duration and paid status. — shape: {id?: string, location_id: string, break_name: string, expected_duration: string, is_paid: bool, version?: int}
 ]: any -> record<break_type: record<id: string, location_id: string, break_name: string, expected_duration: string, is_paid: bool, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -3911,7 +4060,7 @@ export def "labor-break-types UpdateBreakType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListEmployeeWages
@@ -3928,6 +4077,7 @@ export def "labor-employee-wages ListEmployeeWages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --employee-id: string # Filter the returned wages to only those that are associated with the specified employee.
   --limit: int # The maximum number of `EmployeeWage` results to return per page. The number can range between 1 and 200. The default is 200.
   --cursor: string # A pointer to the next page of `EmployeeWage` results to fetch.
@@ -3938,7 +4088,7 @@ export def "labor-employee-wages ListEmployeeWages" [
   let full_url = (build-url $base "/v2/labor/employee-wages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetEmployeeWage
@@ -3956,13 +4106,14 @@ export def "labor-employee-wages GetEmployeeWage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<employee_wage: record<id: string, employee_id: string, title: string, hourly_rate: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/employee-wages/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateScheduledShift
@@ -3978,6 +4129,7 @@ export def "labor-scheduled-shifts CreateScheduledShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique identifier for the `CreateScheduledShift` request, used to ensure the [idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) of the operation.
   scheduled_shift: record # Represents a specific time slot in a work schedule. This object is used to manage the lifecycle of a scheduled shift from the draft to published state. A scheduled shift contains the latest draft shift details and current published shift details. — shape: {id?: string, draft_shift_details?: record, published_shift_details?: record, version?: int}
 ]: any -> record<scheduled_shift: record<id: string, draft_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, published_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -3989,7 +4141,7 @@ export def "labor-scheduled-shifts CreateScheduledShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkPublishScheduledShifts
@@ -4004,6 +4156,7 @@ export def "labor-scheduled-shifts-bulk-publish BulkPublishScheduledShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scheduled_shifts: record # A map of 1 to 100 key-value pairs that represent individual publish requests.  - Each key is the ID of a scheduled shift you want to publish. - Each value is a `BulkPublishScheduledShiftsData` object that contains the `version` field or is an empty object.
   --scheduled-shift-notification-audience: string@scheduled-shift-notification-audience-completer # Indicates whether Square sends an email notification to team members when a scheduled shift is published and which team members receive the notification.
 ]: any -> record<responses: record, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4015,7 +4168,7 @@ export def "labor-scheduled-shifts-bulk-publish BulkPublishScheduledShifts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchScheduledShifts
@@ -4031,6 +4184,7 @@ export def "labor-scheduled-shifts-search SearchScheduledShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # Represents filter and sort criteria for the `query` field in a [SearchScheduledShifts](api-endpoint:Labor-SearchScheduledShifts) request. — shape: {filter?: record, sort?: record}
   --limit: int # The maximum number of results to return in a single response page. The default value is 50.
   --cursor: string # The pagination cursor returned by the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -4043,7 +4197,7 @@ export def "labor-scheduled-shifts-search SearchScheduledShifts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveScheduledShift
@@ -4059,13 +4213,14 @@ export def "labor-scheduled-shifts RetrieveScheduledShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scheduled_shift: record<id: string, draft_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, published_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/scheduled-shifts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateScheduledShift
@@ -4082,6 +4237,7 @@ export def "labor-scheduled-shifts UpdateScheduledShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scheduled_shift: record # Represents a specific time slot in a work schedule. This object is used to manage the lifecycle of a scheduled shift from the draft to published state. A scheduled shift contains the latest draft shift details and current published shift details. — shape: {id?: string, draft_shift_details?: record, published_shift_details?: record, version?: int}
 ]: any -> record<scheduled_shift: record<id: string, draft_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, published_shift_details: record<team_member_id: string, location_id: string, job_id: string, start_at: string, end_at: string, notes: string, is_deleted: bool, timezone: string>, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4092,7 +4248,7 @@ export def "labor-scheduled-shifts UpdateScheduledShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PublishScheduledShift
@@ -4108,6 +4264,7 @@ export def "labor-scheduled-shifts-publish PublishScheduledShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique identifier for the `PublishScheduledShift` request, used to ensure the [idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) of the operation.
   --version: int # The current version of the scheduled shift, used to enable [optimistic concurrency](https://developer.squareup.com/docs/build-basics/common-api-patterns/optimistic-concurrency) control. If the provided version doesn't match the server version, the request fails. If omitted, Square executes a blind write, potentially overwriting data from another publish request.
   --scheduled-shift-notification-audience: string@scheduled-shift-notification-audience-completer # Indicates whether Square sends an email notification to team members when a scheduled shift is published and which team members receive the notification.
@@ -4120,7 +4277,7 @@ export def "labor-scheduled-shifts-publish PublishScheduledShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateShift
@@ -4138,6 +4295,7 @@ export def "labor-shifts CreateShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string value to ensure the idempotency of the operation.
   shift: record # A record of the hourly rate, start, and end times for a single work shift for an employee. This might include a record of the start and end times for breaks taken during the shift.  Deprecated at Square API version 2025-05-21. Replaced by [Timecard](entity:Timecard). See the [migration notes](https://developer.squareup.com/docs/labor-api/what-it-does#migration-notes). — shape: {id?: string, employee_id?: string, location_id: string, timezone?: string, start_at: string, end_at?: string, wage?: record, breaks?: list, status?: "OPEN"|"CLOSED", version?: int, team_member_id?: string, declared_cash_tip_money?: record}
 ]: any -> record<shift: record<id: string, employee_id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4149,7 +4307,7 @@ export def "labor-shifts CreateShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchShifts
@@ -4167,6 +4325,7 @@ export def "labor-shifts-search SearchShifts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # The parameters of a `Shift` search query, which includes filter and sort options.  Deprecated at Square API version 2025-05-21. See the [migration notes](https://developer.squareup.com/docs/labor-api/what-it-does#migration-notes). — shape: {filter?: record, sort?: record}
   --limit: int # The number of resources in a page (200 by default).
   --cursor: string # An opaque cursor for fetching the next page.
@@ -4179,7 +4338,7 @@ export def "labor-shifts-search SearchShifts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteShift
@@ -4197,13 +4356,14 @@ export def "labor-shifts DeleteShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/shifts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetShift
@@ -4221,13 +4381,14 @@ export def "labor-shifts GetShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<shift: record<id: string, employee_id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/shifts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateShift
@@ -4246,6 +4407,7 @@ export def "labor-shifts UpdateShift" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   shift: record # A record of the hourly rate, start, and end times for a single work shift for an employee. This might include a record of the start and end times for breaks taken during the shift.  Deprecated at Square API version 2025-05-21. Replaced by [Timecard](entity:Timecard). See the [migration notes](https://developer.squareup.com/docs/labor-api/what-it-does#migration-notes). — shape: {id?: string, employee_id?: string, location_id: string, timezone?: string, start_at: string, end_at?: string, wage?: record, breaks?: list, status?: "OPEN"|"CLOSED", version?: int, team_member_id?: string, declared_cash_tip_money?: record}
 ]: any -> record<shift: record<id: string, employee_id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4256,7 +4418,7 @@ export def "labor-shifts UpdateShift" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListTeamMemberWages
@@ -4271,6 +4433,7 @@ export def "labor-team-member-wages ListTeamMemberWages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-member-id: string # Filter the returned wages to only those that are associated with the specified team member.
   --limit: int # The maximum number of `TeamMemberWage` results to return per page. The number can range between 1 and 200. The default is 200.
   --cursor: string # A pointer to the next page of `EmployeeWage` results to fetch.
@@ -4281,7 +4444,7 @@ export def "labor-team-member-wages ListTeamMemberWages" [
   let full_url = (build-url $base "/v2/labor/team-member-wages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetTeamMemberWage
@@ -4297,13 +4460,14 @@ export def "labor-team-member-wages GetTeamMemberWage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<team_member_wage: record<id: string, team_member_id: string, title: string, hourly_rate: record<amount: int, currency: string>, job_id: string, tip_eligible: bool>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/team-member-wages/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateTimecard
@@ -4319,6 +4483,7 @@ export def "labor-timecards CreateTimecard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string value to ensure the idempotency of the operation.
   timecard: record # A record of the hourly rate, start time, and end time of a single timecard (shift) for a team member. This might include a record of the start and end times of breaks taken during the shift. — shape: {id?: string, location_id: string, timezone?: string, start_at: string, end_at?: string, wage?: record, breaks?: list, status?: "OPEN"|"CLOSED", version?: int, team_member_id: string, declared_cash_tip_money?: record}
 ]: any -> record<timecard: record<id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4330,7 +4495,7 @@ export def "labor-timecards CreateTimecard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTimecards
@@ -4346,6 +4511,7 @@ export def "labor-timecards-search SearchTimecards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # The parameters of a `Timecard` search query, which includes filter and sort options. — shape: {filter?: record, sort?: record}
   --limit: int # The number of resources in a page (200 by default).
   --cursor: string # An opaque cursor for fetching the next page.
@@ -4358,7 +4524,7 @@ export def "labor-timecards-search SearchTimecards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteTimecard
@@ -4374,13 +4540,14 @@ export def "labor-timecards DeleteTimecard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/timecards/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveTimecard
@@ -4396,13 +4563,14 @@ export def "labor-timecards RetrieveTimecard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<timecard: record<id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/labor/timecards/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateTimecard
@@ -4419,6 +4587,7 @@ export def "labor-timecards UpdateTimecard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   timecard: record # A record of the hourly rate, start time, and end time of a single timecard (shift) for a team member. This might include a record of the start and end times of breaks taken during the shift. — shape: {id?: string, location_id: string, timezone?: string, start_at: string, end_at?: string, wage?: record, breaks?: list, status?: "OPEN"|"CLOSED", version?: int, team_member_id: string, declared_cash_tip_money?: record}
 ]: any -> record<timecard: record<id: string, location_id: string, timezone: string, start_at: string, end_at: string, wage: record<title: string, hourly_rate: record, job_id: string, tip_eligible: bool>, breaks: list<record>, status: string, version: int, created_at: string, updated_at: string, team_member_id: string, declared_cash_tip_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4429,7 +4598,7 @@ export def "labor-timecards UpdateTimecard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListWorkweekConfigs
@@ -4444,6 +4613,7 @@ export def "labor-workweek-configs ListWorkweekConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of `WorkweekConfigs` results to return per page.
   --cursor: string # A pointer to the next page of `WorkweekConfig` results to fetch.
 ]: nothing -> record<workweek_configs: table<id: string, start_of_week: string, start_of_day_local_time: string, version: int, created_at: string, updated_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4453,7 +4623,7 @@ export def "labor-workweek-configs ListWorkweekConfigs" [
   let full_url = (build-url $base "/v2/labor/workweek-configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateWorkweekConfig
@@ -4470,6 +4640,7 @@ export def "labor-workweek-configs UpdateWorkweekConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   workweek_config: record # Sets the day of the week and hour of the day that a business starts a workweek. This is used to calculate overtime pay. — shape: {id?: string, start_of_week: "MON"|"TUE"|"WED"|"THU"|"FRI"|"SAT"|"SUN", start_of_day_local_time: string, version?: int}
 ]: any -> record<workweek_config: record<id: string, start_of_week: string, start_of_day_local_time: string, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4480,7 +4651,7 @@ export def "labor-workweek-configs UpdateWorkweekConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLocations
@@ -4495,13 +4666,14 @@ export def "locations ListLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, locations: table<id: string, name: string, address: record, timezone: string, capabilities: list, status: string, created_at: string, merchant_id: string, country: string, language_code: string, currency: string, phone_number: string, business_name: string, type: string, website_url: string, business_hours: record, business_email: string, description: string, twitter_username: string, instagram_username: string, facebook_url: string, coordinates: record, logo_url: string, pos_background_url: string, mcc: string, full_format_logo_url: string, tax_ids: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateLocation
@@ -4517,6 +4689,7 @@ export def "locations CreateLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: record # Represents one of a business' [locations](https://developer.squareup.com/docs/locations-api). — shape: {name?: string, address?: record, timezone?: string, status?: "ACTIVE"|"INACTIVE", country?: "ZZ"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", language_code?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS", phone_number?: string, business_name?: string, type?: "PHYSICAL"|"MOBILE", website_url?: string, business_hours?: record, business_email?: string, description?: string, twitter_username?: string, instagram_username?: string, facebook_url?: string, coordinates?: record, mcc?: string, tax_ids?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, location: record<id: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, timezone: string, capabilities: list<string>, status: string, created_at: string, merchant_id: string, country: string, language_code: string, currency: string, phone_number: string, business_name: string, type: string, website_url: string, business_hours: record<periods: list>, business_email: string, description: string, twitter_username: string, instagram_username: string, facebook_url: string, coordinates: record<latitude: float, longitude: float>, logo_url: string, pos_background_url: string, mcc: string, full_format_logo_url: string, tax_ids: record<eu_vat: string, fr_siret: string, fr_naf: string, es_nif: string, jp_qii: string>>> {
   let input = $in
@@ -4527,7 +4700,7 @@ export def "locations CreateLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLocationCustomAttributeDefinitions
@@ -4542,6 +4715,7 @@ export def "locations-custom-attribute-definitions ListLocationCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -4552,7 +4726,7 @@ export def "locations-custom-attribute-definitions ListLocationCustomAttributeDe
   let full_url = (build-url $base "/v2/locations/custom-attribute-definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateLocationCustomAttributeDefinition
@@ -4568,6 +4742,7 @@ export def "locations-custom-attribute-definitions CreateLocationCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4579,7 +4754,7 @@ export def "locations-custom-attribute-definitions CreateLocationCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteLocationCustomAttributeDefinition
@@ -4595,13 +4770,14 @@ export def "locations-custom-attribute-definitions DeleteLocationCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/custom-attribute-definitions/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveLocationCustomAttributeDefinition
@@ -4617,6 +4793,7 @@ export def "locations-custom-attribute-definitions RetrieveLocationCustomAttribu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The current version of the custom attribute definition, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4625,7 +4802,7 @@ export def "locations-custom-attribute-definitions RetrieveLocationCustomAttribu
   let full_url = (build-url $base $"/v2/locations/custom-attribute-definitions/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateLocationCustomAttributeDefinition
@@ -4642,6 +4819,7 @@ export def "locations-custom-attribute-definitions UpdateLocationCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4653,7 +4831,7 @@ export def "locations-custom-attribute-definitions UpdateLocationCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkDeleteLocationCustomAttributes
@@ -4668,6 +4846,7 @@ export def "locations-custom-attributes-bulk-delete BulkDeleteLocationCustomAttr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # The data used to update the `CustomAttribute` objects. The keys must be unique and are used to map to the corresponding response.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4678,7 +4857,7 @@ export def "locations-custom-attributes-bulk-delete BulkDeleteLocationCustomAttr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpsertLocationCustomAttributes
@@ -4693,6 +4872,7 @@ export def "locations-custom-attributes-bulk-upsert BulkUpsertLocationCustomAttr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map containing 1 to 25 individual upsert requests. For each request, provide an arbitrary ID that is unique for this `BulkUpsertLocationCustomAttributes` request and the information needed to create or update a custom attribute.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -4703,7 +4883,7 @@ export def "locations-custom-attributes-bulk-upsert BulkUpsertLocationCustomAttr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveLocation
@@ -4719,13 +4899,14 @@ export def "locations RetrieveLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, location: record<id: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, timezone: string, capabilities: list<string>, status: string, created_at: string, merchant_id: string, country: string, language_code: string, currency: string, phone_number: string, business_name: string, type: string, website_url: string, business_hours: record<periods: list>, business_email: string, description: string, twitter_username: string, instagram_username: string, facebook_url: string, coordinates: record<latitude: float, longitude: float>, logo_url: string, pos_background_url: string, mcc: string, full_format_logo_url: string, tax_ids: record<eu_vat: string, fr_siret: string, fr_naf: string, es_nif: string, jp_qii: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/($location_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateLocation
@@ -4742,6 +4923,7 @@ export def "locations UpdateLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: record # Represents one of a business' [locations](https://developer.squareup.com/docs/locations-api). — shape: {name?: string, address?: record, timezone?: string, status?: "ACTIVE"|"INACTIVE", country?: "ZZ"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", language_code?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS", phone_number?: string, business_name?: string, type?: "PHYSICAL"|"MOBILE", website_url?: string, business_hours?: record, business_email?: string, description?: string, twitter_username?: string, instagram_username?: string, facebook_url?: string, coordinates?: record, mcc?: string, tax_ids?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, location: record<id: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, timezone: string, capabilities: list<string>, status: string, created_at: string, merchant_id: string, country: string, language_code: string, currency: string, phone_number: string, business_name: string, type: string, website_url: string, business_hours: record<periods: list>, business_email: string, description: string, twitter_username: string, instagram_username: string, facebook_url: string, coordinates: record<latitude: float, longitude: float>, logo_url: string, pos_background_url: string, mcc: string, full_format_logo_url: string, tax_ids: record<eu_vat: string, fr_siret: string, fr_naf: string, es_nif: string, jp_qii: string>>> {
   let input = $in
@@ -4752,7 +4934,7 @@ export def "locations UpdateLocation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateCheckout
@@ -4773,6 +4955,7 @@ export def "locations-checkouts CreateCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this checkout among others you have created. It can be any valid string but must be unique for every order sent to Square Checkout for a given location ID.  The idempotency key is used to avoid processing the same order more than once. If you are  unsure whether a particular checkout was created successfully, you can attempt it again with the same idempotency key and all the same other parameters without worrying about creating duplicates.  You should use a random number/string generator native to the language you are working in to generate strings for your idempotency keys.  For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   order: record # e.g. {idempotency_key: 8193148c-9586-11e6-99f9-28cfe92138cf, order: {discounts: [{name: Labor Day Sale, percentage: 5, scope: ORDER, uid: labor-day-sale}, {catalog_object_id: DB7L55ZH2BGWI4H23ULIWOQ7, scope: ORDER, uid: membership-discount}, {amount_money: {amount: 100, currency: USD}, name: Sale - $1.00 off, scope: LINE_ITEM, uid: one-dollar-off}], line_items: [{base_price_money: {amount: 1599, currency: USD}, name: New York Strip Steak, quantity: 1}, {applied_discounts: [{discount_uid: one-dollar-off}], catalog_object_id: BEMYCSMIJL46OCDV4KYIKXIB, modifiers: [{catalog_object_id: CHQX7Y4KY6N5KINJKZCFURPZ}], quantity: 2}], location_id: 057P5VYJ4A5X1, reference_id: my-order-001, taxes: [{name: State Sales Tax, percentage: 9, scope: ORDER, uid: state-sales-tax}]}} — shape: {order?: record, idempotency_key?: string}
   --ask-for-shipping-address: oneof<nothing, bool> # If `true`, Square Checkout collects shipping information on your behalf and stores  that information with the transaction information in the Square Seller Dashboard.  Default: `false`.
@@ -4791,7 +4974,7 @@ export def "locations-checkouts CreateCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLocationCustomAttributes
@@ -4807,6 +4990,7 @@ export def "locations-custom-attributes ListLocationCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -4818,7 +5002,7 @@ export def "locations-custom-attributes ListLocationCustomAttributes" [
   let full_url = (build-url $base $"/v2/locations/($location_id)/custom-attributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteLocationCustomAttribute
@@ -4835,13 +5019,14 @@ export def "locations-custom-attributes DeleteLocationCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/($location_id)/custom-attributes/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveLocationCustomAttribute
@@ -4858,6 +5043,7 @@ export def "locations-custom-attributes RetrieveLocationCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-definition: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of the custom attribute. Set this parameter to `true` to get the name and description of the custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
   --version: int # The current version of the custom attribute, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4867,7 +5053,7 @@ export def "locations-custom-attributes RetrieveLocationCustomAttribute" [
   let full_url = (build-url $base $"/v2/locations/($location_id)/custom-attributes/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertLocationCustomAttribute
@@ -4885,6 +5071,7 @@ export def "locations-custom-attributes UpsertLocationCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute: record # A custom attribute value. Each custom attribute value has a corresponding `CustomAttributeDefinition` object. — shape: {key?: string, value?: any, version?: int, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", definition?: record}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4896,7 +5083,7 @@ export def "locations-custom-attributes UpsertLocationCustomAttribute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListTransactions
@@ -4914,6 +5101,7 @@ export def "locations-transactions ListTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --begin-time: string # The beginning of the requested reporting period, in RFC 3339 format.  See [Date ranges](https://developer.squareup.com/docs/build-basics/working-with-dates) for details on date inclusivity/exclusivity.  Default value: The current time minus one year.
   --end-time: string # The end of the requested reporting period, in RFC 3339 format.  See [Date ranges](https://developer.squareup.com/docs/build-basics/working-with-dates) for details on date inclusivity/exclusivity.  Default value: The current time.
   --sort-order: string@sort-order-completer # The order in which results are listed in the response (`ASC` for oldest first, `DESC` for newest first).  Default value: `DESC`
@@ -4925,7 +5113,7 @@ export def "locations-transactions ListTransactions" [
   let full_url = (build-url $base $"/v2/locations/($location_id)/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveTransaction
@@ -4944,13 +5132,14 @@ export def "locations-transactions RetrieveTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, transaction: record<id: string, location_id: string, created_at: string, tenders: list<record>, refunds: list<record>, reference_id: string, product: string, client_id: string, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, order_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/($location_id)/transactions/($transaction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CaptureTransaction
@@ -4969,13 +5158,14 @@ export def "locations-transactions-capture CaptureTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/($location_id)/transactions/($transaction_id)/capture")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # VoidTransaction
@@ -4994,13 +5184,14 @@ export def "locations-transactions-void VoidTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/locations/($location_id)/transactions/($transaction_id)/void")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateLoyaltyAccount
@@ -5016,6 +5207,7 @@ export def "loyalty-accounts CreateLoyaltyAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   loyalty_account: record # Describes a loyalty account in a [loyalty program](entity:LoyaltyProgram). For more information, see [Create and Retrieve Loyalty Accounts](https://developer.squareup.com/docs/loyalty-api/loyalty-accounts). — shape: {program_id: string, customer_id?: string, enrolled_at?: string, mapping?: record, expiring_point_deadlines?: list}
   idempotency_key: string # A unique string that identifies this `CreateLoyaltyAccount` request.  Keys can be any valid string, but must be unique for every request.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_account: record<id: string, program_id: string, balance: int, lifetime_points: int, customer_id: string, enrolled_at: string, created_at: string, updated_at: string, mapping: record<id: string, created_at: string, phone_number: string>, expiring_point_deadlines: list<record>>> {
@@ -5027,7 +5219,7 @@ export def "loyalty-accounts CreateLoyaltyAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchLoyaltyAccounts
@@ -5043,6 +5235,7 @@ export def "loyalty-accounts-search SearchLoyaltyAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # The search criteria for the loyalty accounts. — shape: {mappings?: list, customer_ids?: list}
   --limit: int # The maximum number of results to include in the response. The default value is 30.
   --cursor: string # A pagination cursor returned by a previous call to  this endpoint. Provide this to retrieve the next set of  results for the original query.  For more information,  see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5055,7 +5248,7 @@ export def "loyalty-accounts-search SearchLoyaltyAccounts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveLoyaltyAccount
@@ -5071,13 +5264,14 @@ export def "loyalty-accounts RetrieveLoyaltyAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_account: record<id: string, program_id: string, balance: int, lifetime_points: int, customer_id: string, enrolled_at: string, created_at: string, updated_at: string, mapping: record<id: string, created_at: string, phone_number: string>, expiring_point_deadlines: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/accounts/($account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # AccumulateLoyaltyPoints
@@ -5094,6 +5288,7 @@ export def "loyalty-accounts-accumulate AccumulateLoyaltyPoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accumulate_points: record # Provides metadata when the event `type` is `ACCUMULATE_POINTS`. — shape: {points?: int, order_id?: string}
   idempotency_key: string # A unique string that identifies the `AccumulateLoyaltyPoints` request.  Keys can be any valid string but must be unique for every request.
   location_id: string # The [location](entity:Location) where the purchase was made.
@@ -5106,7 +5301,7 @@ export def "loyalty-accounts-accumulate AccumulateLoyaltyPoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # AdjustLoyaltyPoints
@@ -5123,6 +5318,7 @@ export def "loyalty-accounts-adjust AdjustLoyaltyPoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this `AdjustLoyaltyPoints` request.  Keys can be any valid string, but must be unique for every request.
   adjust_points: record # Provides metadata when the event `type` is `ADJUST_POINTS`. — shape: {points: int, reason?: string}
   --allow-negative-balance: oneof<nothing, bool> # Indicates whether to allow a negative adjustment to result in a negative balance. If `true`, a negative balance is allowed when subtracting points. If `false`, Square returns a `BAD_REQUEST` error when subtracting the specified number of points would result in a negative balance. The default value is `false`. (nullable)
@@ -5135,7 +5331,7 @@ export def "loyalty-accounts-adjust AdjustLoyaltyPoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchLoyaltyEvents
@@ -5151,6 +5347,7 @@ export def "loyalty-events-search SearchLoyaltyEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # Represents a query used to search for loyalty events. — shape: {filter?: record}
   --limit: int # The maximum number of results to include in the response.  The last page might contain fewer events.  The default is 30 events.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5163,7 +5360,7 @@ export def "loyalty-events-search SearchLoyaltyEvents" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLoyaltyPrograms
@@ -5180,13 +5377,14 @@ export def "loyalty-programs ListLoyaltyPrograms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, programs: table<id: string, status: string, reward_tiers: list, expiration_policy: record, terminology: record, location_ids: list, created_at: string, updated_at: string, accrual_rules: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/loyalty/programs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveLoyaltyProgram
@@ -5202,13 +5400,14 @@ export def "loyalty-programs RetrieveLoyaltyProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, program: record<id: string, status: string, reward_tiers: list<record>, expiration_policy: record<expiration_duration: string>, terminology: record<one: string, other: string>, location_ids: list<string>, created_at: string, updated_at: string, accrual_rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/programs/($program_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CalculateLoyaltyPoints
@@ -5225,6 +5424,7 @@ export def "loyalty-programs-calculate CalculateLoyaltyPoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order-id: string # The [order](entity:Order) ID for which to calculate the points. Specify this field if your application uses the Orders API to process orders. Otherwise, specify the `transaction_amount_money`. (nullable)
   --transaction-amount-money: record # Represents an amount of money. `Money` fields can be signed or unsigned. Fields that do not explicitly define whether they are signed or unsigned are considered unsigned and can only hold positive amounts. For signed fields, the sign of the value indicates the purpose of the money transfer. See [Working with Monetary Amounts](https://developer.squareup.com/docs/build-basics/working-with-monetary-amounts) for more information. — shape: {amount?: int, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS"}
   --loyalty-account-id: string # The ID of the target [loyalty account](entity:LoyaltyAccount). Optionally specify this field if your application uses the Orders API to process orders.  If specified, the `promotion_points` field in the response shows the number of points the buyer would earn from the purchase. In this case, Square uses the account ID to determine whether the promotion's `trigger_limit` (the maximum number of times that a buyer can trigger the promotion) has been reached. If not specified, the `promotion_points` field shows the number of points the purchase qualifies for regardless of the trigger limit. (nullable)
@@ -5237,7 +5437,7 @@ export def "loyalty-programs-calculate CalculateLoyaltyPoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListLoyaltyPromotions
@@ -5253,6 +5453,7 @@ export def "loyalty-programs-promotions ListLoyaltyPromotions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # The status to filter the results by. If a status is provided, only loyalty promotions with the specified status are returned. Otherwise, all loyalty promotions associated with the loyalty program are returned.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single paged response. The minimum value is 1 and the maximum value is 30. The default value is 30. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5263,7 +5464,7 @@ export def "loyalty-programs-promotions ListLoyaltyPromotions" [
   let full_url = (build-url $base $"/v2/loyalty/programs/($program_id)/promotions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateLoyaltyPromotion
@@ -5280,6 +5481,7 @@ export def "loyalty-programs-promotions CreateLoyaltyPromotion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   loyalty_promotion: record # Represents a promotion for a [loyalty program](entity:LoyaltyProgram). Loyalty promotions enable buyers to earn extra points on top of those earned from the base program.  A loyalty program can have a maximum of 10 loyalty promotions with an `ACTIVE` or `SCHEDULED` status. — shape: {name: string, incentive: record, available_time: record, trigger_limit?: record, status?: "ACTIVE"|"ENDED"|"CANCELED"|"SCHEDULED", minimum_spend_amount_money?: record, qualifying_item_variation_ids?: list, qualifying_category_ids?: list}
   idempotency_key: string # A unique identifier for this request, which is used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_promotion: record<id: string, name: string, incentive: record<type: string, points_multiplier_data: record, points_addition_data: record>, available_time: record<start_date: string, end_date: string, time_periods: list>, trigger_limit: record<times: int, interval: string>, status: string, created_at: string, canceled_at: string, updated_at: string, loyalty_program_id: string, minimum_spend_amount_money: record<amount: int, currency: string>, qualifying_item_variation_ids: list<string>, qualifying_category_ids: list<string>>> {
@@ -5291,7 +5493,7 @@ export def "loyalty-programs-promotions CreateLoyaltyPromotion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveLoyaltyPromotion
@@ -5308,13 +5510,14 @@ export def "loyalty-programs-promotions RetrieveLoyaltyPromotion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_promotion: record<id: string, name: string, incentive: record<type: string, points_multiplier_data: record, points_addition_data: record>, available_time: record<start_date: string, end_date: string, time_periods: list>, trigger_limit: record<times: int, interval: string>, status: string, created_at: string, canceled_at: string, updated_at: string, loyalty_program_id: string, minimum_spend_amount_money: record<amount: int, currency: string>, qualifying_item_variation_ids: list<string>, qualifying_category_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/programs/($program_id)/promotions/($promotion_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CancelLoyaltyPromotion
@@ -5331,13 +5534,14 @@ export def "loyalty-programs-promotions-cancel CancelLoyaltyPromotion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_promotion: record<id: string, name: string, incentive: record<type: string, points_multiplier_data: record, points_addition_data: record>, available_time: record<start_date: string, end_date: string, time_periods: list>, trigger_limit: record<times: int, interval: string>, status: string, created_at: string, canceled_at: string, updated_at: string, loyalty_program_id: string, minimum_spend_amount_money: record<amount: int, currency: string>, qualifying_item_variation_ids: list<string>, qualifying_category_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/programs/($program_id)/promotions/($promotion_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateLoyaltyReward
@@ -5353,6 +5557,7 @@ export def "loyalty-rewards CreateLoyaltyReward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   reward: record # Represents a contract to redeem loyalty points for a [reward tier](entity:LoyaltyProgramRewardTier) discount. Loyalty rewards can be in an ISSUED, REDEEMED, or DELETED state.  For more information, see [Manage loyalty rewards](https://developer.squareup.com/docs/loyalty-api/loyalty-rewards). — shape: {status?: "ISSUED"|"REDEEMED"|"DELETED", loyalty_account_id: string, reward_tier_id: string, order_id?: string}
   idempotency_key: string # A unique string that identifies this `CreateLoyaltyReward` request.  Keys can be any valid string, but must be unique for every request.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, reward: record<id: string, status: string, loyalty_account_id: string, reward_tier_id: string, points: int, order_id: string, created_at: string, updated_at: string, redeemed_at: string>> {
@@ -5364,7 +5569,7 @@ export def "loyalty-rewards CreateLoyaltyReward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchLoyaltyRewards
@@ -5380,6 +5585,7 @@ export def "loyalty-rewards-search SearchLoyaltyRewards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # The set of search requirements. — shape: {loyalty_account_id: string, status?: "ISSUED"|"REDEEMED"|"DELETED"}
   --limit: int # The maximum number of results to return in the response. The default value is 30.
   --cursor: string # A pagination cursor returned by a previous call to  this endpoint. Provide this to retrieve the next set of  results for the original query. For more information,  see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5392,7 +5598,7 @@ export def "loyalty-rewards-search SearchLoyaltyRewards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteLoyaltyReward
@@ -5408,13 +5614,14 @@ export def "loyalty-rewards DeleteLoyaltyReward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/rewards/($reward_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveLoyaltyReward
@@ -5430,13 +5637,14 @@ export def "loyalty-rewards RetrieveLoyaltyReward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, reward: record<id: string, status: string, loyalty_account_id: string, reward_tier_id: string, points: int, order_id: string, created_at: string, updated_at: string, redeemed_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/loyalty/rewards/($reward_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RedeemLoyaltyReward
@@ -5452,6 +5660,7 @@ export def "loyalty-rewards-redeem RedeemLoyaltyReward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this `RedeemLoyaltyReward` request.  Keys can be any valid string, but must be unique for every request.
   location_id: string # The ID of the [location](entity:Location) where the reward is redeemed.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, event: record<id: string, type: string, created_at: string, accumulate_points: record<loyalty_program_id: string, points: int, order_id: string>, create_reward: record<loyalty_program_id: string, reward_id: string, points: int>, redeem_reward: record<loyalty_program_id: string, reward_id: string, order_id: string>, delete_reward: record<loyalty_program_id: string, reward_id: string, points: int>, adjust_points: record<loyalty_program_id: string, points: int, reason: string>, loyalty_account_id: string, location_id: string, source: string, expire_points: record<loyalty_program_id: string, points: int>, other_event: record<loyalty_program_id: string, points: int>, accumulate_promotion_points: record<loyalty_program_id: string, loyalty_promotion_id: string, points: int, order_id: string>>> {
@@ -5463,7 +5672,7 @@ export def "loyalty-rewards-redeem RedeemLoyaltyReward" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListMerchants
@@ -5478,6 +5687,7 @@ export def "merchants ListMerchants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: int # The cursor generated by the previous response.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, merchant: table<id: string, business_name: string, country: string, language_code: string, currency: string, status: string, main_location_id: string, created_at: string>, cursor: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5486,7 +5696,7 @@ export def "merchants ListMerchants" [
   let full_url = (build-url $base "/v2/merchants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListMerchantCustomAttributeDefinitions
@@ -5501,6 +5711,7 @@ export def "merchants-custom-attribute-definitions ListMerchantCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5511,7 +5722,7 @@ export def "merchants-custom-attribute-definitions ListMerchantCustomAttributeDe
   let full_url = (build-url $base "/v2/merchants/custom-attribute-definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateMerchantCustomAttributeDefinition
@@ -5527,6 +5738,7 @@ export def "merchants-custom-attribute-definitions CreateMerchantCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -5538,7 +5750,7 @@ export def "merchants-custom-attribute-definitions CreateMerchantCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteMerchantCustomAttributeDefinition
@@ -5554,13 +5766,14 @@ export def "merchants-custom-attribute-definitions DeleteMerchantCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/merchants/custom-attribute-definitions/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveMerchantCustomAttributeDefinition
@@ -5576,6 +5789,7 @@ export def "merchants-custom-attribute-definitions RetrieveMerchantCustomAttribu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The current version of the custom attribute definition, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5584,7 +5798,7 @@ export def "merchants-custom-attribute-definitions RetrieveMerchantCustomAttribu
   let full_url = (build-url $base $"/v2/merchants/custom-attribute-definitions/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateMerchantCustomAttributeDefinition
@@ -5601,6 +5815,7 @@ export def "merchants-custom-attribute-definitions UpdateMerchantCustomAttribute
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -5612,7 +5827,7 @@ export def "merchants-custom-attribute-definitions UpdateMerchantCustomAttribute
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkDeleteMerchantCustomAttributes
@@ -5627,6 +5842,7 @@ export def "merchants-custom-attributes-bulk-delete BulkDeleteMerchantCustomAttr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # The data used to update the `CustomAttribute` objects. The keys must be unique and are used to map to the corresponding response.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -5637,7 +5853,7 @@ export def "merchants-custom-attributes-bulk-delete BulkDeleteMerchantCustomAttr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpsertMerchantCustomAttributes
@@ -5652,6 +5868,7 @@ export def "merchants-custom-attributes-bulk-upsert BulkUpsertMerchantCustomAttr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map containing 1 to 25 individual upsert requests. For each request, provide an arbitrary ID that is unique for this `BulkUpsertMerchantCustomAttributes` request and the information needed to create or update a custom attribute.
 ]: any -> record<values: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -5662,7 +5879,7 @@ export def "merchants-custom-attributes-bulk-upsert BulkUpsertMerchantCustomAttr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveMerchant
@@ -5678,13 +5895,14 @@ export def "merchants RetrieveMerchant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, merchant: record<id: string, business_name: string, country: string, language_code: string, currency: string, status: string, main_location_id: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/merchants/($merchant_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListMerchantCustomAttributes
@@ -5700,6 +5918,7 @@ export def "merchants-custom-attributes ListMerchantCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
@@ -5711,7 +5930,7 @@ export def "merchants-custom-attributes ListMerchantCustomAttributes" [
   let full_url = (build-url $base $"/v2/merchants/($merchant_id)/custom-attributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteMerchantCustomAttribute
@@ -5728,13 +5947,14 @@ export def "merchants-custom-attributes DeleteMerchantCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/merchants/($merchant_id)/custom-attributes/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveMerchantCustomAttribute
@@ -5751,6 +5971,7 @@ export def "merchants-custom-attributes RetrieveMerchantCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-definition: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of the custom attribute. Set this parameter to `true` to get the name and description of the custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
   --version: int # The current version of the custom attribute, which is used for strongly consistent reads to guarantee that you receive the most up-to-date data. When included in the request, Square returns the specified version or a higher version if one exists. If the specified version is higher than the current version, Square returns a `BAD_REQUEST` error.
 ]: nothing -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -5760,7 +5981,7 @@ export def "merchants-custom-attributes RetrieveMerchantCustomAttribute" [
   let full_url = (build-url $base $"/v2/merchants/($merchant_id)/custom-attributes/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertMerchantCustomAttribute
@@ -5778,6 +5999,7 @@ export def "merchants-custom-attributes UpsertMerchantCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute: record # A custom attribute value. Each custom attribute value has a corresponding `CustomAttributeDefinition` object. — shape: {key?: string, value?: any, version?: int, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", definition?: record}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -5789,7 +6011,7 @@ export def "merchants-custom-attributes UpsertMerchantCustomAttribute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveLocationSettings
@@ -5805,13 +6027,14 @@ export def "online-checkout-location-settings RetrieveLocationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, location_settings: record<location_id: string, customer_notes_enabled: bool, policies: list<record>, branding: record<header_type: string, button_color: string, button_shape: string>, tipping: record<percentages: list, smart_tipping_enabled: bool, default_percent: int, smart_tips: list, default_smart_tip: record>, coupons: record<enabled: bool>, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/online-checkout/location-settings/($location_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateLocationSettings
@@ -5828,6 +6051,7 @@ export def "online-checkout-location-settings UpdateLocationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   location_settings: record # shape: {location_id?: string, customer_notes_enabled?: bool, policies?: list, branding?: record, tipping?: record, coupons?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, location_settings: record<location_id: string, customer_notes_enabled: bool, policies: list<record>, branding: record<header_type: string, button_color: string, button_shape: string>, tipping: record<percentages: list, smart_tipping_enabled: bool, default_percent: int, smart_tips: list, default_smart_tip: record>, coupons: record<enabled: bool>, updated_at: string>> {
   let input = $in
@@ -5838,7 +6062,7 @@ export def "online-checkout-location-settings UpdateLocationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveMerchantSettings
@@ -5853,13 +6077,14 @@ export def "online-checkout-merchant-settings RetrieveMerchantSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, merchant_settings: record<payment_methods: record<apple_pay: record, google_pay: record, cash_app: record, afterpay_clearpay: record>, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/online-checkout/merchant-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateMerchantSettings
@@ -5875,6 +6100,7 @@ export def "online-checkout-merchant-settings UpdateMerchantSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   merchant_settings: record # shape: {payment_methods?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, merchant_settings: record<payment_methods: record<apple_pay: record, google_pay: record, cash_app: record, afterpay_clearpay: record>, updated_at: string>> {
   let input = $in
@@ -5885,7 +6111,7 @@ export def "online-checkout-merchant-settings UpdateMerchantSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListPaymentLinks
@@ -5900,6 +6126,7 @@ export def "online-checkout-payment-links ListPaymentLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. If a cursor is not provided, the endpoint returns the first page of the results. For more  information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # A limit on the number of results to return per page. The limit is advisory and the implementation might return more or less results. If the supplied limit is negative, zero, or greater than the maximum limit of 1000, it is ignored.  Default value: `100`
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment_links: table<id: string, version: int, description: string, order_id: string, checkout_options: record, pre_populated_data: record, url: string, long_url: string, created_at: string, updated_at: string, payment_note: string>, cursor: string> {
@@ -5909,7 +6136,7 @@ export def "online-checkout-payment-links ListPaymentLinks" [
   let full_url = (build-url $base "/v2/online-checkout/payment-links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreatePaymentLink
@@ -5928,6 +6155,7 @@ export def "online-checkout-payment-links CreatePaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string that identifies this `CreatePaymentLinkRequest` request. If you do not provide a unique string (or provide an empty string as the value), the endpoint treats each request as independent.  For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   --description: string # A description of the payment link. You provide this optional description that is useful in your application context. It is not used anywhere.
   --quick-pay: record # Describes an ad hoc item and price to generate a quick pay checkout link. For more information, see [Quick Pay Checkout](https://developer.squareup.com/docs/checkout-api/quick-pay-checkout). — shape: {name: string, price_money: record, location_id: string}
@@ -5944,7 +6172,7 @@ export def "online-checkout-payment-links CreatePaymentLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeletePaymentLink
@@ -5960,13 +6188,14 @@ export def "online-checkout-payment-links DeletePaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, id: string, cancelled_order_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/online-checkout/payment-links/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrievePaymentLink
@@ -5982,13 +6211,14 @@ export def "online-checkout-payment-links RetrievePaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment_link: record<id: string, version: int, description: string, order_id: string, checkout_options: record<allow_tipping: bool, custom_fields: list, subscription_plan_id: string, redirect_url: string, merchant_support_email: string, ask_for_shipping_address: bool, accepted_payment_methods: record, app_fee_money: record, shipping_fee: record, enable_coupon: bool, enable_loyalty: bool>, pre_populated_data: record<buyer_email: string, buyer_phone_number: string, buyer_address: record>, url: string, long_url: string, created_at: string, updated_at: string, payment_note: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/online-checkout/payment-links/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdatePaymentLink
@@ -6005,6 +6235,7 @@ export def "online-checkout-payment-links UpdatePaymentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment_link: record # shape: {version: int, description?: string, checkout_options?: record, pre_populated_data?: record, created_at?: string, updated_at?: string, payment_note?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, payment_link: record<id: string, version: int, description: string, order_id: string, checkout_options: record<allow_tipping: bool, custom_fields: list, subscription_plan_id: string, redirect_url: string, merchant_support_email: string, ask_for_shipping_address: bool, accepted_payment_methods: record, app_fee_money: record, shipping_fee: record, enable_coupon: bool, enable_loyalty: bool>, pre_populated_data: record<buyer_email: string, buyer_phone_number: string, buyer_address: record>, url: string, long_url: string, created_at: string, updated_at: string, payment_note: string>> {
   let input = $in
@@ -6015,7 +6246,7 @@ export def "online-checkout-payment-links UpdatePaymentLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateOrder
@@ -6031,6 +6262,7 @@ export def "orders CreateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: record # Contains all information related to a single order to process with Square, including line items that specify the products to purchase. `Order` objects also include information about any associated tenders, refunds, and returns.  All Connect V2 Transactions have all been converted to Orders including all associated itemization data. — shape: {location_id: string, reference_id?: string, source?: record, customer_id?: string, line_items?: list, taxes?: list, discounts?: list, service_charges?: list, fulfillments?: list, return_amounts?: record, net_amounts?: record, rounding_adjustment?: record, metadata?: record, state?: "OPEN"|"COMPLETED"|"CANCELED"|"DRAFT", version?: int, total_money?: record, total_tax_money?: record, total_discount_money?: record, total_tip_money?: record, total_service_charge_money?: record, ticket_name?: string, pricing_options?: record, net_amount_due_money?: record}
   --idempotency-key: string # A value you specify that uniquely identifies this order among orders you have created.  If you are unsure whether a particular order was created successfully, you can try it again with the same idempotency key without worrying about creating duplicate orders.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<order: record<id: string, location_id: string, reference_id: string, source: record<name: string>, customer_id: string, line_items: list<record>, taxes: list<record>, discounts: list<record>, service_charges: list<record>, fulfillments: list<record>, returns: list<record>, return_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, net_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, rounding_adjustment: record<uid: string, name: string, amount_money: record>, tenders: list<record>, refunds: list<record>, metadata: record, created_at: string, updated_at: string, closed_at: string, state: string, version: int, total_money: record<amount: int, currency: string>, total_tax_money: record<amount: int, currency: string>, total_discount_money: record<amount: int, currency: string>, total_tip_money: record<amount: int, currency: string>, total_service_charge_money: record<amount: int, currency: string>, ticket_name: string, pricing_options: record<auto_apply_discounts: bool, auto_apply_taxes: bool>, rewards: list<record>, net_amount_due_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6042,7 +6274,7 @@ export def "orders CreateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BatchRetrieveOrders
@@ -6057,6 +6289,7 @@ export def "orders-batch-retrieve BatchRetrieveOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location for these orders. This field is optional: omit it to retrieve orders within the scope of the current authorization's merchant ID. (nullable)
   order_ids: list # The IDs of the orders to retrieve. A maximum of 100 orders can be retrieved per request.
 ]: any -> record<orders: table<id: string, location_id: string, reference_id: string, source: record, customer_id: string, line_items: list, taxes: list, discounts: list, service_charges: list, fulfillments: list, returns: list, return_amounts: record, net_amounts: record, rounding_adjustment: record, tenders: list, refunds: list, metadata: record, created_at: string, updated_at: string, closed_at: string, state: string, version: int, total_money: record, total_tax_money: record, total_discount_money: record, total_tip_money: record, total_service_charge_money: record, ticket_name: string, pricing_options: record, rewards: list, net_amount_due_money: record>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6068,7 +6301,7 @@ export def "orders-batch-retrieve BatchRetrieveOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CalculateOrder
@@ -6085,6 +6318,7 @@ export def "orders-calculate CalculateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   order: record # Contains all information related to a single order to process with Square, including line items that specify the products to purchase. `Order` objects also include information about any associated tenders, refunds, and returns.  All Connect V2 Transactions have all been converted to Orders including all associated itemization data. — shape: {location_id: string, reference_id?: string, source?: record, customer_id?: string, line_items?: list, taxes?: list, discounts?: list, service_charges?: list, fulfillments?: list, return_amounts?: record, net_amounts?: record, rounding_adjustment?: record, metadata?: record, state?: "OPEN"|"COMPLETED"|"CANCELED"|"DRAFT", version?: int, total_money?: record, total_tax_money?: record, total_discount_money?: record, total_tip_money?: record, total_service_charge_money?: record, ticket_name?: string, pricing_options?: record, net_amount_due_money?: record}
   --proposed-rewards: list # Identifies one or more loyalty reward tiers to apply during the order calculation. The discounts defined by the reward tiers are added to the order only to preview the effect of applying the specified rewards. The rewards do not correspond to actual redemptions; that is, no `reward`s are created. Therefore, the reward `id`s are random strings used only to reference the reward tier. (nullable) — item shape: {id: string, reward_tier_id: string}
 ]: any -> record<order: record<id: string, location_id: string, reference_id: string, source: record<name: string>, customer_id: string, line_items: list<record>, taxes: list<record>, discounts: list<record>, service_charges: list<record>, fulfillments: list<record>, returns: list<record>, return_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, net_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, rounding_adjustment: record<uid: string, name: string, amount_money: record>, tenders: list<record>, refunds: list<record>, metadata: record, created_at: string, updated_at: string, closed_at: string, state: string, version: int, total_money: record<amount: int, currency: string>, total_tax_money: record<amount: int, currency: string>, total_discount_money: record<amount: int, currency: string>, total_tip_money: record<amount: int, currency: string>, total_service_charge_money: record<amount: int, currency: string>, ticket_name: string, pricing_options: record<auto_apply_discounts: bool, auto_apply_taxes: bool>, rewards: list<record>, net_amount_due_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6096,7 +6330,7 @@ export def "orders-calculate CalculateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CloneOrder
@@ -6111,6 +6345,7 @@ export def "orders-clone CloneOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   order_id: string # The ID of the order to clone.
   --version: int # An optional order version for concurrency protection.  If a version is provided, it must match the latest stored version of the order to clone. If a version is not provided, the API clones the latest version.
   --idempotency-key: string # A value you specify that uniquely identifies this clone request.  If you are unsure whether a particular order was cloned successfully, you can reattempt the call with the same idempotency key without worrying about creating duplicate cloned orders. The originally cloned order is returned.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
@@ -6123,7 +6358,7 @@ export def "orders-clone CloneOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListOrderCustomAttributeDefinitions
@@ -6138,6 +6373,7 @@ export def "orders-custom-attribute-definitions ListOrderCustomAttributeDefiniti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint.  Provide this cursor to retrieve the next page of results for your original request.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory.  The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100.  The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
@@ -6148,7 +6384,7 @@ export def "orders-custom-attribute-definitions ListOrderCustomAttributeDefiniti
   let full_url = (build-url $base "/v2/orders/custom-attribute-definitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateOrderCustomAttributeDefinition
@@ -6164,6 +6400,7 @@ export def "orders-custom-attribute-definitions CreateOrderCustomAttributeDefini
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6175,7 +6412,7 @@ export def "orders-custom-attribute-definitions CreateOrderCustomAttributeDefini
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteOrderCustomAttributeDefinition
@@ -6191,13 +6428,14 @@ export def "orders-custom-attribute-definitions DeleteOrderCustomAttributeDefini
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/orders/custom-attribute-definitions/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveOrderCustomAttributeDefinition
@@ -6213,6 +6451,7 @@ export def "orders-custom-attribute-definitions RetrieveOrderCustomAttributeDefi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # To enable [optimistic concurrency](https://developer.squareup.com/docs/build-basics/common-api-patterns/optimistic-concurrency) control, include this optional field and specify the current version of the custom attribute.
 ]: nothing -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6221,7 +6460,7 @@ export def "orders-custom-attribute-definitions RetrieveOrderCustomAttributeDefi
   let full_url = (build-url $base $"/v2/orders/custom-attribute-definitions/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateOrderCustomAttributeDefinition
@@ -6238,6 +6477,7 @@ export def "orders-custom-attribute-definitions UpdateOrderCustomAttributeDefini
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute_definition: record # Represents a definition for custom attribute values. A custom attribute definition specifies the key, visibility, schema, and other properties for a custom attribute. — shape: {key?: string, schema?: record, name?: string, description?: string, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", version?: int}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute_definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6249,7 +6489,7 @@ export def "orders-custom-attribute-definitions UpdateOrderCustomAttributeDefini
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkDeleteOrderCustomAttributes
@@ -6264,6 +6504,7 @@ export def "orders-custom-attributes-bulk-delete BulkDeleteOrderCustomAttributes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map of requests that correspond to individual delete operations for custom attributes.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, values: record> {
   let input = $in
@@ -6274,7 +6515,7 @@ export def "orders-custom-attributes-bulk-delete BulkDeleteOrderCustomAttributes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpsertOrderCustomAttributes
@@ -6289,6 +6530,7 @@ export def "orders-custom-attributes-bulk-upsert BulkUpsertOrderCustomAttributes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   values: record # A map of requests that correspond to individual upsert operations for custom attributes.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, values: record> {
   let input = $in
@@ -6299,7 +6541,7 @@ export def "orders-custom-attributes-bulk-upsert BulkUpsertOrderCustomAttributes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchOrders
@@ -6315,6 +6557,7 @@ export def "orders-search SearchOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-ids: list # The location IDs for the orders to query. All locations must belong to the same merchant.  Max: 10 location IDs.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for your original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --body-query: record # Contains query criteria for the search. — shape: {filter?: record, sort?: record}
@@ -6329,7 +6572,7 @@ export def "orders-search SearchOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveOrder
@@ -6345,13 +6588,14 @@ export def "orders RetrieveOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<order: record<id: string, location_id: string, reference_id: string, source: record<name: string>, customer_id: string, line_items: list<record>, taxes: list<record>, discounts: list<record>, service_charges: list<record>, fulfillments: list<record>, returns: list<record>, return_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, net_amounts: record<total_money: record, tax_money: record, discount_money: record, tip_money: record, service_charge_money: record>, rounding_adjustment: record<uid: string, name: string, amount_money: record>, tenders: list<record>, refunds: list<record>, metadata: record, created_at: string, updated_at: string, closed_at: string, state: string, version: int, total_money: record<amount: int, currency: string>, total_tax_money: record<amount: int, currency: string>, total_discount_money: record<amount: int, currency: string>, total_tip_money: record<amount: int, currency: string>, total_service_charge_money: record<amount: int, currency: string>, ticket_name: string, pricing_options: record<auto_apply_discounts: bool, auto_apply_taxes: bool>, rewards: list<record>, net_amount_due_money: record<amount: int, currency: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/orders/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateOrder
@@ -6368,6 +6612,7 @@ export def "orders UpdateOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: record # Contains all information related to a single order to process with Square, including line items that specify the products to purchase. `Order` objects also include information about any associated tenders, refunds, and returns.  All Connect V2 Transactions have all been converted to Orders including all associated itemization data. — shape: {location_id: string, reference_id?: string, source?: record, customer_id?: string, line_items?: list, taxes?: list, discounts?: list, service_charges?: list, fulfillments?: list, return_amounts?: record, net_amounts?: record, rounding_adjustment?: record, metadata?: record, state?: "OPEN"|"COMPLETED"|"CANCELED"|"DRAFT", version?: int, total_money?: record, total_tax_money?: record, total_discount_money?: record, total_tip_money?: record, total_service_charge_money?: record, ticket_name?: string, pricing_options?: record, net_amount_due_money?: record}
   --fields-to-clear: list # The [dot notation paths](https://developer.squareup.com/docs/orders-api/manage-orders/update-orders#identifying-fields-to-delete) fields to clear. For example, `line_items[uid].note`. For more information, see [Deleting fields](https://developer.squareup.com/docs/orders-api/manage-orders/update-orders#deleting-fields). (nullable)
   --idempotency-key: string # A value you specify that uniquely identifies this update request.  If you are unsure whether a particular update was applied to an order successfully, you can reattempt it with the same idempotency key without worrying about creating duplicate updates to the order. The latest order version is returned.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
@@ -6380,7 +6625,7 @@ export def "orders UpdateOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListOrderCustomAttributes
@@ -6396,6 +6641,7 @@ export def "orders-custom-attributes ListOrderCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility-filter: string@visibility-filter-completer # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint.  Provide this cursor to retrieve the next page of results for your original request.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory.  The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100.  The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
@@ -6407,7 +6653,7 @@ export def "orders-custom-attributes ListOrderCustomAttributes" [
   let full_url = (build-url $base $"/v2/orders/($order_id)/custom-attributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteOrderCustomAttribute
@@ -6424,13 +6670,14 @@ export def "orders-custom-attributes DeleteOrderCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/orders/($order_id)/custom-attributes/($custom_attribute_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveOrderCustomAttribute
@@ -6447,6 +6694,7 @@ export def "orders-custom-attributes RetrieveOrderCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # To enable [optimistic concurrency](https://developer.squareup.com/docs/build-basics/common-api-patterns/optimistic-concurrency) control, include this optional field and specify the current version of the custom attribute.
   --with-definition: oneof<nothing, bool> # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each  custom attribute. Set this parameter to `true` to get the name and description of each custom attribute,  information about the data type, or other definition details. The default value is `false`. (default: false)
 ]: nothing -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6456,7 +6704,7 @@ export def "orders-custom-attributes RetrieveOrderCustomAttribute" [
   let full_url = (build-url $base $"/v2/orders/($order_id)/custom-attributes/($custom_attribute_key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertOrderCustomAttribute
@@ -6474,6 +6722,7 @@ export def "orders-custom-attributes UpsertOrderCustomAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   custom_attribute: record # A custom attribute value. Each custom attribute value has a corresponding `CustomAttributeDefinition` object. — shape: {key?: string, value?: any, version?: int, visibility?: "VISIBILITY_HIDDEN"|"VISIBILITY_READ_ONLY"|"VISIBILITY_READ_WRITE_VALUES", definition?: record}
   --idempotency-key: string # A unique identifier for this request, used to ensure idempotency.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency). (nullable)
 ]: any -> record<custom_attribute: record<key: string, value: any, version: int, visibility: string, definition: record<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, updated_at: string, created_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6485,7 +6734,7 @@ export def "orders-custom-attributes UpsertOrderCustomAttribute" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PayOrder
@@ -6501,6 +6750,7 @@ export def "orders-pay PayOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A value you specify that uniquely identifies this request among requests you have sent. If you are unsure whether a particular payment request was completed successfully, you can reattempt it with the same idempotency key without worrying about duplicate payments.  For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   --order-version: int # The version of the order being paid. If not supplied, the latest version will be paid. (nullable)
   --payment-ids: list # The IDs of the [payments](entity:Payment) to collect. The payment total must match the order total. (nullable)
@@ -6513,7 +6763,7 @@ export def "orders-pay PayOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListPayments
@@ -6528,6 +6778,7 @@ export def "payments ListPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --begin-time: string # Indicates the start of the time range to retrieve payments for, in RFC 3339 format. The range is determined using the `created_at` field for each Payment. Inclusive. Default: The current time minus one year.
   --end-time: string # Indicates the end of the time range to retrieve payments for, in RFC 3339 format.  The range is determined using the `created_at` field for each Payment.  Default: The current time.
   --sort-order: string # The order in which results are listed by `ListPaymentsRequest.sort_field`: - `ASC` - Oldest to newest. - `DESC` - Newest to oldest (default).
@@ -6550,7 +6801,7 @@ export def "payments ListPayments" [
   let full_url = (build-url $base "/v2/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreatePayment
@@ -6573,6 +6824,7 @@ export def "payments CreatePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   source_id: string # The ID for the source of funds for this payment. This could be a payment token generated by the Web Payments SDK for any of its [supported methods](https://developer.squareup.com/docs/web-payments/overview#explore-payment-methods), including cards, bank transfers, Afterpay or Cash App Pay. If recording a payment that the seller received outside of Square, specify either "CASH" or "EXTERNAL". For more information, see [Take Payments](https://developer.squareup.com/docs/payments-api/take-payments).
   idempotency_key: string # A unique string that identifies this `CreatePayment` request. Keys can be any valid string but must be unique for every `CreatePayment` request.  Note: The number of allowed characters might be less than the stated maximum, if multi-byte characters are used.  For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   --amount-money: record # Represents an amount of money. `Money` fields can be signed or unsigned. Fields that do not explicitly define whether they are signed or unsigned are considered unsigned and can only hold positive amounts. For signed fields, the sign of the value indicates the purpose of the money transfer. See [Working with Monetary Amounts](https://developer.squareup.com/docs/build-basics/working-with-monetary-amounts) for more information. — shape: {amount?: int, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS"}
@@ -6608,7 +6860,7 @@ export def "payments CreatePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CancelPaymentByIdempotencyKey
@@ -6623,6 +6875,7 @@ export def "payments-cancel CancelPaymentByIdempotencyKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # The `idempotency_key` identifying the payment to be canceled.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -6633,7 +6886,7 @@ export def "payments-cancel CancelPaymentByIdempotencyKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetPayment
@@ -6649,13 +6902,14 @@ export def "payments GetPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<id: string, created_at: string, updated_at: string, amount_money: record<amount: int, currency: string>, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, app_fee_allocations: list<any>, approved_money: record<amount: int, currency: string>, processing_fee: list<record>, refunded_money: record<amount: int, currency: string>, status: string, delay_duration: string, delay_action: string, delayed_until: string, source_type: string, card_details: record<status: string, card: record, entry_method: string, cvv_status: string, avs_status: string, auth_result_code: string, application_identifier: string, application_name: string, application_cryptogram: string, verification_method: string, verification_results: string, statement_description: string, device_details: record, card_payment_timeline: record, refund_requires_card_presence: bool, errors: list, applied_card_surcharge_details: record, wallet_type: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, bank_account_details: record<bank_name: string, transfer_type: string, account_ownership_type: string, fingerprint: string, country: string, statement_description: string, ach_details: record, errors: list>, electronic_money_details: record<felica_details: record>, external_details: record<type: string, source: string, source_id: string, source_fee_money: record>, wallet_details: record<status: string, brand: string, cash_app_details: record, lightning_details: record, errors: list>, buy_now_pay_later_details: record<brand: string, afterpay_details: record, clearpay_details: record, errors: list>, square_account_details: record<payment_source_token: string, errors: list>, location_id: string, order_id: string, reference_id: string, customer_id: string, employee_id: string, team_member_id: string, refund_ids: list<string>, risk_evaluation: record<created_at: string, risk_level: string>, terminal_checkout_id: string, buyer_email_address: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, note: string, statement_description_identifier: string, capabilities: list<string>, receipt_number: string, receipt_url: string, device_details: record<device_id: string, device_installation_id: string, device_name: string>, application_details: record<square_product: string, application_id: string>, buyer_currency_exchange: any, is_offline_payment: bool, offline_payment_details: record<client_created_at: string>, version_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payments/($payment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdatePayment
@@ -6672,6 +6926,7 @@ export def "payments UpdatePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment: record # Represents a payment processed by the Square API. — shape: {amount_money?: record, tip_money?: record, total_money?: record, app_fee_money?: record, app_fee_allocations?: list, approved_money?: record, refunded_money?: record, delay_action?: string, card_details?: record, cash_details?: record, bank_account_details?: record, electronic_money_details?: record, external_details?: record, wallet_details?: record, buy_now_pay_later_details?: record, square_account_details?: record, team_member_id?: string, risk_evaluation?: record, billing_address?: record, shipping_address?: record, device_details?: record, application_details?: record, offline_payment_details?: record, version_token?: string}
   idempotency_key: string # A unique string that identifies this `UpdatePayment` request. Keys can be any valid string but must be unique for every `UpdatePayment` request.  For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<id: string, created_at: string, updated_at: string, amount_money: record<amount: int, currency: string>, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, app_fee_allocations: list<any>, approved_money: record<amount: int, currency: string>, processing_fee: list<record>, refunded_money: record<amount: int, currency: string>, status: string, delay_duration: string, delay_action: string, delayed_until: string, source_type: string, card_details: record<status: string, card: record, entry_method: string, cvv_status: string, avs_status: string, auth_result_code: string, application_identifier: string, application_name: string, application_cryptogram: string, verification_method: string, verification_results: string, statement_description: string, device_details: record, card_payment_timeline: record, refund_requires_card_presence: bool, errors: list, applied_card_surcharge_details: record, wallet_type: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, bank_account_details: record<bank_name: string, transfer_type: string, account_ownership_type: string, fingerprint: string, country: string, statement_description: string, ach_details: record, errors: list>, electronic_money_details: record<felica_details: record>, external_details: record<type: string, source: string, source_id: string, source_fee_money: record>, wallet_details: record<status: string, brand: string, cash_app_details: record, lightning_details: record, errors: list>, buy_now_pay_later_details: record<brand: string, afterpay_details: record, clearpay_details: record, errors: list>, square_account_details: record<payment_source_token: string, errors: list>, location_id: string, order_id: string, reference_id: string, customer_id: string, employee_id: string, team_member_id: string, refund_ids: list<string>, risk_evaluation: record<created_at: string, risk_level: string>, terminal_checkout_id: string, buyer_email_address: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, note: string, statement_description_identifier: string, capabilities: list<string>, receipt_number: string, receipt_url: string, device_details: record<device_id: string, device_installation_id: string, device_name: string>, application_details: record<square_product: string, application_id: string>, buyer_currency_exchange: any, is_offline_payment: bool, offline_payment_details: record<client_created_at: string>, version_token: string>> {
@@ -6683,7 +6938,7 @@ export def "payments UpdatePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CancelPayment
@@ -6699,13 +6954,14 @@ export def "payments-cancel CancelPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<id: string, created_at: string, updated_at: string, amount_money: record<amount: int, currency: string>, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, app_fee_allocations: list<any>, approved_money: record<amount: int, currency: string>, processing_fee: list<record>, refunded_money: record<amount: int, currency: string>, status: string, delay_duration: string, delay_action: string, delayed_until: string, source_type: string, card_details: record<status: string, card: record, entry_method: string, cvv_status: string, avs_status: string, auth_result_code: string, application_identifier: string, application_name: string, application_cryptogram: string, verification_method: string, verification_results: string, statement_description: string, device_details: record, card_payment_timeline: record, refund_requires_card_presence: bool, errors: list, applied_card_surcharge_details: record, wallet_type: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, bank_account_details: record<bank_name: string, transfer_type: string, account_ownership_type: string, fingerprint: string, country: string, statement_description: string, ach_details: record, errors: list>, electronic_money_details: record<felica_details: record>, external_details: record<type: string, source: string, source_id: string, source_fee_money: record>, wallet_details: record<status: string, brand: string, cash_app_details: record, lightning_details: record, errors: list>, buy_now_pay_later_details: record<brand: string, afterpay_details: record, clearpay_details: record, errors: list>, square_account_details: record<payment_source_token: string, errors: list>, location_id: string, order_id: string, reference_id: string, customer_id: string, employee_id: string, team_member_id: string, refund_ids: list<string>, risk_evaluation: record<created_at: string, risk_level: string>, terminal_checkout_id: string, buyer_email_address: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, note: string, statement_description_identifier: string, capabilities: list<string>, receipt_number: string, receipt_url: string, device_details: record<device_id: string, device_installation_id: string, device_name: string>, application_details: record<square_product: string, application_id: string>, buyer_currency_exchange: any, is_offline_payment: bool, offline_payment_details: record<client_created_at: string>, version_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payments/($payment_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CompletePayment
@@ -6721,6 +6977,7 @@ export def "payments-complete CompletePayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version-token: string # Used for optimistic concurrency. This opaque token identifies the current `Payment` version that the caller expects. If the server has a different version of the Payment, the update fails and a response with a VERSION_MISMATCH error is returned. (nullable)
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<id: string, created_at: string, updated_at: string, amount_money: record<amount: int, currency: string>, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, app_fee_allocations: list<any>, approved_money: record<amount: int, currency: string>, processing_fee: list<record>, refunded_money: record<amount: int, currency: string>, status: string, delay_duration: string, delay_action: string, delayed_until: string, source_type: string, card_details: record<status: string, card: record, entry_method: string, cvv_status: string, avs_status: string, auth_result_code: string, application_identifier: string, application_name: string, application_cryptogram: string, verification_method: string, verification_results: string, statement_description: string, device_details: record, card_payment_timeline: record, refund_requires_card_presence: bool, errors: list, applied_card_surcharge_details: record, wallet_type: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, bank_account_details: record<bank_name: string, transfer_type: string, account_ownership_type: string, fingerprint: string, country: string, statement_description: string, ach_details: record, errors: list>, electronic_money_details: record<felica_details: record>, external_details: record<type: string, source: string, source_id: string, source_fee_money: record>, wallet_details: record<status: string, brand: string, cash_app_details: record, lightning_details: record, errors: list>, buy_now_pay_later_details: record<brand: string, afterpay_details: record, clearpay_details: record, errors: list>, square_account_details: record<payment_source_token: string, errors: list>, location_id: string, order_id: string, reference_id: string, customer_id: string, employee_id: string, team_member_id: string, refund_ids: list<string>, risk_evaluation: record<created_at: string, risk_level: string>, terminal_checkout_id: string, buyer_email_address: string, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, note: string, statement_description_identifier: string, capabilities: list<string>, receipt_number: string, receipt_url: string, device_details: record<device_id: string, device_installation_id: string, device_name: string>, application_details: record<square_product: string, application_id: string>, buyer_currency_exchange: any, is_offline_payment: bool, offline_payment_details: record<client_created_at: string>, version_token: string>> {
   let input = $in
@@ -6731,7 +6988,7 @@ export def "payments-complete CompletePayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListPayouts
@@ -6746,6 +7003,7 @@ export def "payouts ListPayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location-id: string # The ID of the location for which to list the payouts. By default, payouts are returned for the default (main) location associated with the seller.
   --status: string@status-completer-3 # If provided, only payouts with the given status are returned.
   --begin-time: string # The timestamp for the beginning of the payout creation time, in RFC 3339 format. Inclusive. Default: The current time minus one year.
@@ -6760,7 +7018,7 @@ export def "payouts ListPayouts" [
   let full_url = (build-url $base "/v2/payouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetPayout
@@ -6776,13 +7034,14 @@ export def "payouts GetPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payout: record<id: string, status: string, location_id: string, created_at: string, updated_at: string, amount_money: record<amount: int, currency: string>, destination: record<type: string, id: string>, version: int, type: string, payout_fee: list<record>, arrival_date: string, end_to_end_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payouts/($payout_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListPayoutEntries
@@ -6798,6 +7057,7 @@ export def "payouts-payout-entries ListPayoutEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-order: string@sort-order-completer # The order in which payout entries are listed.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination). If request parameters change between requests, subsequent results may contain duplicates or missing records.
   --limit: int # The maximum number of results to be returned in a single page. It is possible to receive fewer results than the specified limit on a given page. The default value of 100 is also the maximum allowed value. If the provided value is greater than 100, it is ignored and the default value is used instead. Default: `100`
@@ -6808,7 +7068,7 @@ export def "payouts-payout-entries ListPayoutEntries" [
   let full_url = (build-url $base $"/v2/payouts/($payout_id)/payout-entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListPaymentRefunds
@@ -6823,6 +7083,7 @@ export def "refunds ListPaymentRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --begin-time: string # Indicates the start of the time range to retrieve each `PaymentRefund` for, in RFC 3339  format.  The range is determined using the `created_at` field for each `PaymentRefund`.   Default: The current time minus one year.
   --end-time: string # Indicates the end of the time range to retrieve each `PaymentRefund` for, in RFC 3339  format.  The range is determined using the `created_at` field for each `PaymentRefund`.  Default: The current time.
   --sort-order: string # The order in which results are listed by `PaymentRefund.created_at`: - `ASC` - Oldest to newest. - `DESC` - Newest to oldest (default).
@@ -6841,7 +7102,7 @@ export def "refunds ListPaymentRefunds" [
   let full_url = (build-url $base "/v2/refunds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RefundPayment
@@ -6860,6 +7121,7 @@ export def "refunds RefundPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string #  A unique string that identifies this `RefundPayment` request. The key can be any valid string but must be unique for every `RefundPayment` request.  Keys are limited to a max of 45 characters - however, the number of allowed characters might be less than 45, if multi-byte characters are used.  For more information, see [Idempotency](https://developer.squareup.com/docs/working-with-apis/idempotency).
   amount_money: record # Represents an amount of money. `Money` fields can be signed or unsigned. Fields that do not explicitly define whether they are signed or unsigned are considered unsigned and can only hold positive amounts. For signed fields, the sign of the value indicates the purpose of the money transfer. See [Working with Monetary Amounts](https://developer.squareup.com/docs/build-basics/working-with-monetary-amounts) for more information. — shape: {amount?: int, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS"}
   --app-fee-money: record # Represents an amount of money. `Money` fields can be signed or unsigned. Fields that do not explicitly define whether they are signed or unsigned are considered unsigned and can only hold positive amounts. For signed fields, the sign of the value indicates the purpose of the money transfer. See [Working with Monetary Amounts](https://developer.squareup.com/docs/build-basics/working-with-monetary-amounts) for more information. — shape: {amount?: int, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SLE"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"XUS"}
@@ -6883,7 +7145,7 @@ export def "refunds RefundPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetPaymentRefund
@@ -6899,13 +7161,14 @@ export def "refunds GetPaymentRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<id: string, status: string, location_id: string, unlinked: bool, destination_type: string, destination_details: record<card_details: record, cash_details: record, external_details: record>, amount_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, app_fee_allocations: list<any>, processing_fee: list<record>, payment_id: string, order_id: string, reason: string, created_at: string, updated_at: string, team_member_id: string, terminal_refund_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/refunds/($refund_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListSites
@@ -6920,13 +7183,14 @@ export def "sites ListSites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, sites: table<id: string, site_title: string, domain: string, is_published: bool, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/sites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DeleteSnippet
@@ -6942,13 +7206,14 @@ export def "sites-snippet DeleteSnippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/sites/($site_id)/snippet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveSnippet
@@ -6964,13 +7229,14 @@ export def "sites-snippet RetrieveSnippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, snippet: record<id: string, site_id: string, content: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/sites/($site_id)/snippet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpsertSnippet
@@ -6987,6 +7253,7 @@ export def "sites-snippet UpsertSnippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   snippet: record # Represents the snippet that is added to a Square Online site. The snippet code is injected into the `head` element of all pages on the site, except for checkout pages. — shape: {content: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, snippet: record<id: string, site_id: string, content: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -6997,7 +7264,7 @@ export def "sites-snippet UpsertSnippet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateSubscription
@@ -7015,6 +7282,7 @@ export def "subscriptions CreateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string that identifies this `CreateSubscription` request. If you do not provide a unique string (or provide an empty string as the value), the endpoint treats each request as independent.  For more information, see [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
   location_id: string # The ID of the location the subscription is associated with.
   --plan-variation-id: string # The ID of the [subscription plan variation](https://developer.squareup.com/docs/subscriptions-api/plans-and-variations#plan-variations) created using the Catalog API.
@@ -7037,7 +7305,7 @@ export def "subscriptions CreateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkSwapPlan
@@ -7052,6 +7320,7 @@ export def "subscriptions-bulk-swap-plan BulkSwapPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   new_plan_variation_id: string # The ID of the new subscription plan variation.  This field is required.
   old_plan_variation_id: string # The ID of the plan variation whose subscriptions should be swapped. Active subscriptions using this plan variation will be subscribed to the new plan variation on their next billing day.
   location_id: string # The ID of the location to associate with the swapped subscriptions.
@@ -7064,7 +7333,7 @@ export def "subscriptions-bulk-swap-plan BulkSwapPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchSubscriptions
@@ -7080,6 +7349,7 @@ export def "subscriptions-search SearchSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # When the total number of resulting subscriptions exceeds the limit of a paged response,  specify the cursor returned from a preceding response here to fetch the next set of results. If the cursor is unset, the response contains the last page of the results.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The upper limit on the number of subscriptions to return in a paged response.
   --body-query: record # Represents a query, consisting of specified query expressions, used to search for subscriptions. — shape: {filter?: record}
@@ -7093,7 +7363,7 @@ export def "subscriptions-search SearchSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveSubscription
@@ -7109,6 +7379,7 @@ export def "subscriptions RetrieveSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # A query parameter to specify related information to be included in the response.   The supported query parameter values are:   - `actions`: to include scheduled actions on the targeted subscription.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7117,7 +7388,7 @@ export def "subscriptions RetrieveSubscription" [
   let full_url = (build-url $base $"/v2/subscriptions/($subscription_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateSubscription
@@ -7134,6 +7405,7 @@ export def "subscriptions UpdateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription: record # Represents a subscription purchased by a customer.  For more information, see [Manage Subscriptions](https://developer.squareup.com/docs/subscriptions-api/manage-subscriptions). — shape: {canceled_date?: string, status?: "PENDING"|"ACTIVE"|"CANCELED"|"DEACTIVATED"|"PAUSED"|"COMPLETED", tax_percentage?: string, price_override_money?: record, version?: int, card_id?: string, source?: record, actions?: list, completed_date?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>> {
   let input = $in
@@ -7144,7 +7416,7 @@ export def "subscriptions UpdateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteSubscriptionAction
@@ -7161,13 +7433,14 @@ export def "subscriptions-actions DeleteSubscriptionAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/subscriptions/($subscription_id)/actions/($action_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ChangeBillingAnchorDate
@@ -7183,6 +7456,7 @@ export def "subscriptions-billing-anchor ChangeBillingAnchorDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --monthly-billing-anchor-date: int # The anchor day for the billing cycle. (nullable)
   --effective-date: string # The `YYYY-MM-DD`-formatted date when the scheduled `BILLING_ANCHOR_CHANGE` action takes place on the subscription.  When this date is unspecified or falls within the current billing cycle, the billing anchor date is changed immediately. (nullable)
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>, actions: table<id: string, type: string, effective_date: string, monthly_billing_anchor_date: int, phases: list, new_plan_variation_id: string>> {
@@ -7194,7 +7468,7 @@ export def "subscriptions-billing-anchor ChangeBillingAnchorDate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CancelSubscription
@@ -7210,13 +7484,14 @@ export def "subscriptions-cancel CancelSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>, actions: table<id: string, type: string, effective_date: string, monthly_billing_anchor_date: int, phases: list, new_plan_variation_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/subscriptions/($subscription_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListSubscriptionEvents
@@ -7232,6 +7507,7 @@ export def "subscriptions-events ListSubscriptionEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # When the total number of resulting subscription events exceeds the limit of a paged response,  specify the cursor returned from a preceding response here to fetch the next set of results. If the cursor is unset, the response contains the last page of the results.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The upper limit on the number of subscription events to return in a paged response.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription_events: table<id: string, subscription_event_type: string, effective_date: string, monthly_billing_anchor_date: int, info: record, phases: list, plan_variation_id: string>, cursor: string> {
@@ -7241,7 +7517,7 @@ export def "subscriptions-events ListSubscriptionEvents" [
   let full_url = (build-url $base $"/v2/subscriptions/($subscription_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PauseSubscription
@@ -7257,6 +7533,7 @@ export def "subscriptions-pause PauseSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pause-effective-date: string # The `YYYY-MM-DD`-formatted date when the scheduled `PAUSE` action takes place on the subscription.  When this date is unspecified or falls within the current billing cycle, the subscription is paused on the starting date of the next billing cycle. (nullable)
   --pause-cycle-duration: int # The number of billing cycles the subscription will be paused before it is reactivated.   When this is set, a `RESUME` action is also scheduled to take place on the subscription at  the end of the specified pause cycle duration. In this case, neither `resume_effective_date`  nor `resume_change_timing` may be specified. (nullable, format: int64)
   --resume-effective-date: string # The date when the subscription is reactivated by a scheduled `RESUME` action.  This date must be at least one billing cycle ahead of `pause_effective_date`. (nullable)
@@ -7271,7 +7548,7 @@ export def "subscriptions-pause PauseSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResumeSubscription
@@ -7287,6 +7564,7 @@ export def "subscriptions-resume ResumeSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resume-effective-date: string # The `YYYY-MM-DD`-formatted date when the subscription reactivated. (nullable)
   --resume-change-timing: string@resume-change-timing-completer # Supported timings when a pending change, as an action, takes place to a subscription.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>, actions: table<id: string, type: string, effective_date: string, monthly_billing_anchor_date: int, phases: list, new_plan_variation_id: string>> {
@@ -7298,7 +7576,7 @@ export def "subscriptions-resume ResumeSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SwapPlan
@@ -7315,6 +7593,7 @@ export def "subscriptions-swap-plan SwapPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --new-plan-variation-id: string # The ID of the new subscription plan variation.  This field is required. (nullable)
   --phases: list # A list of PhaseInputs, to pass phase-specific information used in the swap. (nullable) — item shape: {ordinal: int, order_template_id?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, location_id: string, plan_variation_id: string, customer_id: string, start_date: string, canceled_date: string, charged_through_date: string, status: string, tax_percentage: string, invoice_ids: list<string>, price_override_money: record<amount: int, currency: string>, version: int, created_at: string, card_id: string, timezone: string, source: record<name: string>, actions: list<record>, monthly_billing_anchor_date: int, phases: list<record>, completed_date: string>, actions: table<id: string, type: string, effective_date: string, monthly_billing_anchor_date: int, phases: list, new_plan_variation_id: string>> {
@@ -7326,7 +7605,7 @@ export def "subscriptions-swap-plan SwapPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateTeamMember
@@ -7342,6 +7621,7 @@ export def "team-members CreateTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string that identifies this `CreateTeamMember` request. Keys can be any valid string, but must be unique for every request. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).  The minimum length is 1 and the maximum length is 45.
   --team-member: record # A record representing an individual team member for a business. — shape: {reference_id?: string, status?: "ACTIVE"|"INACTIVE", given_name?: string, family_name?: string, email_address?: string, phone_number?: string, assigned_locations?: record, wage_setting?: record}
 ]: any -> record<team_member: record<id: string, reference_id: string, is_owner: bool, status: string, given_name: string, family_name: string, email_address: string, phone_number: string, created_at: string, updated_at: string, assigned_locations: record<assignment_type: string, location_ids: list>, wage_setting: record<team_member_id: string, job_assignments: list, is_overtime_exempt: bool, version: int, created_at: string, updated_at: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -7353,7 +7633,7 @@ export def "team-members CreateTeamMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkCreateTeamMembers
@@ -7368,6 +7648,7 @@ export def "team-members-bulk-create BulkCreateTeamMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   team_members: record # The data used to create the `TeamMember` objects. Each key is the `idempotency_key` that maps to the `CreateTeamMemberRequest`. The maximum number of create objects is 25.  If you include a team member's `wage_setting`, you must provide `job_id` for each job assignment. To get job IDs, call [ListJobs](api-endpoint:Team-ListJobs).
 ]: any -> record<team_members: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -7378,7 +7659,7 @@ export def "team-members-bulk-create BulkCreateTeamMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpdateTeamMembers
@@ -7393,6 +7674,7 @@ export def "team-members-bulk-update BulkUpdateTeamMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   team_members: record # The data used to update the `TeamMember` objects. Each key is the `team_member_id` that maps to the `UpdateTeamMemberRequest`. The maximum number of update objects is 25.  For each team member, include the fields to add, change, or clear. Fields can be cleared using a null value. To update `wage_setting.job_assignments`, you must provide the complete list of job assignments. If needed, call [ListJobs](api-endpoint:Team-ListJobs) to get the required `job_id` values.
 ]: any -> record<team_members: record, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -7403,7 +7685,7 @@ export def "team-members-bulk-update BulkUpdateTeamMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListJobs
@@ -7418,6 +7700,7 @@ export def "team-members-jobs ListJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The pagination cursor returned by the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<jobs: table<id: string, title: string, is_tip_eligible: bool, created_at: string, updated_at: string, version: int>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7426,7 +7709,7 @@ export def "team-members-jobs ListJobs" [
   let full_url = (build-url $base "/v2/team-members/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateJob
@@ -7442,6 +7725,7 @@ export def "team-members-jobs CreateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   job: record # Represents a job that can be assigned to [team members](entity:TeamMember). This object defines the job's title and tip eligibility. Compensation is defined in a [job assignment](entity:JobAssignment) in a team member's wage setting. — shape: {id?: string, title?: string, is_tip_eligible?: bool, version?: int}
   idempotency_key: string # A unique identifier for the `CreateJob` request. Keys can be any valid string, but must be unique for each request. For more information, see [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency).
 ]: any -> record<job: record<id: string, title: string, is_tip_eligible: bool, created_at: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -7453,7 +7737,7 @@ export def "team-members-jobs CreateJob" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveJob
@@ -7469,13 +7753,14 @@ export def "team-members-jobs RetrieveJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<job: record<id: string, title: string, is_tip_eligible: bool, created_at: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/team-members/jobs/($job_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateJob
@@ -7492,6 +7777,7 @@ export def "team-members-jobs UpdateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   job: record # Represents a job that can be assigned to [team members](entity:TeamMember). This object defines the job's title and tip eligibility. Compensation is defined in a [job assignment](entity:JobAssignment) in a team member's wage setting. — shape: {id?: string, title?: string, is_tip_eligible?: bool, version?: int}
 ]: any -> record<job: record<id: string, title: string, is_tip_eligible: bool, created_at: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -7502,7 +7788,7 @@ export def "team-members-jobs UpdateJob" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTeamMembers
@@ -7518,6 +7804,7 @@ export def "team-members-search SearchTeamMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # Represents the parameters in a search for `TeamMember` objects. — shape: {filter?: record}
   --limit: int # The maximum number of `TeamMember` objects in a page (100 by default).
   --cursor: string # The opaque cursor for fetching the next page. For more information, see [pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
@@ -7530,7 +7817,7 @@ export def "team-members-search SearchTeamMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveTeamMember
@@ -7546,13 +7833,14 @@ export def "team-members RetrieveTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<team_member: record<id: string, reference_id: string, is_owner: bool, status: string, given_name: string, family_name: string, email_address: string, phone_number: string, created_at: string, updated_at: string, assigned_locations: record<assignment_type: string, location_ids: list>, wage_setting: record<team_member_id: string, job_assignments: list, is_overtime_exempt: bool, version: int, created_at: string, updated_at: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/team-members/($team_member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateTeamMember
@@ -7569,6 +7857,7 @@ export def "team-members UpdateTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-member: record # A record representing an individual team member for a business. — shape: {reference_id?: string, status?: "ACTIVE"|"INACTIVE", given_name?: string, family_name?: string, email_address?: string, phone_number?: string, assigned_locations?: record, wage_setting?: record}
 ]: any -> record<team_member: record<id: string, reference_id: string, is_owner: bool, status: string, given_name: string, family_name: string, email_address: string, phone_number: string, created_at: string, updated_at: string, assigned_locations: record<assignment_type: string, location_ids: list>, wage_setting: record<team_member_id: string, job_assignments: list, is_overtime_exempt: bool, version: int, created_at: string, updated_at: string>>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -7579,7 +7868,7 @@ export def "team-members UpdateTeamMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveWageSetting
@@ -7595,13 +7884,14 @@ export def "team-members-wage-setting RetrieveWageSetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<wage_setting: record<team_member_id: string, job_assignments: list<record>, is_overtime_exempt: bool, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/team-members/($team_member_id)/wage-setting")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateWageSetting
@@ -7618,6 +7908,7 @@ export def "team-members-wage-setting UpdateWageSetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   wage_setting: record # Represents information about the overtime exemption status, job assignments, and compensation for a [team member](entity:TeamMember). — shape: {team_member_id?: string, job_assignments?: list, is_overtime_exempt?: bool, version?: int}
 ]: any -> record<wage_setting: record<team_member_id: string, job_assignments: list<record>, is_overtime_exempt: bool, version: int, created_at: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let input = $in
@@ -7628,7 +7919,7 @@ export def "team-members-wage-setting UpdateWageSetting" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateTerminalAction
@@ -7644,6 +7935,7 @@ export def "terminals-actions CreateTerminalAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this `CreateAction` request. Keys can be any valid string but must be unique for every `CreateAction` request.  See [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   action: record # Represents an action processed by the Square Terminal. — shape: {device_id?: string, deadline_duration?: string, cancel_reason?: "BUYER_CANCELED"|"SELLER_CANCELED"|"TIMED_OUT", type?: "QR_CODE"|"PING"|"SAVE_CARD"|"SIGNATURE"|"CONFIRMATION"|"RECEIPT"|"DATA_COLLECTION"|"SELECT", qr_code_options?: record, save_card_options?: record, signature_options?: record, confirmation_options?: record, receipt_options?: record, data_collection_options?: record, select_options?: record, device_metadata?: record, await_next_action?: bool, await_next_action_duration?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, action: record<id: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string, type: string, qr_code_options: record<title: string, body: string, barcode_contents: string>, save_card_options: record<customer_id: string, card_id: string, reference_id: string>, signature_options: record<title: string, body: string, signature: list>, confirmation_options: record<title: string, body: string, agree_button_text: string, disagree_button_text: string, decision: record>, receipt_options: record<payment_id: string, print_only: bool, is_duplicate: bool>, data_collection_options: record<title: string, body: string, input_type: string, collected_data: record>, select_options: record<title: string, body: string, options: list, selected_option: record>, device_metadata: record<battery_percentage: string, charging_state: string, location_id: string, merchant_id: string, network_connection_type: string, payment_region: string, serial_number: string, os_version: string, app_version: string, wifi_network_name: string, wifi_network_strength: string, ip_address: string>, await_next_action: bool, await_next_action_duration: string>> {
@@ -7655,7 +7947,7 @@ export def "terminals-actions CreateTerminalAction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTerminalActions
@@ -7671,6 +7963,7 @@ export def "terminals-actions-search SearchTerminalActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # e.g. {include: [CUSTOMER], limit: 2, query: {filter: {status: COMPLETED}}} — shape: {filter?: record, sort?: record}
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for the original query. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --limit: int # Limit the number of results returned for a single request.
@@ -7683,7 +7976,7 @@ export def "terminals-actions-search SearchTerminalActions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetTerminalAction
@@ -7699,13 +7992,14 @@ export def "terminals-actions GetTerminalAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, action: record<id: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string, type: string, qr_code_options: record<title: string, body: string, barcode_contents: string>, save_card_options: record<customer_id: string, card_id: string, reference_id: string>, signature_options: record<title: string, body: string, signature: list>, confirmation_options: record<title: string, body: string, agree_button_text: string, disagree_button_text: string, decision: record>, receipt_options: record<payment_id: string, print_only: bool, is_duplicate: bool>, data_collection_options: record<title: string, body: string, input_type: string, collected_data: record>, select_options: record<title: string, body: string, options: list, selected_option: record>, device_metadata: record<battery_percentage: string, charging_state: string, location_id: string, merchant_id: string, network_connection_type: string, payment_region: string, serial_number: string, os_version: string, app_version: string, wifi_network_name: string, wifi_network_strength: string, ip_address: string>, await_next_action: bool, await_next_action_duration: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/actions/($action_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CancelTerminalAction
@@ -7721,13 +8015,14 @@ export def "terminals-actions-cancel CancelTerminalAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, action: record<id: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string, type: string, qr_code_options: record<title: string, body: string, barcode_contents: string>, save_card_options: record<customer_id: string, card_id: string, reference_id: string>, signature_options: record<title: string, body: string, signature: list>, confirmation_options: record<title: string, body: string, agree_button_text: string, disagree_button_text: string, decision: record>, receipt_options: record<payment_id: string, print_only: bool, is_duplicate: bool>, data_collection_options: record<title: string, body: string, input_type: string, collected_data: record>, select_options: record<title: string, body: string, options: list, selected_option: record>, device_metadata: record<battery_percentage: string, charging_state: string, location_id: string, merchant_id: string, network_connection_type: string, payment_region: string, serial_number: string, os_version: string, app_version: string, wifi_network_name: string, wifi_network_strength: string, ip_address: string>, await_next_action: bool, await_next_action_duration: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/actions/($action_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DismissTerminalAction
@@ -7743,13 +8038,14 @@ export def "terminals-actions-dismiss DismissTerminalAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, action: record<id: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string, type: string, qr_code_options: record<title: string, body: string, barcode_contents: string>, save_card_options: record<customer_id: string, card_id: string, reference_id: string>, signature_options: record<title: string, body: string, signature: list>, confirmation_options: record<title: string, body: string, agree_button_text: string, disagree_button_text: string, decision: record>, receipt_options: record<payment_id: string, print_only: bool, is_duplicate: bool>, data_collection_options: record<title: string, body: string, input_type: string, collected_data: record>, select_options: record<title: string, body: string, options: list, selected_option: record>, device_metadata: record<battery_percentage: string, charging_state: string, location_id: string, merchant_id: string, network_connection_type: string, payment_region: string, serial_number: string, os_version: string, app_version: string, wifi_network_name: string, wifi_network_strength: string, ip_address: string>, await_next_action: bool, await_next_action_duration: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/actions/($action_id)/dismiss")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateTerminalCheckout
@@ -7765,6 +8061,7 @@ export def "terminals-checkouts CreateTerminalCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this `CreateCheckout` request. Keys can be any valid string but must be unique for every `CreateCheckout` request.  See [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   checkout: record # Represents a checkout processed by the Square Terminal. — shape: {amount_money: record, reference_id?: string, note?: string, order_id?: string, payment_options?: record, device_options: record, deadline_duration?: string, cancel_reason?: "BUYER_CANCELED"|"SELLER_CANCELED"|"TIMED_OUT", payment_type?: "CARD_PRESENT"|"MANUAL_CARD_ENTRY"|"FELICA_ID"|"FELICA_QUICPAY"|"FELICA_TRANSPORTATION_GROUP"|"FELICA_ALL"|"PAYPAY"|"QR_CODE", team_member_id?: string, customer_id?: string, app_fee_money?: record, statement_description_identifier?: string, tip_money?: record}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, checkout: record<id: string, amount_money: record<amount: int, currency: string>, reference_id: string, note: string, order_id: string, payment_options: record<autocomplete: bool, delay_duration: string, accept_partial_authorization: bool, delay_action: string>, device_options: record<device_id: string, skip_receipt_screen: bool, collect_signature: bool, tip_settings: record, show_itemized_cart: bool, allow_auto_card_surcharge: bool>, deadline_duration: string, status: string, cancel_reason: string, payment_ids: list<string>, created_at: string, updated_at: string, app_id: string, location_id: string, payment_type: string, team_member_id: string, customer_id: string, app_fee_money: record<amount: int, currency: string>, statement_description_identifier: string, tip_money: record<amount: int, currency: string>>> {
@@ -7776,7 +8073,7 @@ export def "terminals-checkouts CreateTerminalCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTerminalCheckouts
@@ -7792,6 +8089,7 @@ export def "terminals-checkouts-search SearchTerminalCheckouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # shape: {filter?: record, sort?: record}
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
   --limit: int # Limits the number of results returned for a single request.
@@ -7804,7 +8102,7 @@ export def "terminals-checkouts-search SearchTerminalCheckouts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetTerminalCheckout
@@ -7820,13 +8118,14 @@ export def "terminals-checkouts GetTerminalCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, checkout: record<id: string, amount_money: record<amount: int, currency: string>, reference_id: string, note: string, order_id: string, payment_options: record<autocomplete: bool, delay_duration: string, accept_partial_authorization: bool, delay_action: string>, device_options: record<device_id: string, skip_receipt_screen: bool, collect_signature: bool, tip_settings: record, show_itemized_cart: bool, allow_auto_card_surcharge: bool>, deadline_duration: string, status: string, cancel_reason: string, payment_ids: list<string>, created_at: string, updated_at: string, app_id: string, location_id: string, payment_type: string, team_member_id: string, customer_id: string, app_fee_money: record<amount: int, currency: string>, statement_description_identifier: string, tip_money: record<amount: int, currency: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/checkouts/($checkout_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CancelTerminalCheckout
@@ -7842,13 +8141,14 @@ export def "terminals-checkouts-cancel CancelTerminalCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, checkout: record<id: string, amount_money: record<amount: int, currency: string>, reference_id: string, note: string, order_id: string, payment_options: record<autocomplete: bool, delay_duration: string, accept_partial_authorization: bool, delay_action: string>, device_options: record<device_id: string, skip_receipt_screen: bool, collect_signature: bool, tip_settings: record, show_itemized_cart: bool, allow_auto_card_surcharge: bool>, deadline_duration: string, status: string, cancel_reason: string, payment_ids: list<string>, created_at: string, updated_at: string, app_id: string, location_id: string, payment_type: string, team_member_id: string, customer_id: string, app_fee_money: record<amount: int, currency: string>, statement_description_identifier: string, tip_money: record<amount: int, currency: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/checkouts/($checkout_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DismissTerminalCheckout
@@ -7864,13 +8164,14 @@ export def "terminals-checkouts-dismiss DismissTerminalCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, checkout: record<id: string, amount_money: record<amount: int, currency: string>, reference_id: string, note: string, order_id: string, payment_options: record<autocomplete: bool, delay_duration: string, accept_partial_authorization: bool, delay_action: string>, device_options: record<device_id: string, skip_receipt_screen: bool, collect_signature: bool, tip_settings: record, show_itemized_cart: bool, allow_auto_card_surcharge: bool>, deadline_duration: string, status: string, cancel_reason: string, payment_ids: list<string>, created_at: string, updated_at: string, app_id: string, location_id: string, payment_type: string, team_member_id: string, customer_id: string, app_fee_money: record<amount: int, currency: string>, statement_description_identifier: string, tip_money: record<amount: int, currency: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/checkouts/($checkout_id)/dismiss")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateTerminalRefund
@@ -7886,6 +8187,7 @@ export def "terminals-refunds CreateTerminalRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this `CreateRefund` request. Keys can be any valid string but must be unique for every `CreateRefund` request.  See [Idempotency keys](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) for more information.
   --refund: record # Represents a payment refund processed by the Square Terminal. Only supports Interac (Canadian debit network) payment refunds. — shape: {payment_id: string, amount_money: record, reason: string, device_id: string, deadline_duration?: string, cancel_reason?: "BUYER_CANCELED"|"SELLER_CANCELED"|"TIMED_OUT"}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<id: string, refund_id: string, payment_id: string, order_id: string, amount_money: record<amount: int, currency: string>, reason: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string>> {
@@ -7897,7 +8199,7 @@ export def "terminals-refunds CreateTerminalRefund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTerminalRefunds
@@ -7913,6 +8215,7 @@ export def "terminals-refunds-search SearchTerminalRefunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # shape: {filter?: record, sort?: record}
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query.
   --limit: int # Limits the number of results returned for a single request.
@@ -7925,7 +8228,7 @@ export def "terminals-refunds-search SearchTerminalRefunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetTerminalRefund
@@ -7941,13 +8244,14 @@ export def "terminals-refunds GetTerminalRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<id: string, refund_id: string, payment_id: string, order_id: string, amount_money: record<amount: int, currency: string>, reason: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/refunds/($terminal_refund_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CancelTerminalRefund
@@ -7963,13 +8267,14 @@ export def "terminals-refunds-cancel CancelTerminalRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<id: string, refund_id: string, payment_id: string, order_id: string, amount_money: record<amount: int, currency: string>, reason: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/refunds/($terminal_refund_id)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DismissTerminalRefund
@@ -7985,13 +8290,14 @@ export def "terminals-refunds-dismiss DismissTerminalRefund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<id: string, refund_id: string, payment_id: string, order_id: string, amount_money: record<amount: int, currency: string>, reason: string, device_id: string, deadline_duration: string, status: string, cancel_reason: string, created_at: string, updated_at: string, app_id: string, location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/terminals/refunds/($terminal_refund_id)/dismiss")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateTransferOrder
@@ -8007,6 +8313,7 @@ export def "transfer-orders CreateTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this CreateTransferOrder request. Keys can be any valid string but must be unique for every CreateTransferOrder request.
   transfer_order: record # Data for creating a new transfer order to move [CatalogItemVariation](entity:CatalogItemVariation)s between [Location](entity:Location)s. Used with the [CreateTransferOrder](api-endpoint:TransferOrders-CreateTransferOrder) endpoint. — shape: {source_location_id: string, destination_location_id: string, expected_at?: string, notes?: string, tracking_number?: string, created_by_team_member_id?: string, line_items?: list}
 ]: any -> record<transfer_order: record<id: string, source_location_id: string, destination_location_id: string, status: string, created_at: string, updated_at: string, expected_at: string, completed_at: string, notes: string, tracking_number: string, created_by_team_member_id: string, line_items: list<record>, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -8018,7 +8325,7 @@ export def "transfer-orders CreateTransferOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchTransferOrders
@@ -8034,6 +8341,7 @@ export def "transfer-orders-search SearchTransferOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: record # Query parameters for searching transfer orders — shape: {filter?: record, sort?: record}
   --cursor: string # Pagination cursor from a previous search response
   --limit: int # Maximum number of results to return (1-100)
@@ -8046,7 +8354,7 @@ export def "transfer-orders-search SearchTransferOrders" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteTransferOrder
@@ -8062,6 +8370,7 @@ export def "transfer-orders DeleteTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # Version for optimistic concurrency (format: int64)
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8070,7 +8379,7 @@ export def "transfer-orders DeleteTransferOrder" [
   let full_url = (build-url $base $"/v2/transfer-orders/($transfer_order_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveTransferOrder
@@ -8086,13 +8395,14 @@ export def "transfer-orders RetrieveTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<transfer_order: record<id: string, source_location_id: string, destination_location_id: string, status: string, created_at: string, updated_at: string, expected_at: string, completed_at: string, notes: string, tracking_number: string, created_by_team_member_id: string, line_items: list<record>, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/transfer-orders/($transfer_order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateTransferOrder
@@ -8109,6 +8419,7 @@ export def "transfer-orders UpdateTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this UpdateTransferOrder request. Keys must contain only alphanumeric characters, dashes and underscores
   transfer_order: record # Data model for updating a transfer order. All fields are optional. — shape: {source_location_id?: string, destination_location_id?: string, expected_at?: string, notes?: string, tracking_number?: string, line_items?: list}
   --version: int # Version for optimistic concurrency (format: int64)
@@ -8121,7 +8432,7 @@ export def "transfer-orders UpdateTransferOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CancelTransferOrder
@@ -8137,6 +8448,7 @@ export def "transfer-orders-cancel CancelTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this UpdateTransferOrder request. Keys can be any valid string but must be unique for every UpdateTransferOrder request.
   --version: int # Version for optimistic concurrency (format: int64)
 ]: any -> record<transfer_order: record<id: string, source_location_id: string, destination_location_id: string, status: string, created_at: string, updated_at: string, expected_at: string, completed_at: string, notes: string, tracking_number: string, created_by_team_member_id: string, line_items: list<record>, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -8148,7 +8460,7 @@ export def "transfer-orders-cancel CancelTransferOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ReceiveTransferOrder
@@ -8165,6 +8477,7 @@ export def "transfer-orders-receive ReceiveTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique key to make this request idempotent
   receipt: record # The goods receipt details for a transfer order. This object represents a single receipt of goods against a transfer order, tracking:  - Which [CatalogItemVariation](entity:CatalogItemVariation)s were received - Quantities received in good condition - Quantities damaged during transit/handling - Quantities canceled during receipt  Multiple goods receipts can be created for a single transfer order to handle: - Partial deliveries - Multiple shipments - Split receipts across different dates - Cancellations of specific quantities  Each receipt automatically: - Updates the transfer order status - Adjusts received quantities - Updates inventory levels at both source and destination [Location](entity:Location)s — shape: {line_items?: list}
   --version: int # Version for optimistic concurrency (format: int64)
@@ -8177,7 +8490,7 @@ export def "transfer-orders-receive ReceiveTransferOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # StartTransferOrder
@@ -8193,6 +8506,7 @@ export def "transfer-orders-start StartTransferOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A unique string that identifies this UpdateTransferOrder request. Keys can be any valid string but must be unique for every UpdateTransferOrder request.
   --version: int # Version for optimistic concurrency (format: int64)
 ]: any -> record<transfer_order: record<id: string, source_location_id: string, destination_location_id: string, status: string, created_at: string, updated_at: string, expected_at: string, completed_at: string, notes: string, tracking_number: string, created_by_team_member_id: string, line_items: list<record>, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -8204,7 +8518,7 @@ export def "transfer-orders-start StartTransferOrder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkCreateVendors
@@ -8219,6 +8533,7 @@ export def "vendors-bulk-create BulkCreateVendors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   vendors: record # Specifies a set of new [Vendor](entity:Vendor) objects as represented by a collection of idempotency-key/`Vendor`-object pairs.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, responses: record> {
   let input = $in
@@ -8229,7 +8544,7 @@ export def "vendors-bulk-create BulkCreateVendors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkRetrieveVendors
@@ -8244,6 +8559,7 @@ export def "vendors-bulk-retrieve BulkRetrieveVendors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vendor-ids: list # IDs of the [Vendor](entity:Vendor) objects to retrieve. (nullable)
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, responses: record> {
   let input = $in
@@ -8254,7 +8570,7 @@ export def "vendors-bulk-retrieve BulkRetrieveVendors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # BulkUpdateVendors
@@ -8269,6 +8585,7 @@ export def "vendors-bulk-update BulkUpdateVendors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   vendors: record # A set of [UpdateVendorRequest](entity:UpdateVendorRequest) objects encapsulating to-be-updated [Vendor](entity:Vendor) objects. The set is represented by  a collection of `Vendor`-ID/`UpdateVendorRequest`-object pairs.
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, responses: record> {
   let input = $in
@@ -8279,7 +8596,7 @@ export def "vendors-bulk-update BulkUpdateVendors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CreateVendor
@@ -8295,6 +8612,7 @@ export def "vendors-create CreateVendor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   idempotency_key: string # A client-supplied, universally unique identifier (UUID) to make this [CreateVendor](api-endpoint:Vendors-CreateVendor) call idempotent.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) in the [API Development 101](https://developer.squareup.com/docs/buildbasics) section for more information.
   --vendor: record # Represents a supplier to a seller. — shape: {id?: string, name?: string, address?: record, contacts?: list, account_number?: string, note?: string, version?: int, status?: "ACTIVE"|"INACTIVE"}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, vendor: record<id: string, created_at: string, updated_at: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, contacts: list<record>, account_number: string, note: string, version: int, status: string>> {
@@ -8306,7 +8624,7 @@ export def "vendors-create CreateVendor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SearchVendors
@@ -8323,6 +8641,7 @@ export def "vendors-search SearchVendors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Defines supported query expressions to search for vendors by. — shape: {name?: list, status?: list}
   --body-sort: record # Defines a sorter used to sort results from [SearchVendors](api-endpoint:Vendors-SearchVendors). — shape: {field?: "NAME"|"CREATED_AT", order?: "DESC"|"ASC"}
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for the original query.  See the [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination) guide for more information.
@@ -8335,7 +8654,7 @@ export def "vendors-search SearchVendors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RetrieveVendor
@@ -8351,13 +8670,14 @@ export def "vendors RetrieveVendor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, vendor: record<id: string, created_at: string, updated_at: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, contacts: list<record>, account_number: string, note: string, version: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/vendors/($vendor_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateVendor
@@ -8374,6 +8694,7 @@ export def "vendors UpdateVendor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A client-supplied, universally unique identifier (UUID) for the request.  See [Idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency) in the [API Development 101](https://developer.squareup.com/docs/buildbasics) section for more information. (nullable)
   vendor: record # Represents a supplier to a seller. — shape: {id?: string, name?: string, address?: record, contacts?: list, account_number?: string, note?: string, version?: int, status?: "ACTIVE"|"INACTIVE"}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, vendor: record<id: string, created_at: string, updated_at: string, name: string, address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, contacts: list<record>, account_number: string, note: string, version: int, status: string>> {
@@ -8385,7 +8706,7 @@ export def "vendors UpdateVendor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListWebhookEventTypes
@@ -8400,6 +8721,7 @@ export def "webhooks-event-types ListWebhookEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version for which to list event types. Setting this field overrides the default version used by the application.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, event_types: list<string>, metadata: table<event_type: string, api_version_introduced: string, release_status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8408,7 +8730,7 @@ export def "webhooks-event-types ListWebhookEventTypes" [
   let full_url = (build-url $base "/v2/webhooks/event-types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListWebhookSubscriptions
@@ -8423,6 +8745,7 @@ export def "webhooks-subscriptions ListWebhookSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --include-disabled: oneof<nothing, bool> # Includes disabled [Subscription](entity:WebhookSubscription)s. By default, all enabled [Subscription](entity:WebhookSubscription)s are returned. (default: false)
   --sort-order: string@sort-order-completer # Sorts the returned list by when the [Subscription](entity:WebhookSubscription) was created with the specified order. This field defaults to ASC.
@@ -8434,7 +8757,7 @@ export def "webhooks-subscriptions ListWebhookSubscriptions" [
   let full_url = (build-url $base "/v2/webhooks/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CreateWebhookSubscription
@@ -8450,6 +8773,7 @@ export def "webhooks-subscriptions CreateWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string that identifies the [CreateWebhookSubscription](api-endpoint:WebhookSubscriptions-CreateWebhookSubscription) request.
   subscription: record # Represents the details of a webhook subscription, including notification URL, event types, and signature key. — shape: {name?: string, enabled?: bool, event_types?: list, notification_url?: string, api_version?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, name: string, enabled: bool, event_types: list<string>, notification_url: string, api_version: string, signature_key: string, created_at: string, updated_at: string>> {
@@ -8461,7 +8785,7 @@ export def "webhooks-subscriptions CreateWebhookSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DeleteWebhookSubscription
@@ -8477,13 +8801,14 @@ export def "webhooks-subscriptions DeleteWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RetrieveWebhookSubscription
@@ -8499,13 +8824,14 @@ export def "webhooks-subscriptions RetrieveWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, name: string, enabled: bool, event_types: list<string>, notification_url: string, api_version: string, signature_key: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/webhooks/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateWebhookSubscription
@@ -8522,6 +8848,7 @@ export def "webhooks-subscriptions UpdateWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscription: record # Represents the details of a webhook subscription, including notification URL, event types, and signature key. — shape: {name?: string, enabled?: bool, event_types?: list, notification_url?: string, api_version?: string}
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<id: string, name: string, enabled: bool, event_types: list<string>, notification_url: string, api_version: string, signature_key: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -8532,7 +8859,7 @@ export def "webhooks-subscriptions UpdateWebhookSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateWebhookSubscriptionSignatureKey
@@ -8548,6 +8875,7 @@ export def "webhooks-subscriptions-signature-key UpdateWebhookSubscriptionSignat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique string that identifies the [UpdateWebhookSubscriptionSignatureKey](api-endpoint:WebhookSubscriptions-UpdateWebhookSubscriptionSignatureKey) request. (nullable)
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, signature_key: string> {
   let input = $in
@@ -8558,7 +8886,7 @@ export def "webhooks-subscriptions-signature-key UpdateWebhookSubscriptionSignat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TestWebhookSubscription
@@ -8574,6 +8902,7 @@ export def "webhooks-subscriptions-test TestWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-type: string # The event type that will be used to test the [Subscription](entity:WebhookSubscription). The event type must be contained in the list of event types in the [Subscription](entity:WebhookSubscription). (nullable)
 ]: any -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription_test_result: record<id: string, status_code: int, payload: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -8584,5 +8913,5 @@ export def "webhooks-subscriptions-test TestWebhookSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

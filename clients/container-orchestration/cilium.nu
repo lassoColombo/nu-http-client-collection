@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def table-type-completer [] { ["adj-rib-in" "adj-rib-out" "loc-rib"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "cluster-nodes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "cluster-nodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: int # Client UUID should be used when the client wants to request a diff of nodes added and / or removed since the last time that client has made a request.
 ]: nothing -> record<self: string, nodes_added: table<name: string, primary_address: record, secondary_addresses: list, health_endpoint_address: record, ingress_address: record, source: string>, nodes_removed: table<name: string, primary_address: record, secondary_addresses: list, health_endpoint_address: record, ingress_address: record, source: string>, client_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -111,7 +113,7 @@ export def "cluster-nodes get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get health of Cilium daemon
@@ -125,6 +127,7 @@ export def "healthz get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brief: oneof<nothing, bool> # Brief will return a brief representation of the Cilium status.
   --require-k8s-connectivity: oneof<nothing, bool> # If set to true, failure of the agent to connect to the Kubernetes control plane will cause the agent's health status to also fail.
 ]: nothing -> record<cilium: record<state: string, msg: string>, kvstore: record<state: string, msg: string>, cni_file: record<state: string, msg: string>, container_runtime: record<state: string, msg: string>, host_firewall: record<mode: string, devices: list<string>>, hubble: record<state: string, msg: string, observer: record<max_flows: int, current_flows: int, seen_flows: int, uptime: string>>, hubble_metrics: record<state: string, msg: string>, kubernetes: record<state: string, k8s_api_versions: list<string>, msg: string>, datapath_mode: string, configured_datapath_mode: string, attach_mode: string, kube_proxy_replacement: record<mode: string, devices: list<string>, deviceList: list<record>, directRoutingDevice: string, features: record<nodePort: record, hostPort: record, externalIPs: record, hostReachableServices: record, socketLB: record, sessionAffinity: record, gracefulTermination: record, nat46X64: record, socketLBTracing: record, bpfSocketLBHostnsOnly: bool, annotations: list>>, ipam: record<allocations: record, ipv4: list<string>, ipv6: list<string>, status: string>, nodeMonitor: record<cpus: int, npages: int, pagesize: int, lost: int, unknown: int>, cluster: record<ciliumHealth: record<state: string, msg: string>, self: string, nodes: list<record>>, controllers: table<name: string, uuid: string, configuration: record, status: record>, proxy: record<port_range: string, ip: string, total_redirects: int, total_ports: int, redirects: list<record>, envoy_deployment_mode: string>, identity_range: record<min_identity: int, max_identity: int>, ipv6_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, ipv4_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, bandwidth_manager: record<enabled: bool, devices: list<string>, congestionControl: string>, masquerading: record<enabled: bool, enabledProtocols: record<ipv4: bool, ipv6: bool>, mode: string, ip_masq_agent: bool, snat_exclusion_cidr: string, snat_exclusion_cidr_v4: string, snat_exclusion_cidr_v6: string>, routing: record<inter_host_routing_mode: string, intra_host_routing_mode: string, tunnel_protocol: string>, clock_source: record<mode: string, hertz: int>, srv6: record<enabled: bool, srv6EncapMode: string>, stale: record, client_id: int, cluster_mesh: record<clusters: list<record>>, bpf_maps: record<dynamic_size_ratio: float, maps: list<record>>, encryption: record<mode: string, msg: string, ipsec: record<decrypt_interfaces: list, max_seq_number: string, keys_in_use: int, error_count: int, xfrm_errors: record>, wireguard: record<node_encryption: string, node_encrypt_opt_out_labels: string, interfaces: list>>, cni_chaining: record<mode: string>, auth_certificate_provider: record<state: string, msg: string>> {
@@ -135,7 +138,7 @@ export def "healthz get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get configuration of Cilium daemon
@@ -149,13 +152,14 @@ export def "config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spec: record<options: record, policy_enforcement: string>, status: record<realized: record<options: record, policy_enforcement: string>, immutable: record, addressing: record<ipv6: record, ipv4: record>, k8s_endpoint: string, k8s_configuration: string, nodeMonitor: record<cpus: int, npages: int, pagesize: int, lost: int, unknown: int>, kvstoreConfiguration: record<type: string, options: record>, deviceMTU: int, routeMTU: int, enableRouteMTUForCNIChaining: bool, packetizationLayerPMTUDMode: string, datapathMode: string, configuredDatapathMode: string, ipam_mode: string, masquerade: bool, masqueradeProtocols: record<ipv4: bool, ipv6: bool>, installUplinkRoutesForDelegatedIPAM: bool, daemonConfigurationMap: any, GSOMaxSize: int, GROMaxSize: int, GSOIPv4MaxSize: int, GROIPv4MaxSize: int, deviceHeadroom: int, deviceTailroom: int, ipLocalReservedPorts: string, enableBBRHostNamespaceOnly: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify daemon configuration
@@ -169,6 +173,7 @@ export def "config patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --options: record # Map of configuration key/value pairs.
   --policy-enforcement: string@policy-enforcement-completer # The policy-enforcement mode
 ]: any -> any {
@@ -180,7 +185,7 @@ export def "config patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get endpoint by endpoint ID
@@ -195,13 +200,14 @@ export def "endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, spec: record<options: record, label_configuration: record<user: list>>, status: record<external_identifiers: record<cni_attachment_id: string, container_id: string, container_name: string, docker_endpoint_id: string, docker_network_id: string, pod_name: string, k8s_pod_name: string, k8s_namespace: string>, identity: record<id: int, labels: list, labelsSHA256: string>, labels: record<realized: record, security_relevant: list, derived: list, disabled: list>, realized: record<options: record, label_configuration: record>, networking: record<addressing: list, host_addressing: record, host_mac: string, mac: string, interface_name: string, interface_index: int, container_interface_name: string>, policy: record<spec: record, realized: record, proxy_policy_revision: int, proxy_statistics: list>, log: list<record>, controllers: list<record>, state: string, health: record<overallHealth: string, bpf: string, policy: string, connected: bool>, namedPorts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create endpoint
@@ -216,13 +222,14 @@ export def "endpoint put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, spec: record<options: record, label_configuration: record<user: list>>, status: record<external_identifiers: record<cni_attachment_id: string, container_id: string, container_name: string, docker_endpoint_id: string, docker_network_id: string, pod_name: string, k8s_pod_name: string, k8s_namespace: string>, identity: record<id: int, labels: list, labelsSHA256: string>, labels: record<realized: record, security_relevant: list, derived: list, disabled: list>, realized: record<options: record, label_configuration: record>, networking: record<addressing: list, host_addressing: record, host_mac: string, mac: string, interface_name: string, interface_index: int, container_interface_name: string>, policy: record<spec: record, realized: record, proxy_policy_revision: int, proxy_statistics: list>, log: list<record>, controllers: list<record>, state: string, health: record<overallHealth: string, bpf: string, policy: string, connected: bool>, namedPorts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify existing endpoint
@@ -239,13 +246,14 @@ export def "endpoint patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete endpoint
@@ -260,13 +268,14 @@ export def "endpoint delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a list of endpoints that have metadata matching the provided parameters.
@@ -280,13 +289,14 @@ export def "endpoint list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, spec: record<options: record, label_configuration: record>, status: record<external_identifiers: record, identity: record, labels: record, realized: record, networking: record, policy: record, log: list, controllers: list, state: string, health: record, namedPorts: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a list of endpoints
@@ -300,13 +310,14 @@ export def "endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve endpoint configuration
@@ -321,13 +332,14 @@ export def "endpoint-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<realized: record<options: record, label_configuration: record<user: list>>, immutable: record, error: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify mutable endpoint configuration
@@ -343,6 +355,7 @@ export def "endpoint-config patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --options: record # Map of configuration key/value pairs.
   --label-configuration: record # User desired Label configuration of an endpoint — shape: {user?: list}
 ]: any -> any {
@@ -354,7 +367,7 @@ export def "endpoint-config patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of labels associated with an endpoint.
@@ -369,13 +382,14 @@ export def "endpoint-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spec: record<user: list<string>>, status: record<realized: record<user: list>, security_relevant: list<string>, derived: list<string>, disabled: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)/labels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set label configuration of endpoint
@@ -390,6 +404,7 @@ export def "endpoint-labels patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: list # Set of labels
 ]: any -> any {
   let input = $in
@@ -400,7 +415,7 @@ export def "endpoint-labels patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the status logs associated with this endpoint.
@@ -415,13 +430,14 @@ export def "endpoint-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<timestamp: string, code: string, message: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)/log")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the status logs associated with this endpoint.
@@ -436,13 +452,14 @@ export def "endpoint-healthz get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<overallHealth: string, bpf: string, policy: string, connected: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/endpoint/($id)/healthz")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a list of identities that have metadata matching the provided parameters.
@@ -456,13 +473,14 @@ export def "identity list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, labels: list<string>, labelsSHA256: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve identity
@@ -477,13 +495,14 @@ export def "identity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, labels: list<string>, labelsSHA256: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/identity/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve identities which are being used by local endpoints
@@ -497,13 +516,14 @@ export def "identity-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<identity: record<id: int, labels: list, labelsSHA256: string>, refCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/endpoints")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allocate an IP address
@@ -517,6 +537,7 @@ export def "ipam post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --family: string@family-completer
   --owner: string
   --pool: string
@@ -530,7 +551,7 @@ export def "ipam post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allocate an IP address
@@ -545,6 +566,7 @@ export def "ipam post-by-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
   --pool: string
 ]: nothing -> any {
@@ -554,7 +576,7 @@ export def "ipam post-by-ip" [
   let full_url = (build-url $base $"/ipam/($ip)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Release an allocated IP address
@@ -569,6 +591,7 @@ export def "ipam delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pool: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -577,7 +600,7 @@ export def "ipam delete" [
   let full_url = (build-url $base $"/ipam/($ip)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve entire policy tree
@@ -593,13 +616,14 @@ export def "policy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<revision: int, policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See what selectors match which identities
@@ -613,13 +637,14 @@ export def "policy-selectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<selector: string, labels: list<list>, identities: list<int>, users: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policy/selectors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # See what subject selectors match which identities on the local node
@@ -633,13 +658,14 @@ export def "policy-subject-selectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<selector: string, labels: list<list>, identities: list<int>, users: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policy/subject-selectors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve list of all local redirect policies
@@ -653,13 +679,14 @@ export def "lrp get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<uid: string, name: string, namespace: string, frontend_type: string, lrp_type: string, service_id: string, frontend_mappings: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lrp")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve list of all services
@@ -673,13 +700,14 @@ export def "service get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<spec: record<id: int, frontend_address: record, backend_addresses: list, flags: record, updateServices: bool>, status: record<realized: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve list of CIDRs
@@ -693,13 +721,14 @@ export def "prefilter get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spec: record<revision: int, deny: list<string>>, status: record<realized: record<revision: int, deny: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prefilter")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update list of CIDRs
@@ -713,13 +742,14 @@ export def "prefilter patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spec: record<revision: int, deny: list<string>>, status: record<realized: record<revision: int, deny: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prefilter")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete list of CIDRs
@@ -733,13 +763,14 @@ export def "prefilter delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spec: record<revision: int, deny: list<string>>, status: record<realized: record<revision: int, deny: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prefilter")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve information about the agent and environment for debugging
@@ -753,13 +784,14 @@ export def "debuginfo get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cilium_version: string, kernel_version: string, cilium_status: record<cilium: record<state: string, msg: string>, kvstore: record<state: string, msg: string>, cni_file: record<state: string, msg: string>, container_runtime: record<state: string, msg: string>, host_firewall: record<mode: string, devices: list>, hubble: record<state: string, msg: string, observer: record>, hubble_metrics: record<state: string, msg: string>, kubernetes: record<state: string, k8s_api_versions: list, msg: string>, datapath_mode: string, configured_datapath_mode: string, attach_mode: string, kube_proxy_replacement: record<mode: string, devices: list, deviceList: list, directRoutingDevice: string, features: record>, ipam: record<allocations: record, ipv4: list, ipv6: list, status: string>, nodeMonitor: record<cpus: int, npages: int, pagesize: int, lost: int, unknown: int>, cluster: record<ciliumHealth: record, self: string, nodes: list>, controllers: list<record>, proxy: record<port_range: string, ip: string, total_redirects: int, total_ports: int, redirects: list, envoy_deployment_mode: string>, identity_range: record<min_identity: int, max_identity: int>, ipv6_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, ipv4_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, bandwidth_manager: record<enabled: bool, devices: list, congestionControl: string>, masquerading: record<enabled: bool, enabledProtocols: record, mode: string, ip_masq_agent: bool, snat_exclusion_cidr: string, snat_exclusion_cidr_v4: string, snat_exclusion_cidr_v6: string>, routing: record<inter_host_routing_mode: string, intra_host_routing_mode: string, tunnel_protocol: string>, clock_source: record<mode: string, hertz: int>, srv6: record<enabled: bool, srv6EncapMode: string>, stale: record, client_id: int, cluster_mesh: record<clusters: list>, bpf_maps: record<dynamic_size_ratio: float, maps: list>, encryption: record<mode: string, msg: string, ipsec: record, wireguard: record>, cni_chaining: record<mode: string>, auth_certificate_provider: record<state: string, msg: string>>, endpoint_list: table<id: int, spec: record, status: record>, service_list: table<spec: record, status: record>, policy: record<revision: int, policy: string>, cilium_memory_map: string, cilium_nodemonitor_memory_map: string, environment_variables: list<string>, subsystem: record, encryption: record<wireguard: record<node_encryption: string, node_encrypt_opt_out_labels: string, interfaces: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/debuginfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve cgroup metadata for all pods
@@ -773,13 +805,14 @@ export def "cgroup-dump-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pod_metadatas: table<name: string, namespace: string, containers: list, ips: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cgroup-dump-metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all open maps
@@ -793,13 +826,14 @@ export def "map list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<maps: table<path: string, cache: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/map")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve contents of BPF map
@@ -814,13 +848,14 @@ export def "map get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<path: string, cache: table<key: string, value: string, desired_action: string, last_error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/map/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the recent event logs associated with this endpoint.
@@ -835,6 +870,7 @@ export def "map-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --follow: oneof<nothing, bool> # Whether to follow streamed requests
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -843,7 +879,7 @@ export def "map-events get" [
   let full_url = (build-url $base $"/map/($name)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of DNS lookups intercepted from all endpoints.
@@ -857,6 +893,7 @@ export def "fqdn-cache list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --matchpattern: string # A toFQDNs compatible matchPattern expression
   --cidr: string # A CIDR range of IPs
   --qp-source: string # Source from which FQDN entries come from
@@ -867,7 +904,7 @@ export def "fqdn-cache list" [
   let full_url = (build-url $base "/fqdn/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes matching DNS lookups from the policy-generation cache.
@@ -881,6 +918,7 @@ export def "fqdn-cache delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --matchpattern: string # A toFQDNs compatible matchPattern expression
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -889,7 +927,7 @@ export def "fqdn-cache delete" [
   let full_url = (build-url $base "/fqdn/cache" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of DNS lookups intercepted from an endpoint.
@@ -904,6 +942,7 @@ export def "fqdn-cache get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --matchpattern: string # A toFQDNs compatible matchPattern expression
   --cidr: string # A CIDR range of IPs
   --qp-source: string # Source from which FQDN entries come from
@@ -914,7 +953,7 @@ export def "fqdn-cache get" [
   let full_url = (build-url $base $"/fqdn/cache/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List internal DNS selector representations
@@ -928,13 +967,14 @@ export def "fqdn-names get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<DNSPollNames: list<string>, FQDNPolicySelectors: table<selectorString: string, regexString: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fqdn/names")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists information about known IP addresses
@@ -948,6 +988,7 @@ export def "ip get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cidr: string # A CIDR range of IPs
 ]: nothing -> table<cidr: string, identity: int, hostIP: string, encryptKey: int, metadata: record<source: string, namespace: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -956,7 +997,7 @@ export def "ip get" [
   let full_url = (build-url $base "/ip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List information about known node IDs
@@ -970,13 +1011,14 @@ export def "node-ids get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, ips: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/node/ids")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists operational state of BGP peers
@@ -992,13 +1034,14 @@ export def "bgp-peers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, local_asn: int, peer_asn: int, peer_address: string, tcp_password_enabled: bool, ebgp_multihop_ttl: int, peer_port: int, session_state: string, uptime_nanoseconds: int, graceful_restart: record<enabled: bool, restart_time_seconds: int>, families: list<record>, connect_retry_time_seconds: int, configured_hold_time_seconds: int, applied_hold_time_seconds: int, configured_keep_alive_time_seconds: int, applied_keep_alive_time_seconds: int, local_capabilities: list<record>, remote_capabilities: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bgp/peers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists BGP routes from BGP Control Plane RIB.
@@ -1014,6 +1057,7 @@ export def "bgp-routes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --table-type: string@table-type-completer # BGP Routing Information Base (RIB) table type
   --afi: string # Address Family Indicator (AFI) of a BGP route
   --safi: string # Subsequent Address Family Indicator (SAFI) of a BGP route
@@ -1026,7 +1070,7 @@ export def "bgp-routes get" [
   let full_url = (build-url $base "/bgp/routes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists BGP route policies configured in BGP Control Plane.
@@ -1042,6 +1086,7 @@ export def "bgp-route-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --router-asn: int # Autonomous System Number (ASN) identifying a BGP virtual router instance. If not specified, all virtual router instances are selected.
 ]: nothing -> table<router_asn: int, name: string, type: string, statements: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1050,5 +1095,5 @@ export def "bgp-route-policies get" [
   let full_url = (build-url $base "/bgp/route-policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

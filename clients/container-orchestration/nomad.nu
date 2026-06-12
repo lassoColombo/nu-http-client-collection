@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["x-nomad-token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "acl-bootstrap PostACLBootstrap" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "acl-bootstrap PostACLBootstrap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -112,7 +114,7 @@ export def "acl-bootstrap PostACLBootstrap" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /acl/policies
@@ -126,6 +128,7 @@ export def "acl-policies GetACLPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -144,7 +147,7 @@ export def "acl-policies GetACLPolicies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /acl/policy/{policyName}
@@ -159,6 +162,7 @@ export def "acl-policy DeleteACLPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -172,7 +176,7 @@ export def "acl-policy DeleteACLPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /acl/policy/{policyName}
@@ -187,6 +191,7 @@ export def "acl-policy GetACLPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -205,7 +210,7 @@ export def "acl-policy GetACLPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /acl/policy/{policyName}
@@ -221,6 +226,7 @@ export def "acl-policy PostACLPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -243,7 +249,7 @@ export def "acl-policy PostACLPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /acl/token
@@ -257,6 +263,7 @@ export def "acl-token GetACLTokenSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -275,7 +282,7 @@ export def "acl-token GetACLTokenSelf" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /acl/token/{tokenAccessor}
@@ -290,6 +297,7 @@ export def "acl-token DeleteACLToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -303,7 +311,7 @@ export def "acl-token DeleteACLToken" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /acl/token/{tokenAccessor}
@@ -318,6 +326,7 @@ export def "acl-token GetACLToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -336,7 +345,7 @@ export def "acl-token GetACLToken" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /acl/token/{tokenAccessor}
@@ -352,6 +361,7 @@ export def "acl-token PostACLToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -380,7 +390,7 @@ export def "acl-token PostACLToken" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /acl/token/onetime
@@ -394,6 +404,7 @@ export def "acl-token-onetime PostACLTokenOnetime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -407,7 +418,7 @@ export def "acl-token-onetime PostACLTokenOnetime" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /acl/token/onetime/exchange
@@ -421,6 +432,7 @@ export def "acl-token-onetime-exchange PostACLTokenOnetimeExchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -438,7 +450,7 @@ export def "acl-token-onetime-exchange PostACLTokenOnetimeExchange" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /acl/tokens
@@ -452,6 +464,7 @@ export def "acl-tokens GetACLTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -470,7 +483,7 @@ export def "acl-tokens GetACLTokens" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /allocation/{allocID}
@@ -485,6 +498,7 @@ export def "allocation GetAllocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -503,7 +517,7 @@ export def "allocation GetAllocation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /allocation/{allocID}/services
@@ -518,6 +532,7 @@ export def "allocation-services GetAllocationServices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -536,7 +551,7 @@ export def "allocation-services GetAllocationServices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /allocation/{allocID}/stop
@@ -551,6 +566,7 @@ export def "allocation-stop PostAllocationStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -570,7 +586,7 @@ export def "allocation-stop PostAllocationStop" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /allocations
@@ -584,6 +600,7 @@ export def "allocations GetAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -604,7 +621,7 @@ export def "allocations GetAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /deployment/{deploymentID}
@@ -619,6 +636,7 @@ export def "deployment GetDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -637,7 +655,7 @@ export def "deployment GetDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /deployment/allocation-health/{deploymentID}
@@ -652,6 +670,7 @@ export def "deployment-allocation-health PostDeploymentAllocationHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -674,7 +693,7 @@ export def "deployment-allocation-health PostDeploymentAllocationHealth" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /deployment/allocations/{deploymentID}
@@ -689,6 +708,7 @@ export def "deployment-allocations GetDeploymentAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -707,7 +727,7 @@ export def "deployment-allocations GetDeploymentAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /deployment/fail/{deploymentID}
@@ -722,6 +742,7 @@ export def "deployment-fail PostDeploymentFail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -735,7 +756,7 @@ export def "deployment-fail PostDeploymentFail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /deployment/pause/{deploymentID}
@@ -750,6 +771,7 @@ export def "deployment-pause PostDeploymentPause" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -771,7 +793,7 @@ export def "deployment-pause PostDeploymentPause" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /deployment/promote/{deploymentID}
@@ -786,6 +808,7 @@ export def "deployment-promote PostDeploymentPromote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -808,7 +831,7 @@ export def "deployment-promote PostDeploymentPromote" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /deployment/unblock/{deploymentID}
@@ -823,6 +846,7 @@ export def "deployment-unblock PostDeploymentUnblock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -843,7 +867,7 @@ export def "deployment-unblock PostDeploymentUnblock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /deployments
@@ -857,6 +881,7 @@ export def "deployments GetDeployments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -875,7 +900,7 @@ export def "deployments GetDeployments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /evaluation/{evalID}
@@ -890,6 +915,7 @@ export def "evaluation GetEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -908,7 +934,7 @@ export def "evaluation GetEvaluation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /evaluation/{evalID}/allocations
@@ -923,6 +949,7 @@ export def "evaluation-allocations GetEvaluationAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -941,7 +968,7 @@ export def "evaluation-allocations GetEvaluationAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /evaluations
@@ -955,6 +982,7 @@ export def "evaluations GetEvaluations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -973,7 +1001,7 @@ export def "evaluations GetEvaluations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /job/{jobName}
@@ -988,6 +1016,7 @@ export def "job DeleteJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1003,7 +1032,7 @@ export def "job DeleteJob" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /job/{jobName}
@@ -1018,6 +1047,7 @@ export def "job GetJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1036,7 +1066,7 @@ export def "job GetJob" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /job/{jobName}
@@ -1052,6 +1082,7 @@ export def "job PostJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1077,7 +1108,7 @@ export def "job PostJob" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /job/{jobName}/allocations
@@ -1092,6 +1123,7 @@ export def "job-allocations GetJobAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1111,7 +1143,7 @@ export def "job-allocations GetJobAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /job/{jobName}/deployment
@@ -1126,6 +1158,7 @@ export def "job-deployment GetJobDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1144,7 +1177,7 @@ export def "job-deployment GetJobDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /job/{jobName}/deployments
@@ -1159,6 +1192,7 @@ export def "job-deployments GetJobDeployments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1178,7 +1212,7 @@ export def "job-deployments GetJobDeployments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /job/{jobName}/dispatch
@@ -1193,6 +1227,7 @@ export def "job-dispatch PostJobDispatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1212,7 +1247,7 @@ export def "job-dispatch PostJobDispatch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /job/{jobName}/evaluate
@@ -1228,6 +1263,7 @@ export def "job-evaluate PostJobEvaluate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1249,7 +1285,7 @@ export def "job-evaluate PostJobEvaluate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /job/{jobName}/evaluations
@@ -1264,6 +1300,7 @@ export def "job-evaluations GetJobEvaluations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1282,7 +1319,7 @@ export def "job-evaluations GetJobEvaluations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /job/{jobName}/periodic/force
@@ -1297,6 +1334,7 @@ export def "job-periodic-force PostJobPeriodicForce" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1310,7 +1348,7 @@ export def "job-periodic-force PostJobPeriodicForce" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /job/{jobName}/plan
@@ -1326,6 +1364,7 @@ export def "job-plan PostJobPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1348,7 +1387,7 @@ export def "job-plan PostJobPlan" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /job/{jobName}/revert
@@ -1363,6 +1402,7 @@ export def "job-revert PostJobRevert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1387,7 +1427,7 @@ export def "job-revert PostJobRevert" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /job/{jobName}/scale
@@ -1402,6 +1442,7 @@ export def "job-scale GetJobScaleStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1420,7 +1461,7 @@ export def "job-scale GetJobScaleStatus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /job/{jobName}/scale
@@ -1435,6 +1476,7 @@ export def "job-scale PostJobScalingRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1460,7 +1502,7 @@ export def "job-scale PostJobScalingRequest" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /job/{jobName}/stable
@@ -1475,6 +1517,7 @@ export def "job-stable PostJobStability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1497,7 +1540,7 @@ export def "job-stable PostJobStability" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /job/{jobName}/summary
@@ -1512,6 +1555,7 @@ export def "job-summary GetJobSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1530,7 +1574,7 @@ export def "job-summary GetJobSummary" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /job/{jobName}/versions
@@ -1545,6 +1589,7 @@ export def "job-versions GetJobVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1564,7 +1609,7 @@ export def "job-versions GetJobVersions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /jobs
@@ -1578,6 +1623,7 @@ export def "jobs GetJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1596,7 +1642,7 @@ export def "jobs GetJobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /jobs
@@ -1611,6 +1657,7 @@ export def "jobs RegisterJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1636,7 +1683,7 @@ export def "jobs RegisterJob" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /jobs/parse
@@ -1650,6 +1697,7 @@ export def "jobs-parse PostJobParse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Canonicalize: oneof<nothing, bool>
   --JobHCL: string
   --hclv1: oneof<nothing, bool>
@@ -1662,7 +1710,7 @@ export def "jobs-parse PostJobParse" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /metrics
@@ -1676,6 +1724,7 @@ export def "metrics GetMetricsSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # The format the user requested for the metrics summary (e.g. prometheus)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-nomad-token"))
@@ -1684,7 +1733,7 @@ export def "metrics GetMetricsSummary" [
   let full_url = (build-url $base "/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /namespace
@@ -1698,6 +1747,7 @@ export def "namespace CreateNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1711,7 +1761,7 @@ export def "namespace CreateNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /namespace/{namespaceName}
@@ -1726,6 +1776,7 @@ export def "namespace DeleteNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1739,7 +1790,7 @@ export def "namespace DeleteNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /namespace/{namespaceName}
@@ -1754,6 +1805,7 @@ export def "namespace GetNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1772,7 +1824,7 @@ export def "namespace GetNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /namespace/{namespaceName}
@@ -1788,6 +1840,7 @@ export def "namespace PostNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -1811,7 +1864,7 @@ export def "namespace PostNamespace" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /namespaces
@@ -1825,6 +1878,7 @@ export def "namespaces GetNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1843,7 +1897,7 @@ export def "namespaces GetNamespaces" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /node/{nodeId}
@@ -1858,6 +1912,7 @@ export def "node GetNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1876,7 +1931,7 @@ export def "node GetNode" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /node/{nodeId}/allocations
@@ -1891,6 +1946,7 @@ export def "node-allocations GetNodeAllocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1909,7 +1965,7 @@ export def "node-allocations GetNodeAllocations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /node/{nodeId}/drain
@@ -1925,6 +1981,7 @@ export def "node-drain UpdateNodeDrain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1950,7 +2007,7 @@ export def "node-drain UpdateNodeDrain" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /node/{nodeId}/eligibility
@@ -1965,6 +2022,7 @@ export def "node-eligibility UpdateNodeEligibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -1988,7 +2046,7 @@ export def "node-eligibility UpdateNodeEligibility" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /node/{nodeId}/purge
@@ -2003,6 +2061,7 @@ export def "node-purge UpdateNodePurge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2021,7 +2080,7 @@ export def "node-purge UpdateNodePurge" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /nodes
@@ -2035,6 +2094,7 @@ export def "nodes GetNodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2054,7 +2114,7 @@ export def "nodes GetNodes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /operator/autopilot/configuration
@@ -2068,6 +2128,7 @@ export def "operator-autopilot-configuration GetOperatorAutopilotConfiguration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2086,7 +2147,7 @@ export def "operator-autopilot-configuration GetOperatorAutopilotConfiguration" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /operator/autopilot/configuration
@@ -2100,6 +2161,7 @@ export def "operator-autopilot-configuration PutOperatorAutopilotConfiguration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2126,7 +2188,7 @@ export def "operator-autopilot-configuration PutOperatorAutopilotConfiguration" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /operator/autopilot/health
@@ -2140,6 +2202,7 @@ export def "operator-autopilot-health GetOperatorAutopilotHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2158,7 +2221,7 @@ export def "operator-autopilot-health GetOperatorAutopilotHealth" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /operator/raft/configuration
@@ -2172,6 +2235,7 @@ export def "operator-raft-configuration GetOperatorRaftConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2190,7 +2254,7 @@ export def "operator-raft-configuration GetOperatorRaftConfiguration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /operator/raft/peer
@@ -2204,6 +2268,7 @@ export def "operator-raft-peer DeleteOperatorRaftPeer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2217,7 +2282,7 @@ export def "operator-raft-peer DeleteOperatorRaftPeer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /operator/scheduler/configuration
@@ -2231,6 +2296,7 @@ export def "operator-scheduler-configuration GetOperatorSchedulerConfiguration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2249,7 +2315,7 @@ export def "operator-scheduler-configuration GetOperatorSchedulerConfiguration" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /operator/scheduler/configuration
@@ -2264,6 +2330,7 @@ export def "operator-scheduler-configuration PostOperatorSchedulerConfiguration"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2287,7 +2354,7 @@ export def "operator-scheduler-configuration PostOperatorSchedulerConfiguration"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /plugin/csi/{pluginID}
@@ -2302,6 +2369,7 @@ export def "plugin-csi GetPluginCSI" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2320,7 +2388,7 @@ export def "plugin-csi GetPluginCSI" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /plugins
@@ -2334,6 +2402,7 @@ export def "plugins GetPlugins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2352,7 +2421,7 @@ export def "plugins GetPlugins" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /quota
@@ -2367,6 +2436,7 @@ export def "quota CreateQuotaSpec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2388,7 +2458,7 @@ export def "quota CreateQuotaSpec" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /quota/{specName}
@@ -2403,6 +2473,7 @@ export def "quota DeleteQuotaSpec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2416,7 +2487,7 @@ export def "quota DeleteQuotaSpec" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /quota/{specName}
@@ -2431,6 +2502,7 @@ export def "quota GetQuotaSpec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2449,7 +2521,7 @@ export def "quota GetQuotaSpec" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /quota/{specName}
@@ -2465,6 +2537,7 @@ export def "quota PostQuotaSpec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2486,7 +2559,7 @@ export def "quota PostQuotaSpec" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /quotas
@@ -2500,6 +2573,7 @@ export def "quotas GetQuotas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2518,7 +2592,7 @@ export def "quotas GetQuotas" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /regions
@@ -2532,13 +2606,14 @@ export def "regions GetRegions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-nomad-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/regions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /scaling/policies
@@ -2552,6 +2627,7 @@ export def "scaling-policies GetScalingPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2570,7 +2646,7 @@ export def "scaling-policies GetScalingPolicies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /scaling/policy/{policyID}
@@ -2585,6 +2661,7 @@ export def "scaling-policy GetScalingPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2603,7 +2680,7 @@ export def "scaling-policy GetScalingPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /search
@@ -2617,6 +2694,7 @@ export def "search GetSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2652,7 +2730,7 @@ export def "search GetSearch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /search/fuzzy
@@ -2666,6 +2744,7 @@ export def "search-fuzzy GetFuzzySearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2702,7 +2781,7 @@ export def "search-fuzzy GetFuzzySearch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /status/leader
@@ -2716,6 +2795,7 @@ export def "status-leader GetStatusLeader" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2734,7 +2814,7 @@ export def "status-leader GetStatusLeader" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /status/peers
@@ -2748,6 +2828,7 @@ export def "status-peers GetStatusPeers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2766,7 +2847,7 @@ export def "status-peers GetStatusPeers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /system/gc
@@ -2780,6 +2861,7 @@ export def "system-gc PutSystemGC" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2793,7 +2875,7 @@ export def "system-gc PutSystemGC" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /system/reconcile/summaries
@@ -2807,6 +2889,7 @@ export def "system-reconcile-summaries PutSystemReconcileSummaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2820,7 +2903,7 @@ export def "system-reconcile-summaries PutSystemReconcileSummaries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /validate/job
@@ -2835,6 +2918,7 @@ export def "validate-job PostJobValidateRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2855,7 +2939,7 @@ export def "validate-job PostJobValidateRequest" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /var/{path}
@@ -2870,6 +2954,7 @@ export def "var DeleteVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2894,7 +2979,7 @@ export def "var DeleteVariable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /var/{path}
@@ -2909,6 +2994,7 @@ export def "var GetVariableQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -2927,7 +3013,7 @@ export def "var GetVariableQuery" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /var/{path}
@@ -2942,6 +3028,7 @@ export def "var PostVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -2966,7 +3053,7 @@ export def "var PostVariable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /var/{path}
@@ -2981,6 +3068,7 @@ export def "var PutVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3005,7 +3093,7 @@ export def "var PutVariable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /vars
@@ -3019,6 +3107,7 @@ export def "vars GetVariablesListRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -3037,7 +3126,7 @@ export def "vars GetVariablesListRequest" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /volume/csi/{volumeId}
@@ -3052,6 +3141,7 @@ export def "volume-csi DeleteVolumeRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3066,7 +3156,7 @@ export def "volume-csi DeleteVolumeRegistration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /volume/csi/{volumeId}
@@ -3081,6 +3171,7 @@ export def "volume-csi GetVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -3099,7 +3190,7 @@ export def "volume-csi GetVolume" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /volume/csi/{volumeId}
@@ -3115,6 +3206,7 @@ export def "volume-csi PostVolumeRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3135,7 +3227,7 @@ export def "volume-csi PostVolumeRegistration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /volume/csi/{volumeId}/{action}
@@ -3151,6 +3243,7 @@ export def "volume-csi DetachOrDeleteVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3165,7 +3258,7 @@ export def "volume-csi DetachOrDeleteVolume" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /volume/csi/{volumeId}/{action}
@@ -3182,6 +3275,7 @@ export def "volume-csi CreateVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3202,7 +3296,7 @@ export def "volume-csi CreateVolume" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /volumes
@@ -3216,6 +3310,7 @@ export def "volumes GetVolumes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -3237,7 +3332,7 @@ export def "volumes GetVolumes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /volumes
@@ -3252,6 +3347,7 @@ export def "volumes PostVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3272,7 +3368,7 @@ export def "volumes PostVolume" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /volumes/external
@@ -3286,6 +3382,7 @@ export def "volumes-external GetExternalVolumes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -3305,7 +3402,7 @@ export def "volumes-external GetExternalVolumes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /volumes/snapshot
@@ -3319,6 +3416,7 @@ export def "volumes-snapshot DeleteSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3334,7 +3432,7 @@ export def "volumes-snapshot DeleteSnapshot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /volumes/snapshot
@@ -3348,6 +3446,7 @@ export def "volumes-snapshot GetSnapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --wait: string # Provided with IndexParam to wait for change.
@@ -3367,7 +3466,7 @@ export def "volumes-snapshot GetSnapshots" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /volumes/snapshot
@@ -3382,6 +3481,7 @@ export def "volumes-snapshot PostSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
@@ -3402,5 +3502,5 @@ export def "volumes-snapshot PostSnapshot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

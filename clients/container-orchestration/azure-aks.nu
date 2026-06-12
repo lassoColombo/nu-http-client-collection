@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-container-service-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "providers-microsoft-container-service-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,7 +110,7 @@ export def "providers-microsoft-container-service-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.ContainerService/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of managed clusters in the specified subscription.
@@ -124,6 +126,7 @@ export def "subscriptions-providers-microsoft-container-service-managed-clusters
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, tags: record, type: string, identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -132,7 +135,7 @@ export def "subscriptions-providers-microsoft-container-service-managed-clusters
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ContainerService/managedClusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists managed clusters in the specified subscription and resource group.
@@ -149,6 +152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, tags: record, type: string, identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -157,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a managed cluster.
@@ -175,6 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -183,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a managed cluster.
@@ -201,6 +206,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, location: string, name: string, tags: record, type: string, identity: record<principalId: string, tenantId: string, type: string>, properties: record<aadProfile: record<clientAppID: string, serverAppID: string, serverAppSecret: string, tenantID: string>, addonProfiles: any, agentPoolProfiles: list<record>, apiServerAccessProfile: record<authorizedIPRanges: list, enablePrivateCluster: bool>, dnsPrefix: string, enablePodSecurityPolicy: bool, enableRBAC: bool, fqdn: string, kubernetesVersion: string, linuxProfile: record<adminUsername: string, ssh: record>, maxAgentPools: int, networkProfile: record<dnsServiceIP: string, dockerBridgeCidr: string, loadBalancerProfile: record, loadBalancerSku: string, networkPlugin: string, networkPolicy: string, podCidr: string, serviceCidr: string>, nodeResourceGroup: string, provisioningState: string, servicePrincipalProfile: record<clientId: string, secret: string>, windowsProfile: record<adminPassword: string, adminUsername: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -209,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates tags on a managed cluster.
@@ -227,6 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --tags: record # Resource tags.
 ]: any -> record<id: string, location: string, name: string, tags: record, type: string, identity: record<principalId: string, tenantId: string, type: string>, properties: record<aadProfile: record<clientAppID: string, serverAppID: string, serverAppSecret: string, tenantID: string>, addonProfiles: any, agentPoolProfiles: list<record>, apiServerAccessProfile: record<authorizedIPRanges: list, enablePrivateCluster: bool>, dnsPrefix: string, enablePodSecurityPolicy: bool, enableRBAC: bool, fqdn: string, kubernetesVersion: string, linuxProfile: record<adminUsername: string, ssh: record>, maxAgentPools: int, networkProfile: record<dnsServiceIP: string, dockerBridgeCidr: string, loadBalancerProfile: record, loadBalancerSku: string, networkPlugin: string, networkPolicy: string, podCidr: string, serviceCidr: string>, nodeResourceGroup: string, provisioningState: string, servicePrincipalProfile: record<clientId: string, secret: string>, windowsProfile: record<adminPassword: string, adminUsername: string>>> {
@@ -239,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a managed cluster.
@@ -259,6 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   location: string # Resource location
   --tags: record # Resource tags
@@ -274,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets an access profile of a managed cluster.
@@ -293,6 +301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, location: string, name: string, tags: record, type: string, properties: record<kubeConfig: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -301,7 +310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/accessProfiles/($roleName)/listCredential" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of agent pools in the specified managed cluster.
@@ -319,6 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, type: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -327,7 +337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/agentPools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an agent pool.
@@ -346,6 +356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -354,7 +365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/agentPools/($agentPoolName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the agent pool.
@@ -373,6 +384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, name: string, type: string, properties: record<availabilityZones: list<string>, count: int, enableAutoScaling: bool, enableNodePublicIP: bool, maxCount: int, maxPods: int, minCount: int, nodeTaints: list<string>, orchestratorVersion: string, osDiskSizeGB: int, osType: string, provisioningState: string, scaleSetEvictionPolicy: string, scaleSetPriority: string, type: string, vmSize: string, vnetSubnetID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -381,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/agentPools/($agentPoolName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an agent pool.
@@ -401,6 +413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # Properties for the container service agent pool profile. — shape: {availabilityZones?: list, count?: int, enableAutoScaling?: bool, enableNodePublicIP?: bool, maxCount?: int, maxPods?: int, minCount?: int, nodeTaints?: list, orchestratorVersion?: string, osDiskSizeGB?: int, osType?: "Linux"|"Windows", scaleSetEvictionPolicy?: "Delete"|"Deallocate", scaleSetPriority?: "Low"|"Regular", type?: "VirtualMachineScaleSets"|"AvailabilitySet", vmSize?: "Standard_A1"|"Standard_A10"|"Standard_A11"|"Standard_A1_v2"|"Standard_A2"|"Standard_A2_v2"|"Standard_A2m_v2"|"Standard_A3"|"Standard_A4"|"Standard_A4_v2"|"Standard_A4m_v2"|"Standard_A5"|"Standard_A6"|"Standard_A7"|"Standard_A8"|"Standard_A8_v2"|"Standard_A8m_v2"|"Standard_A9"|"Standard_B2ms"|"Standard_B2s"|"Standard_B4ms"|"Standard_B8ms"|"Standard_D1"|"Standard_D11"|"Standard_D11_v2"|"Standard_D11_v2_Promo"|"Standard_D12"|"Standard_D12_v2"|"Standard_D12_v2_Promo"|"Standard_D13"|"Standard_D13_v2"|"Standard_D13_v2_Promo"|"Standard_D14"|"Standard_D14_v2"|"Standard_D14_v2_Promo"|"Standard_D15_v2"|"Standard_D16_v3"|"Standard_D16s_v3"|"Standard_D1_v2"|"Standard_D2"|"Standard_D2_v2"|"Standard_D2_v2_Promo"|"Standard_D2_v3"|"Standard_D2s_v3"|"Standard_D3"|"Standard_D32_v3"|"Standard_D32s_v3"|"Standard_D3_v2"|"Standard_D3_v2_Promo"|"Standard_D4"|"Standard_D4_v2"|"Standard_D4_v2_Promo"|"Standard_D4_v3"|"Standard_D4s_v3"|"Standard_D5_v2"|"Standard_D5_v2_Promo"|"Standard_D64_v3"|"Standard_D64s_v3"|"Standard_D8_v3"|"Standard_D8s_v3"|"Standard_DS1"|"Standard_DS11"|"Standard_DS11_v2"|"Standard_DS11_v2_Promo"|"Standard_DS12"|"Standard_DS12_v2"|"Standard_DS12_v2_Promo"|"Standard_DS13"|"Standard_DS13-2_v2"|"Standard_DS13-4_v2"|"Standard_DS13_v2"|"Standard_DS13_v2_Promo"|"Standard_DS14"|"Standard_DS14-4_v2"|"Standard_DS14-8_v2"|"Standard_DS14_v2"|"Standard_DS14_v2_Promo"|"Standard_DS15_v2"|"Standard_DS1_v2"|"Standard_DS2"|"Standard_DS2_v2"|"Standard_DS2_v2_Promo"|"Standard_DS3"|"Standard_DS3_v2"|"Standard_DS3_v2_Promo"|"Standard_DS4"|"Standard_DS4_v2"|"Standard_DS4_v2_Promo"|"Standard_DS5_v2"|"Standard_DS5_v2_Promo"|"Standard_E16_v3"|"Standard_E16s_v3"|"Standard_E2_v3"|"Standard_E2s_v3"|"Standard_E32-16s_v3"|"Standard_E32-8s_v3"|"Standard_E32_v3"|"Standard_E32s_v3"|"Standard_E4_v3"|"Standard_E4s_v3"|"Standard_E64-16s_v3"|"Standard_E64-32s_v3"|"Standard_E64_v3"|"Standard_E64s_v3"|"Standard_E8_v3"|"Standard_E8s_v3"|"Standard_F1"|"Standard_F16"|"Standard_F16s"|"Standard_F16s_v2"|"Standard_F1s"|"Standard_F2"|"Standard_F2s"|"Standard_F2s_v2"|"Standard_F32s_v2"|"Standard_F4"|"Standard_F4s"|"Standard_F4s_v2"|"Standard_F64s_v2"|"Standard_F72s_v2"|"Standard_F8"|"Standard_F8s"|"Standard_F8s_v2"|"Standard_G1"|"Standard_G2"|"Standard_G3"|"Standard_G4"|"Standard_G5"|"Standard_GS1"|"Standard_GS2"|"Standard_GS3"|"Standard_GS4"|"Standard_GS4-4"|"Standard_GS4-8"|"Standard_GS5"|"Standard_GS5-16"|"Standard_GS5-8"|"Standard_H16"|"Standard_H16m"|"Standard_H16mr"|"Standard_H16r"|"Standard_H8"|"Standard_H8m"|"Standard_L16s"|"Standard_L32s"|"Standard_L4s"|"Standard_L8s"|"Standard_M128-32ms"|"Standard_M128-64ms"|"Standard_M128ms"|"Standard_M128s"|"Standard_M64-16ms"|"Standard_M64-32ms"|"Standard_M64ms"|"Standard_M64s"|"Standard_NC12"|"Standard_NC12s_v2"|"Standard_NC12s_v3"|"Standard_NC24"|"Standard_NC24r"|"Standard_NC24rs_v2"|"Standard_NC24rs_v3"|"Standard_NC24s_v2"|"Standard_NC24s_v3"|"Standard_NC6"|"Standard_NC6s_v2"|"Standard_NC6s_v3"|"Standard_ND12s"|"Standard_ND24rs"|"Standard_ND24s"|"Standard_ND6s"|"Standard_NV12"|"Standard_NV24"|"Standard_NV6", vnetSubnetID?: string}
 ]: any -> record<id: string, name: string, type: string, properties: record<availabilityZones: list<string>, count: int, enableAutoScaling: bool, enableNodePublicIP: bool, maxCount: int, maxPods: int, minCount: int, nodeTaints: list<string>, orchestratorVersion: string, osDiskSizeGB: int, osType: string, provisioningState: string, scaleSetEvictionPolicy: string, scaleSetPriority: string, type: string, vmSize: string, vnetSubnetID: string>> {
@@ -413,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets upgrade profile for an agent pool.
@@ -432,6 +445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, name: string, properties: record<kubernetesVersion: string, osType: string, upgrades: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -440,7 +454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/agentPools/($agentPoolName)/upgradeProfiles/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of supported versions for the specified agent pool.
@@ -458,6 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, name: string, properties: record<agentPoolVersions: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -466,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/availableAgentPoolVersions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets cluster admin credential of a managed cluster.
@@ -484,6 +499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<kubeconfigs: table<name: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -492,7 +508,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/listClusterAdminCredential" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets cluster user credential of a managed cluster.
@@ -510,6 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<kubeconfigs: table<name: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -518,7 +535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/listClusterUserCredential" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset AAD Profile of a managed cluster.
@@ -536,6 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   clientAppID: string # The client AAD application ID.
   serverAppID: string # The server AAD application ID.
@@ -551,7 +569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset Service Principal Profile of a managed cluster.
@@ -569,6 +587,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   clientId: string # The ID for the service principal.
   --secret: string # The secret password associated with the service principal in plain text.
@@ -582,7 +601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotate certificates of a managed cluster.
@@ -600,6 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -608,7 +628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/rotateClusterCertificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets upgrade profile for a managed cluster.
@@ -626,6 +646,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<id: string, name: string, properties: record<agentPoolProfiles: list<record>, controlPlaneProfile: record<kubernetesVersion: string, name: string, osType: string, upgrades: list>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -634,5 +655,5 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerService/managedClusters/($resourceName)/upgradeProfiles/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

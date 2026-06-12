@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def overrideOriginProtocol-completer [] { ["HTTP" "HTTPS" "MATCH"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "cdn-public-ip-list get-cdn-servers-ip-addresses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "cdn-public-ip-list get-cdn-servers-ip-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Optional format override. When set, this takes precedence over the `Accept` header.
   --Accept: string@Accept-completer # Content negotiation header. Defaults to `application/json` if not provided.
@@ -121,7 +123,7 @@ export def "cdn-public-ip-list get-cdn-servers-ip-addresses" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN servers networks
@@ -136,6 +138,7 @@ export def "cdn-public-net-list get-cdn-servers-networks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Optional format override. When set, this takes precedence over the `Accept` header.
   --Accept: string@Accept-completer # Content negotiation header. Defaults to `application/json` if not provided.
@@ -148,7 +151,7 @@ export def "cdn-public-net-list get-cdn-servers-networks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN service details
@@ -163,13 +166,14 @@ export def "cdn-clients-me get-cdn-service-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, created: string, updated: string, service: record<enabled: bool, status: string, updated: string>, utilization_level: int, cname: string, use_balancer: bool, auto_suspend_enabled: bool, cdn_resources_rules_max_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/clients/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change CDN service
@@ -184,6 +188,7 @@ export def "cdn-clients-me change-cdn-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --utilization-level: int # CDN traffic usage limit in gigabytes.  When the limit is reached, we will send an email notification. (e.g. 1111)
 ]: any -> record<id: int, created: string, updated: string, service: record<enabled: bool, status: string, updated: string>, utilization_level: int, cname: string, use_balancer: bool, auto_suspend_enabled: bool, cdn_resources_rules_max_count: int> {
   let input = $in
@@ -194,7 +199,7 @@ export def "cdn-clients-me change-cdn-service" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change CDN service
@@ -209,6 +214,7 @@ export def "cdn-clients-me patch-cdn-service" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --utilization-level: int # CDN traffic usage limit in gigabytes.  When the limit is reached, we will send an email notification. (e.g. 1111)
 ]: any -> record<id: int, created: string, updated: string, service: record<enabled: bool, status: string, updated: string>, utilization_level: int, cname: string, use_balancer: bool, auto_suspend_enabled: bool, cdn_resources_rules_max_count: int> {
   let input = $in
@@ -219,7 +225,7 @@ export def "cdn-clients-me patch-cdn-service" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get CDN features details
@@ -234,13 +240,14 @@ export def "cdn-clients-me-features get-cdn-features-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, paid_features: table<feature_id: int, name: string, paid_feature_id: int, create_date: string>, free_features: table<feature_id: int, name: string, free_feature_id: int, create_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/clients/me/features")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN limits details
@@ -255,13 +262,14 @@ export def "cdn-clients-me-limits get-cdn-limits-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, resources_limit: int, rules_limit: int, origins_in_group_limit: int, secondary_hostnames_limit: int, purge_pattern_limit: int, purge_max_urls_limit: int, purge_request_limit: string, purge_by_urls_request_limit: string, prefetch_pattern_limit: int, prefetch_request_limit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/clients/me/limits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get origin groups list
@@ -276,6 +284,7 @@ export def "cdn-origin-groups get-origin-groups-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Origin group name.
   --sources: string # Origin sources (IP addresses or domains) in the origin group.
   --has-related-resources: oneof<nothing, bool> # Defines whether the origin group has related CDN resources.  Possible values: - **true** – Origin group has related CDN resources. - **false** – Origin group does not have related CDN resources.
@@ -288,7 +297,7 @@ export def "cdn-origin-groups get-origin-groups-list" [
   let full_url = (build-url $base "/cdn/origin_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create origin group
@@ -306,6 +315,7 @@ export def "cdn-origin-groups create-origin-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Origin group name. (e.g. YourOriginGroup)
   --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
@@ -321,7 +331,7 @@ export def "cdn-origin-groups create-origin-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get origin group details
@@ -337,13 +347,14 @@ export def "cdn-origin-groups get-origin-group-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/origin_groups/($origin_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change origin group
@@ -363,6 +374,7 @@ export def "cdn-origin-groups change-origin-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Origin group name. (e.g. YourOriginGroup)
   --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
@@ -379,7 +391,7 @@ export def "cdn-origin-groups change-origin-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change origin group
@@ -399,6 +411,7 @@ export def "cdn-origin-groups patch-origin-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Origin group name. (e.g. YourOriginGroup)
   --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
@@ -415,7 +428,7 @@ export def "cdn-origin-groups patch-origin-group" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete origin group
@@ -431,13 +444,14 @@ export def "cdn-origin-groups delete-origin-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/origin_groups/($origin_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN resources list
@@ -452,6 +466,7 @@ export def "cdn-resources get-cdn-resources-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleted: oneof<nothing, bool> # Defines whether a CDN resource has been deleted.  Possible values: - **true** - CDN resource has been deleted. - **false** - CDN resource has not been deleted.
   --enabled: oneof<nothing, bool> # Enables or disables a CDN resource change by a user.  Possible values: - **true** - CDN resource is enabled. - **false** - CDN resource is disabled.
   --originGroup: int # Origin group ID.
@@ -477,7 +492,7 @@ export def "cdn-resources get-cdn-resources-list" [
   let full_url = (build-url $base "/cdn/resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create CDN resource
@@ -493,6 +508,7 @@ export def "cdn-resources create-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cname: string # Delivery domains that will be used for content delivery through a CDN.  Delivery domains should be added to your DNS settings. (e.g. cdn.site.com)
   --originGroup: int # Origin group ID with which the CDN resource is associated.  Exactly one of `origin` or `originGroup` must be provided during resource creation. (e.g. 132)
   --origin: string # IP address or domain name of the origin and the port, if custom port is used.  Exactly one of `origin` or `originGroup` must be provided during resource creation. (e.g. example.com)
@@ -518,7 +534,7 @@ export def "cdn-resources create-cdn-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get CDN resource details
@@ -534,13 +550,14 @@ export def "cdn-resources get-cdn-resource-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, cname: string, active: bool, enabled: bool, status: string, deleted: bool, client: int, name: string, description: string, created: string, updated: string, originGroup: int, originGroup_name: string, originProtocol: string, secondaryHostnames: list<string>, shielded: bool, shield_dc: string, shield_enabled: bool, shield_routing_map: int, sslEnabled: bool, sslData: int, proxy_ssl_enabled: bool, proxy_ssl_ca: int, proxy_ssl_data: int, preset_applied: bool, vp_enabled: bool, full_custom_enabled: bool, can_purge_by_urls: bool, suspend_date: string, suspended: bool, primary_resource: int, is_primary: bool, waap_domain_id: string, rules: list<record>, options: record<allowedHttpMethods: record<enabled: bool, value: list>, brotli_compression: record<enabled: bool, value: list>, browser_cache_settings: record<enabled: bool, value: string>, cache_http_headers: record<enabled: bool, value: list>, cors: record<enabled: bool, value: list, always: bool>, country_acl: record<enabled: bool, policy_type: string, excepted_values: list>, disable_cache: record<enabled: bool, value: bool>, disable_proxy_force_ranges: record<enabled: bool, value: bool>, edge_cache_settings: record<enabled: bool, value: string, custom_values: record, default: string>, fastedge: record<enabled: bool, on_request_headers: record, on_request_headers_after_cache: record, on_request_body: record, on_response_headers: record, on_response_body: record>, fetch_compressed: record<enabled: bool, value: bool>, follow_origin_redirect: record<enabled: bool, codes: list>, force_return: record<enabled: bool, code: int, body: string, time_interval: record>, forward_host_header: record<enabled: bool, value: bool>, grpc_passthrough: record<enabled: bool, value: bool>, gzipOn: record<enabled: bool, value: bool>, hostHeader: record<enabled: bool, value: string>, http3_enabled: record<enabled: bool, value: bool>, ignore_cookie: record<enabled: bool, value: bool>, ignoreQueryString: record<enabled: bool, value: bool>, image_stack: record<enabled: bool, avif_enabled: bool, webp_enabled: bool, quality: int, png_lossless: bool>, ip_address_acl: record<enabled: bool, policy_type: string, excepted_values: list>, limit_bandwidth: record<enabled: bool, limit_type: string, speed: int, buffer: int>, network_error_logging: record<enabled: bool, value: bool>, proxy_cache_key: record<enabled: bool, value: string>, proxy_cache_methods_set: record<enabled: bool, value: bool>, proxy_connect_timeout: record<enabled: bool, value: string>, proxy_read_timeout: record<enabled: bool, value: string>, query_params_blacklist: record<enabled: bool, value: list>, query_params_whitelist: record<enabled: bool, value: list>, query_string_forwarding: record<enabled: bool, forward_from_file_types: list, forward_to_file_types: list, forward_only_keys: list, forward_except_keys: list>, redirect_http_to_https: record<enabled: bool, value: bool>, redirect_https_to_http: record<enabled: bool, value: bool>, referrer_acl: record<enabled: bool, policy_type: string, excepted_values: list>, response_headers_hiding_policy: record<enabled: bool, mode: string, excepted: list>, rewrite: record<enabled: bool, flag: string, body: string>, secure_key: record<enabled: bool, key: string, type: int>, slice: record<enabled: bool, value: bool>, sni: record<enabled: bool, sni_type: string, custom_hostname: string>, stale: record<enabled: bool, value: list>, static_response_headers: record<enabled: bool, value: list>, staticHeaders: record<enabled: bool, value: record>, staticRequestHeaders: record<enabled: bool, value: record>, tls_versions: record<enabled: bool, value: list>, use_default_le_chain: record<enabled: bool, value: bool>, use_dns01_le_challenge: record<enabled: bool, value: bool>, use_rsa_le_cert: record<enabled: bool, value: bool>, user_agent_acl: record<enabled: bool, policy_type: string, excepted_values: list>, waap: record<enabled: bool, value: bool>, websockets: record<enabled: bool, value: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change CDN resource
@@ -557,6 +574,7 @@ export def "cdn-resources change-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
   --name: string # CDN resource name. (nullable, e.g. Resource for images)
   --description: string # Optional comment describing the CDN resource. (e.g. My resource)
@@ -579,7 +597,7 @@ export def "cdn-resources change-cdn-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change CDN resource
@@ -596,6 +614,7 @@ export def "cdn-resources patch-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
   --name: string # CDN resource name. (nullable, e.g. Resource for images)
   --description: string # Optional comment describing the CDN resource. (e.g. My resource)
@@ -617,7 +636,7 @@ export def "cdn-resources patch-cdn-resource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete CDN resource
@@ -633,13 +652,14 @@ export def "cdn-resources delete-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN activity logs
@@ -654,6 +674,7 @@ export def "cdn-activity-log-requests get-activity-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # Exact URL path.
   --user-id: int # User ID.
   --token-id: int # Permanent API token ID. Requests made with this token should be displayed.
@@ -672,7 +693,7 @@ export def "cdn-activity-log-requests get-activity-logs" [
   let full_url = (build-url $base "/cdn/activity_log/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN activity logs details
@@ -688,13 +709,14 @@ export def "cdn-activity-log-requests get-activity-logs-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/activity_log/requests/($log_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN logs
@@ -709,6 +731,7 @@ export def "cdn-advanced-logs get-cdn-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date and time of the requested time period (ISO 8601/RFC 3339 format, UTC.)  Difference between "from" and "to" cannot exceed 6 hours.  Examples: - &from=2021-06-14T00:00:00Z - &from=2021-06-14T00:00:00.000Z
   --qp-to: string # End date and time of the requested time period (ISO 8601/RFC 3339 format, UTC.)  Difference between "from" and "to" cannot exceed 6 hours.  Examples: - &to=2021-06-15T00:00:00Z - &to=2021-06-15T00:00:00.000Z
   --offset: int # Number of log records to skip starting from the beginning of the requested period. (default: 0)
@@ -767,7 +790,7 @@ export def "cdn-advanced-logs get-cdn-logs" [
   let full_url = (build-url $base "/cdn/advanced/v1/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download CDN logs
@@ -782,6 +805,7 @@ export def "cdn-advanced-logs-download download-cdn-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Start date and time of the requested time period (ISO 8601/RFC 3339 format, UTC.)  Difference between "from" and "to" cannot exceed 6 hours.  Examples: - &from=2021-06-14T00:00:00Z - &from=2021-06-14T00:00:00.000Z
   --qp-to: string # End date and time of the requested time period (ISO 8601/RFC 3339 format, UTC.)  Difference between "from" and "to" cannot exceed 6 hours.  Examples: - &to=2021-06-15T00:00:00Z - &to=2021-06-15T00:00:00.000Z
   --offset: int # Number of log records to skip starting from the beginning of the requested period. (default: 0)
@@ -841,7 +865,7 @@ export def "cdn-advanced-logs-download download-cdn-logs" [
   let full_url = (build-url $base "/cdn/advanced/v1/logs/download" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get policies list
@@ -856,6 +880,7 @@ export def "cdn-logs-uploader-policies get-policies-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search by policy name or id.
   --config-ids: list # Filter by ids of related logs uploader configs that use given policy.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
@@ -867,7 +892,7 @@ export def "cdn-logs-uploader-policies get-policies-list" [
   let full_url = (build-url $base "/cdn/logs_uploader/policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create policy
@@ -882,6 +907,7 @@ export def "cdn-logs-uploader-policies create-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload. (default: false)
   --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload. (default: false)
   --name: string # Name of the policy. (default: Policy)
@@ -908,7 +934,7 @@ export def "cdn-logs-uploader-policies create-policy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get policy details
@@ -924,13 +950,14 @@ export def "cdn-logs-uploader-policies get-policy-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, client_id: int, created: string, updated: string, include_empty_logs: bool, include_shield_logs: bool, name: string, description: string, retry_interval_minutes: int, rotate_interval_minutes: int, rotate_threshold_mb: int, rotate_threshold_lines: int, date_format: string, field_delimiter: string, field_separator: string, fields: list<string>, file_name_template: string, format_type: string, tags: record, escape_special_characters: bool, log_sample_rate: float, related_uploader_configs: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change policy
@@ -946,6 +973,7 @@ export def "cdn-logs-uploader-policies change-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload. (default: false)
   --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload. (default: false)
   --name: string # Name of the policy. (default: Policy)
@@ -972,7 +1000,7 @@ export def "cdn-logs-uploader-policies change-policy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change policy
@@ -988,6 +1016,7 @@ export def "cdn-logs-uploader-policies patch-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload.
   --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload.
   --name: string # Name of the policy.
@@ -1014,7 +1043,7 @@ export def "cdn-logs-uploader-policies patch-policy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete policy
@@ -1030,13 +1059,14 @@ export def "cdn-logs-uploader-policies delete-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get policy fields
@@ -1051,13 +1081,14 @@ export def "cdn-logs-uploader-policies-fields get-policy-fields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/logs_uploader/policies/fields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get targets list
@@ -1072,6 +1103,7 @@ export def "cdn-logs-uploader-targets get-targets-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search by target name or id.
   --config-ids: list # Filter by ids of related logs uploader configs that use given target.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
@@ -1083,7 +1115,7 @@ export def "cdn-logs-uploader-targets get-targets-list" [
   let full_url = (build-url $base "/cdn/logs_uploader/targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create target
@@ -1098,6 +1130,7 @@ export def "cdn-logs-uploader-targets create-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   storage_type: string@storage-type-completer # Type of storage for logs.
   --name: string # Name of the target. (default: Target)
   --description: string # Description of the target.
@@ -1111,7 +1144,7 @@ export def "cdn-logs-uploader-targets create-target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get target details
@@ -1127,13 +1160,14 @@ export def "cdn-logs-uploader-targets get-target-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, client_id: int, created: string, updated: string, storage_type: string, name: string, description: string, related_uploader_configs: list<int>, status: record<status: string, code: int, updated: string, details: string>, config: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/targets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change target
@@ -1149,6 +1183,7 @@ export def "cdn-logs-uploader-targets change-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   storage_type: string@storage-type-completer # Type of storage for logs.
   --name: string # Name of the target. (default: Target)
   --description: string # Description of the target.
@@ -1162,7 +1197,7 @@ export def "cdn-logs-uploader-targets change-target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change target
@@ -1178,6 +1213,7 @@ export def "cdn-logs-uploader-targets patch-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storage-type: string@storage-type-completer # Type of storage for logs.
   --name: string # Name of the target.
   --description: string # Description of the target.
@@ -1191,7 +1227,7 @@ export def "cdn-logs-uploader-targets patch-target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete target
@@ -1207,13 +1243,14 @@ export def "cdn-logs-uploader-targets delete-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/targets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate target
@@ -1229,13 +1266,14 @@ export def "cdn-logs-uploader-targets-validate validate-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, code: int, updated: string, details: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/targets/($id)/validate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get configs list
@@ -1250,6 +1288,7 @@ export def "cdn-logs-uploader-configs get-configs-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search by config name or id.
   --resource-ids: list # Filter by ids of CDN resources that are assigned to given config.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
@@ -1261,7 +1300,7 @@ export def "cdn-logs-uploader-configs get-configs-list" [
   let full_url = (build-url $base "/cdn/logs_uploader/configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create config
@@ -1276,6 +1315,7 @@ export def "cdn-logs-uploader-configs create-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Enables or disables the config. (default: true)
   name: string # Name of the config.
   policy: int # ID of the policy that should be assigned to given config.
@@ -1291,7 +1331,7 @@ export def "cdn-logs-uploader-configs create-config" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get config details
@@ -1307,13 +1347,14 @@ export def "cdn-logs-uploader-configs get-config-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, client_id: int, created: string, updated: string, enabled: bool, name: string, policy: int, target: int, for_all_resources: bool, resources: list<int>, status: record<status: string, code: int, updated: string, details: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/configs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change config
@@ -1329,6 +1370,7 @@ export def "cdn-logs-uploader-configs change-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Enables or disables the config. (default: true)
   name: string # Name of the config.
   policy: int # ID of the policy that should be assigned to given config.
@@ -1344,7 +1386,7 @@ export def "cdn-logs-uploader-configs change-config" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change config
@@ -1360,6 +1402,7 @@ export def "cdn-logs-uploader-configs patch-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Enables or disables the config.
   --name: string # Name of the config.
   --policy: int # ID of the policy that should be assigned to given config.
@@ -1375,7 +1418,7 @@ export def "cdn-logs-uploader-configs patch-config" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete config
@@ -1391,13 +1434,14 @@ export def "cdn-logs-uploader-configs delete-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/configs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate config
@@ -1413,13 +1457,14 @@ export def "cdn-logs-uploader-configs-validate validate-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, code: int, updated: string, details: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/logs_uploader/configs/($id)/validate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get AWS regions list
@@ -1434,6 +1479,7 @@ export def "cdn-aws-regions get-aws-regions-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -1443,7 +1489,7 @@ export def "cdn-aws-regions get-aws-regions-list" [
   let full_url = (build-url $base "/cdn/aws_regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Alibaba regions list
@@ -1458,6 +1504,7 @@ export def "cdn-alibaba-regions get-alibaba-regions-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -1467,7 +1514,7 @@ export def "cdn-alibaba-regions get-alibaba-regions-list" [
   let full_url = (build-url $base "/cdn/alibaba_regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Prefetch content
@@ -1483,6 +1530,7 @@ export def "cdn-resources-prefetch prefetch-content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   paths: list # Paths to files that should be pre-populated to the CDN.  Paths to the files should be specified without a domain name. (e.g. [/test.jpg, test1.jpg])
 ]: any -> any {
   let input = $in
@@ -1493,7 +1541,7 @@ export def "cdn-resources-prefetch prefetch-content" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge cache
@@ -1509,6 +1557,7 @@ export def "cdn-resources-purge purge-cache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --urls: list # **Purge by URL** clears the cache of a specific files. This purge type is recommended.  Specify file URLs including query strings. URLs should start with / without a domain name.  Purge by URL depends on the following CDN options:  1. "vary response header" is used. If your origin serves variants of the same content depending on the Vary HTTP response header, purge by URL will delete only one version of the file. 2. "slice" is used. If you update several files in the origin without clearing the CDN cache, purge by URL will delete only the first slice (with bytes=0… .) 3. "ignoreQueryString" is used. Don’t specify parameters in the purge request. 4. "query_params_blacklist" is used. Only files with the listed in the option parameters will be cached as different objects. Files with other parameters will be cached as one object. In this case, specify the listed parameters in the Purge request. Don't specify other parameters. 5. "query_params_whitelist" is used. Files with listed in the option parameters will be cached as one object. Files with other parameters will be cached as different objects. In this case, specify other parameters (if any) besides the ones listed in the purge request.
   --paths: list # **Purge by pattern** clears the cache that matches the pattern.  Use * operator, which replaces any number of symbols in your path. It's important to note that wildcard usage (*) is permitted only at the end of a pattern.  Query string added to any patterns will be ignored, and purge request will be processed as if there weren't any parameters.  Purge by pattern is recursive. Both /path and /path* will result in recursive purging, meaning all content under the specified path will be affected. As such, using the pattern /path* is functionally equivalent to simply using /path.
 ]: any -> any {
@@ -1520,7 +1569,7 @@ export def "cdn-resources-purge purge-cache" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rules list
@@ -1536,6 +1585,7 @@ export def "cdn-resources-rules get-rules-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -1545,7 +1595,7 @@ export def "cdn-resources-rules get-rules-list" [
   let full_url = (build-url $base $"/cdn/resources/($resource_id)/rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create rule
@@ -1562,6 +1612,7 @@ export def "cdn-resources-rules create-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Rule name. (e.g. My first rule)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1579,7 +1630,7 @@ export def "cdn-resources-rules create-rule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rule details
@@ -1596,13 +1647,14 @@ export def "cdn-resources-rules get-rule-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, active: bool, deleted: bool, originGroup: int, rule: string, ruleType: int, weight: int, originProtocol: string, overrideOriginProtocol: string, preset_applied: bool, primary_rule: int, options: record<allowedHttpMethods: record<enabled: bool, value: list>, brotli_compression: record<enabled: bool, value: list>, browser_cache_settings: record<enabled: bool, value: string>, cache_http_headers: record<enabled: bool, value: list>, cors: record<enabled: bool, value: list, always: bool>, country_acl: record<enabled: bool, policy_type: string, excepted_values: list>, disable_cache: record<enabled: bool, value: bool>, disable_proxy_force_ranges: record<enabled: bool, value: bool>, edge_cache_settings: record<enabled: bool, value: string, custom_values: record, default: string>, fastedge: record<enabled: bool, on_request_headers: record, on_request_headers_after_cache: record, on_request_body: record, on_response_headers: record, on_response_body: record>, fetch_compressed: record<enabled: bool, value: bool>, follow_origin_redirect: record<enabled: bool, codes: list>, force_return: record<enabled: bool, code: int, body: string, time_interval: record>, forward_host_header: record<enabled: bool, value: bool>, gzipOn: record<enabled: bool, value: bool>, hostHeader: record<enabled: bool, value: string>, ignore_cookie: record<enabled: bool, value: bool>, ignoreQueryString: record<enabled: bool, value: bool>, image_stack: record<enabled: bool, avif_enabled: bool, webp_enabled: bool, quality: int, png_lossless: bool>, ip_address_acl: record<enabled: bool, policy_type: string, excepted_values: list>, limit_bandwidth: record<enabled: bool, limit_type: string, speed: int, buffer: int>, proxy_cache_key: record<enabled: bool, value: string>, proxy_cache_methods_set: record<enabled: bool, value: bool>, proxy_connect_timeout: record<enabled: bool, value: string>, proxy_read_timeout: record<enabled: bool, value: string>, query_params_blacklist: record<enabled: bool, value: list>, query_params_whitelist: record<enabled: bool, value: list>, query_string_forwarding: record<enabled: bool, forward_from_file_types: list, forward_to_file_types: list, forward_only_keys: list, forward_except_keys: list>, redirect_http_to_https: record<enabled: bool, value: bool>, redirect_https_to_http: record<enabled: bool, value: bool>, referrer_acl: record<enabled: bool, policy_type: string, excepted_values: list>, response_headers_hiding_policy: record<enabled: bool, mode: string, excepted: list>, rewrite: record<enabled: bool, flag: string, body: string>, secure_key: record<enabled: bool, key: string, type: int>, slice: record<enabled: bool, value: bool>, sni: record<enabled: bool, sni_type: string, custom_hostname: string>, stale: record<enabled: bool, value: list>, static_response_headers: record<enabled: bool, value: list>, staticHeaders: record<enabled: bool, value: record>, staticRequestHeaders: record<enabled: bool, value: record>, user_agent_acl: record<enabled: bool, policy_type: string, excepted_values: list>, waap: record<enabled: bool, value: bool>, websockets: record<enabled: bool, value: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)/rules/($rule_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change rule
@@ -1620,6 +1672,7 @@ export def "cdn-resources-rules change-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
   --name: string # Rule name. (e.g. My first rule)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
@@ -1637,7 +1690,7 @@ export def "cdn-resources-rules change-rule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change rule
@@ -1655,6 +1708,7 @@ export def "cdn-resources-rules patch-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
   --name: string # Rule name. (e.g. My first rule)
   --rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
@@ -1672,7 +1726,7 @@ export def "cdn-resources-rules patch-rule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete rule
@@ -1689,13 +1743,14 @@ export def "cdn-resources-rules delete-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)/rules/($rule_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rule templates list
@@ -1710,6 +1765,7 @@ export def "cdn-resources-rule-templates get-rule-templates-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -1719,7 +1775,7 @@ export def "cdn-resources-rule-templates get-rule-templates-list" [
   let full_url = (build-url $base "/cdn/resources/rule_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create rule template
@@ -1735,6 +1791,7 @@ export def "cdn-resources-rule-templates create-rule-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Rule template name. (e.g. All images template)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1750,7 +1807,7 @@ export def "cdn-resources-rule-templates create-rule-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rule template details
@@ -1766,13 +1823,14 @@ export def "cdn-resources-rule-templates get-rule-template-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, client: int, deleted: bool, rule: string, ruleType: int, weight: int, template: bool, default: bool, overrideOriginProtocol: string, options: record<allowedHttpMethods: record<enabled: bool, value: list>, brotli_compression: record<enabled: bool, value: list>, browser_cache_settings: record<enabled: bool, value: string>, cache_http_headers: record<enabled: bool, value: list>, cors: record<enabled: bool, value: list, always: bool>, country_acl: record<enabled: bool, policy_type: string, excepted_values: list>, disable_cache: record<enabled: bool, value: bool>, disable_proxy_force_ranges: record<enabled: bool, value: bool>, edge_cache_settings: record<enabled: bool, value: string, custom_values: record, default: string>, fastedge: record<enabled: bool, on_request_headers: record, on_request_headers_after_cache: record, on_request_body: record, on_response_headers: record, on_response_body: record>, fetch_compressed: record<enabled: bool, value: bool>, follow_origin_redirect: record<enabled: bool, codes: list>, force_return: record<enabled: bool, code: int, body: string, time_interval: record>, forward_host_header: record<enabled: bool, value: bool>, gzipOn: record<enabled: bool, value: bool>, hostHeader: record<enabled: bool, value: string>, ignore_cookie: record<enabled: bool, value: bool>, ignoreQueryString: record<enabled: bool, value: bool>, image_stack: record<enabled: bool, avif_enabled: bool, webp_enabled: bool, quality: int, png_lossless: bool>, ip_address_acl: record<enabled: bool, policy_type: string, excepted_values: list>, limit_bandwidth: record<enabled: bool, limit_type: string, speed: int, buffer: int>, proxy_cache_key: record<enabled: bool, value: string>, proxy_cache_methods_set: record<enabled: bool, value: bool>, proxy_connect_timeout: record<enabled: bool, value: string>, proxy_read_timeout: record<enabled: bool, value: string>, query_params_blacklist: record<enabled: bool, value: list>, query_params_whitelist: record<enabled: bool, value: list>, query_string_forwarding: record<enabled: bool, forward_from_file_types: list, forward_to_file_types: list, forward_only_keys: list, forward_except_keys: list>, redirect_http_to_https: record<enabled: bool, value: bool>, redirect_https_to_http: record<enabled: bool, value: bool>, referrer_acl: record<enabled: bool, policy_type: string, excepted_values: list>, response_headers_hiding_policy: record<enabled: bool, mode: string, excepted: list>, rewrite: record<enabled: bool, flag: string, body: string>, secure_key: record<enabled: bool, key: string, type: int>, slice: record<enabled: bool, value: bool>, sni: record<enabled: bool, sni_type: string, custom_hostname: string>, stale: record<enabled: bool, value: list>, static_response_headers: record<enabled: bool, value: list>, staticHeaders: record<enabled: bool, value: record>, staticRequestHeaders: record<enabled: bool, value: record>, user_agent_acl: record<enabled: bool, policy_type: string, excepted_values: list>, waap: record<enabled: bool, value: bool>, websockets: record<enabled: bool, value: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/rule_templates/($rule_template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change rule template
@@ -1789,6 +1847,7 @@ export def "cdn-resources-rule-templates change-rule-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Rule template name. (e.g. All images template)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1804,7 +1863,7 @@ export def "cdn-resources-rule-templates change-rule-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change rule template
@@ -1821,6 +1880,7 @@ export def "cdn-resources-rule-templates patch-rule-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Rule template name. (e.g. All images template)
   --rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   --ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1836,7 +1896,7 @@ export def "cdn-resources-rule-templates patch-rule-template" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete rule template
@@ -1852,13 +1912,14 @@ export def "cdn-resources-rule-templates delete-rule-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/rule_templates/($rule_template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get purges history list
@@ -1873,6 +1934,7 @@ export def "cdn-purge-statuses get-purge-status-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cname: string # Purges associated with a specific resource CNAME.  Example: - &cname=example.com
   --status: string
   --purge-type: string
@@ -1887,7 +1949,7 @@ export def "cdn-purge-statuses get-purge-status-list" [
   let full_url = (build-url $base "/cdn/purge_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSL certificates list
@@ -1902,6 +1964,7 @@ export def "cdn-ssl-data get-ssl-certificates-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automated: oneof<nothing, bool> # How the SSL certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
   --validity-not-after-lte: string # Date and time when the certificate become untrusted (ISO 8601/RFC 3339 format, UTC.)  Response will contain only certificates valid until the specified time.
   --resource-id: int # CDN resource ID for which certificates are requested.
@@ -1914,7 +1977,7 @@ export def "cdn-ssl-data get-ssl-certificates-list" [
   let full_url = (build-url $base "/cdn/sslData" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add SSL certificate
@@ -1929,6 +1992,7 @@ export def "cdn-ssl-data add-ssl-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # SSL certificate name.  It must be unique. (e.g. New certificate)
   --sslCertificate: string # Public part of the SSL certificate.  All chain of the SSL certificate should be added. (e.g. -----BEGIN CERTIFICATE----- MIIFWzCCBEOgAwIBAgISBK6qoNitg//89H/YJamujpWlMA0GCSqGSIb3DQEBCwUA MEoxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MSMwIQYDVQQD ExpMZXQncyBFbmNyeXB0IEF1dGhvcml0eSBYMzAeFw0xODExMTMxMjQwMDJaFw0x OTAyMTExMjQwMDJaMBwxGjAYBgNVBAMTEWNkbjIudG50LWNsdWIuY29tMIIBIjAN BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzaHExDEXNSf6ELS0WUR7qq8gs9cc xx99sM2zs3Jld0twPmuldkVNe5xte/Hj03r4SesfOBczR7pn+t60YujPvUQDN8lx WYpvRuetOneyf4gNPatwzR/W1GWGlahet1xPVYGrttqL4gCJeShIXvU4aCyzW941 Pt0wCs+bg9u+59fXFkigWrWJPkwbR7bJ14XTStYynMbYLfCg+VPeGWj3d8wOhQcf AD86o8TLTbVfK2BDXwS5S8Dgf5u8g+WvmVHYDIkYKCxcLj0jP61Y7uHoFbSg41oN A9yPOa+0cYxA7U702V2WjxbfIeATYtNLZvH17lk+DYlQl8q3MLwguqZdgwIDAQAB iIqI2xquGONtHFDOKJvy1O2qYTVRtNRVZqhc1ol+mw== -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/ MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT DkRTVCBSb290IENBIFgzMB4XDTE2MDMxNzE2NDA0NloXDTIxMDMxNzE2NDA0Nlow SjELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUxldCdzIEVuY3J5cHQxIzAhBgNVBAMT GkxldCdzIEVuY3J5cHQgQXV0aG9yaXR5IFgzMIIBIjANBgkqhkiG9w0BAQEFAAOC AQ8AMIIBCgKCAQEAnNMM8FrlLke3cl03g7NoYzDq1zUmGSXhvb418XCSL7e4S0EF q6meNQhY7LEqxGiHC6PjdeTm86dicbp5gWAf15Gan/PQeGdxyGkOlZHP/uaZ6WA8 SMx+yk13EiSdRxta67nsHjcAHJyse6cF6s5K671B5TaYucv9bTyWaN8jKkKQDIZ0 KOqkqm57TH2H3eDJAkSnh6/DNFu0Qg== -----END CERTIFICATE----- )
   --sslPrivateKey: string # Private key of the SSL certificate. (e.g. -----BEGIN PRIVATE KEY----- MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZcNCZiNNHfX2O dZpf12mv2rAZwqGZBAdpox0wntEPK3JciQ7ZRloLJeHuCNIJs9MidnH7Xk8zveju mab6HmfIzvMJAAm88OYWMFQRiYe1ggJEHMe7yYPQbtXwTqWDYdWmjPPma3Ujqqmb hmVX2rsYILD7cUjS+e0Ucfqx3QODQj/aujTt1rS0gFhJ0soY5m+C6VimPCx4Bjyw 5rhtskJDRrfXxrIhVXOvSPFRyxDSfjt3win8vjhhZ3oFPWgrl9lVhn0zaB5hjDsd -----END PRIVATE KEY----- )
@@ -1943,7 +2007,7 @@ export def "cdn-ssl-data add-ssl-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SSL certificate details
@@ -1959,13 +2023,14 @@ export def "cdn-ssl-data get-ssl-certificate-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, deleted: bool, cert_issuer: string, cert_subject_cn: string, cert_subject_alt: string, validity_not_before: string, validity_not_after: string, sslCertificateChain: string, hasRelatedResources: bool, name: string, automated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslData/($ssl_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change SSL certificate
@@ -1981,6 +2046,7 @@ export def "cdn-ssl-data change-ssl-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # SSL certificate name.  It must be unique. (e.g. New certificate)
   sslCertificate: string # Public part of the SSL certificate.  All chain of the SSL certificate should be added. (e.g. -----BEGIN CERTIFICATE----- MIIFWzCCBEOgAwIBAgISBK6qoNitg//89H/YJamujpWlMA0GCSqGSIb3DQEBCwUA MEoxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MSMwIQYDVQQD ExpMZXQncyBFbmNyeXB0IEF1dGhvcml0eSBYMzAeFw0xODExMTMxMjQwMDJaFw0x OTAyMTExMjQwMDJaMBwxGjAYBgNVBAMTEWNkbjIudG50LWNsdWIuY29tMIIBIjAN BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzaHExDEXNSf6ELS0WUR7qq8gs9cc xx99sM2zs3Jld0twPmuldkVNe5xte/Hj03r4SesfOBczR7pn+t60YujPvUQDN8lx WYpvRuetOneyf4gNPatwzR/W1GWGlahet1xPVYGrttqL4gCJeShIXvU4aCyzW941 Pt0wCs+bg9u+59fXFkigWrWJPkwbR7bJ14XTStYynMbYLfCg+VPeGWj3d8wOhQcf AD86o8TLTbVfK2BDXwS5S8Dgf5u8g+WvmVHYDIkYKCxcLj0jP61Y7uHoFbSg41oN A9yPOa+0cYxA7U702V2WjxbfIeATYtNLZvH17lk+DYlQl8q3MLwguqZdgwIDAQAB iIqI2xquGONtHFDOKJvy1O2qYTVRtNRVZqhc1ol+mw== -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/ MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT DkRTVCBSb290IENBIFgzMB4XDTE2MDMxNzE2NDA0NloXDTIxMDMxNzE2NDA0Nlow SjELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUxldCdzIEVuY3J5cHQxIzAhBgNVBAMT GkxldCdzIEVuY3J5cHQgQXV0aG9yaXR5IFgzMIIBIjANBgkqhkiG9w0BAQEFAAOC AQ8AMIIBCgKCAQEAnNMM8FrlLke3cl03g7NoYzDq1zUmGSXhvb418XCSL7e4S0EF q6meNQhY7LEqxGiHC6PjdeTm86dicbp5gWAf15Gan/PQeGdxyGkOlZHP/uaZ6WA8 SMx+yk13EiSdRxta67nsHjcAHJyse6cF6s5K671B5TaYucv9bTyWaN8jKkKQDIZ0 KOqkqm57TH2H3eDJAkSnh6/DNFu0Qg== -----END CERTIFICATE----- )
   sslPrivateKey: string # Private key of the SSL certificate. (e.g. -----BEGIN PRIVATE KEY----- MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZcNCZiNNHfX2O dZpf12mv2rAZwqGZBAdpox0wntEPK3JciQ7ZRloLJeHuCNIJs9MidnH7Xk8zveju mab6HmfIzvMJAAm88OYWMFQRiYe1ggJEHMe7yYPQbtXwTqWDYdWmjPPma3Ujqqmb hmVX2rsYILD7cUjS+e0Ucfqx3QODQj/aujTt1rS0gFhJ0soY5m+C6VimPCx4Bjyw 5rhtskJDRrfXxrIhVXOvSPFRyxDSfjt3win8vjhhZ3oFPWgrl9lVhn0zaB5hjDsd -----END PRIVATE KEY----- )
@@ -1994,7 +2060,7 @@ export def "cdn-ssl-data change-ssl-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SSL certificate
@@ -2010,13 +2076,14 @@ export def "cdn-ssl-data delete-ssl-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslData/($ssl_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trusted CA certificates list
@@ -2031,6 +2098,7 @@ export def "cdn-ssl-certificates get-trusted-ca-certificates-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automated: oneof<nothing, bool> # How the certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
   --validity-not-after-lte: string # Date and time when the certificate become untrusted (ISO 8601/RFC 3339 format, UTC.)  Response will contain certificates valid until the specified time.
   --resource-id: int # CDN resource ID for which the certificates are requested.
@@ -2043,7 +2111,7 @@ export def "cdn-ssl-certificates get-trusted-ca-certificates-list" [
   let full_url = (build-url $base "/cdn/sslCertificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add trusted CA certificate
@@ -2058,6 +2126,7 @@ export def "cdn-ssl-certificates add-trusted-ca-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # CA certificate name.  It must be unique. (e.g. Example CA cert)
   sslCertificate: string # Public part of the CA certificate.  It must be in the PEM format. (e.g. -----BEGIN CERTIFICATE----- MIIC0zCCAbugAwIBAgICA+gwDQYJKoZIhvcNAQELBQAwFjEUMBIGA1UEAwwLZXhh bXBsZS5jb20wHhcNMjAwNjI2MTIwMzUzWhcNMjEwNjI2MTIwMzUzWjAWMRQwEgYD VQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB AN4nnSfTsMEnfPgL7rkbImxZAQoND+bpPoX8q16iXZz3fFfqdRk+uEIpU3Brleeg p0zrrT2eI3+c2h/PRod0Fam4TO6EcfwuboUFzV3j6yw6aWdfBjWZsWBR/FoqWLYq b3UejN7yiTYNSiIy3zVpi9pnFM8N8qT+VGBrRDGef2v9JCzhsSSU7wAYM5HKZTp+ WHojjiyB2hOYqft7A2WlTEDmHFa5UcPHMRZKATUYI1T2TRVqLlSiE2mJ3dFRXGM2 ZAS33J0NVUjkx3w8RmJ7DNflEFJt/6IXdfaokVgfza7LFarrQFQP/YURXEeJT7jm DvKpZ/a8wu3ve6N4ykC+CBsCAwEAAaMrMCkwDwYDVR0TBAgwBgEB/wIBADAWBgNV HREEDzANggtleGFtcGxlLmNvbTANBgkqhkiG9w0BAQsFAAOCAQEAovxY5lm89Eod L8CH3dZzIH7nv8MXtwgpv2vth4PDq2btLS8xrqm2SsA/cV+DsbDjh5CxQLoDX+8V g8NtY+ipOE0hdJAUo7UVlsxuAY4frkmLL1/RwpjZg+Z2NAxpR7xGWgoMn7CH481w AOBypAuCxcfcyyAOttdS+YMRJnpL6z8/C3W0LGkNOs26Qhu1/U8lfz1f9F4XummD u2SCmJsAd1PrL1shsyh4HtmFjuY698aTjYUDUleAnx7ytrGlZuLOIeoQi7tcsLJJ TPMbxTLgGN2HEkdJerFRBNViuWvqioEyYlzZ3MshOCR2wsL4wrXrCF0Y3cNOYcIh Z8z+wUAP2g== -----END CERTIFICATE----- )
 ]: any -> record<id: int, name: string, deleted: bool, cert_issuer: string, cert_subject_cn: string, cert_subject_alt: string, validity_not_before: string, validity_not_after: string, sslCertificateChain: string, hasRelatedResources: bool> {
@@ -2069,7 +2138,7 @@ export def "cdn-ssl-certificates add-trusted-ca-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get trusted CA certificate details
@@ -2085,13 +2154,14 @@ export def "cdn-ssl-certificates get-trusted-ca-certificate-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, deleted: bool, cert_issuer: string, cert_subject_cn: string, cert_subject_alt: string, validity_not_before: string, validity_not_after: string, sslCertificateChain: string, hasRelatedResources: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslCertificates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change trusted CA certificate
@@ -2107,6 +2177,7 @@ export def "cdn-ssl-certificates change-trusted-ca-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # CA certificate name.  It must be unique. (e.g. Example CA cert 2)
 ]: any -> record<id: int, name: string, deleted: bool, cert_issuer: string, cert_subject_cn: string, cert_subject_alt: string, validity_not_before: string, validity_not_after: string, sslCertificateChain: string, hasRelatedResources: bool> {
   let input = $in
@@ -2117,7 +2188,7 @@ export def "cdn-ssl-certificates change-trusted-ca-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete trusted CA certificate
@@ -2133,13 +2204,14 @@ export def "cdn-ssl-certificates delete-trusted-ca-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslCertificates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CDN resource statistics
@@ -2154,6 +2226,7 @@ export def "cdn-statistics-series cdn-resource-statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --service: string # Service name.  Possible value: - CDN
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
@@ -2170,7 +2243,7 @@ export def "cdn-statistics-series cdn-resource-statistics" [
   let full_url = (build-url $base "/cdn/statistics/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Aggregated statistics
@@ -2185,6 +2258,7 @@ export def "cdn-statistics-aggregate-stats aggregated-statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --service: string # Service name.  Possible value: - CDN
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
@@ -2201,7 +2275,7 @@ export def "cdn-statistics-aggregate-stats aggregated-statistics" [
   let full_url = (build-url $base "/cdn/statistics/aggregate/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Origin shielding usage statistics
@@ -2216,6 +2290,7 @@ export def "cdn-statistics-shield-usage-series origin-shielding-usage-statistics
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --resource: int # CDN resources IDs by that statistics data is grouped.  To request multiple values, use: - &resource=1&resource=2  If CDN resource ID is not specified, data related to all CDN resources is returned.
@@ -2226,7 +2301,7 @@ export def "cdn-statistics-shield-usage-series origin-shielding-usage-statistics
   let full_url = (build-url $base "/cdn/statistics/shield_usage/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Aggregated origin shielding usage statistics
@@ -2241,6 +2316,7 @@ export def "cdn-statistics-shield-usage-aggregated aggregated-origin-shielding-u
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --group-by: string # Output data grouping.  Possible value: - **resource** - Data is grouped by CDN resources.
@@ -2253,7 +2329,7 @@ export def "cdn-statistics-shield-usage-aggregated aggregated-origin-shielding-u
   let full_url = (build-url $base "/cdn/statistics/shield_usage/aggregated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Logs uploader usage statistics
@@ -2268,6 +2344,7 @@ export def "cdn-statistics-raw-logs-usage-series raw-logs-usage-statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --resource: int # CDN resources IDs by that statistics data is grouped.  To request multiple values, use: - &resource=1&resource=2  If CDN resource ID is not specified, data related to all CDN resources is returned.
@@ -2278,7 +2355,7 @@ export def "cdn-statistics-raw-logs-usage-series raw-logs-usage-statistics" [
   let full_url = (build-url $base "/cdn/statistics/raw_logs_usage/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Aggregated Logs uploader usage statistics
@@ -2293,6 +2370,7 @@ export def "cdn-statistics-raw-logs-usage-aggregated aggregated-raw-logs-usage-s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Beginning of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --group-by: string # Output data grouping.  Possible value: - **resource** - Data is grouped by CDN resources.
@@ -2305,7 +2383,7 @@ export def "cdn-statistics-raw-logs-usage-aggregated aggregated-raw-logs-usage-s
   let full_url = (build-url $base "/cdn/statistics/raw_logs_usage/aggregated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get network capacity
@@ -2320,13 +2398,14 @@ export def "cdn-advanced-capacity get-network-capacity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<country_code: string, country: string, capacity: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/advanced/v1/capacity")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get CDN metrics
@@ -2342,6 +2421,7 @@ export def "cdn-advanced-metrics get-cdn-metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metrics: list # Possible values: - **`edge_bandwidth`** - Bandwidth from client to CDN (bit/s.) - **`edge_requests`** - Number of requests per interval (requests/s.) - **`edge_requests_total`** - Total number of requests per interval. - **`edge_status_1xx`** - Number of 1xx status codes from edge. - **`edge_status_200`** - Number of 200 status codes from edge. - **`edge_status_204`** - Number of 204 status codes from edge. - **`edge_status_206`** - Number of 206 status codes from edge. - **`edge_status_2xx`** - Number of 2xx status codes from edge. - **`edge_status_301`** - Number of 301 status codes from edge. - **`edge_status_302`** - Number of 302 status codes from edge. - **`edge_status_304`** - Number of 304 status codes from edge. - **`edge_status_3xx`** - Number of 3xx status codes from edge. - **`edge_status_400`** - Number of 400 status codes from edge. - **`edge_status_401`** - Number of 401 status codes from edge. - **`edge_status_403`** - Number of 403 status codes from edge. - **`edge_status_404`** - Number of 404 status codes from edge. - **`edge_status_416`** - Number of 416 status codes from edge. - **`edge_status_429`** - Number of 429 status codes from edge. - **`edge_status_4xx`** - Number of 4xx status codes from edge. - **`edge_status_500`** - Number of 500 status codes from edge. - **`edge_status_501`** - Number of 501 status codes from edge. - **`edge_status_502`** - Number of 502 status codes from edge. - **`edge_status_503`** - Number of 503 status codes from edge. - **`edge_status_504`** - Number of 504 status codes from edge. - **`edge_status_505`** - Number of 505 status codes from edge. - **`edge_status_5xx`** - Number of 5xx status codes from edge. - **`edge_hit_ratio`** - Percent of cache hits (0.0 - 1.0). - **`edge_hit_bytes`** - Number of bytes sent back when cache hits. - **`origin_bandwidth`** - Bandwidth from CDN to Origin (bit/s.) - **`origin_requests`** - Number of requests per interval (requests/s.) - **`origin_status_1xx`** - Number of 1xx status from origin. - **`origin_status_200`** - Number of 200 status from origin. - **`origin_status_204`** - Number of 204 status from origin. - **`origin_status_206`** - Number of 206 status from origin. - **`origin_status_2xx`** - Number of 2xx status from origin. - **`origin_status_301`** - Number of 301 status from origin. - **`origin_status_302`** - Number of 302 status from origin. - **`origin_status_304`** - Number of 304 status from origin. - **`origin_status_3xx`** - Number of 3xx status from origin. - **`origin_status_400`** - Number of 400 status from origin. - **`origin_status_401`** - Number of 401 status from origin. - **`origin_status_403`** - Number of 403 status from origin. - **`origin_status_404`** - Number of 404 status from origin. - **`origin_status_416`** - Number of 416 status from origin. - **`origin_status_429`** - Number of 426 status from origin. - **`origin_status_4xx`** - Number of 4xx status from origin. - **`origin_status_500`** - Number of 500 status from origin. - **`origin_status_501`** - Number of 501 status from origin. - **`origin_status_502`** - Number of 502 status from origin. - **`origin_status_503`** - Number of 503 status from origin. - **`origin_status_504`** - Number of 504 status from origin. - **`origin_status_505`** - Number of 505 status from origin. - **`origin_status_5xx`** - Number of 5xx status from origin. - **`edge_download_speed`** - Download speed from edge in KB/s (includes only requests that status was in the range [200, 300].) - **`origin_download_speed`** - Download speed from origin in KB/s (includes only requests that status was in the range [200, 300].) (e.g. [edge_status_2xx, edge_status_3xx, edge_status_4xx, edge_status_5xx])
   --body-from: string # Beginning period to fetch metrics (ISO 8601/RFC 3339 format, UTC.)  Examples: - 2021-06-14T00:00:00Z - 2021-06-14T00:00:00.000Z  The total number of points, which is determined as the difference between "from" and "to" divided by "granularity", cannot exceed 1440. Exception: "speed" metrics are limited to 72 points. (e.g. 2021-06-14T00:00:00Z)
   --body-to: string # Specifies ending period to fetch metrics (ISO 8601/RFC 3339 format, UTC)  Examples: - 2021-06-15T00:00:00Z - 2021-06-15T00:00:00.000Z  The total number of points, which is determined as the difference between "from" and "to" divided by "granularity", cannot exceed 1440. Exception: "speed" metrics are limited to 72 points. (e.g. 2021-06-15T00:00:00Z)
@@ -2357,7 +2437,7 @@ export def "cdn-advanced-metrics get-cdn-metrics" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Playground
@@ -2372,13 +2452,14 @@ export def "cdn-advanced-query playground" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cdn/advanced/v2/query")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get origin shielding details
@@ -2394,13 +2475,14 @@ export def "cdn-resources-shielding-v2 get-origin-shielding-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<shielding_pop: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)/shielding_v2")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change origin shielding
@@ -2416,6 +2498,7 @@ export def "cdn-resources-shielding-v2 change-origin-shielding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --shielding-pop: int # Shielding location ID.  If origin shielding is disabled, the parameter value is **null**. (nullable)
 ]: any -> record {
   let input = $in
@@ -2426,7 +2509,7 @@ export def "cdn-resources-shielding-v2 change-origin-shielding" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get origin shielding locations
@@ -2441,6 +2524,7 @@ export def "cdn-shieldingpop-v2 get-origin-shielding-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -2450,7 +2534,7 @@ export def "cdn-shieldingpop-v2 get-origin-shielding-locations" [
   let full_url = (build-url $base "/cdn/shieldingpop_v2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pre-validate CDN resource before issuing Let's Encrypt certificate
@@ -2466,13 +2550,14 @@ export def "cdn-resources-ssl-le-pre-validate pre-validate-cdn-resources-before-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/resources/($resource_id)/ssl/le/pre-validate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force retry issuance of Let's Encrypt certificate
@@ -2488,13 +2573,14 @@ export def "cdn-ssl-data-force-retry force-retry-issuance-of-lets-encrypt-certif
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslData/($cert_id)/force-retry")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renew Let's Encrypt certificate
@@ -2510,13 +2596,14 @@ export def "cdn-ssl-data-renew renew-lets-encrypt-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslData/($cert_id)/renew")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Let's Encrypt certificate issuing details
@@ -2532,6 +2619,7 @@ export def "cdn-ssl-data-status get-lets-encrypt-certificate-issuing-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exclude: list # Listed fields will be excluded from the response.
 ]: nothing -> record<id: int, statuses: table<id: int, status: string, error: string, details: string, created: string, retry_after: string>, latest_status: record<id: int, status: string, error: string, details: string, created: string, retry_after: string>, started: string, finished: string, active: bool, attempts_count: int, next_attempt_time: string, resource: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2540,7 +2628,7 @@ export def "cdn-ssl-data-status get-lets-encrypt-certificate-issuing-details" [
   let full_url = (build-url $base $"/cdn/sslData/($cert_id)/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSL certificate usage
@@ -2556,13 +2644,14 @@ export def "cdn-ssl-data-usage get-ssl-certificate-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<resources: table<id: int, cname: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cdn/sslData/($cert_id)/usage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issue Let's Encrypt certificate
@@ -2578,7 +2667,8 @@ export def "cdn-resources issue-lets-encrypt-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  sslData: int # ID of Let's Encrypt certificate obtained [here](/docs/api-reference/cdn/ssl-certificates/add-ssl-certificate).  It can be used only with "sslEnabled": true. (e.g. 192)
+  --dry-run(-n) # Return the request that would be sent without executing it
+  sslData: int # ID of Let's Encrypt certificate obtained [here](/api-reference/cdn/ssl-certificates/add-ssl-certificate).  It can be used only with "sslEnabled": true. (e.g. 192)
   --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. Certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. Certificate cannot be linked. (e.g. true)
 ]: any -> any {
   let input = $in
@@ -2589,7 +2679,7 @@ export def "cdn-resources issue-lets-encrypt-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke Let's Encrypt certificate
@@ -2605,6 +2695,7 @@ export def "cdn-resources revoke-lets-encrypt-certificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sslData: int # ID of Let's Encrypt certificate linked to the CDN resource.  It must be **null** to revoke Let's Encrypt certificate. (nullable)
   --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. SSL certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. SSL certificate cannot be linked.  It must be **false** to revoke the Let's Encrypt certificate. (e.g. false)
 ]: any -> any {
@@ -2616,5 +2707,5 @@ export def "cdn-resources revoke-lets-encrypt-certificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

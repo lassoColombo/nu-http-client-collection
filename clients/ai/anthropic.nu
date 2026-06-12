@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def trigger-type-completer [] { ["manual" "schedule"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "messages post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +114,7 @@ export def "messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   model: any # The model that will complete your prompt.  See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
   messages: list # Input messages.  Our models are trained to operate on alternating `user` and `assistant` conversational turns. When creating a new `Message`, you specify the prior conversational turns with the `messages` parameter, and the model then generates the next `Message` in the conversation. Consecutive `user` or `assistant` turns in your request will be combined into a single turn.  Each input message must be an object with a `role` and `content`. You can specify a single `user`-role message, or you can include multiple `user` and `assistant` messages.  If the final message uses the `assistant` role, the response content will continue immediately from the content in that message. This can be used to constrain part of the model's response.  Example with a single `user` message:  ```json [{"role": "user", "content": "Hello, Claude"}] ```  Example with multiple conversational turns:  ```json [   {"role": "user", "content": "Hello there."},   {"role": "assistant", "content": "Hi, I'm Claude. How can I help you?"},   {"role": "user", "content": "Can you explain LLMs in plain English?"}, ] ```  Example with a partially-filled response from Claude:  ```json [   {"role": "user", "content": "What's the Greek name for Sun? (A) Sol (B) Helios (C) Sun"},   {"role": "assistant", "content": "The best answer is ("}, ] ```  Each input message `content` may be either a single `string` or an array of content blocks, where each block has a specific `type`. Using a `string` for `content` is shorthand for an array of one content block of type `"text"`. The following input messages are equivalent:  ```json {"role": "user", "content": "Hello, Claude"} ```  ```json {"role": "user", "content": [{"type": "text", "text": "Hello, Claude"}]} ```  See [input examples](https://docs.claude.com/en/api/messages-examples).  Note that if you want to include a [system prompt](https://docs.claude.com/en/docs/system-prompts), you can use the top-level `system` parameter — there is no `"system"` role for input messages in the Messages API.  There is a limit of 100,000 messages in a single request. — item shape: {content: any, role: "user"|"assistant"|"system"}
@@ -143,7 +145,7 @@ export def "messages post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Text Completion
@@ -162,6 +164,7 @@ export def "complete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   model: any # The model that will complete your prompt.  See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
@@ -184,7 +187,7 @@ export def "complete post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Models
@@ -199,6 +202,7 @@ export def "models list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --before-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
   --after-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
   --limit: int # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`. (default: 20)
@@ -214,7 +218,7 @@ export def "models list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Model
@@ -230,6 +234,7 @@ export def "models get-by-model_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -241,7 +246,7 @@ export def "models get-by-model_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Message Batch
@@ -257,6 +262,7 @@ export def "messages-batches post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   requests: list # List of requests for prompt completion. Each is an individual request to create a Message. — item shape: {custom_id: string, params: record}
 ]: any -> record<archived_at: any, cancel_initiated_at: any, created_at: string, ended_at: any, expires_at: string, id: string, processing_status: string, request_counts: record<canceled: int, errored: int, expired: int, processing: int, succeeded: int>, results_url: any, type: string> {
@@ -270,7 +276,7 @@ export def "messages-batches post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Message Batches
@@ -285,6 +291,7 @@ export def "messages-batches list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --before-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
   --after-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
   --limit: int # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`. (default: 20)
@@ -299,7 +306,7 @@ export def "messages-batches list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a Message Batch
@@ -315,6 +322,7 @@ export def "messages-batches get-by-message_batch_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
 ]: nothing -> record<archived_at: any, cancel_initiated_at: any, created_at: string, ended_at: any, expires_at: string, id: string, processing_status: string, request_counts: record<canceled: int, errored: int, expired: int, processing: int, succeeded: int>, results_url: any, type: string> {
@@ -325,7 +333,7 @@ export def "messages-batches get-by-message_batch_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Message Batch
@@ -341,6 +349,7 @@ export def "messages-batches delete-by-message_batch_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
 ]: nothing -> record<id: string, type: string> {
@@ -351,7 +360,7 @@ export def "messages-batches delete-by-message_batch_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a Message Batch
@@ -367,6 +376,7 @@ export def "messages-batches-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
 ]: nothing -> record<archived_at: any, cancel_initiated_at: any, created_at: string, ended_at: any, expires_at: string, id: string, processing_status: string, request_counts: record<canceled: int, errored: int, expired: int, processing: int, succeeded: int>, results_url: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -376,7 +386,7 @@ export def "messages-batches-cancel cancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Message Batch results
@@ -392,6 +402,7 @@ export def "messages-batches-results results" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
 ]: nothing -> any {
@@ -402,7 +413,7 @@ export def "messages-batches-results results" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/x-jsonl"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Count tokens in a Message
@@ -419,6 +430,7 @@ export def "messages-count-tokens post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --cache-control: any # Top-level cache control automatically applies a cache_control marker to the last cacheable block in the request.
   messages: list # Input messages.  Our models are trained to operate on alternating `user` and `assistant` conversational turns. When creating a new `Message`, you specify the prior conversational turns with the `messages` parameter, and the model then generates the next `Message` in the conversation. Consecutive `user` or `assistant` turns in your request will be combined into a single turn.  Each input message must be an object with a `role` and `content`. You can specify a single `user`-role message, or you can include multiple `user` and `assistant` messages.  If the final message uses the `assistant` role, the response content will continue immediately from the content in that message. This can be used to constrain part of the model's response.  Example with a single `user` message:  ```json [{"role": "user", "content": "Hello, Claude"}] ```  Example with multiple conversational turns:  ```json [   {"role": "user", "content": "Hello there."},   {"role": "assistant", "content": "Hi, I'm Claude. How can I help you?"},   {"role": "user", "content": "Can you explain LLMs in plain English?"}, ] ```  Example with a partially-filled response from Claude:  ```json [   {"role": "user", "content": "What's the Greek name for Sun? (A) Sol (B) Helios (C) Sun"},   {"role": "assistant", "content": "The best answer is ("}, ] ```  Each input message `content` may be either a single `string` or an array of content blocks, where each block has a specific `type`. Using a `string` for `content` is shorthand for an array of one content block of type `"text"`. The following input messages are equivalent:  ```json {"role": "user", "content": "Hello, Claude"} ```  ```json {"role": "user", "content": [{"type": "text", "text": "Hello, Claude"}]} ```  See [input examples](https://docs.claude.com/en/api/messages-examples).  Note that if you want to include a [system prompt](https://docs.claude.com/en/docs/system-prompts), you can use the top-level `system` parameter — there is no `"system"` role for input messages in the Messages API.  There is a limit of 100,000 messages in a single request. — item shape: {content: any, role: "user"|"assistant"|"system"}
@@ -439,7 +451,7 @@ export def "messages-count-tokens post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Message
@@ -462,6 +474,7 @@ export def "messages-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   model: any # The model that will complete your prompt.  See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
@@ -501,7 +514,7 @@ export def "messages-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Models
@@ -516,6 +529,7 @@ export def "models-betatrue list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --before-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
   --after-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
   --limit: int # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`. (default: 20)
@@ -531,7 +545,7 @@ export def "models-betatrue list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Model
@@ -547,6 +561,7 @@ export def "models get-by-model_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -558,7 +573,7 @@ export def "models get-by-model_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Message Batch
@@ -574,6 +589,7 @@ export def "messages-batches-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   requests: list # List of requests for prompt completion. Each is an individual request to create a Message. — item shape: {custom_id: string, params: record}
@@ -588,7 +604,7 @@ export def "messages-batches-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Message Batches
@@ -603,6 +619,7 @@ export def "messages-batches-betatrue list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --before-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
   --after-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
   --limit: int # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`. (default: 20)
@@ -618,7 +635,7 @@ export def "messages-batches-betatrue list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a Message Batch
@@ -634,6 +651,7 @@ export def "messages-batches get-by-message_batch_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -645,7 +663,7 @@ export def "messages-batches get-by-message_batch_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Message Batch
@@ -661,6 +679,7 @@ export def "messages-batches delete-by-message_batch_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -672,7 +691,7 @@ export def "messages-batches delete-by-message_batch_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a Message Batch
@@ -688,6 +707,7 @@ export def "messages-batches-cancel-betatrue cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
 ]: nothing -> record<archived_at: any, cancel_initiated_at: any, created_at: string, ended_at: any, expires_at: string, id: string, processing_status: string, request_counts: record<canceled: int, errored: int, expired: int, processing: int, succeeded: int>, results_url: any, type: string> {
@@ -698,7 +718,7 @@ export def "messages-batches-cancel-betatrue cancel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Message Batch results
@@ -714,6 +734,7 @@ export def "messages-batches-results-betatrue results" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -725,7 +746,7 @@ export def "messages-batches-results-betatrue results" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/x-jsonl"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Count tokens in a Message
@@ -744,6 +765,7 @@ export def "messages-count-tokens-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --cache-control: any # Top-level cache control automatically applies a cache_control marker to the last cacheable block in the request.
@@ -769,7 +791,7 @@ export def "messages-count-tokens-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload File
@@ -784,6 +806,7 @@ export def "files-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   file: string # The file to upload (format: binary)
@@ -798,7 +821,7 @@ export def "files-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Files
@@ -813,6 +836,7 @@ export def "files-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --before-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
   --after-id: string # ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
   --limit: int # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`. (default: 20)
@@ -829,7 +853,7 @@ export def "files-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get File Metadata
@@ -845,6 +869,7 @@ export def "files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -856,7 +881,7 @@ export def "files get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete File
@@ -872,6 +897,7 @@ export def "files delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -883,7 +909,7 @@ export def "files delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download File
@@ -899,6 +925,7 @@ export def "files-content-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -910,7 +937,7 @@ export def "files-content-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Skill
@@ -925,6 +952,7 @@ export def "skills-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --display-title: any # Display title for the skill.  This is a human-readable label that is not included in the prompt sent to the model.
@@ -940,7 +968,7 @@ export def "skills-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Skills
@@ -955,6 +983,7 @@ export def "skills-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Pagination token for fetching a specific page of results.  Pass the value from a previous response's `next_page` field to get the next page of results.
   --limit: int # Number of results to return per page.  Maximum value is 100. Defaults to 20. (default: 20)
   --qp-source: string # Filter skills by source.  If provided, only skills from the specified source will be returned: * `"custom"`: only return user-created skills * `"anthropic"`: only return Anthropic-created skills
@@ -970,7 +999,7 @@ export def "skills-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Skill
@@ -986,6 +1015,7 @@ export def "skills get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -997,7 +1027,7 @@ export def "skills get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Skill
@@ -1013,6 +1043,7 @@ export def "skills delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -1024,7 +1055,7 @@ export def "skills delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Skill Version
@@ -1040,6 +1071,7 @@ export def "skills-versions-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --files: any # Files to upload for the skill.  All files must be in the same top-level directory and must include a SKILL.md file at the root of that directory.
@@ -1054,7 +1086,7 @@ export def "skills-versions-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Skill Versions
@@ -1070,6 +1102,7 @@ export def "skills-versions-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Optionally set to the `next_page` token from the previous response.
   --limit: string # Number of items to return per page.  Defaults to `20`. Ranges from `1` to `1000`.
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
@@ -1084,7 +1117,7 @@ export def "skills-versions-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Skill Version
@@ -1101,6 +1134,7 @@ export def "skills-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -1112,7 +1146,7 @@ export def "skills-versions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Skill Version
@@ -1129,6 +1163,7 @@ export def "skills-versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -1140,7 +1175,7 @@ export def "skills-versions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Skill Version Content
@@ -1157,6 +1192,7 @@ export def "skills-versions-content-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string # Your unique API key for authentication.  This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
@@ -1168,7 +1204,7 @@ export def "skills-versions-content-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Environment
@@ -1183,6 +1219,7 @@ export def "environments-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --config: any # Environment configuration
@@ -1201,7 +1238,7 @@ export def "environments-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Environments
@@ -1216,6 +1253,7 @@ export def "environments-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of environments to return (default: 20)
   --page: string # Opaque cursor from previous response for pagination. Pass the `next_page` value from the previous response.
   --include-archived: oneof<nothing, bool> # Include archived environments in the response (default: false)
@@ -1231,7 +1269,7 @@ export def "environments-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Environment
@@ -1247,6 +1285,7 @@ export def "environments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string
@@ -1258,7 +1297,7 @@ export def "environments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Environment
@@ -1274,6 +1313,7 @@ export def "environments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --config: any # Updated environment configuration
@@ -1292,7 +1332,7 @@ export def "environments post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Environment
@@ -1308,6 +1348,7 @@ export def "environments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string
@@ -1319,7 +1360,7 @@ export def "environments delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Environment
@@ -1335,6 +1376,7 @@ export def "environments-archive-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
 ]: nothing -> record<archived_at: any, config: any, created_at: string, description: string, id: string, metadata: record, name: string, scope: string, type: string, updated_at: string> {
@@ -1345,7 +1387,7 @@ export def "environments-archive-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Queue Statistics
@@ -1361,6 +1403,7 @@ export def "environments-work-stats-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string
@@ -1373,7 +1416,7 @@ export def "environments-work-stats-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Poll for Work
@@ -1389,6 +1432,7 @@ export def "environments-work-poll-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --block-ms: string # How long to wait for work to arrive before returning. Must be 1-999 in milliseconds. Defaults to non-blocking (returns immediately if no work is available).
   --reclaim-older-than-ms: string # Reclaim unacknowledged work items older than this many milliseconds. If omitted, uses the default (5000ms).
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
@@ -1404,7 +1448,7 @@ export def "environments-work-poll-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledge Work
@@ -1421,6 +1465,7 @@ export def "environments-work-ack-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --authorization: string
@@ -1432,7 +1477,7 @@ export def "environments-work-ack-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Record Heartbeat
@@ -1449,6 +1494,7 @@ export def "environments-work-heartbeat-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --desired-ttl-seconds: string # Desired TTL in seconds
   --expected-last-heartbeat: string # Expected last_heartbeat for conditional update (optimistic concurrency). Use literal 'NO_HEARTBEAT' to claim an unclaimed lease (first heartbeat). For subsequent heartbeats, echo the server's previous last_heartbeat value exactly. Returns 412 Precondition Failed if the actual value doesn't match.
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
@@ -1463,7 +1509,7 @@ export def "environments-work-heartbeat-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop Work
@@ -1480,6 +1526,7 @@ export def "environments-work-stop-betatrue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --authorization: string
@@ -1495,7 +1542,7 @@ export def "environments-work-stop-betatrue post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Work Item
@@ -1512,6 +1559,7 @@ export def "environments-work get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string
@@ -1523,7 +1571,7 @@ export def "environments-work get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Work Item
@@ -1540,6 +1588,7 @@ export def "environments-work post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   metadata: record # Metadata patch. Set a key to a string to upsert it, or to null to delete it. Omit the field to preserve existing metadata.
@@ -1554,7 +1603,7 @@ export def "environments-work post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Work Items
@@ -1570,6 +1619,7 @@ export def "environments-work-betatrue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of work items to return (default: 20)
   --page: string # Opaque cursor from previous response for pagination
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
@@ -1584,7 +1634,7 @@ export def "environments-work-betatrue get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a memory
@@ -1600,6 +1650,7 @@ export def "memory-stores-memories-betatrue BetaCreateMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Query parameter for view
   --anthropic-version: string
   --anthropic-beta: string
@@ -1617,7 +1668,7 @@ export def "memory-stores-memories-betatrue BetaCreateMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List memories
@@ -1633,6 +1684,7 @@ export def "memory-stores-memories-betatrue BetaListMemories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path-prefix: string # Optional path prefix filter (raw string-prefix match; include a trailing slash for directory-scoped lists). This value appears in request URLs. Do not include secrets or personally identifiable information.
   --depth: int # Query parameter for depth (format: int32)
   --order-by: string # Query parameter for order_by
@@ -1652,7 +1704,7 @@ export def "memory-stores-memories-betatrue BetaListMemories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a memory
@@ -1669,6 +1721,7 @@ export def "memory-stores-memories BetaGetMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
@@ -1682,7 +1735,7 @@ export def "memory-stores-memories BetaGetMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a memory
@@ -1699,6 +1752,7 @@ export def "memory-stores-memories BetaUpdateMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Query parameter for view
   --anthropic-version: string
   --anthropic-beta: string
@@ -1717,7 +1771,7 @@ export def "memory-stores-memories BetaUpdateMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a memory
@@ -1734,6 +1788,7 @@ export def "memory-stores-memories BetaDeleteMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expected-content-sha256: string # Query parameter for expected_content_sha256
   --x-api-key: string
   --anthropic-version: string
@@ -1747,7 +1802,7 @@ export def "memory-stores-memories BetaDeleteMemory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List memory versions
@@ -1763,6 +1818,7 @@ export def "memory-stores-memory-versions-betatrue BetaListMemoryVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --memory-id: string # Query parameter for memory_id
   --session-id: string # Query parameter for session_id
   --api-key-id: string # Query parameter for api_key_id
@@ -1784,7 +1840,7 @@ export def "memory-stores-memory-versions-betatrue BetaListMemoryVersions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a memory version
@@ -1801,6 +1857,7 @@ export def "memory-stores-memory-versions BetaGetMemoryVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
@@ -1814,7 +1871,7 @@ export def "memory-stores-memory-versions BetaGetMemoryVersion" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redact a memory version
@@ -1831,6 +1888,7 @@ export def "memory-stores-memory-versions-redact-betatrue BetaRedactMemoryVersio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, memory_store_id: string, memory_id: string, path: string, operation: record, content: string, content_size_bytes: int, content_sha256: string, created_by: record, created_at: record, redacted_at: record, redacted_by: record> {
@@ -1841,7 +1899,7 @@ export def "memory-stores-memory-versions-redact-betatrue BetaRedactMemoryVersio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a memory store
@@ -1857,6 +1915,7 @@ export def "memory-stores-betatrue BetaCreateMemoryStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   name: string # Human-readable name for the store. Required; 1–255 characters; no control characters. The mount-path slug under `/mnt/memory/` is derived from this name (lowercased, non-alphanumeric runs collapsed to a hyphen). Names need not be unique within a workspace.
@@ -1873,7 +1932,7 @@ export def "memory-stores-betatrue BetaCreateMemoryStore" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List memory stores
@@ -1888,6 +1947,7 @@ export def "memory-stores-betatrue BetaListMemoryStores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of stores to return per page. Must be between 1 and 100. Defaults to 20 when omitted. (format: int32)
   --page: string # Opaque pagination cursor (a `page_...` value). Pass the `next_page` value from a previous response to fetch the next page; omit for the first page.
   --include-archived: oneof<nothing, bool> # When `true`, archived stores are included in the results. Defaults to `false` (archived stores are excluded).
@@ -1905,7 +1965,7 @@ export def "memory-stores-betatrue BetaListMemoryStores" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a memory store
@@ -1922,6 +1982,7 @@ export def "memory-stores BetaGetMemoryStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1933,7 +1994,7 @@ export def "memory-stores BetaGetMemoryStore" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a memory store
@@ -1950,6 +2011,7 @@ export def "memory-stores BetaUpdateMemoryStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --name: string # New human-readable name for the store. 1–255 characters; no control characters. Renaming changes the slug used for the store's `mount_path` in sessions created after the update. (nullable)
@@ -1966,7 +2028,7 @@ export def "memory-stores BetaUpdateMemoryStore" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a memory store
@@ -1983,6 +2045,7 @@ export def "memory-stores BetaDeleteMemoryStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1994,7 +2057,7 @@ export def "memory-stores BetaDeleteMemoryStore" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a memory store
@@ -2011,6 +2074,7 @@ export def "memory-stores-archive-betatrue BetaArchiveMemoryStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record {
@@ -2021,7 +2085,7 @@ export def "memory-stores-archive-betatrue BetaArchiveMemoryStore" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create User Profile
@@ -2036,6 +2100,7 @@ export def "user-profiles-betatrue BetaCreateUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --external-id: string # Platform's own identifier for this user. Not enforced unique. Maximum 255 characters. (nullable)
@@ -2053,7 +2118,7 @@ export def "user-profiles-betatrue BetaCreateUserProfile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List User Profiles
@@ -2068,6 +2133,7 @@ export def "user-profiles-betatrue BetaListUserProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Query parameter for page
   --order: string@order-completer # Query parameter for order
@@ -2083,7 +2149,7 @@ export def "user-profiles-betatrue BetaListUserProfiles" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Profile
@@ -2099,6 +2165,7 @@ export def "user-profiles BetaGetUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2110,7 +2177,7 @@ export def "user-profiles BetaGetUserProfile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update User Profile
@@ -2126,6 +2193,7 @@ export def "user-profiles BetaUpdateUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --external-id: string # If present, replaces the stored external_id. Omit to leave unchanged. Maximum 255 characters. (nullable)
@@ -2143,7 +2211,7 @@ export def "user-profiles BetaUpdateUserProfile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Enrollment URL
@@ -2159,6 +2227,7 @@ export def "user-profiles-enrollment-url-betatrue BetaCreateEnrollmentUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<url: string, expires_at: record, type: string> {
@@ -2169,7 +2238,7 @@ export def "user-profiles-enrollment-url-betatrue BetaCreateEnrollmentUrl" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Session
@@ -2184,6 +2253,7 @@ export def "sessions-betatrue BetaCreateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   agent: any # Agent identifier. Accepts the `agent` ID string, which pins the latest version for the session, or an `agent` object with both id and version specified.
@@ -2203,7 +2273,7 @@ export def "sessions-betatrue BetaCreateSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Sessions
@@ -2218,6 +2288,7 @@ export def "sessions-betatrue BetaListSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of results to return. (format: int32)
   --page: string # Opaque pagination cursor from a previous response.
   --include-archived: oneof<nothing, bool> # When true, includes archived sessions. Default: false (exclude archived).
@@ -2243,7 +2314,7 @@ export def "sessions-betatrue BetaListSessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session
@@ -2259,6 +2330,7 @@ export def "sessions BetaGetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2270,7 +2342,7 @@ export def "sessions BetaGetSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Session
@@ -2286,6 +2358,7 @@ export def "sessions BetaUpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --title: string # Human-readable session title. (nullable)
@@ -2303,7 +2376,7 @@ export def "sessions BetaUpdateSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Session
@@ -2319,6 +2392,7 @@ export def "sessions BetaDeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2330,7 +2404,7 @@ export def "sessions BetaDeleteSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Events
@@ -2346,6 +2420,7 @@ export def "sessions-events-betatrue BetaListEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Opaque pagination cursor from a previous response's next_page.
   --order: string@order-completer # Sort direction for results, ordered by created_at. Defaults to asc (chronological).
@@ -2366,7 +2441,7 @@ export def "sessions-events-betatrue BetaListEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Events
@@ -2382,6 +2457,7 @@ export def "sessions-events-betatrue BetaSendEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   events: list # Events to send to the `session`.
@@ -2396,7 +2472,7 @@ export def "sessions-events-betatrue BetaSendEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream Events
@@ -2413,6 +2489,7 @@ export def "sessions-events-stream-betatrue BetaStreamSessionEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2424,7 +2501,7 @@ export def "sessions-events-stream-betatrue BetaStreamSessionEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Session
@@ -2440,6 +2517,7 @@ export def "sessions-archive-betatrue BetaArchiveSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, status: string, created_at: string, updated_at: string, environment_id: string, title: string, metadata: record, agent: record<type: string, id: string, version: int, name: string, description: string, model: record<id: any, speed: record>, system: string, tools: list<record>, mcp_servers: list<record>, skills: list<any>, multiagent: record>, resources: list<record>, vault_ids: list<string>, outcome_evaluations: table<type: string, outcome_id: string, description: string, result: string, iteration: int, completed_at: record, explanation: string>, usage: record<input_tokens: int, output_tokens: int, cache_read_input_tokens: int, cache_creation: record<ephemeral_1h_input_tokens: int, ephemeral_5m_input_tokens: int>>, stats: record<duration_seconds: float, active_seconds: float>, archived_at: record, deployment_id: string> {
@@ -2450,7 +2528,7 @@ export def "sessions-archive-betatrue BetaArchiveSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Session Threads
@@ -2466,6 +2544,7 @@ export def "sessions-threads-betatrue BetaListSessionThreads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum results per page. Defaults to 1000. (format: int32)
   --page: string # Opaque pagination cursor from a previous response's next_page. Forward-only.
   --x-api-key: string
@@ -2480,7 +2559,7 @@ export def "sessions-threads-betatrue BetaListSessionThreads" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session Thread
@@ -2497,6 +2576,7 @@ export def "sessions-threads BetaGetSessionThread" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2508,7 +2588,7 @@ export def "sessions-threads BetaGetSessionThread" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Session Thread Events
@@ -2525,6 +2605,7 @@ export def "sessions-threads-events-betatrue BetaListSessionThreadEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Query parameter for page
   --x-api-key: string
@@ -2539,7 +2620,7 @@ export def "sessions-threads-events-betatrue BetaListSessionThreadEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream Session Thread Events
@@ -2557,6 +2638,7 @@ export def "sessions-threads-stream-betatrue BetaStreamSessionThreadEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2568,7 +2650,7 @@ export def "sessions-threads-stream-betatrue BetaStreamSessionThreadEvents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Session Thread
@@ -2585,6 +2667,7 @@ export def "sessions-threads-archive-betatrue BetaArchiveSessionThread" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, session_id: string, status: record, agent: record<type: string, id: string, version: int, name: string, description: string, model: record<id: any, speed: record>, system: string, tools: list<record>, mcp_servers: list<record>, skills: list<any>>, parent_thread_id: string, created_at: record, updated_at: record, archived_at: record, usage: record<input_tokens: int, output_tokens: int, cache_read_input_tokens: int, cache_creation: record<ephemeral_1h_input_tokens: int, ephemeral_5m_input_tokens: int>>, stats: record<duration_seconds: float, startup_seconds: float, active_seconds: float>> {
@@ -2595,7 +2678,7 @@ export def "sessions-threads-archive-betatrue BetaArchiveSessionThread" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Session Resources
@@ -2611,6 +2694,7 @@ export def "sessions-resources-betatrue BetaListResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of resources to return per page (max 1000). If omitted, returns all resources. (format: int32)
   --page: string # Opaque cursor from a previous response's next_page field.
   --x-api-key: string
@@ -2625,7 +2709,7 @@ export def "sessions-resources-betatrue BetaListResources" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Session Resource
@@ -2642,6 +2726,7 @@ export def "sessions-resources-betatrue BetaAddResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   type: string@type-completer
@@ -2658,7 +2743,7 @@ export def "sessions-resources-betatrue BetaAddResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Session Resource
@@ -2676,6 +2761,7 @@ export def "sessions-resources BetaGetResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2687,7 +2773,7 @@ export def "sessions-resources BetaGetResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Session Resource
@@ -2704,6 +2790,7 @@ export def "sessions-resources BetaDeleteResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2715,7 +2802,7 @@ export def "sessions-resources BetaDeleteResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Session Resource
@@ -2733,6 +2820,7 @@ export def "sessions-resources BetaUpdateResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   authorization_token: string # New authorization token for the resource. Currently only `github_repository` resources support token rotation.
@@ -2747,7 +2835,7 @@ export def "sessions-resources BetaUpdateResource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Agent
@@ -2762,6 +2850,7 @@ export def "agents-betatrue BetaCreateAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   name: string # Human-readable name for the agent.
@@ -2784,7 +2873,7 @@ export def "agents-betatrue BetaCreateAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Agents
@@ -2799,6 +2888,7 @@ export def "agents-betatrue BetaListAgents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum results per page. Default 20, maximum 100. (format: int32)
   --page: string # Opaque pagination cursor from a previous response.
   --created-atgte: string # Return agents created at or after this time (inclusive). (format: date-time)
@@ -2816,7 +2906,7 @@ export def "agents-betatrue BetaListAgents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Agent
@@ -2832,6 +2922,7 @@ export def "agents BetaGetAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # Agent version. Omit for the most recent version. Must be at least 1 if specified. (format: int32)
   --x-api-key: string
   --anthropic-version: string
@@ -2845,7 +2936,7 @@ export def "agents BetaGetAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Agent
@@ -2861,6 +2952,7 @@ export def "agents BetaUpdateAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   version: int # The agent's current version, used to prevent concurrent overwrites. Obtain this value from a create or retrieve response. The request fails if this does not match the server's current version. (format: int32)
@@ -2884,7 +2976,7 @@ export def "agents BetaUpdateAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive Agent
@@ -2900,6 +2992,7 @@ export def "agents-archive-betatrue BetaArchiveAgent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, version: int, name: string, description: string, model: record<id: any, speed: record>, system: string, tools: list<record>, mcp_servers: list<record>, skills: list<any>, metadata: record, created_at: string, updated_at: string, archived_at: record, multiagent: record> {
@@ -2910,7 +3003,7 @@ export def "agents-archive-betatrue BetaArchiveAgent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Agent Versions
@@ -2926,6 +3019,7 @@ export def "agents-versions-betatrue BetaListAgentVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum results per page. Default 20, maximum 100. (format: int32)
   --page: string # Opaque pagination cursor.
   --x-api-key: string
@@ -2940,7 +3034,7 @@ export def "agents-versions-betatrue BetaListAgentVersions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Deployment
@@ -2955,6 +3049,7 @@ export def "deployments-betatrue BetaCreateDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   name: string # Human-readable name for the deployment.
@@ -2977,7 +3072,7 @@ export def "deployments-betatrue BetaCreateDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Deployments
@@ -2992,6 +3087,7 @@ export def "deployments-betatrue BetaListDeployments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum results per page. Default 20, maximum 100. (format: int32)
   --page: string # Opaque pagination cursor.
   --agent-id: string # Filter by agent ID.
@@ -3011,7 +3107,7 @@ export def "deployments-betatrue BetaListDeployments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Deployment
@@ -3027,6 +3123,7 @@ export def "deployments BetaGetDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3038,7 +3135,7 @@ export def "deployments BetaGetDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Deployment
@@ -3054,6 +3151,7 @@ export def "deployments BetaUpdateDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --name: string # Human-readable name. Must be non-empty. Omit to preserve. Cannot be cleared.
@@ -3076,7 +3174,7 @@ export def "deployments BetaUpdateDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive Deployment
@@ -3092,6 +3190,7 @@ export def "deployments-archive-betatrue BetaArchiveDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, name: string, description: string, agent: record<type: string, id: string, version: int>, environment_id: string, vault_ids: list<string>, initial_events: list<record>, resources: list<record>, metadata: record, schedule: record, status: record, paused_reason: record, created_at: record, updated_at: record, archived_at: record> {
@@ -3102,7 +3201,7 @@ export def "deployments-archive-betatrue BetaArchiveDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause Deployment
@@ -3118,6 +3217,7 @@ export def "deployments-pause-betatrue BetaPauseDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, name: string, description: string, agent: record<type: string, id: string, version: int>, environment_id: string, vault_ids: list<string>, initial_events: list<record>, resources: list<record>, metadata: record, schedule: record, status: record, paused_reason: record, created_at: record, updated_at: record, archived_at: record> {
@@ -3128,7 +3228,7 @@ export def "deployments-pause-betatrue BetaPauseDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpause Deployment
@@ -3144,6 +3244,7 @@ export def "deployments-unpause-betatrue BetaUnpauseDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, name: string, description: string, agent: record<type: string, id: string, version: int>, environment_id: string, vault_ids: list<string>, initial_events: list<record>, resources: list<record>, metadata: record, schedule: record, status: record, paused_reason: record, created_at: record, updated_at: record, archived_at: record> {
@@ -3154,7 +3255,7 @@ export def "deployments-unpause-betatrue BetaUnpauseDeployment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run Deployment Now
@@ -3170,6 +3271,7 @@ export def "deployments-run-betatrue BetaRunDeploymentNow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, deployment_id: string, trigger_context: record, session_id: string, error: record, agent: record<type: string, id: string, version: int>, created_at: record> {
@@ -3180,7 +3282,7 @@ export def "deployments-run-betatrue BetaRunDeploymentNow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Deployment Runs
@@ -3195,6 +3297,7 @@ export def "deployment-runs-betatrue BetaListDeploymentRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum results per page. Default 20, maximum 1000. (format: int32)
   --page: string # Opaque pagination cursor. Pass next_page from the previous response. Invalid or expired cursors return 400.
   --deployment-id: string # Filter to a specific deployment. Omit to list across all deployments in the workspace. Filtering by a non-existent deployment_id returns 200 with empty data.
@@ -3216,7 +3319,7 @@ export def "deployment-runs-betatrue BetaListDeploymentRuns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Deployment Run
@@ -3232,6 +3335,7 @@ export def "deployment-runs BetaGetDeploymentRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3243,7 +3347,7 @@ export def "deployment-runs BetaGetDeploymentRun" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Vault
@@ -3258,6 +3362,7 @@ export def "vaults-betatrue BetaCreateVault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   display_name: string # Human-readable name for the vault. 1-255 characters.
@@ -3273,7 +3378,7 @@ export def "vaults-betatrue BetaCreateVault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Vaults
@@ -3288,6 +3393,7 @@ export def "vaults-betatrue BetaListVaults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of vaults to return per page. Defaults to 20, maximum 100. (format: int32)
   --page: string # Opaque pagination token from a previous `list_vaults` response.
   --include-archived: oneof<nothing, bool> # Whether to include archived vaults in the results.
@@ -3303,7 +3409,7 @@ export def "vaults-betatrue BetaListVaults" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Vault
@@ -3319,6 +3425,7 @@ export def "vaults BetaGetVault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3330,7 +3437,7 @@ export def "vaults BetaGetVault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Vault
@@ -3346,6 +3453,7 @@ export def "vaults BetaUpdateVault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --display-name: string # Updated human-readable name for the vault. 1-255 characters. (nullable)
@@ -3361,7 +3469,7 @@ export def "vaults BetaUpdateVault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Vault
@@ -3377,6 +3485,7 @@ export def "vaults BetaDeleteVault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3388,7 +3497,7 @@ export def "vaults BetaDeleteVault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Vault
@@ -3404,6 +3513,7 @@ export def "vaults-archive-betatrue BetaArchiveVault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, display_name: string, metadata: record, created_at: string, updated_at: string, archived_at: record> {
@@ -3414,7 +3524,7 @@ export def "vaults-archive-betatrue BetaArchiveVault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Credential
@@ -3430,6 +3540,7 @@ export def "vaults-credentials-betatrue BetaCreateCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --body-auth: any # Authentication configuration for the credential.
@@ -3446,7 +3557,7 @@ export def "vaults-credentials-betatrue BetaCreateCredential" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Credentials
@@ -3462,6 +3573,7 @@ export def "vaults-credentials-betatrue BetaListCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of credentials to return per page. Defaults to 20, maximum 100. (format: int32)
   --page: string # Opaque pagination token from a previous `list_credentials` response.
   --include-archived: oneof<nothing, bool> # Whether to include archived credentials in the results.
@@ -3477,7 +3589,7 @@ export def "vaults-credentials-betatrue BetaListCredentials" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Credential
@@ -3494,6 +3606,7 @@ export def "vaults-credentials BetaGetCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3505,7 +3618,7 @@ export def "vaults-credentials BetaGetCredential" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Credential
@@ -3522,6 +3635,7 @@ export def "vaults-credentials BetaUpdateCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
   --display-name: string # Updated human-readable name for the credential. 1-255 characters. (nullable)
@@ -3538,7 +3652,7 @@ export def "vaults-credentials BetaUpdateCredential" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Credential
@@ -3555,6 +3669,7 @@ export def "vaults-credentials BetaDeleteCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3566,7 +3681,7 @@ export def "vaults-credentials BetaDeleteCredential" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive Credential
@@ -3583,6 +3698,7 @@ export def "vaults-credentials-archive-betatrue BetaArchiveCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, id: string, vault_id: string, display_name: string, metadata: record, created_at: string, updated_at: string, archived_at: record, auth: record> {
@@ -3593,7 +3709,7 @@ export def "vaults-credentials-archive-betatrue BetaArchiveCredential" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate Credential
@@ -3610,6 +3726,7 @@ export def "vaults-credentials-mcp-oauth-validate-betatrue BetaValidateCredentia
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anthropic-version: string
   --anthropic-beta: string
 ]: nothing -> record<type: string, credential_id: string, vault_id: string, status: record, validated_at: record, has_refresh_token: bool, mcp_probe: record<method: string, http_response: record<status_code: int, content_type: string, body: string, body_truncated: bool>>, refresh: record<status: record, http_response: record<status_code: int, content_type: string, body: string, body_truncated: bool>>> {
@@ -3620,5 +3737,5 @@ export def "vaults-credentials-mcp-oauth-validate-betatrue BetaValidateCredentia
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

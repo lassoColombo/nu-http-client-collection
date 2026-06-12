@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def protocolType-completer [] { ["IPBased" "ServerNameIndication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cdn-check-name-availability CheckNameAvailability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "providers-microsoft-cdn-check-name-availability CheckNameAvailabilit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
@@ -118,7 +120,7 @@ export def "providers-microsoft-cdn-check-name-availability CheckNameAvailabilit
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edgenodes are the global Point of Presence (POP) locations used to deliver CDN content to end users.
@@ -133,6 +135,7 @@ export def "providers-microsoft-cdn-edgenodes List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -141,7 +144,7 @@ export def "providers-microsoft-cdn-edgenodes List" [
   let full_url = (build-url $base "/providers/Microsoft.Cdn/edgenodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the available CDN REST API operations.
@@ -156,6 +159,7 @@ export def "providers-microsoft-cdn-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -164,7 +168,7 @@ export def "providers-microsoft-cdn-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Cdn/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check the availability of a resource name. This is needed for resources where name is globally unique, such as a CDN endpoint.
@@ -180,6 +184,7 @@ export def "subscriptions-providers-microsoft-cdn-check-name-availability CheckN
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
@@ -193,7 +198,7 @@ export def "subscriptions-providers-microsoft-cdn-check-name-availability CheckN
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check the quota and actual usage of the CDN profiles under the given subscription.
@@ -209,6 +214,7 @@ export def "subscriptions-providers-microsoft-cdn-check-resource-usage List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -217,7 +223,7 @@ export def "subscriptions-providers-microsoft-cdn-check-resource-usage List" [
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/checkResourceUsage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the CDN profiles within an Azure subscription.
@@ -233,6 +239,7 @@ export def "subscriptions-providers-microsoft-cdn-profiles List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -241,7 +248,7 @@ export def "subscriptions-providers-microsoft-cdn-profiles List" [
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if the probe path is a valid path and the file can be accessed. Probe path is the path to a file hosted on the origin server to help accelerate the delivery of dynamic content via the CDN endpoint. This path is relative to the origin path specified in the endpoint configuration.
@@ -257,6 +264,7 @@ export def "subscriptions-providers-microsoft-cdn-validate-probe ValidateProbe" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   probeURL: string # The probe URL to validate.
 ]: any -> record<errorCode: string, isValid: bool, message: string> {
@@ -269,7 +277,7 @@ export def "subscriptions-providers-microsoft-cdn-validate-probe ValidateProbe" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all of the CDN profiles within a resource group.
@@ -286,6 +294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles ListB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -294,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles ListB
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an existing CDN profile with the specified parameters. Deleting a profile will result in the deletion of all of the sub-resources including endpoints, origins and custom domains.
@@ -312,6 +321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Delet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -320,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Delet
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a CDN profile with the specified profile name under the specified subscription and resource group.
@@ -338,6 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Get" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -346,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Get" 
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an existing CDN profile with the specified profile name under the specified subscription and resource group.
@@ -364,6 +375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Updat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --tags: record # Profile tags
 ]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>> {
@@ -376,7 +388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Updat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new CDN profile with a profile name under the specified subscription and resource group.
@@ -395,6 +407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --properties: any # The JSON object that contains the properties required to create a profile.
   sku: record # The pricing tier (defines a CDN provider, feature list and rate) of the CDN profile. — shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
@@ -410,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Creat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Checks the quota and actual usage of endpoints under the given CDN profile.
@@ -428,6 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -436,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/checkResourceUsage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists existing CDN endpoints.
@@ -454,6 +468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -462,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an existing CDN endpoint with the specified endpoint name under the specified subscription, resource group and profile.
@@ -481,6 +496,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -489,7 +505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an existing CDN endpoint with the specified endpoint name under the specified subscription, resource group and profile.
@@ -508,6 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -516,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an existing CDN endpoint with the specified endpoint name under the specified subscription, resource group and profile. Only tags and Origin HostHeader can be updated after creating an endpoint. To update origins, use the Update Origin operation. To update custom domains, use the Update Custom Domain operation.
@@ -536,6 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --properties: any # The JSON object containing endpoint update parameters. — shape: {contentTypesToCompress?: list, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
   --tags: record # Endpoint tags.
@@ -549,7 +567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new CDN endpoint with the specified endpoint name under the specified subscription, resource group and profile.
@@ -569,6 +587,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --properties: any # The JSON object that contains the properties required to create an endpoint. — shape: {origins: list, contentTypesToCompress?: list, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
   location: string # Resource location.
@@ -583,7 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Checks the quota and usage of geo filters and custom domains under the given endpoint.
@@ -602,6 +621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -610,7 +630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/checkResourceUsage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the existing custom domains within an endpoint.
@@ -629,6 +649,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -637,7 +658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an existing custom domain within an endpoint.
@@ -657,6 +678,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -665,7 +687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an existing custom domain within an endpoint.
@@ -685,6 +707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -693,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new custom domain within an endpoint.
@@ -714,6 +737,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --properties: any # The JSON object that contains the properties of the custom domain to create. — shape: {hostName: string}
 ]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
@@ -726,7 +750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Disable https delivery of the custom domain.
@@ -746,6 +770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -754,7 +779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)/disableCustomHttps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable https delivery of the custom domain.
@@ -775,6 +800,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   certificateSource: string@certificateSource-completer # Defines the source of the SSL certificate.
   --minimumTlsVersion: string@minimumTlsVersion-completer # TLS protocol version that will be used for Https
@@ -789,7 +815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pre-loads a content to CDN. Available for Verizon Profiles.
@@ -808,6 +834,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   contentPaths: list # The path to the content to be loaded. Path should be a relative file URL of the origin.
 ]: any -> record<code: string, message: string> {
@@ -820,7 +847,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all of the existing origins within an endpoint.
@@ -839,6 +866,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -847,7 +875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/origins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an existing origin within an endpoint.
@@ -867,6 +895,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -875,7 +904,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/origins/($originName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an existing origin within an endpoint.
@@ -896,6 +925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --properties: any # The JSON object that contains the properties of the origin. — shape: {hostName?: string, httpPort?: int, httpsPort?: int}
 ]: any -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>> {
@@ -908,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a content from CDN.
@@ -927,6 +957,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   contentPaths: list # The path to the content to be purged. Can describe a file path or a wild card directory.
 ]: any -> record<code: string, message: string> {
@@ -939,7 +970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Starts an existing CDN endpoint that is on a stopped state.
@@ -958,6 +989,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -966,7 +998,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops an existing running CDN endpoint.
@@ -985,6 +1017,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -993,7 +1026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validates the custom domain mapping to ensure it maps to the correct CDN endpoint in DNS.
@@ -1012,6 +1045,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   hostName: string # The host name of the custom domain. Must be a domain name.
 ]: any -> record<customDomainValidated: bool, message: string, reason: string> {
@@ -1024,7 +1058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generates a dynamic SSO URI used to sign in to the CDN supplemental portal. Supplemental portal is used to configure advanced feature capabilities that are not yet available in the Azure portal, such as core reports in a standard profile; rules engine, advanced HTTP reports, and real-time stats and alerts in a premium profile. The SSO URI changes approximately every 10 minutes.
@@ -1042,6 +1076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-gener
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<ssoUriValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1050,7 +1085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-gener
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/generateSsoUri" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the supported optimization types for the current profile. A user can create an endpoint with an optimization type from the listed values.
@@ -1068,6 +1103,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<supportedOptimizationTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1076,5 +1112,5 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-s
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/getSupportedOptimizationTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

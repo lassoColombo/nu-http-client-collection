@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def action-completer [] { ["pause" "resume" "stop"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "health get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "health get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<status: string, components: table<name: string, status: string, error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -112,7 +114,7 @@ export def "health get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for projects and repositories
@@ -127,6 +129,7 @@ export def "search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search parameter for project and repository name.
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<project: table<project_id: int, owner_id: int, name: string, registry_id: int, creation_time: string, update_time: string, deleted: bool, owner_name: string, togglable: bool, current_user_role_id: int, current_user_role_ids: list, repo_count: int, metadata: record, cve_allowlist: record>, repository: table<project_id: int, project_name: string, project_public: bool, repository_name: string, pull_count: int, artifact_count: int>> {
@@ -138,7 +141,7 @@ export def "search search" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the statistic information about the projects and repositories
@@ -153,6 +156,7 @@ export def "statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<private_project_count: int, private_repo_count: int, public_project_count: int, public_repo_count: int, total_project_count: int, total_repo_count: int, total_storage_consumption: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -162,7 +166,7 @@ export def "statistics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping available ldap service.
@@ -177,6 +181,7 @@ export def "ldap-ping pingLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --ldap-url: string # The url of ldap service.
   --ldap-search-dn: string # The search dn of ldap service.
@@ -198,7 +203,7 @@ export def "ldap-ping pingLdap" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search available ldap users.
@@ -213,6 +218,7 @@ export def "ldap-users-search searchLdapUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # Registered user ID
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<username: string, realname: string, email: string> {
@@ -224,7 +230,7 @@ export def "ldap-users-search searchLdapUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import selected available ldap users.
@@ -239,6 +245,7 @@ export def "ldap-users-import importLdapUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --ldap-uid-list: list # selected uid list
 ]: any -> any {
@@ -252,7 +259,7 @@ export def "ldap-users-import importLdapUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search available ldap groups.
@@ -267,6 +274,7 @@ export def "ldap-groups-search searchLdapGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # Ldap group name
   --groupdn: string # The LDAP group DN
   --X-Request-Id: string # An unique ID for the request
@@ -279,7 +287,7 @@ export def "ldap-groups-search searchLdapGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get internal configurations.
@@ -294,6 +302,7 @@ export def "internalconfig get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -303,7 +312,7 @@ export def "internalconfig get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system configurations.
@@ -318,6 +327,7 @@ export def "configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<auth_mode: record<value: string, editable: bool>, primary_auth_mode: record<value: bool, editable: bool>, ldap_base_dn: record<value: string, editable: bool>, ldap_filter: record<value: string, editable: bool>, ldap_group_base_dn: record<value: string, editable: bool>, ldap_group_admin_dn: record<value: string, editable: bool>, ldap_group_attribute_name: record<value: string, editable: bool>, ldap_group_search_filter: record<value: string, editable: bool>, ldap_group_search_scope: record<value: int, editable: bool>, ldap_group_attach_parallel: record<value: bool, editable: bool>, ldap_scope: record<value: int, editable: bool>, ldap_search_dn: record<value: string, editable: bool>, ldap_timeout: record<value: int, editable: bool>, ldap_uid: record<value: string, editable: bool>, ldap_url: record<value: string, editable: bool>, ldap_verify_cert: record<value: bool, editable: bool>, ldap_group_membership_attribute: record<value: string, editable: bool>, project_creation_restriction: record<value: string, editable: bool>, read_only: record<value: bool, editable: bool>, self_registration: record<value: bool, editable: bool>, token_expiration: record<value: int, editable: bool>, uaa_client_id: record<value: string, editable: bool>, uaa_client_secret: record<value: string, editable: bool>, uaa_endpoint: record<value: string, editable: bool>, uaa_verify_cert: record<value: bool, editable: bool>, http_authproxy_endpoint: record<value: string, editable: bool>, http_authproxy_tokenreview_endpoint: record<value: string, editable: bool>, http_authproxy_admin_groups: record<value: string, editable: bool>, http_authproxy_admin_usernames: record<value: string, editable: bool>, http_authproxy_verify_cert: record<value: bool, editable: bool>, http_authproxy_skip_search: record<value: bool, editable: bool>, http_authproxy_server_certificate: record<value: string, editable: bool>, oidc_name: record<value: string, editable: bool>, oidc_endpoint: record<value: string, editable: bool>, oidc_client_id: record<value: string, editable: bool>, oidc_groups_claim: record<value: string, editable: bool>, oidc_admin_group: record<value: string, editable: bool>, oidc_group_filter: record<value: string, editable: bool>, oidc_scope: record<value: string, editable: bool>, oidc_user_claim: record<value: string, editable: bool>, oidc_verify_cert: record<value: bool, editable: bool>, oidc_auto_onboard: record<value: bool, editable: bool>, oidc_extra_redirect_parms: record<value: string, editable: bool>, oidc_logout: record<value: bool, editable: bool>, robot_token_duration: record<value: int, editable: bool>, robot_name_prefix: record<value: string, editable: bool>, notification_enable: record<value: bool, editable: bool>, quota_per_project_enable: record<value: bool, editable: bool>, storage_per_project: record<value: int, editable: bool>, audit_log_forward_endpoint: record<value: string, editable: bool>, skip_audit_log_database: record<value: bool, editable: bool>, scanner_skip_update_pulltime: record<value: bool, editable: bool>, scan_all_policy: record<type: string, parameter: record<daily_time: int>>, session_timeout: record<value: int, editable: bool>, banner_message: record<value: string, editable: bool>, disabled_audit_log_event_types: record<value: string, editable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -327,7 +337,7 @@ export def "configurations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify system configurations.
@@ -342,6 +352,7 @@ export def "configurations updateConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --auth-mode: string # The auth mode of current system, such as "db_auth", "ldap_auth", "oidc_auth"
   --primary-auth-mode: oneof<nothing, bool> # The flag to indicate whether the current auth mode should consider as a primary one.
@@ -411,7 +422,7 @@ export def "configurations updateConfigurations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List projects
@@ -426,6 +437,7 @@ export def "projects listProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
@@ -444,7 +456,7 @@ export def "projects listProjects" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if the project name user provided already exists.
@@ -459,6 +471,7 @@ export def "projects headProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project-name: string # Project name for checking exists.
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record {
@@ -470,7 +483,7 @@ export def "projects headProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new project.
@@ -487,6 +500,7 @@ export def "projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Resource-Name-In-Location: oneof<nothing, bool> # The flag to indicate whether to return the name of the resource in Location. When X-Resource-Name-In-Location is true, the Location will return the name of the resource.
   --project-name: string # The name of the project.
@@ -506,7 +520,7 @@ export def "projects createProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return specific project detail information
@@ -522,6 +536,7 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<project_id: int, owner_id: int, name: string, registry_id: int, creation_time: string, update_time: string, deleted: bool, owner_name: string, togglable: bool, current_user_role_id: int, current_user_role_ids: list<int>, repo_count: int, metadata: record<public: string, enable_content_trust: string, enable_content_trust_cosign: string, prevent_vul: string, severity: string, auto_scan: string, auto_sbom_generation: string, reuse_sys_cve_allowlist: string, retention_id: string, proxy_speed_kb: string, max_upstream_conn: string, proxy_cache_local_on_not_found: string, proxy_referrer_api: string>, cve_allowlist: record<id: int, project_id: int, expires_at: int, items: list<record>, creation_time: string, update_time: string>> {
@@ -532,7 +547,7 @@ export def "projects get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update properties for a selected project.
@@ -550,6 +565,7 @@ export def "projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --project-name: string # The name of the project.
@@ -569,7 +585,7 @@ export def "projects updateProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project by projectID
@@ -585,6 +601,7 @@ export def "projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
@@ -595,7 +612,7 @@ export def "projects delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the deletable status of the project
@@ -611,6 +628,7 @@ export def "projects-deletable get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<deletable: bool, message: string> {
@@ -621,7 +639,7 @@ export def "projects-deletable get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get summary of the project.
@@ -637,6 +655,7 @@ export def "projects-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<repo_count: int, project_admin_count: int, maintainer_count: int, developer_count: int, guest_count: int, limited_guest_count: int, quota: record<hard: record, used: record>, registry: record<id: int, url: string, name: string, credential: record<type: string, access_key: string, access_secret: string>, type: string, insecure: bool, ca_certificate: string, description: string, status: string, creation_time: string, update_time: string>> {
@@ -647,7 +666,7 @@ export def "projects-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all project member information
@@ -663,6 +682,7 @@ export def "projects-members listProjectMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --entityname: string # The entity name to search.
@@ -677,7 +697,7 @@ export def "projects-members listProjectMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project member
@@ -695,6 +715,7 @@ export def "projects-members createProjectMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --role-id: int # The role id 1 for projectAdmin, 2 for developer, 3 for guest, 4 for maintainer
@@ -711,7 +732,7 @@ export def "projects-members createProjectMember" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the project member information
@@ -728,6 +749,7 @@ export def "projects-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<id: int, project_id: int, entity_name: string, role_name: string, role_id: int, entity_id: int, entity_type: string> {
@@ -738,7 +760,7 @@ export def "projects-members get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project member
@@ -755,6 +777,7 @@ export def "projects-members updateProjectMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --role-id: int # The role id 1 for projectAdmin, 2 for developer, 3 for guest, 4 for maintainer
@@ -769,7 +792,7 @@ export def "projects-members updateProjectMember" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project member
@@ -786,6 +809,7 @@ export def "projects-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
@@ -796,7 +820,7 @@ export def "projects-members delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the metadata of the specific project
@@ -812,6 +836,7 @@ export def "projects-metadatas listProjectMetadatas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record {
@@ -822,7 +847,7 @@ export def "projects-metadatas listProjectMetadatas" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add metadata for the specific project
@@ -838,6 +863,7 @@ export def "projects-metadatas addProjectMetadatas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --body: record
@@ -851,7 +877,7 @@ export def "projects-metadatas addProjectMetadatas" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the specific metadata of the specific project
@@ -868,6 +894,7 @@ export def "projects-metadatas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record {
@@ -878,7 +905,7 @@ export def "projects-metadatas get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the specific metadata for the specific project
@@ -895,6 +922,7 @@ export def "projects-metadatas updateProjectMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --body: record
@@ -908,7 +936,7 @@ export def "projects-metadatas updateProjectMetadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the specific metadata for the specific project
@@ -925,6 +953,7 @@ export def "projects-metadatas delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
@@ -935,7 +964,7 @@ export def "projects-metadatas delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all authorized repositories
@@ -950,6 +979,7 @@ export def "repositories listAllRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -964,7 +994,7 @@ export def "repositories listAllRepositories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repositories
@@ -980,6 +1010,7 @@ export def "projects-repositories listRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -994,7 +1025,7 @@ export def "projects-repositories listRepositories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository
@@ -1011,6 +1042,7 @@ export def "projects-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, project_id: int, name: string, description: string, artifact_count: int, pull_count: int, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1020,7 +1052,7 @@ export def "projects-repositories get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository
@@ -1037,6 +1069,7 @@ export def "projects-repositories updateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the repository (format: int64)
   --project-id: int # The ID of the project that the repository belongs to (format: int64)
@@ -1057,7 +1090,7 @@ export def "projects-repositories updateRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete repository
@@ -1074,6 +1107,7 @@ export def "projects-repositories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1083,7 +1117,7 @@ export def "projects-repositories delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List artifacts
@@ -1100,6 +1134,7 @@ export def "projects-repositories-artifacts listArtifacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1121,7 +1156,7 @@ export def "projects-repositories-artifacts listArtifacts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy artifact
@@ -1138,6 +1173,7 @@ export def "projects-repositories-artifacts CopyArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # The artifact from which the new artifact is copied from, the format should be "project/repository:tag" or "project/repository@digest".
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
@@ -1149,7 +1185,7 @@ export def "projects-repositories-artifacts CopyArtifact" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the specific artifact
@@ -1167,6 +1203,7 @@ export def "projects-repositories-artifacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --with-tag: oneof<nothing, bool> # Specify whether the tags are inclued inside the returning artifacts (default: true)
@@ -1187,7 +1224,7 @@ export def "projects-repositories-artifacts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specific artifact
@@ -1205,6 +1242,7 @@ export def "projects-repositories-artifacts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1214,7 +1252,7 @@ export def "projects-repositories-artifacts delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Scan the artifact
@@ -1232,6 +1270,7 @@ export def "projects-repositories-artifacts-scan scanArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --scan-type: string@scan-type-completer # The scan type for the scan request. Two options are currently supported, vulnerability and sbom
 ]: any -> any {
@@ -1245,7 +1284,7 @@ export def "projects-repositories-artifacts-scan scanArtifact" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancelling a scan job for a particular artifact
@@ -1263,6 +1302,7 @@ export def "projects-repositories-artifacts-scan-stop stopScanArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --scan-type: string@scan-type-completer # The scan type for the scan request. Two options are currently supported, vulnerability and sbom
 ]: any -> any {
@@ -1276,7 +1316,7 @@ export def "projects-repositories-artifacts-scan-stop stopScanArtifact" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the log of the scan report
@@ -1295,6 +1335,7 @@ export def "projects-repositories-artifacts-scan-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1304,7 +1345,7 @@ export def "projects-repositories-artifacts-scan-log get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tag
@@ -1322,6 +1363,7 @@ export def "projects-repositories-artifacts-tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   name: string # The name of the tag
 ]: any -> any {
@@ -1335,7 +1377,7 @@ export def "projects-repositories-artifacts-tags createTag" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List tags
@@ -1353,6 +1395,7 @@ export def "projects-repositories-artifacts-tags listTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1368,7 +1411,7 @@ export def "projects-repositories-artifacts-tags listTags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete tag
@@ -1387,6 +1430,7 @@ export def "projects-repositories-artifacts-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1396,7 +1440,7 @@ export def "projects-repositories-artifacts-tags delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List accessories
@@ -1414,6 +1458,7 @@ export def "projects-repositories-artifacts-accessories listAccessories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1428,7 +1473,7 @@ export def "projects-repositories-artifacts-accessories listAccessories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the vulnerabilities addition of the specific artifact
@@ -1446,6 +1491,7 @@ export def "projects-repositories-artifacts-additions-vulnerabilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Accept-Vulnerabilities: string # A comma-separated lists of MIME types for the scan report or scan summary. The first mime type will be used when the report found for it. Currently the mime type supports 'application/vnd.scanner.adapter.vuln.report.harbor+json; version=1.0' and 'application/vnd.security.vulnerability.report; version=1.1'
 ]: nothing -> string {
@@ -1456,7 +1502,7 @@ export def "projects-repositories-artifacts-additions-vulnerabilities get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the addition of the specific artifact
@@ -1475,6 +1521,7 @@ export def "projects-repositories-artifacts-additions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1484,7 +1531,7 @@ export def "projects-repositories-artifacts-additions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add label to artifact
@@ -1502,6 +1549,7 @@ export def "projects-repositories-artifacts-labels addLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the label (format: int64)
   --name: string # The name the label
@@ -1522,7 +1570,7 @@ export def "projects-repositories-artifacts-labels addLabel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove label from artifact
@@ -1541,6 +1589,7 @@ export def "projects-repositories-artifacts-labels removeLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1550,7 +1599,7 @@ export def "projects-repositories-artifacts-labels removeLabel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List artifacts
@@ -1566,6 +1615,7 @@ export def "projects-artifacts listArtifactsOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1589,7 +1639,7 @@ export def "projects-artifacts listArtifactsOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project level scanner
@@ -1605,6 +1655,7 @@ export def "projects-scanner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<uuid: string, name: string, description: string, url: string, disabled: bool, is_default: bool, auth: string, access_credential: string, skip_certVerify: bool, use_internal_addr: bool, create_time: string, update_time: string, adapter: string, vendor: string, version: string, health: string, capabilities: record> {
@@ -1615,7 +1666,7 @@ export def "projects-scanner get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure scanner for the specified project
@@ -1631,6 +1682,7 @@ export def "projects-scanner setScannerOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   uuid: string # The identifier of the scanner registration
@@ -1645,7 +1697,7 @@ export def "projects-scanner setScannerOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get scanner registration candidates for configurating project level scanner
@@ -1661,6 +1713,7 @@ export def "projects-scanner-candidates listScannerCandidatesOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1676,7 +1729,7 @@ export def "projects-scanner-candidates listScannerCandidatesOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent logs of projects which the user is a member with project admin role, or return all audit logs for system admin user (deprecated)
@@ -1691,6 +1744,7 @@ export def "audit-logs listAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1705,7 +1759,7 @@ export def "audit-logs listAuditLogs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent logs of the projects which the user is a member with project_admin role, or return all audit logs for system admin user
@@ -1720,6 +1774,7 @@ export def "auditlog-exts listAuditLogExts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1734,7 +1789,7 @@ export def "auditlog-exts listAuditLogExts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all event types of audit log
@@ -1749,6 +1804,7 @@ export def "auditlog-exts-events listAuditLogEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<event_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1758,7 +1814,7 @@ export def "auditlog-exts-events listAuditLogEventTypes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent logs of the projects (deprecated)
@@ -1774,6 +1830,7 @@ export def "projects-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1788,7 +1845,7 @@ export def "projects-logs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recent logs of the projects
@@ -1804,6 +1861,7 @@ export def "projects-auditlog-exts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -1818,7 +1876,7 @@ export def "projects-auditlog-exts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List P2P providers
@@ -1833,6 +1891,7 @@ export def "p2p-preheat-providers ListProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<id: string, name: string, icon: string, maintainers: list<string>, version: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1842,7 +1901,7 @@ export def "p2p-preheat-providers ListProviders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping status of a instance.
@@ -1857,6 +1916,7 @@ export def "p2p-preheat-instances-ping PingInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # Unique ID
   --name: string # Instance name
@@ -1881,7 +1941,7 @@ export def "p2p-preheat-instances-ping PingInstances" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List P2P provider instances
@@ -1896,6 +1956,7 @@ export def "p2p-preheat-instances ListInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -1910,7 +1971,7 @@ export def "p2p-preheat-instances ListInstances" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create p2p provider instances
@@ -1925,6 +1986,7 @@ export def "p2p-preheat-instances CreateInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # Unique ID
   --name: string # Instance name
@@ -1949,7 +2011,7 @@ export def "p2p-preheat-instances CreateInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a P2P provider instance
@@ -1965,6 +2027,7 @@ export def "p2p-preheat-instances GetInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, name: string, description: string, vendor: string, endpoint: string, auth_mode: string, auth_info: record, status: string, enabled: bool, default: bool, insecure: bool, setup_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1974,7 +2037,7 @@ export def "p2p-preheat-instances GetInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specified P2P provider instance
@@ -1990,6 +2053,7 @@ export def "p2p-preheat-instances DeleteInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1999,7 +2063,7 @@ export def "p2p-preheat-instances DeleteInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the specified P2P provider instance
@@ -2015,6 +2079,7 @@ export def "p2p-preheat-instances UpdateInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # Unique ID
   --name: string # Instance name
@@ -2039,7 +2104,7 @@ export def "p2p-preheat-instances UpdateInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a preheat policy under a project
@@ -2055,6 +2120,7 @@ export def "projects-preheat-policies CreatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of preheat policy
   --name: string # The Name of preheat policy
@@ -2079,7 +2145,7 @@ export def "projects-preheat-policies CreatePolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List preheat policies
@@ -2095,6 +2161,7 @@ export def "projects-preheat-policies ListPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2109,7 +2176,7 @@ export def "projects-preheat-policies ListPolicies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a preheat policy
@@ -2126,6 +2193,7 @@ export def "projects-preheat-policies GetPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, name: string, description: string, project_id: int, provider_id: int, provider_name: string, filters: string, trigger: string, enabled: bool, extra_attrs: string, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2135,7 +2203,7 @@ export def "projects-preheat-policies GetPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update preheat policy
@@ -2152,6 +2220,7 @@ export def "projects-preheat-policies UpdatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of preheat policy
   --name: string # The Name of preheat policy
@@ -2176,7 +2245,7 @@ export def "projects-preheat-policies UpdatePolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Manual preheat
@@ -2193,6 +2262,7 @@ export def "projects-preheat-policies ManualPreheat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of preheat policy
   --name: string # The Name of preheat policy
@@ -2217,7 +2287,7 @@ export def "projects-preheat-policies ManualPreheat" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a preheat policy
@@ -2234,6 +2304,7 @@ export def "projects-preheat-policies DeletePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2243,7 +2314,7 @@ export def "projects-preheat-policies DeletePolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List executions for the given policy
@@ -2260,6 +2331,7 @@ export def "projects-preheat-policies-executions ListExecutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2274,7 +2346,7 @@ export def "projects-preheat-policies-executions ListExecutions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a execution detail by id
@@ -2292,6 +2364,7 @@ export def "projects-preheat-policies-executions GetExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, vendor_type: string, vendor_id: int, status: string, status_message: string, metrics: record<task_count: int, success_task_count: int, error_task_count: int, pending_task_count: int, running_task_count: int, scheduled_task_count: int, stopped_task_count: int>, trigger: string, extra_attrs: record, start_time: string, end_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2301,7 +2374,7 @@ export def "projects-preheat-policies-executions GetExecution" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a execution
@@ -2320,6 +2393,7 @@ export def "projects-preheat-policies-executions StopExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of execution
   --vendor-type: string # The vendor type of execution
@@ -2342,7 +2416,7 @@ export def "projects-preheat-policies-executions StopExecution" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all the related tasks for the given execution
@@ -2360,6 +2434,7 @@ export def "projects-preheat-policies-executions-tasks ListTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2374,7 +2449,7 @@ export def "projects-preheat-policies-executions-tasks ListTasks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the log text stream of the specified task for the given execution
@@ -2393,6 +2468,7 @@ export def "projects-preheat-policies-executions-tasks-logs GetPreheatLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2402,7 +2478,7 @@ export def "projects-preheat-policies-executions-tasks-logs GetPreheatLog" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all providers at project level
@@ -2418,6 +2494,7 @@ export def "projects-preheat-providers ListProvidersUnderProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<id: int, provider: string, enabled: bool, default: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2427,7 +2504,7 @@ export def "projects-preheat-providers ListProvidersUnderProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all immutable tag rules of current project
@@ -2443,6 +2520,7 @@ export def "projects-immutabletagrules ListImmuRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2458,7 +2536,7 @@ export def "projects-immutabletagrules ListImmuRules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an immutable tag rule to current project
@@ -2475,6 +2553,7 @@ export def "projects-immutabletagrules CreateImmuRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int
@@ -2496,7 +2575,7 @@ export def "projects-immutabletagrules CreateImmuRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the immutable tag rule or enable or disable the rule
@@ -2514,6 +2593,7 @@ export def "projects-immutabletagrules UpdateImmuRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int
@@ -2535,7 +2615,7 @@ export def "projects-immutabletagrules UpdateImmuRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the immutable tag rule.
@@ -2552,6 +2632,7 @@ export def "projects-immutabletagrules DeleteImmuRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
@@ -2562,7 +2643,7 @@ export def "projects-immutabletagrules DeleteImmuRule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List project webhook policies.
@@ -2578,6 +2659,7 @@ export def "projects-webhook-policies ListWebhookPoliciesOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --page: int # The page number (format: int64, default: 1)
@@ -2593,7 +2675,7 @@ export def "projects-webhook-policies ListWebhookPoliciesOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project webhook policy.
@@ -2610,6 +2692,7 @@ export def "projects-webhook-policies CreateWebhookPolicyOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int # The webhook policy ID. (format: int64)
@@ -2633,7 +2716,7 @@ export def "projects-webhook-policies CreateWebhookPolicyOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project webhook policy
@@ -2650,6 +2733,7 @@ export def "projects-webhook-policies GetWebhookPolicyOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<id: int, name: string, description: string, project_id: int, targets: table<type: string, address: string, auth_header: string, skip_cert_verify: bool, payload_format: string>, event_types: list<string>, creator: string, creation_time: string, update_time: string, enabled: bool> {
@@ -2660,7 +2744,7 @@ export def "projects-webhook-policies GetWebhookPolicyOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook policy of a project.
@@ -2678,6 +2762,7 @@ export def "projects-webhook-policies UpdateWebhookPolicyOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int # The webhook policy ID. (format: int64)
@@ -2701,7 +2786,7 @@ export def "projects-webhook-policies UpdateWebhookPolicyOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete webhook policy of a project
@@ -2718,6 +2803,7 @@ export def "projects-webhook-policies DeleteWebhookPolicyOfProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
@@ -2728,7 +2814,7 @@ export def "projects-webhook-policies DeleteWebhookPolicyOfProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List executions for a specific webhook policy
@@ -2745,6 +2831,7 @@ export def "projects-webhook-policies-executions ListExecutionsOfWebhookPolicy" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2760,7 +2847,7 @@ export def "projects-webhook-policies-executions ListExecutionsOfWebhookPolicy" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tasks for a specific webhook execution
@@ -2778,6 +2865,7 @@ export def "projects-webhook-policies-executions-tasks ListTasksOfWebhookExecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
@@ -2793,7 +2881,7 @@ export def "projects-webhook-policies-executions-tasks ListTasksOfWebhookExecuti
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get logs for a specific webhook task
@@ -2812,6 +2900,7 @@ export def "projects-webhook-policies-executions-tasks-log GetLogsOfWebhookTask"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> string {
@@ -2822,7 +2911,7 @@ export def "projects-webhook-policies-executions-tasks-log GetLogsOfWebhookTask"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project webhook policy last trigger info
@@ -2840,6 +2929,7 @@ export def "projects-webhook-lasttrigger LastTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<policy_name: string, event_type: string, enabled: bool, creation_time: string, last_trigger_time: string> {
@@ -2850,7 +2940,7 @@ export def "projects-webhook-lasttrigger LastTrigger" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List project webhook jobs
@@ -2868,6 +2958,7 @@ export def "projects-webhook-jobs ListWebhookJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -2885,7 +2976,7 @@ export def "projects-webhook-jobs ListWebhookJobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get supported event types and notify types.
@@ -2901,6 +2992,7 @@ export def "projects-webhook-events GetSupportedEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<event_type: list<string>, notify_type: list<string>, payload_formats: table<notify_type: string, formats: list>> {
@@ -2911,7 +3003,7 @@ export def "projects-webhook-events GetSupportedEventTypes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all user groups information
@@ -2926,6 +3018,7 @@ export def "usergroups listUserGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --ldap-group-dn: string # search with ldap group DN
@@ -2940,7 +3033,7 @@ export def "usergroups listUserGroups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user group
@@ -2955,6 +3048,7 @@ export def "usergroups createUserGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the user group
   --group-name: string # The name of the user group
@@ -2971,7 +3065,7 @@ export def "usergroups createUserGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search groups by groupname
@@ -2986,6 +3080,7 @@ export def "usergroups-search searchUserGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --groupname: string # Group name for filtering results.
@@ -2999,7 +3094,7 @@ export def "usergroups-search searchUserGroups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user group information
@@ -3015,6 +3110,7 @@ export def "usergroups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, group_name: string, group_type: int, ldap_group_dn: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3024,7 +3120,7 @@ export def "usergroups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group information
@@ -3040,6 +3136,7 @@ export def "usergroups updateUserGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the user group
   --group-name: string # The name of the user group
@@ -3056,7 +3153,7 @@ export def "usergroups updateUserGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user group
@@ -3072,6 +3169,7 @@ export def "usergroups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3081,7 +3179,7 @@ export def "usergroups delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artifact icon
@@ -3097,6 +3195,7 @@ export def "icons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<content_type: string, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3106,7 +3205,7 @@ export def "icons get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get robot account
@@ -3121,6 +3220,7 @@ export def "robots ListRobot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -3135,7 +3235,7 @@ export def "robots ListRobot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a robot account
@@ -3151,6 +3251,7 @@ export def "robots CreateRobot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --name: string # The name of the robot
   --description: string # The description of the robot
@@ -3170,7 +3271,7 @@ export def "robots CreateRobot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List quotas
@@ -3185,6 +3286,7 @@ export def "quotas listQuotas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --reference: string # The reference type of quota.
@@ -3200,7 +3302,7 @@ export def "quotas listQuotas" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the specified quota
@@ -3216,6 +3318,7 @@ export def "quotas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, ref: record, hard: record, used: record, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3225,7 +3328,7 @@ export def "quotas get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the specified quota
@@ -3241,6 +3344,7 @@ export def "quotas updateQuota" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --hard: record
 ]: any -> any {
@@ -3254,7 +3358,7 @@ export def "quotas updateQuota" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a robot account
@@ -3270,6 +3374,7 @@ export def "robots GetRobotByID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, name: string, description: string, secret: string, level: string, duration: int, editable: bool, disable: bool, expires_at: int, permissions: table<kind: string, namespace: string, access: list>, creator_type: string, creator_ref: int, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3279,7 +3384,7 @@ export def "robots GetRobotByID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a robot account
@@ -3296,6 +3401,7 @@ export def "robots UpdateRobot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the robot (format: int64)
   --name: string # The name of the robot
@@ -3322,7 +3428,7 @@ export def "robots UpdateRobot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refresh the robot secret
@@ -3338,6 +3444,7 @@ export def "robots RefreshSec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --secret: string # The secret of the robot
 ]: any -> record<secret: string> {
@@ -3351,7 +3458,7 @@ export def "robots RefreshSec" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a robot account
@@ -3367,6 +3474,7 @@ export def "robots DeleteRobot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3376,7 +3484,7 @@ export def "robots DeleteRobot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List replication policies
@@ -3391,6 +3499,7 @@ export def "replication-policies listReplicationPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -3406,7 +3515,7 @@ export def "replication-policies listReplicationPolicies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a replication policy
@@ -3425,6 +3534,7 @@ export def "replication-policies createReplicationPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The policy ID. (format: int64)
   --name: string # The policy name.
@@ -3455,7 +3565,7 @@ export def "replication-policies createReplicationPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the specific replication policy
@@ -3471,6 +3581,7 @@ export def "replication-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, name: string, description: string, src_registry: record<id: int, url: string, name: string, credential: record<type: string, access_key: string, access_secret: string>, type: string, insecure: bool, ca_certificate: string, description: string, status: string, creation_time: string, update_time: string>, dest_registry: record<id: int, url: string, name: string, credential: record<type: string, access_key: string, access_secret: string>, type: string, insecure: bool, ca_certificate: string, description: string, status: string, creation_time: string, update_time: string>, dest_namespace: string, dest_namespace_replace_count: int, trigger: record<type: string, trigger_settings: record<cron: string>>, filters: table<type: string, value: any, decoration: string>, replicate_deletion: bool, deletion: bool, override: bool, enabled: bool, creation_time: string, update_time: string, speed: int, copy_by_chunk: bool, single_active_replication: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3480,7 +3591,7 @@ export def "replication-policies get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specific replication policy
@@ -3496,6 +3607,7 @@ export def "replication-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3505,7 +3617,7 @@ export def "replication-policies delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the replication policy
@@ -3525,6 +3637,7 @@ export def "replication-policies updateReplicationPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --body-id: int # The policy ID. (format: int64)
   --name: string # The policy name.
@@ -3555,7 +3668,7 @@ export def "replication-policies updateReplicationPolicy" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List replication executions
@@ -3570,6 +3683,7 @@ export def "replication-executions listReplicationExecutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
@@ -3586,7 +3700,7 @@ export def "replication-executions listReplicationExecutions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start one replication execution
@@ -3601,6 +3715,7 @@ export def "replication-executions startReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --policy-id: int # The ID of policy that the execution belongs to. (format: int64)
 ]: any -> any {
@@ -3614,7 +3729,7 @@ export def "replication-executions startReplication" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the specific replication execution
@@ -3630,6 +3745,7 @@ export def "replication-executions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, policy_id: int, status: string, trigger: string, start_time: string, end_time: string, status_text: string, total: int, failed: int, succeed: int, in_progress: int, stopped: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3639,7 +3755,7 @@ export def "replication-executions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop the specific replication execution
@@ -3655,6 +3771,7 @@ export def "replication-executions stopReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3664,7 +3781,7 @@ export def "replication-executions stopReplication" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List replication tasks for a specific execution
@@ -3680,6 +3797,7 @@ export def "replication-executions-tasks listReplicationTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
@@ -3695,7 +3813,7 @@ export def "replication-executions-tasks listReplicationTasks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the log of the specific replication task
@@ -3712,6 +3830,7 @@ export def "replication-executions-tasks-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3721,7 +3840,7 @@ export def "replication-executions-tasks-log get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List registry adapters
@@ -3736,6 +3855,7 @@ export def "replication-adapters listRegistryProviderTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3745,7 +3865,7 @@ export def "replication-adapters listRegistryProviderTypes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all registered registry provider information
@@ -3760,6 +3880,7 @@ export def "replication-adapterinfos listRegistryProviderInfos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3769,7 +3890,7 @@ export def "replication-adapterinfos listRegistryProviderInfos" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a registry
@@ -3785,6 +3906,7 @@ export def "registries createRegistry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The registry ID. (format: int64)
   --body-url: string # The registry URL string.
@@ -3808,7 +3930,7 @@ export def "registries createRegistry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the registries
@@ -3823,6 +3945,7 @@ export def "registries listRegistries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -3838,7 +3961,7 @@ export def "registries listRegistries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check status of a registry
@@ -3853,6 +3976,7 @@ export def "registries-ping pingRegistry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The registry ID. (format: int64)
   --type: string # Type of the registry, e.g. 'harbor'.
@@ -3873,7 +3997,7 @@ export def "registries-ping pingRegistry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the specific registry
@@ -3889,6 +4013,7 @@ export def "registries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, url: string, name: string, credential: record<type: string, access_key: string, access_secret: string>, type: string, insecure: bool, ca_certificate: string, description: string, status: string, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3898,7 +4023,7 @@ export def "registries get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specific registry
@@ -3914,6 +4039,7 @@ export def "registries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3923,7 +4049,7 @@ export def "registries delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the registry
@@ -3939,6 +4065,7 @@ export def "registries updateRegistry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --name: string # The registry name.
   --description: string # Description of the registry.
@@ -3959,7 +4086,7 @@ export def "registries updateRegistry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the registry info
@@ -3975,6 +4102,7 @@ export def "registries-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<type: string, description: string, supported_resource_filters: table<type: string, style: string, values: list>, supported_triggers: list<string>, supported_copy_by_chunk: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3984,7 +4112,7 @@ export def "registries-info get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the metrics of the latest scan all process
@@ -3999,6 +4127,7 @@ export def "scans-all-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<total: int, completed: int, metrics: record, ongoing: bool, trigger: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4008,7 +4137,7 @@ export def "scans-all-metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the metrics of the latest scheduled scan all process
@@ -4025,6 +4154,7 @@ export def "scans-schedule-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<total: int, completed: int, metrics: record, ongoing: bool, trigger: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4034,7 +4164,7 @@ export def "scans-schedule-metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get general system info
@@ -4049,6 +4179,7 @@ export def "systeminfo get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<banner_message: string, current_time: string, registry_url: string, external_url: string, auth_mode: string, primary_auth_mode: bool, project_creation_restriction: string, self_registration: bool, has_ca_root: bool, harbor_version: string, registry_storage_provider_name: string, read_only: bool, notification_enable: bool, authproxy_settings: record<endpoint: string, tokenreivew_endpoint: string, skip_search: bool, verify_cert: bool, server_certificate: string>, oidc_provider_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4058,7 +4189,7 @@ export def "systeminfo get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system volume info (total/free size).
@@ -4073,6 +4204,7 @@ export def "systeminfo-volumes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<storage: table<total: int, free: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4082,7 +4214,7 @@ export def "systeminfo-volumes get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default root certificate.
@@ -4097,6 +4229,7 @@ export def "systeminfo-getcert get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4106,7 +4239,7 @@ export def "systeminfo-getcert get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test the OIDC endpoint.
@@ -4121,6 +4254,7 @@ export def "system-oidc-ping pingOIDC" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --body-url: string # The URL of OIDC endpoint to be tested.
   --verify-cert: oneof<nothing, bool> # Whether the certificate should be verified
@@ -4135,7 +4269,7 @@ export def "system-oidc-ping pingOIDC" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get gc results.
@@ -4150,6 +4284,7 @@ export def "system-gc list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -4164,7 +4299,7 @@ export def "system-gc list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gc status.
@@ -4180,6 +4315,7 @@ export def "system-gc get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, job_name: string, job_kind: string, job_parameters: string, schedule: record<type: string, cron: string, next_scheduled_time: string>, job_status: string, deleted: bool, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4189,7 +4325,7 @@ export def "system-gc get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop the specific GC execution
@@ -4205,6 +4341,7 @@ export def "system-gc stopGC" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4214,7 +4351,7 @@ export def "system-gc stopGC" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gc job log.
@@ -4230,6 +4367,7 @@ export def "system-gc-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4239,7 +4377,7 @@ export def "system-gc-log get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gc's schedule.
@@ -4254,6 +4392,7 @@ export def "system-gc-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, job_name: string, job_kind: string, job_parameters: string, schedule: record<type: string, cron: string, next_scheduled_time: string>, job_status: string, deleted: bool, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4263,7 +4402,7 @@ export def "system-gc-schedule get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a gc schedule.
@@ -4279,6 +4418,7 @@ export def "system-gc-schedule createGCSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4293,7 +4433,7 @@ export def "system-gc-schedule createGCSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update gc's schedule.
@@ -4309,6 +4449,7 @@ export def "system-gc-schedule updateGCSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4323,7 +4464,7 @@ export def "system-gc-schedule updateGCSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get purge job results.
@@ -4338,6 +4479,7 @@ export def "system-purgeaudit list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -4352,7 +4494,7 @@ export def "system-purgeaudit list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get purge job status.
@@ -4368,6 +4510,7 @@ export def "system-purgeaudit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, job_name: string, job_kind: string, job_parameters: string, schedule: record<type: string, cron: string, next_scheduled_time: string>, job_status: string, deleted: bool, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4377,7 +4520,7 @@ export def "system-purgeaudit get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop the specific purge audit log execution
@@ -4393,6 +4536,7 @@ export def "system-purgeaudit stopPurge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4402,7 +4546,7 @@ export def "system-purgeaudit stopPurge" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get purge job log.
@@ -4418,6 +4562,7 @@ export def "system-purgeaudit-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4427,7 +4572,7 @@ export def "system-purgeaudit-log get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get purge's schedule.
@@ -4442,6 +4587,7 @@ export def "system-purgeaudit-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, job_name: string, job_kind: string, job_parameters: string, schedule: record<type: string, cron: string, next_scheduled_time: string>, job_status: string, deleted: bool, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4451,7 +4597,7 @@ export def "system-purgeaudit-schedule get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a purge job schedule.
@@ -4467,6 +4613,7 @@ export def "system-purgeaudit-schedule createPurgeSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4481,7 +4628,7 @@ export def "system-purgeaudit-schedule createPurgeSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update purge job's schedule.
@@ -4497,6 +4644,7 @@ export def "system-purgeaudit-schedule updatePurgeSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4511,7 +4659,7 @@ export def "system-purgeaudit-schedule updatePurgeSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the system level allowlist of CVE.
@@ -4526,6 +4674,7 @@ export def "system-cve-allowlist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, project_id: int, expires_at: int, items: table<cve_id: string>, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4535,7 +4684,7 @@ export def "system-cve-allowlist get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the system level allowlist of CVE.
@@ -4551,6 +4700,7 @@ export def "system-cve-allowlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # ID of the allowlist
   --project-id: int # ID of the project which the allowlist belongs to.  For system level allowlist this attribute is zero.
@@ -4569,7 +4719,7 @@ export def "system-cve-allowlist put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get scan all's schedule.
@@ -4584,6 +4734,7 @@ export def "system-scan-all-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, status: string, creation_time: string, update_time: string, schedule: record<type: string, cron: string, next_scheduled_time: string>, parameters: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4593,7 +4744,7 @@ export def "system-scan-all-schedule get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update scan all's schedule.
@@ -4609,6 +4760,7 @@ export def "system-scan-all-schedule updateScanAllSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4623,7 +4775,7 @@ export def "system-scan-all-schedule updateScanAllSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a schedule or a manual trigger for the scan all job.
@@ -4639,6 +4791,7 @@ export def "system-scan-all-schedule createScanAllSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --schedule: record # shape: {type?: "Hourly"|"Daily"|"Weekly"|"Custom"|"Manual"|"None"|"Schedule", cron?: string, next_scheduled_time?: string}
   --parameters: record # The parameters of schedule job
@@ -4653,7 +4806,7 @@ export def "system-scan-all-schedule createScanAllSchedule" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stop scanAll job execution
@@ -4668,6 +4821,7 @@ export def "system-scan-all-stop stopScanAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4677,7 +4831,7 @@ export def "system-scan-all-stop stopScanAll" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get worker pools
@@ -4692,6 +4846,7 @@ export def "jobservice-pools get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<pid: int, worker_pool_id: string, start_at: string, heartbeat_at: string, concurrency: int, host: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4701,7 +4856,7 @@ export def "jobservice-pools get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workers
@@ -4717,6 +4872,7 @@ export def "jobservice-pools-workers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<id: string, pool_id: string, job_name: string, job_id: string, start_at: string, check_in: string, checkin_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4726,7 +4882,7 @@ export def "jobservice-pools-workers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop running job
@@ -4742,6 +4898,7 @@ export def "jobservice-jobs stopRunningJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4751,7 +4908,7 @@ export def "jobservice-jobs stopRunningJob" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get job log by job id
@@ -4767,6 +4924,7 @@ export def "jobservice-jobs-log actionGetJobLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4776,7 +4934,7 @@ export def "jobservice-jobs-log actionGetJobLog" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list job queues
@@ -4791,6 +4949,7 @@ export def "jobservice-queues listJobQueues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<job_type: string, count: int, latency: int, paused: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4800,7 +4959,7 @@ export def "jobservice-queues listJobQueues" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # stop and clean, pause, resume pending jobs in the queue
@@ -4816,6 +4975,7 @@ export def "jobservice-queues actionPendingJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --action: string@action-completer # The action of the request, should be stop, pause or resume
 ]: any -> any {
@@ -4829,7 +4989,7 @@ export def "jobservice-queues actionPendingJobs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List schedules
@@ -4844,6 +5004,7 @@ export def "schedules listSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --X-Request-Id: string # An unique ID for the request
@@ -4856,7 +5017,7 @@ export def "schedules listSchedules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get scheduler paused status
@@ -4872,6 +5033,7 @@ export def "schedules-paused get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<paused: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4881,7 +5043,7 @@ export def "schedules-paused get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping Harbor to check if the API server is alive.
@@ -4896,6 +5058,7 @@ export def "ping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4905,7 +5068,7 @@ export def "ping get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Retention Metadatas
@@ -4920,6 +5083,7 @@ export def "retentions-metadatas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<templates: table<rule_template: string, display_text: string, action: string, params: list>, scope_selectors: table<display_text: string, kind: string, decorations: list>, tag_selectors: table<display_text: string, kind: string, decorations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4929,7 +5093,7 @@ export def "retentions-metadatas get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Retention Policy
@@ -4947,6 +5111,7 @@ export def "retentions createRetention" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # format: int64
   --algorithm: string
@@ -4964,7 +5129,7 @@ export def "retentions createRetention" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Retention Policy
@@ -4980,6 +5145,7 @@ export def "retentions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, algorithm: string, rules: table<id: int, priority: int, disabled: bool, action: string, template: string, params: record, tag_selectors: list, scope_selectors: record>, trigger: record<kind: string, settings: record, references: record>, scope: record<level: string, ref: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4989,7 +5155,7 @@ export def "retentions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Retention Policy
@@ -5008,6 +5174,7 @@ export def "retentions updateRetention" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --body-id: int # format: int64
   --algorithm: string
@@ -5025,7 +5192,7 @@ export def "retentions updateRetention" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Retention Policy
@@ -5041,6 +5208,7 @@ export def "retentions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5050,7 +5218,7 @@ export def "retentions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a Retention Execution
@@ -5066,20 +5234,21 @@ export def "retentions-executions triggerRetentionExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
-  --dry-run: oneof<nothing, bool>
+  --body-dry-run: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/retentions/($id)/executions")
-  let body = {dry_run: $dry_run} | compact
+  let body = {dry_run: $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Retention executions
@@ -5095,6 +5264,7 @@ export def "retentions-executions listRetentionExecutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number. (format: int64)
   --page-size: int # The size of per page. (format: int64)
   --X-Request-Id: string # An unique ID for the request
@@ -5107,7 +5277,7 @@ export def "retentions-executions listRetentionExecutions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a Retention execution
@@ -5124,6 +5294,7 @@ export def "retentions-executions operateRetentionExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --action: string
 ]: any -> any {
@@ -5137,7 +5308,7 @@ export def "retentions-executions operateRetentionExecution" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Retention tasks
@@ -5154,6 +5325,7 @@ export def "retentions-executions-tasks listRetentionTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number. (format: int64)
   --page-size: int # The size of per page. (format: int64)
   --X-Request-Id: string # An unique ID for the request
@@ -5166,7 +5338,7 @@ export def "retentions-executions-tasks listRetentionTasks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Retention job task log
@@ -5184,6 +5356,7 @@ export def "retentions-executions-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5193,7 +5366,7 @@ export def "retentions-executions-tasks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List scanner registrations
@@ -5208,6 +5381,7 @@ export def "scanners listScanners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -5222,7 +5396,7 @@ export def "scanners listScanners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a scanner registration
@@ -5237,6 +5411,7 @@ export def "scanners createScanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   name: string # The name of this registration (e.g. Trivy)
   --description: string # An optional description of this registration. (e.g. A free-to-use tool that scans container images for package vulnerabilities. )
@@ -5257,7 +5432,7 @@ export def "scanners createScanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Tests scanner registration settings
@@ -5272,6 +5447,7 @@ export def "scanners-ping pingScanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   name: string # The name of this registration (e.g. Trivy)
   --body-url: string # A base URL of the scanner adapter. (format: uri, e.g. http://harbor-scanner-trivy:8080)
@@ -5288,7 +5464,7 @@ export def "scanners-ping pingScanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a scanner registration details
@@ -5304,6 +5480,7 @@ export def "scanners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<uuid: string, name: string, description: string, url: string, disabled: bool, is_default: bool, auth: string, access_credential: string, skip_certVerify: bool, use_internal_addr: bool, create_time: string, update_time: string, adapter: string, vendor: string, version: string, health: string, capabilities: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5313,7 +5490,7 @@ export def "scanners get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a scanner registration
@@ -5329,6 +5506,7 @@ export def "scanners updateScanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   name: string # The name of this registration (e.g. Trivy)
   --description: string # An optional description of this registration. (e.g. A free-to-use tool that scans container images for package vulnerabilities. )
@@ -5349,7 +5527,7 @@ export def "scanners updateScanner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a scanner registration
@@ -5365,6 +5543,7 @@ export def "scanners delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<uuid: string, name: string, description: string, url: string, disabled: bool, is_default: bool, auth: string, access_credential: string, skip_certVerify: bool, use_internal_addr: bool, create_time: string, update_time: string, adapter: string, vendor: string, version: string, health: string, capabilities: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5374,7 +5553,7 @@ export def "scanners delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set system default scanner registration
@@ -5390,6 +5569,7 @@ export def "scanners setScannerAsDefault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --is-default: oneof<nothing, bool> # A flag indicating whether a scanner registration is default.
 ]: any -> any {
@@ -5403,7 +5583,7 @@ export def "scanners setScannerAsDefault" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the metadata of the specified scanner registration
@@ -5419,6 +5599,7 @@ export def "scanners-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<scanner: record<name: string, vendor: string, version: string>, capabilities: table<type: string, consumes_mime_types: list, produces_mime_types: list>, properties: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5428,7 +5609,7 @@ export def "scanners-metadata get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users
@@ -5443,6 +5624,7 @@ export def "users listUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -5457,7 +5639,7 @@ export def "users listUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a local user.
@@ -5472,6 +5654,7 @@ export def "users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --email: string
   --realname: string
@@ -5489,7 +5672,7 @@ export def "users createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get current user info.
@@ -5504,6 +5687,7 @@ export def "users-current get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<email: string, realname: string, comment: string, user_id: int, username: string, sysadmin_flag: bool, admin_role_in_auth: bool, oidc_user_meta: record<id: int, user_id: int, subiss: string, secret: string, creation_time: string, update_time: string>, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5513,7 +5697,7 @@ export def "users-current get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search users by username
@@ -5528,6 +5712,7 @@ export def "users-search searchUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --username: string # Username for filtering results.
@@ -5541,7 +5726,7 @@ export def "users-search searchUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's profile.
@@ -5557,6 +5742,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<email: string, realname: string, comment: string, user_id: int, username: string, sysadmin_flag: bool, admin_role_in_auth: bool, oidc_user_meta: record<id: int, user_id: int, subiss: string, secret: string, creation_time: string, update_time: string>, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5566,7 +5752,7 @@ export def "users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user's profile.
@@ -5582,6 +5768,7 @@ export def "users updateUserProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --email: string
   --realname: string
@@ -5597,7 +5784,7 @@ export def "users updateUserProfile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark a registered user as be removed.
@@ -5613,6 +5800,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5622,7 +5810,7 @@ export def "users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a registered user to change to be an administrator of Harbor.
@@ -5638,6 +5826,7 @@ export def "users-sysadmin setUserSysAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --sysadmin-flag: oneof<nothing, bool> # true-admin, false-not admin.
 ]: any -> any {
@@ -5651,7 +5840,7 @@ export def "users-sysadmin setUserSysAdmin" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change the password on a user that already exists.
@@ -5667,6 +5856,7 @@ export def "users-password updateUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --old-password: string # The user's existing password.
   --new-password: string # New password for marking as to be updated.
@@ -5681,7 +5871,7 @@ export def "users-password updateUserPassword" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get current user permissions.
@@ -5696,6 +5886,7 @@ export def "users-current-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string # The scope for the permission
   --relative: oneof<nothing, bool> # If true, the resources in the response are relative to the scope, eg for resource '/project/1/repository' if relative is 'true' then the resource in response will be 'repository'.
   --X-Request-Id: string # An unique ID for the request
@@ -5708,7 +5899,7 @@ export def "users-current-permissions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set CLI secret for a user.
@@ -5724,6 +5915,7 @@ export def "users-cli-secret setCliSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --secret: string # The new secret
 ]: any -> any {
@@ -5737,7 +5929,7 @@ export def "users-cli-secret setCliSecret" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List labels according to the query strings.
@@ -5752,6 +5944,7 @@ export def "labels ListLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
@@ -5769,7 +5962,7 @@ export def "labels ListLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post creates a label
@@ -5784,6 +5977,7 @@ export def "labels CreateLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the label (format: int64)
   --name: string # The name the label
@@ -5804,7 +5998,7 @@ export def "labels CreateLabel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the label specified by ID.
@@ -5820,6 +6014,7 @@ export def "labels GetLabelByID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, name: string, description: string, color: string, scope: string, project_id: int, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5829,7 +6024,7 @@ export def "labels GetLabelByID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the label properties.
@@ -5845,6 +6040,7 @@ export def "labels UpdateLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --id: int # The ID of the label (format: int64)
   --name: string # The name the label
@@ -5865,7 +6061,7 @@ export def "labels UpdateLabel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the label specified by ID.
@@ -5881,6 +6077,7 @@ export def "labels DeleteLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5890,7 +6087,7 @@ export def "labels DeleteLabel" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export scan data for selected projects
@@ -5905,6 +6102,7 @@ export def "export-cve exportScanData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
   --X-Scan-Data-Type: string # The type of scan data to export
   --job-name: string # Name of the scan data export job
@@ -5924,7 +6122,7 @@ export def "export-cve exportScanData" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the specific scan data export execution
@@ -5940,6 +6138,7 @@ export def "export-cve-execution get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<id: int, user_id: int, status: string, trigger: string, start_time: string, end_time: string, status_text: string, user_name: string, file_present: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5949,7 +6148,7 @@ export def "export-cve-execution get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of specific scan data export execution jobs for a specified user
@@ -5964,6 +6163,7 @@ export def "export-cve-executions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<items: table<id: int, user_id: int, status: string, trigger: string, start_time: string, end_time: string, status_text: string, user_name: string, file_present: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5973,7 +6173,7 @@ export def "export-cve-executions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download the scan data export file
@@ -5989,6 +6189,7 @@ export def "export-cve-download downloadScanData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # The format of the data to be exported. e.g. CSV or PDF
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> any {
@@ -6000,7 +6201,7 @@ export def "export-cve-download downloadScanData" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get vulnerability system summary
@@ -6015,6 +6216,7 @@ export def "security-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-dangerous-cve: oneof<nothing, bool> # Specify whether the dangerous CVEs are included inside summary information (default: false)
   --with-dangerous-artifact: oneof<nothing, bool> # Specify whether the dangerous Artifact are included inside summary information (default: false)
   --X-Request-Id: string # An unique ID for the request
@@ -6027,7 +6229,7 @@ export def "security-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the vulnerability list.
@@ -6042,6 +6244,7 @@ export def "security-vul ListVulnerabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
@@ -6057,7 +6260,7 @@ export def "security-vul ListVulnerabilities" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system or project level permissions info.
@@ -6072,6 +6275,7 @@ export def "permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<system: table<resource: string, action: string>, project: table<resource: string, action: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6081,5 +6285,5 @@ export def "permissions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

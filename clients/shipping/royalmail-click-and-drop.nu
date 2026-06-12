@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "manifests CreateManifestsAsync" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "manifests CreateManifestsAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountBatchNumbers: list # Cannot be mixed with other parameter types. (e.g. [B1111, B12345])
   --allOrders: oneof<nothing, bool> # Set to <code>true</code> and leave all the other parameters empty to manifest all orders in an eligible state  up to and including the current day (orders with a future despatch date will not be included). Do not specify this parameter or alternatively set to <code>false</code> if specifying any other parameter options.  (e.g. false)
   --endDateTime: string # Date and time in UTC. Used together with <b>startDateTime</b> to manifest all orders in an eligible state in a date/time range.  If a <b>startDateTime</b> is specified without this parameter the end of the date/time range will be the latest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
@@ -118,7 +120,7 @@ export def "manifests CreateManifestsAsync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve manifest status and documentation
@@ -134,13 +136,14 @@ export def "manifests GetManifestAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<documentStatus: string, errorReference: string, manifestStatus: string, orders: table<orderIdentifier: int, orderReference: string>, pdf: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/manifests/($manifestGuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry failed manifest
@@ -156,13 +159,14 @@ export def "manifests-retry RetryManifestAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/manifests/($manifestGuid)/retry")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve pageable list of orders
@@ -177,6 +181,7 @@ export def "orders GetOrdersAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The number of items to return (default: 25)
   --startDateTime: string # Date and time lower bound for items filtering (format: date-time)
   --endDateTime: string # Date and time upper bound for items filtering (format: date-time)
@@ -188,7 +193,7 @@ export def "orders GetOrdersAsync" [
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create orders
@@ -204,6 +209,7 @@ export def "orders CreateOrdersAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {billing?: record, currencyCode?: string, customsDutyCosts?: float, label?: record, orderDate: string, orderReference?: string, otherCosts?: float, packages?: list, plannedDespatchDate?: string, postageDetails?: record, recipient: record, sender?: record, shippingCostCharged: float, specialInstructions?: string, subtotal: float, tags?: list, total: float}
 ]: any -> record<createdOrders: table<createdOn: string, label: string, labelErrors: list, manifestedOn: string, orderDate: string, orderIdentifier: int, orderReference: string, printedOn: string, shippedOn: string, trackingNumber: string>, errorsCount: int, failedOrders: table<errors: list, order: record>, successCount: int> {
   let input = $in
@@ -214,7 +220,7 @@ export def "orders CreateOrdersAsync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve pageable list of orders with details
@@ -229,6 +235,7 @@ export def "orders-full GetOrdersWithDetailsAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # The number of items to return (default: 25)
   --startDateTime: string # Date and time lower bound for items filtering (format: date-time)
   --endDateTime: string # Date and time upper bound for items filtering (format: date-time)
@@ -240,7 +247,7 @@ export def "orders-full GetOrdersWithDetailsAsync" [
   let full_url = (build-url $base "/orders/full" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set order status
@@ -256,6 +263,7 @@ export def "orders-status UpdateOrdersStatusAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --items: list # item shape: {despatchDate?: string, orderIdentifier?: int, orderReference?: string, shippingCarrier?: string, shippingService?: string, status?: "new"|"despatchedByOtherCourier"|"despatched", trackingNumber?: string}
 ]: any -> record<errors: table<code: string, message: string, orderIdentifier: int, orderReference: string, status: string>, updatedOrders: table<orderIdentifier: int, orderReference: string, status: string>> {
   let input = $in
@@ -266,7 +274,7 @@ export def "orders-status UpdateOrdersStatusAsync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete orders
@@ -282,13 +290,14 @@ export def "orders DeleteOrdersAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deletedOrders: table<orderIdentifier: int, orderInfo: string, orderReference: string>, errors: table<code: string, message: string, orderIdentifier: int, orderReference: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($orderIdentifiers)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve specific orders
@@ -304,13 +313,14 @@ export def "orders GetSpecificOrdersAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<createdOn: string, manifestedOn: string, orderDate: string, orderIdentifier: int, orderReference: string, printedOn: string, shippedOn: string, trackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($orderIdentifiers)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve details of the specific orders
@@ -326,13 +336,14 @@ export def "orders-full GetSpecificOrdersWithDetailsAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<AIRNumber: string, accountBatchNumber: string, billingInfo: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, countryCode: string, county: string, emailAddress: string, firstName: string, lastName: string, phoneNumber: string, postcode: string, title: string>, channel: string, channelShippingMethod: string, commercialInvoiceDate: string, commercialInvoiceNumber: string, createdOn: string, currencyCode: string, department: string, despatchedByOtherCourierOn: string, manifestedOn: string, marketplaceTypeName: string, orderDate: string, orderDiscount: float, orderIdentifier: int, orderLines: list<record>, orderReference: string, orderStatus: string, packageSize: string, pickerSpecialInstructions: string, postageAppliedOn: string, printedOn: string, requiresExportLicense: bool, shippedOn: string, shippingCostCharged: float, shippingDetails: record<guaranteedSaturdayDelivery: bool, isLocalCollect: bool, receiveEmailNotification: bool, receiveSmsNotification: bool, requestSignatureUponDelivery: bool, serviceCode: string, shippingCarrier: string, shippingCost: float, shippingService: string, shippingTrackingStatus: string, trackingNumber: string>, shippingInfo: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, countryCode: string, county: string, emailAddress: string, firstName: string, lastName: string, phoneNumber: string, postcode: string, title: string>, specialInstructions: string, subtotal: float, tags: list<record>, total: float, tradingName: string, weightInGrams: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orders/($orderIdentifiers)/full")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a single PDF file with generated label and/or associated document(s)
@@ -348,6 +359,7 @@ export def "orders-label GetOrdersLabelAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --documentType: string@documentType-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel"
   --includeReturnsLabel: oneof<nothing, bool> # Include returns label. Required when documentType is set to 'postageLabel'
@@ -359,7 +371,7 @@ export def "orders-label GetOrdersLabelAsync" [
   let full_url = (build-url $base $"/orders/($orderIdentifiers)/label" $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get API version details.
@@ -374,11 +386,12 @@ export def "version GetVersionAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<build: string, commit: string, release: string, releaseDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

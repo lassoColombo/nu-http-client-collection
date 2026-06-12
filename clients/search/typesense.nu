@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def type-completer [] { ["counter" "log" "nohits_queries" "popular_queries"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getCollectionsParameters: record
 ]: nothing -> table<name: string, fields: list<record>, default_sorting_field: string, token_separators: list<string>, synonym_sets: list<string>, enable_nested_fields: bool, symbols_to_index: list<string>, voice_query_model: record<model_name: string>, metadata: record, num_documents: int, created_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -112,7 +114,7 @@ export def "collections list" [
   let full_url = (build-url $base "/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new collection
@@ -129,6 +131,7 @@ export def "collections createCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the collection (e.g. companies)
   --body-fields: list # A list of fields for querying, filtering and faceting (e.g. [{name: num_employees, type: int32, facet: false}, {name: company_name, type: string, facet: false}, {name: country, type: string, facet: true}]) — item shape: {name: string, type: string, optional?: bool, facet?: bool, index?: bool, locale?: string, sort?: bool, infix?: bool, reference?: string, async_reference?: bool, num_dim?: int, drop?: bool, store?: bool, vec_dist?: string, range_index?: bool, stem?: bool, stem_dictionary?: string, token_separators?: list, symbols_to_index?: list, embed?: record}
   --default-sorting-field: string # The name of an int32 / float field that determines the order in which the search results are ranked when a sort_by clause is not provided during searching. This field must indicate some kind of popularity. (default: , e.g. num_employees)
@@ -147,7 +150,7 @@ export def "collections createCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a single collection
@@ -163,13 +166,14 @@ export def "collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, fields: table<name: string, type: string, optional: bool, facet: bool, index: bool, locale: string, sort: bool, infix: bool, reference: string, async_reference: bool, num_dim: int, drop: bool, store: bool, vec_dist: string, range_index: bool, stem: bool, stem_dictionary: string, token_separators: list, symbols_to_index: list, embed: record>, default_sorting_field: string, token_separators: list<string>, synonym_sets: list<string>, enable_nested_fields: bool, symbols_to_index: list<string>, voice_query_model: record<model_name: string>, metadata: record, num_documents: int, created_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collectionName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a collection
@@ -186,6 +190,7 @@ export def "collections updateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-fields: list # A list of fields for querying, filtering and faceting (e.g. [{name: company_name, type: string, facet: false}, {name: num_employees, type: int32, facet: false}, {name: country, type: string, facet: true}]) — item shape: {name: string, type: string, optional?: bool, facet?: bool, index?: bool, locale?: string, sort?: bool, infix?: bool, reference?: string, async_reference?: bool, num_dim?: int, drop?: bool, store?: bool, vec_dist?: string, range_index?: bool, stem?: bool, stem_dictionary?: string, token_separators?: list, symbols_to_index?: list, embed?: record}
   --synonym-sets: list # List of synonym set names to associate with this collection
   --metadata: record # Optional details about the collection, e.g., when it was created, who created it etc.
@@ -198,7 +203,7 @@ export def "collections updateCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a collection
@@ -214,13 +219,14 @@ export def "collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, fields: table<name: string, type: string, optional: bool, facet: bool, index: bool, locale: string, sort: bool, infix: bool, reference: string, async_reference: bool, num_dim: int, drop: bool, store: bool, vec_dist: string, range_index: bool, stem: bool, stem_dictionary: string, token_separators: list, symbols_to_index: list, embed: record>, default_sorting_field: string, token_separators: list<string>, synonym_sets: list<string>, enable_nested_fields: bool, symbols_to_index: list<string>, voice_query_model: record<model_name: string>, metadata: record, num_documents: int, created_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collectionName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Index a document
@@ -236,6 +242,7 @@ export def "collections-documents indexDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer # Additional action to perform
   --dirty-values: string@dirty-values-completer # Dealing with Dirty Data
   --body: record
@@ -248,7 +255,7 @@ export def "collections-documents indexDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update documents with conditional query
@@ -264,6 +271,7 @@ export def "collections-documents updateDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateDocumentsParameters: record
   --body: record
 ]: any -> record<num_updated: int> {
@@ -275,7 +283,7 @@ export def "collections-documents updateDocuments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a bunch of documents
@@ -291,6 +299,7 @@ export def "collections-documents delete-by-collectionName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteDocumentsParameters: record
 ]: nothing -> record<num_deleted: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -299,7 +308,7 @@ export def "collections-documents delete-by-collectionName" [
   let full_url = (build-url $base $"/collections/($collectionName)/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for documents in a collection
@@ -315,6 +324,7 @@ export def "collections-documents-search searchCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchParameters: record
 ]: nothing -> record<facet_counts: table<counts: list, field_name: string, sampled: bool, stats: record>, found: int, found_docs: int, search_time_ms: int, out_of: int, search_cutoff: bool, page: int, grouped_hits: table<found: int, group_key: list, hits: list>, hits: table<highlights: list, highlight: record, document: record, text_match: int, text_match_info: record, geo_distance_meters: record, vector_distance: float, hybrid_search_info: record, search_index: int>, request_params: record<collection_name: string, first_q: string, q: string, per_page: int, voice_query: record<transcribed_query: string>>, conversation: record<answer: string, conversation_history: list<record>, conversation_id: string, query: string>, union_request_params: table<collection_name: string, first_q: string, q: string, per_page: int, voice_query: record>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -323,7 +333,7 @@ export def "collections-documents-search searchCollection" [
   let full_url = (build-url $base $"/collections/($collectionName)/documents/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all synonym sets
@@ -338,13 +348,14 @@ export def "synonym-sets retrieveSynonymSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<items: list<record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/synonym_sets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a synonym set
@@ -360,13 +371,14 @@ export def "synonym-sets retrieveSynonymSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<id: string, synonyms: list, root: string, locale: string, symbols_to_index: list>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/synonym_sets/($synonymSetName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a synonym set
@@ -383,6 +395,7 @@ export def "synonym-sets upsertSynonymSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # Array of synonym items — item shape: {id: string, synonyms: list, root?: string, locale?: string, symbols_to_index?: list}
 ]: any -> record<items: table<id: string, synonyms: list, root: string, locale: string, symbols_to_index: list>, name: string> {
   let input = $in
@@ -393,7 +406,7 @@ export def "synonym-sets upsertSynonymSet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a synonym set
@@ -409,13 +422,14 @@ export def "synonym-sets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/synonym_sets/($synonymSetName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List items in a synonym set
@@ -431,13 +445,14 @@ export def "synonym-sets-items retrieveSynonymSetItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, synonyms: list<string>, root: string, locale: string, symbols_to_index: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/synonym_sets/($synonymSetName)/items")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a synonym set item
@@ -454,13 +469,14 @@ export def "synonym-sets-items retrieveSynonymSetItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, synonyms: list<string>, root: string, locale: string, symbols_to_index: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/synonym_sets/($synonymSetName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a synonym set item
@@ -477,6 +493,7 @@ export def "synonym-sets-items upsertSynonymSetItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   synonyms: list # Array of words that should be considered as synonyms
   --root: string # For 1-way synonyms, indicates the root word that words in the synonyms parameter map to
   --locale: string # Locale for the synonym, leave blank to use the standard tokenizer
@@ -490,7 +507,7 @@ export def "synonym-sets-items upsertSynonymSetItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a synonym set item
@@ -507,13 +524,14 @@ export def "synonym-sets-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/synonym_sets/($synonymSetName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all curation sets
@@ -528,13 +546,14 @@ export def "curation-sets retrieveCurationSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<items: list<record>, description: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/curation_sets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a curation set
@@ -550,13 +569,14 @@ export def "curation-sets retrieveCurationSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<rule: record, includes: list, excludes: list, filter_by: string, remove_matched_tokens: bool, metadata: record, sort_by: string, replace_query: string, filter_curated_hits: bool, effective_from_ts: int, effective_to_ts: int, stop_processing: bool, id: string>, description: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/curation_sets/($curationSetName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a curation set
@@ -573,6 +593,7 @@ export def "curation-sets upsertCurationSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # Array of curation items — item shape: {rule: record, includes?: list, excludes?: list, filter_by?: string, remove_matched_tokens?: bool, metadata?: record, sort_by?: string, replace_query?: string, filter_curated_hits?: bool, effective_from_ts?: int, effective_to_ts?: int, stop_processing?: bool, id?: string}
   --description: string # Optional description for the curation set
 ]: any -> record<items: table<rule: record, includes: list, excludes: list, filter_by: string, remove_matched_tokens: bool, metadata: record, sort_by: string, replace_query: string, filter_curated_hits: bool, effective_from_ts: int, effective_to_ts: int, stop_processing: bool, id: string>, description: string, name: string> {
@@ -584,7 +605,7 @@ export def "curation-sets upsertCurationSet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a curation set
@@ -600,13 +621,14 @@ export def "curation-sets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/curation_sets/($curationSetName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List items in a curation set
@@ -622,13 +644,14 @@ export def "curation-sets-items retrieveCurationSetItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<rule: record<tags: list, query: string, match: string, filter_by: string>, includes: list<record>, excludes: list<record>, filter_by: string, remove_matched_tokens: bool, metadata: record, sort_by: string, replace_query: string, filter_curated_hits: bool, effective_from_ts: int, effective_to_ts: int, stop_processing: bool, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/curation_sets/($curationSetName)/items")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a curation set item
@@ -645,13 +668,14 @@ export def "curation-sets-items retrieveCurationSetItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rule: record<tags: list<string>, query: string, match: string, filter_by: string>, includes: table<id: string, position: int>, excludes: table<id: string>, filter_by: string, remove_matched_tokens: bool, metadata: record, sort_by: string, replace_query: string, filter_curated_hits: bool, effective_from_ts: int, effective_to_ts: int, stop_processing: bool, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/curation_sets/($curationSetName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a curation set item
@@ -671,6 +695,7 @@ export def "curation-sets-items upsertCurationSetItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   rule: record # shape: {tags?: list, query?: string, match?: "exact"|"contains", filter_by?: string}
   --includes: list # List of document `id`s that should be included in the search results with their corresponding `position`s. — item shape: {id: string, position: int}
   --excludes: list # List of document `id`s that should be excluded from the search results. — item shape: {id: string}
@@ -693,7 +718,7 @@ export def "curation-sets-items upsertCurationSetItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a curation set item
@@ -710,13 +735,14 @@ export def "curation-sets-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/curation_sets/($curationSetName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export all documents in a collection
@@ -732,6 +758,7 @@ export def "collections-documents-export exportDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exportDocumentsParameters: record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -740,7 +767,7 @@ export def "collections-documents-export exportDocuments" [
   let full_url = (build-url $base $"/collections/($collectionName)/documents/export" $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import documents into a collection
@@ -756,6 +783,7 @@ export def "collections-documents-import importDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --importDocumentsParameters: record
   --body: record
 ]: any -> any {
@@ -767,7 +795,7 @@ export def "collections-documents-import importDocuments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Retrieve a document
@@ -784,13 +812,14 @@ export def "collections-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collectionName)/documents/($documentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a document
@@ -807,6 +836,7 @@ export def "collections-documents updateDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dirty-values: string@dirty-values-completer # Dealing with Dirty Data
   --body: record
 ]: any -> record {
@@ -818,7 +848,7 @@ export def "collections-documents updateDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a document
@@ -835,13 +865,14 @@ export def "collections-documents delete-by-collectionName-documentId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/collections/($collectionName)/documents/($documentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all conversation models
@@ -856,13 +887,14 @@ export def "conversations-models retrieveAllConversationModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations/models")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a conversation model
@@ -877,6 +909,7 @@ export def "conversations-models createConversationModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An explicit id for the model, otherwise the API will return a response with an auto-generated conversation model id.
   model_name: string # Name of the LLM model offered by OpenAI, Cloudflare or vLLM
   --api-key: string # The LLM service's API Key
@@ -895,7 +928,7 @@ export def "conversations-models createConversationModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a conversation model
@@ -911,13 +944,14 @@ export def "conversations-models retrieveConversationModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/conversations/models/($modelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a conversation model
@@ -933,6 +967,7 @@ export def "conversations-models updateConversationModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # An explicit id for the model, otherwise the API will return a response with an auto-generated conversation model id.
   --model-name: string # Name of the LLM model offered by OpenAI, Cloudflare or vLLM
   --api-key: string # The LLM service's API Key
@@ -951,7 +986,7 @@ export def "conversations-models updateConversationModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a conversation model
@@ -967,13 +1002,14 @@ export def "conversations-models delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/conversations/models/($modelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve (metadata about) all keys.
@@ -988,13 +1024,14 @@ export def "keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<value: string, description: string, actions: list, collections: list, expires_at: int, id: int, value_prefix: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API Key
@@ -1009,6 +1046,7 @@ export def "keys createKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --value: string
   description: string
   actions: list
@@ -1023,7 +1061,7 @@ export def "keys createKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve (metadata about) a key
@@ -1039,13 +1077,14 @@ export def "keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<value: string, description: string, actions: list<string>, collections: list<string>, expires_at: int, id: int, value_prefix: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an API key given its ID.
@@ -1061,13 +1100,14 @@ export def "keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all aliases
@@ -1082,13 +1122,14 @@ export def "aliases list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<aliases: table<name: string, collection_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aliases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a collection alias
@@ -1104,6 +1145,7 @@ export def "aliases upsertAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   collection_name: string # Name of the collection you wish to map the alias to
 ]: any -> record<name: string, collection_name: string> {
   let input = $in
@@ -1114,7 +1156,7 @@ export def "aliases upsertAlias" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an alias
@@ -1130,13 +1172,14 @@ export def "aliases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, collection_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aliases/($aliasName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an alias
@@ -1152,13 +1195,14 @@ export def "aliases delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, collection_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/aliases/($aliasName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Print debugging information
@@ -1173,13 +1217,14 @@ export def "debug debug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/debug")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks if Typesense server is ready to accept requests.
@@ -1194,13 +1239,14 @@ export def "health health" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the status of in-progress schema change operations
@@ -1215,13 +1261,14 @@ export def "operations-schema-changes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<collection: string, validated_docs: int, altered_docs: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/operations/schema_changes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a point-in-time snapshot of a Typesense node's state and data in the specified directory.
@@ -1236,6 +1283,7 @@ export def "operations-snapshot takeSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --snapshot-path: string # The directory on the server where the snapshot should be saved.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -1244,7 +1292,7 @@ export def "operations-snapshot takeSnapshot" [
   let full_url = (build-url $base "/operations/snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Triggers a follower node to initiate the raft voting process, which triggers leader re-election.
@@ -1259,13 +1307,14 @@ export def "operations-vote vote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/operations/vote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear the cached responses of search requests in the LRU cache.
@@ -1280,13 +1329,14 @@ export def "operations-cache-clear clearCache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/operations/cache/clear")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compacting the on-disk database
@@ -1301,13 +1351,14 @@ export def "operations-db-compact compactDb" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/operations/db/compact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle Slow Request Log
@@ -1322,6 +1373,7 @@ export def "config toggleSlowRequestLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   log_slow_requests_time_ms: int
 ]: any -> record<success: bool> {
   let input = $in
@@ -1332,7 +1384,7 @@ export def "config toggleSlowRequestLog" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # send multiple search requests in a single HTTP request
@@ -1348,6 +1400,7 @@ export def "multi-search multiSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --multiSearchParameters: record
   --union: oneof<nothing, bool> # When true, merges the search results from each search query into a single ordered set of hits. (default: false)
   searches: list # item shape: {q?: string, query_by?: string, query_by_weights?: string, text_match_type?: string, prefix?: string, infix?: string, max_extra_prefix?: int, max_extra_suffix?: int, filter_by?: string, sort_by?: string, facet_by?: string, max_facet_values?: int, facet_query?: string, num_typos?: string, page?: int, per_page?: int, limit?: int, offset?: int, group_by?: string, group_limit?: int, group_missing_values?: bool, include_fields?: string, exclude_fields?: string, highlight_full_fields?: string, highlight_affix_num_tokens?: int, highlight_start_tag?: string, highlight_end_tag?: string, snippet_threshold?: int, drop_tokens_threshold?: int, drop_tokens_mode?: "right_to_left"|"left_to_right"|"both_sides:3", typo_tokens_threshold?: int, enable_typos_for_alpha_numerical_tokens?: bool, filter_curated_hits?: bool, enable_synonyms?: bool, enable_analytics?: bool, synonym_prefix?: bool, synonym_num_typos?: int, pinned_hits?: string, hidden_hits?: string, curation_tags?: string, highlight_fields?: string, pre_segmented_query?: bool, preset?: string, enable_curations?: bool, prioritize_exact_match?: bool, prioritize_token_position?: bool, prioritize_num_matching_fields?: bool, enable_typos_for_numerical_tokens?: bool, exhaustive_search?: bool, search_cutoff_ms?: int, use_cache?: bool, cache_ttl?: int, min_len_1typo?: int, min_len_2typo?: int, vector_query?: string, remote_embedding_timeout_ms?: int, remote_embedding_num_tries?: int, facet_strategy?: string, stopwords?: string, facet_return_parent?: string, voice_query?: string, conversation?: bool, conversation_model_id?: string, conversation_id?: string, validate_field_names?: bool, collection?: string, x-typesense-api-key?: string, rerank_hybrid_matches?: bool}
@@ -1361,7 +1414,7 @@ export def "multi-search multiSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an analytics event
@@ -1377,6 +1430,7 @@ export def "analytics-events createAnalyticsEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the analytics rule this event corresponds to
   event_type: string # Type of event (e.g., click, conversion, query, visit)
   data: record # Event payload — shape: {user_id?: string, doc_id?: string, doc_ids?: list, q?: string, analytics_tag?: string}
@@ -1389,7 +1443,7 @@ export def "analytics-events createAnalyticsEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve analytics events
@@ -1404,6 +1458,7 @@ export def "analytics-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
   --name: string # Analytics rule name
   --n: int # Number of events to return (max 1000)
@@ -1414,7 +1469,7 @@ export def "analytics-events get" [
   let full_url = (build-url $base "/analytics/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Flush in-memory analytics to disk
@@ -1429,13 +1484,14 @@ export def "analytics-flush flushAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/analytics/flush")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analytics subsystem status
@@ -1450,13 +1506,14 @@ export def "analytics-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<popular_prefix_queries: int, nohits_prefix_queries: int, log_prefix_queries: int, query_log_events: int, query_counter_events: int, doc_log_events: int, doc_counter_events: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/analytics/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create analytics rule(s)
@@ -1472,6 +1529,7 @@ export def "analytics-rules createAnalyticsRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --type: string@type-completer
   --collection: string
@@ -1487,7 +1545,7 @@ export def "analytics-rules createAnalyticsRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve analytics rules
@@ -1502,6 +1560,7 @@ export def "analytics-rules retrieveAnalyticsRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rule-tag: string # Filter rules by rule_tag
 ]: nothing -> table<name: string, type: string, collection: string, event_type: string, rule_tag: string, params: record<destination_collection: string, limit: int, capture_search_requests: bool, meta_fields: list, expand_query: bool, counter_field: string, weight: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
@@ -1510,7 +1569,7 @@ export def "analytics-rules retrieveAnalyticsRules" [
   let full_url = (build-url $base "/analytics/rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upserts an analytics rule
@@ -1527,6 +1586,7 @@ export def "analytics-rules upsertAnalyticsRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --rule-tag: string
   --params: record # shape: {destination_collection?: string, limit?: int, capture_search_requests?: bool, meta_fields?: list, expand_query?: bool, counter_field?: string, weight?: int}
@@ -1539,7 +1599,7 @@ export def "analytics-rules upsertAnalyticsRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves an analytics rule
@@ -1555,13 +1615,14 @@ export def "analytics-rules retrieveAnalyticsRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, type: string, collection: string, event_type: string, rule_tag: string, params: record<destination_collection: string, limit: int, capture_search_requests: bool, meta_fields: list<string>, expand_query: bool, counter_field: string, weight: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analytics/rules/($ruleName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an analytics rule
@@ -1577,13 +1638,14 @@ export def "analytics-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, type: string, collection: string, event_type: string, rule_tag: string, params: record<destination_collection: string, limit: int, capture_search_requests: bool, meta_fields: list<string>, expand_query: bool, counter_field: string, weight: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analytics/rules/($ruleName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current RAM, CPU, Disk & Network usage metrics.
@@ -1598,13 +1660,14 @@ export def "metricsjson retrieveMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metrics.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stats about API endpoints.
@@ -1619,13 +1682,14 @@ export def "statsjson retrieveAPIStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<delete_latency_ms: float, delete_requests_per_second: float, import_latency_ms: float, import_requests_per_second: float, latency_ms: record, overloaded_requests_per_second: float, pending_write_batches: float, requests_per_second: record, search_latency_ms: float, search_requests_per_second: float, total_requests_per_second: float, write_latency_ms: float, write_requests_per_second: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all stopwords sets.
@@ -1640,13 +1704,14 @@ export def "stopwords retrieveStopwordsSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stopwords: table<id: string, stopwords: list, locale: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stopwords")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upserts a stopwords set.
@@ -1662,6 +1727,7 @@ export def "stopwords upsertStopwordsSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   stopwords: list
   --locale: string
 ]: any -> record<id: string, stopwords: list<string>, locale: string> {
@@ -1673,7 +1739,7 @@ export def "stopwords upsertStopwordsSet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a stopwords set.
@@ -1689,13 +1755,14 @@ export def "stopwords retrieveStopwordsSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stopwords: record<id: string, stopwords: list<string>, locale: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stopwords/($setId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a stopwords set.
@@ -1711,13 +1778,14 @@ export def "stopwords delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stopwords/($setId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all presets.
@@ -1732,13 +1800,14 @@ export def "presets retrieveAllPresets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<presets: table<value: any, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/presets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a preset.
@@ -1754,13 +1823,14 @@ export def "presets retrievePreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<value: any, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/presets/($presetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upserts a preset.
@@ -1776,6 +1846,7 @@ export def "presets upsertPreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: any
 ]: any -> record<value: any, name: string> {
   let input = $in
@@ -1786,7 +1857,7 @@ export def "presets upsertPreset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a preset.
@@ -1802,13 +1873,14 @@ export def "presets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/presets/($presetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all stemming dictionaries
@@ -1823,13 +1895,14 @@ export def "stemming-dictionaries listStemmingDictionaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dictionaries: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stemming/dictionaries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a stemming dictionary
@@ -1845,13 +1918,14 @@ export def "stemming-dictionaries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, words: table<word: string, root: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stemming/dictionaries/($dictionaryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import a stemming dictionary
@@ -1866,6 +1940,7 @@ export def "stemming-dictionaries-import importStemmingDictionary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID to assign to the dictionary (e.g. irregular-plurals)
   --body: record
 ]: any -> any {
@@ -1877,7 +1952,7 @@ export def "stemming-dictionaries-import importStemmingDictionary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all NL search models
@@ -1892,13 +1967,14 @@ export def "nl-search-models retrieveAllNLSearchModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nl_search_models")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a NL search model
@@ -1913,6 +1989,7 @@ export def "nl-search-models createNLSearchModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model-name: string # Name of the NL model to use
   --api-key: string # API key for the NL model service
   --api-url: string # Custom API URL for the NL model service
@@ -1941,7 +2018,7 @@ export def "nl-search-models createNLSearchModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a NL search model
@@ -1957,13 +2034,14 @@ export def "nl-search-models retrieveNLSearchModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/nl_search_models/($modelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a NL search model
@@ -1979,6 +2057,7 @@ export def "nl-search-models updateNLSearchModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --model-name: string # Name of the NL model to use
   --api-key: string # API key for the NL model service
   --api-url: string # Custom API URL for the NL model service
@@ -2007,7 +2086,7 @@ export def "nl-search-models updateNLSearchModel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a NL search model
@@ -2023,11 +2102,12 @@ export def "nl-search-models delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/nl_search_models/($modelId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

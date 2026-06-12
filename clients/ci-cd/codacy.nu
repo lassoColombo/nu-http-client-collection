@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -85,7 +86,7 @@ def targetType-completer [] { ["graphql" "openapi" "webapp"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "version get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -118,13 +119,14 @@ export def "version get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization repositories with analysis information for the authenticated user
@@ -142,6 +144,7 @@ export def "analysis-organizations-repositories listOrganizationRepositoriesWith
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -154,7 +157,7 @@ export def "analysis-organizations-repositories listOrganizationRepositoriesWith
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search organization repositories with analysis information for the authenticated user
@@ -171,6 +174,7 @@ export def "search-analysis-organizations-repositories searchOrganizationReposit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --names: list # List of repository names
@@ -184,7 +188,7 @@ export def "search-analysis-organizations-repositories searchOrganizationReposit
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a repository with analysis information for the authenticated user
@@ -202,6 +206,7 @@ export def "analysis-organizations-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> record<data: record<lastAnalysedCommit: record<sha: string, id: int, commitTimestamp: string, authorName: string, authorEmail: string, message: string, startedAnalysis: string, endedAnalysis: string, isMergeCommit: bool, gitHref: string, parents: list>, grade: int, gradeLetter: string, issuesPercentage: int, issuesCount: int, loc: int, complexFilesPercentage: int, complexFilesCount: int, duplicationPercentage: int, repository: record<repositoryId: int, provider: string, owner: string, name: string, fullPath: string, visibility: string, remoteIdentifier: string, lastUpdated: string, permission: string, problems: list, languages: list, defaultBranch: record, badges: record, codingStandardId: int, codingStandardName: string, standards: list, addedState: string, gatePolicyId: int, gatePolicyName: string>, branch: record<id: int, name: string, isDefault: bool, isEnabled: bool, lastUpdated: string, branchType: string, lastCommit: string>, selectedBranch: record<id: int, name: string, isDefault: bool, isEnabled: bool, lastUpdated: string, branchType: string, lastCommit: string>, coverage: record<filesUncovered: int, filesWithLowCoverage: int, coveragePercentage: int, coveragePercentageWithDecimals: float, numberTotalFiles: int, numberCoveredLines: int, numberCoverableLines: int>, goals: record<maxIssuePercentage: int, maxDuplicatedFilesPercentage: int, minCoveragePercentage: int, maxComplexFilesPercentage: int, fileDuplicationBlockThreshold: int, fileComplexityValueThreshold: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -210,7 +215,7 @@ export def "analysis-organizations-repositories get" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis tools settings of a repository
@@ -228,13 +233,14 @@ export def "analysis-organizations-repositories-tools listRepositoryTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<uuid: string, name: string, isClientSide: bool, settings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tools with conflicts in a repository
@@ -252,13 +258,14 @@ export def "analysis-organizations-repositories-tools-conflicts listRepositoryTo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools/conflicts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure an analysis tool by enabling and disabling its patterns for a repository. This endpoint will apply the changes without verifying if the repository belongs to a coding standard.
@@ -278,6 +285,7 @@ export def "analysis-organizations-repositories-tools configureTool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Whether to enable or disable the tool.
   --useConfigurationFile: oneof<nothing, bool> # Marks the tool as using a configuration file or not.
   --patterns: list # The patterns to enable or disable. — item shape: {id: string, enabled: bool, parameters?: list}
@@ -290,7 +298,7 @@ export def "analysis-organizations-repositories-tools configureTool" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patterns configuration for (repository, tool). Uses standard if applied, repository settings otherwise.
@@ -309,6 +317,7 @@ export def "analysis-organizations-repositories-tools-patterns listRepositoryToo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -327,7 +336,7 @@ export def "analysis-organizations-repositories-tools-patterns listRepositoryToo
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools/($toolUuid)/patterns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk updates the code patterns of a tool in a repository. Use filters to specify the code patterns to update, or omit the filters to update all code patterns.
@@ -346,6 +355,7 @@ export def "analysis-organizations-repositories-tools-patterns updateRepositoryT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -363,7 +373,7 @@ export def "analysis-organizations-repositories-tools-patterns updateRepositoryT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patterns configuration for (repository, tool, pattern). Uses standard if applied, repository settings otherwise.
@@ -383,13 +393,14 @@ export def "analysis-organizations-repositories-tools-patterns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<patternDefinition: record<id: string, title: string, category: string, subCategory: string, level: string, severityLevel: string, description: string, explanation: string, enabled: bool, languages: list, timeToFix: int, parameters: list, rationale: string, solution: string, goodExamples: list, badExamples: list, tags: list>, enabled: bool, isCustom: bool, parameters: list<record>, enabledBy: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools/($toolUuid)/patterns/($patternId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patterns overview for tool. Uses standard if applied, repository settings otherwise.
@@ -408,6 +419,7 @@ export def "analysis-organizations-repositories-tools-patterns-overview toolPatt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -422,7 +434,7 @@ export def "analysis-organizations-repositories-tools-patterns-overview toolPatt
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools/($toolUuid)/patterns/overview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patterns with Coding Standards conflicts for tool.
@@ -441,13 +453,14 @@ export def "analysis-organizations-repositories-tools-conflicts listRepositoryTo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<patternId: string, conflicts: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tools/($toolUuid)/conflicts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the analysis progress of a repository
@@ -465,6 +478,7 @@ export def "analysis-organizations-repositories-analysis-progress get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> record<data: table<action: string, complete: bool>, isStuck: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -473,7 +487,7 @@ export def "analysis-organizations-repositories-analysis-progress get" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/analysis-progress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recover a stuck repository
@@ -491,6 +505,7 @@ export def "analysis-organizations-repositories-recover recoverRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -499,7 +514,7 @@ export def "analysis-organizations-repositories-recover recoverRepository" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/recover" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add repository autoconfiguration run
@@ -517,13 +532,14 @@ export def "analysis-organizations-repositories-autoconfig addAutoconfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<analysisId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/autoconfig")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get autoconfig run status
@@ -541,13 +557,14 @@ export def "analysis-organizations-repositories-autoconfig-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<status: string, transitionedAt: string, transitionReason: string, analysisId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/autoconfig/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pull requests from a repository that the user has access to
@@ -565,6 +582,7 @@ export def "analysis-organizations-repositories-pull-requests listRepositoryPull
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -576,7 +594,7 @@ export def "analysis-organizations-repositories-pull-requests listRepositoryPull
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request from a repository
@@ -595,13 +613,14 @@ export def "analysis-organizations-repositories-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<isUpToStandards: bool, isAnalysing: bool, pullRequest: record<id: int, number: int, updated: string, status: string, repository: string, title: string, owner: record<name: string, avatarUrl: string, username: string, email: string>, headCommitSha: string, commonAncestorCommitSha: string, originBranch: string, targetBranch: string, gitHref: string>, newIssues: int, fixedIssues: int, deltaComplexity: int, deltaClonesCount: int, deltaCoverageWithDecimals: float, deltaCoverage: int, diffCoverage: float, coverage: record<deltaCoverage: float, diffCoverage: record<value: float, coveredLines: int, coverableLines: int, cause: string>, isUpToStandards: bool, resultReasons: list<record>>, quality: record<newIssues: int, fixedIssues: int, deltaComplexity: int, deltaClonesCount: int, isUpToStandards: bool, resultReasons: list<record>>, meta: record<analyzable: bool, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request coverage information from a repository
@@ -620,13 +639,14 @@ export def "coverage-organizations-repositories-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<pullRequest: record<id: int, number: int, updated: string, status: string, repository: string, title: string, owner: record, headCommitSha: string, commonAncestorCommitSha: string, originBranch: string, targetBranch: string, gitHref: string>, coverage: record<deltaCoverage: float, diffCoverage: record, isUpToStandards: bool, resultReasons: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coverage/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request files coverage information from a repository
@@ -645,13 +665,14 @@ export def "coverage-organizations-repositories-pull-requests-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<fileName: string, coverage: float, variation: float, diff: record, diffLineHits: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coverage/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/files")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Triggers the reanalysis of the latest coverage report uploaded for the pull request
@@ -670,13 +691,14 @@ export def "coverage-organizations-repositories-pull-requests-reanalyze reanalyz
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coverage/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/reanalyze")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return analysis results for the commits in a pull request
@@ -695,6 +717,7 @@ export def "analysis-organizations-repositories-pull-requests-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<commit: record, coverage: record, quality: record, meta: record>> {
@@ -704,7 +727,7 @@ export def "analysis-organizations-repositories-pull-requests-commits get" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/commits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bypass analysis status in a pull request
@@ -723,13 +746,14 @@ export def "analysis-organizations-repositories-pull-requests-bypass bypassPullR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/bypass")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Triggers an AI review for a pull request
@@ -748,13 +772,14 @@ export def "analysis-organizations-repositories-pull-requests-ai-reviewer-trigge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/ai-reviewer/trigger")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all coverage reports uploaded for the common ancestor commit and head commit of a pull request branch
@@ -773,13 +798,14 @@ export def "analysis-organizations-repositories-pull-requests-coverage-status ge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<headCommit: record<commitId: int, commitSha: string, reports: list>, commonAncestorCommit: record<commitId: int, commitSha: string, reports: list>, origin: record<commitId: int, commitSha: string, reports: list>, target: record<commitId: int, commitSha: string, reports: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/coverage/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issues found in a pull request
@@ -798,6 +824,7 @@ export def "analysis-organizations-repositories-pull-requests-issues listPullReq
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
   --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -809,7 +836,7 @@ export def "analysis-organizations-repositories-pull-requests-issues listPullReq
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List duplicate code blocks found in a pull request
@@ -828,6 +855,7 @@ export def "analysis-organizations-repositories-pull-requests-clones listPullReq
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
   --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -839,7 +867,7 @@ export def "analysis-organizations-repositories-pull-requests-clones listPullReq
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/clones" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List duplicate code blocks found in a commit
@@ -858,6 +886,7 @@ export def "analysis-organizations-repositories-commits-clones listCommitClones"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
   --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -869,7 +898,7 @@ export def "analysis-organizations-repositories-commits-clones listCommitClones"
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/clones" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis logs for a pull request
@@ -888,13 +917,14 @@ export def "analysis-organizations-repositories-pull-requests-logs listPullReque
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<headCommitSha: string, commonAncestorCommitSha: string, start: string, end: string, totalAnalysisTime: int, steps: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/logs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis logs for a commit
@@ -913,13 +943,14 @@ export def "analysis-organizations-repositories-commits-logs listCommitLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<headCommitSha: string, commonAncestorCommitSha: string, start: string, end: string, totalAnalysisTime: int, steps: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/logs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quality settings for the specific repository
@@ -939,13 +970,14 @@ export def "analysis-organizations-repositories-quality-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<issueThreshold: int, duplicationThreshold: int, coverageThreshold: int, complexityThreshold: int, fileDuplicationThreshold: int, fileComplexityThreshold: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/quality-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List files of a commit with analysis results
@@ -964,6 +996,7 @@ export def "analysis-organizations-repositories-commits-files listCommitFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
   --filter: string@filter-completer # Optional field to filter the results. The possible values are empty (default, return files changed in the commit or with coverage changes) or `withCoverageChanges` (return files with coverage changes)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -978,7 +1011,7 @@ export def "analysis-organizations-repositories-commits-files listCommitFiles" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List files of a pull request with analysis results
@@ -997,6 +1030,7 @@ export def "analysis-organizations-repositories-pull-requests-files listPullRequ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --sortColumn: string@sortColumn-completer # Field used to sort the results. The possible values are `deltaCoverage` (to sort by the coverage variation value of the files), `totalCoverage` (to sort by the total coverage value of the files) or `filename` (default - to sort by the name of the files)  (default: filename)
@@ -1008,7 +1042,7 @@ export def "analysis-organizations-repositories-pull-requests-files listPullRequ
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Follow a repository that was already added to Codacy
@@ -1026,13 +1060,14 @@ export def "organizations-repositories-follow followAddedRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/follow")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unfollow a repository
@@ -1050,13 +1085,14 @@ export def "organizations-repositories-follow unfollowRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/follow")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quality settings for the specific repository
@@ -1074,13 +1110,14 @@ export def "organizations-repositories-settings-quality-repository get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<maxIssuePercentage: int, maxDuplicatedFilesPercentage: int, minCoveragePercentage: int, maxComplexFilesPercentage: int, fileDuplicationBlockThreshold: int, fileComplexityValueThreshold: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/repository")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update quality goals settings for the specific repository
@@ -1098,6 +1135,7 @@ export def "organizations-repositories-settings-quality-repository updateReposit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxIssuePercentage: int # The repository will be considered unhealthy if the percentage of issues is over this threshold (format: int32, e.g. 1)
   --maxDuplicatedFilesPercentage: int # The repository will be considered unhealthy if the percentage of duplication of files is over this threshold (format: int32, e.g. 1)
   --minCoveragePercentage: int # The repository will be considered unhealthy if the coverage percentage is under this threshold (format: int32, e.g. 1)
@@ -1113,7 +1151,7 @@ export def "organizations-repositories-settings-quality-repository updateReposit
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Regenerate the user SSH key that Codacy uses to clone the repository
@@ -1131,13 +1169,14 @@ export def "organizations-repositories-settings-ssh-user-key regenerateUserSshKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<publicSshKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/ssh-user-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Regenerate the SSH key that Codacy uses to clone the repository
@@ -1155,13 +1194,14 @@ export def "organizations-repositories-settings-ssh-repository-key regenerateRep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<publicSshKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/ssh-repository-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the public SSH key for the repository
@@ -1179,13 +1219,14 @@ export def "organizations-repositories-settings-stored-ssh-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<publicSshKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/stored-ssh-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Synchronize repository name and visibility with Git provider
@@ -1203,13 +1244,14 @@ export def "organizations-repositories-settings-sync syncRepositoryWithProvider"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the status of the repository setting **Run analysis on your build server**
@@ -1227,13 +1269,14 @@ export def "organizations-repositories-settings-analysis get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<buildServerAnalysisSetting: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/analysis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the status of the repository setting **Run analysis on your build server**
@@ -1251,6 +1294,7 @@ export def "organizations-repositories-settings-analysis updateBuildServerAnalys
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --buildServerAnalysisSetting: oneof<nothing, bool> # If true, Codacy waits for your build server to upload the results of the local analysis before resuming the analysis of your commits. If false, Codacy analyzes your commits directly on its cloud infrastructure.
 ]: any -> record<buildServerAnalysisSetting: bool> {
   let input = $in
@@ -1261,7 +1305,7 @@ export def "organizations-repositories-settings-analysis updateBuildServerAnalys
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of all languages with their extensions and enabled status
@@ -1279,13 +1323,14 @@ export def "organizations-repositories-settings-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<languages: table<name: string, codacyDefaults: list, extensions: list, defaultFiles: list, enabled: bool, detected: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure language settings for this repo
@@ -1304,6 +1349,7 @@ export def "organizations-repositories-settings-languages patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   languages: list # List of languages for this repository — item shape: {name: string, extensions?: list, enabled?: bool}
 ]: any -> any {
   let input = $in
@@ -1314,7 +1360,7 @@ export def "organizations-repositories-settings-languages patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the list of supported file extensions associated with each language in a repository
@@ -1334,13 +1380,14 @@ export def "organizations-repositories-settings-file-extensions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<languagesExtensions: table<name: string, codacyDefaults: list, extensions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/file-extensions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the custom file extensions for a repository
@@ -1361,6 +1408,7 @@ export def "organizations-repositories-settings-file-extensions patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   languagesExtensions: list # List of custom file extensions to associate with each language for a repository — item shape: {name: string, extensions: list}
 ]: any -> any {
   let input = $in
@@ -1371,7 +1419,7 @@ export def "organizations-repositories-settings-file-extensions patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get quality settings for the commits of a repository
@@ -1389,13 +1437,14 @@ export def "organizations-repositories-settings-quality-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<qualityGate: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, repositoryGatePolicyInfo: record<id: int, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/commits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update quality settings for the commits of a repository
@@ -1414,6 +1463,7 @@ export def "organizations-repositories-settings-quality-commits updateCommitQual
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueThreshold: record # The quality gate will fail if there are new issues of the specified severity over this threshold (if no severity is specified all severity levels are considered). This value cannot be negative — shape: {threshold: int, minimumSeverity?: "Info"|"Warning"|"High"|"Error"}
   --securityIssueThreshold: int # The quality gate will fail if the number of new security issues is over this threshold. This value cannot be negative (format: int32, e.g. 1)
   --securityIssueMinimumSeverity: string@securityIssueMinimumSeverity-completer # Issue severity level. These values map to our UI as follows - Info to Minor, Warning to Medium, High to High, Error to Critical. (e.g. Error)
@@ -1431,7 +1481,7 @@ export def "organizations-repositories-settings-quality-commits updateCommitQual
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset quality settings for the commits of a repository to Codacy’s default values
@@ -1449,13 +1499,14 @@ export def "organizations-repositories-settings-quality-commits-reset resetCommi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<qualityGate: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, repositoryGatePolicyInfo: record<id: int, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/commits/reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset quality settings for the pull requests of a repository to Codacy’s default values
@@ -1473,13 +1524,14 @@ export def "organizations-repositories-settings-quality-pull-requests-reset rese
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<qualityGate: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, repositoryGatePolicyInfo: record<id: int, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/pull-requests/reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset quality settings for the repository to Codacy’s default values
@@ -1497,13 +1549,14 @@ export def "organizations-repositories-settings-quality-repository-reset resetRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<maxIssuePercentage: int, maxDuplicatedFilesPercentage: int, minCoveragePercentage: int, maxComplexFilesPercentage: int, fileDuplicationBlockThreshold: int, fileComplexityValueThreshold: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/repository/reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quality settings for the pull requests of a repository
@@ -1521,13 +1574,14 @@ export def "organizations-repositories-settings-quality-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<qualityGate: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, repositoryGatePolicyInfo: record<id: int, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/settings/quality/pull-requests")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update quality settings for the pull requests of a repository
@@ -1546,6 +1600,7 @@ export def "organizations-repositories-settings-quality-pull-requests updatePull
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueThreshold: record # The quality gate will fail if there are new issues of the specified severity over this threshold (if no severity is specified all severity levels are considered). This value cannot be negative — shape: {threshold: int, minimumSeverity?: "Info"|"Warning"|"High"|"Error"}
   --securityIssueThreshold: int # The quality gate will fail if the number of new security issues is over this threshold. This value cannot be negative (format: int32, e.g. 1)
   --securityIssueMinimumSeverity: string@securityIssueMinimumSeverity-completer # Issue severity level. These values map to our UI as follows - Info to Minor, Warning to Medium, High to High, Error to Critical. (e.g. Error)
@@ -1563,7 +1618,7 @@ export def "organizations-repositories-settings-quality-pull-requests updatePull
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List organization pull requests from repositories that the user has access to
@@ -1581,6 +1636,7 @@ export def "analysis-organizations-pull-requests listOrganizationPullRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
   --repositories: string # **Deprecated:** Use [searchOrganizationRepositoriesWithAnalysis](#searchorganizationrepositorieswithanalysis) instead. (DEPRECATED, e.g. codacy-eslint,codacy-pmd)
@@ -1591,7 +1647,7 @@ export def "analysis-organizations-pull-requests listOrganizationPullRequests" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/pull-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List commit analysis statistics for the last n days that have analysis data
@@ -1609,6 +1665,7 @@ export def "analysis-organizations-repositories-commit-statistics listCommitAnal
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
   --days: int # Number of days of data to return (1-365, defaults to 31) (format: int32, default: 31, e.g. 31)
 ]: nothing -> record<data: table<repositoryId: int, commitId: int, numberIssues: int, numberLoc: int, issuesPerCategory: list, issuePercentage: int, totalComplexity: int, numberComplexFiles: int, complexFilesPercentage: int, filesChangedToIncreaseComplexity: int, numberDuplicatedLines: int, duplicationPercentage: int, coveragePercentage: int, coveragePercentageWithDecimals: float, numberFilesUncovered: int, techDebt: int, totalFilesAdded: int, totalFilesRemoved: int, totalFilesChanged: int, commitTimestamp: string, commitAuthorName: string, commitShortUUID: string>> {
@@ -1618,7 +1675,7 @@ export def "analysis-organizations-repositories-commit-statistics listCommitAnal
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commit-statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List analysis category overviews for a repository that the user has access to
@@ -1636,6 +1693,7 @@ export def "analysis-organizations-repositories-category-overviews listCategoryO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> record<data: table<commitId: int, category: record, percentage: float, totalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -1644,7 +1702,7 @@ export def "analysis-organizations-repositories-category-overviews listCategoryO
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/category-overviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issues in a repository
@@ -1662,6 +1720,7 @@ export def "analysis-organizations-repositories-issues-search searchRepositoryIs
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --branchName: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. a-feature-branch-name)
@@ -1683,7 +1742,7 @@ export def "analysis-organizations-repositories-issues-search searchRepositoryIs
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk ignore issues in a repository
@@ -1701,6 +1760,7 @@ export def "analysis-organizations-repositories-issues-bulk-ignore bulkIgnoreIss
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueIds: list # List of issue ids to ignore
   --reason: string # Optional reason for ignoring
   --comment: string # Optional comment
@@ -1713,7 +1773,7 @@ export def "analysis-organizations-repositories-issues-bulk-ignore bulkIgnoreIss
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an overview of the issues in a repository
@@ -1731,6 +1791,7 @@ export def "analysis-organizations-repositories-issues-overview issuesOverview" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branchName: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. a-feature-branch-name)
   --patternIds: list # Set of code pattern identifiers, as returned by the endpoint [listPatterns](#listpatterns) (e.g. [ESLint_@typescript-eslint_consistent-indexed-object-style, ESLint_@typescript-eslint_no-redeclare])
   --toolUuids: list # Set of tool UUIDs to filter issues by the tools that detected them (e.g. [847feb32-9ff2-11ea-bb37-0242ac130002, cf05f3aa-fd23-4586-8cce-5571b1904586])
@@ -1749,7 +1810,7 @@ export def "analysis-organizations-repositories-issues-overview issuesOverview" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get information about an open issue in a repository
@@ -1768,13 +1829,14 @@ export def "analysis-organizations-repositories-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<issueId: string, resultDataId: int, filePath: string, fileId: int, patternInfo: record<id: string, title: string, category: string, subCategory: string, level: string, severityLevel: string>, toolInfo: record<uuid: string, name: string>, lineNumber: int, message: string, suggestion: string, language: string, lineText: string, commitInfo: record<sha: string, commiter: string, commiterName: string, timestamp: string>, falsePositiveProbability: int, falsePositiveReason: string, falsePositiveThreshold: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/issues/($issueId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ignore or unignore an issue
@@ -1793,6 +1855,7 @@ export def "analysis-organizations-repositories-issues updateIssueState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignored: oneof<nothing, bool> # True if the issue is ignored
   --reason: string@reason-completer # Predefined reason for ignoring the issue (e.g. FalsePositive)
   --comment: string # Optional comment justifying the ignore action
@@ -1805,7 +1868,7 @@ export def "analysis-organizations-repositories-issues updateIssueState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Ignore the false positive result in an issue
@@ -1824,13 +1887,14 @@ export def "analysis-organizations-repositories-issues-false-positive-ignore ign
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/issues/($issueId)/false-positive/ignore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List ignored issues in a repository
@@ -1848,6 +1912,7 @@ export def "analysis-organizations-repositories-ignored-issues-search searchRepo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --branchName: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. a-feature-branch-name)
@@ -1870,7 +1935,7 @@ export def "analysis-organizations-repositories-ignored-issues-search searchRepo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return analysis results for the commits in a branch
@@ -1888,6 +1953,7 @@ export def "analysis-organizations-repositories-commits listRepositoryCommits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
@@ -1898,7 +1964,7 @@ export def "analysis-organizations-repositories-commits listRepositoryCommits" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis results for a commit
@@ -1917,13 +1983,14 @@ export def "analysis-organizations-repositories-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commit: record<sha: string, id: int, commitTimestamp: string, authorName: string, authorEmail: string, message: string, startedAnalysis: string, endedAnalysis: string, isMergeCommit: bool, gitHref: string, parents: list<string>>, coverage: record<totalCoveragePercentage: float, deltaCoveragePercentage: float, isUpToStandards: bool, resultReasons: list<record>>, quality: record<newIssues: int, fixedIssues: int, deltaComplexity: int, deltaClonesCount: int, isUpToStandards: bool, resultReasons: list<record>>, meta: record<analyzable: bool, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis statistics of a commit
@@ -1942,13 +2009,14 @@ export def "analysis-organizations-repositories-commits-delta-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commitUuid: string, newIssues: int, fixedIssues: int, deltaComplexity: int, deltaCoverage: int, deltaCoverageWithDecimals: float, deltaClonesCount: int, analyzed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/deltaStatistics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the issues introduced or fixed by a commit
@@ -1967,6 +2035,7 @@ export def "analysis-organizations-repositories-commits-delta-issues listCommitD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetCommitUuid: string # UUID or SHA string that identifies the target commit (e.g. 2957025d42e8daadf937d4044516f991d21deea4)
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
   --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
@@ -1979,7 +2048,7 @@ export def "analysis-organizations-repositories-commits-delta-issues listCommitD
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($srcCommitUuid)/deltaIssues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the authenticated user
@@ -1994,13 +2063,14 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, name: string, mainEmail: string, otherEmails: list<string>, isAdmin: bool, isActive: bool, created: string, intercomHash: string, zendeskHash: string, pylonHash: string, shouldDoClientQualification: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the authenticated user
@@ -2015,13 +2085,14 @@ export def "user delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the authenticated user
@@ -2036,6 +2107,7 @@ export def "user patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # e.g. Foo
   --shouldDoClientQualification: oneof<nothing, bool> # e.g. false
 ]: any -> record<data: record<id: int, name: string, mainEmail: string, otherEmails: list<string>, isAdmin: bool, isActive: bool, created: string, intercomHash: string, zendeskHash: string, pylonHash: string, shouldDoClientQualification: bool>> {
@@ -2047,7 +2119,7 @@ export def "user patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List organizations for the authenticated user
@@ -2062,6 +2134,7 @@ export def "user-organizations listUserOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<identifier: int, remoteIdentifier: string, name: string, avatar: string, created: string, provider: string, joinMode: string, type: string, joinStatus: string, singleProviderLogin: bool, hasDastAccess: bool, hasScaEnabled: bool, imageSbomEnabled: bool, hasAiInventoryEnabled: bool, hasFalsePositiveAccess: bool, hasSilentFalsePositiveDetection: bool>> {
@@ -2071,7 +2144,7 @@ export def "user-organizations listUserOrganizations" [
   let full_url = (build-url $base "/user/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organizations for the authenticated user
@@ -2087,6 +2160,7 @@ export def "user-organizations listOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<identifier: int, remoteIdentifier: string, name: string, avatar: string, created: string, provider: string, joinMode: string, type: string, joinStatus: string, singleProviderLogin: bool, hasDastAccess: bool, hasScaEnabled: bool, imageSbomEnabled: bool, hasAiInventoryEnabled: bool, hasFalsePositiveAccess: bool, hasSilentFalsePositiveDetection: bool>> {
@@ -2096,7 +2170,7 @@ export def "user-organizations listOrganizations" [
   let full_url = (build-url $base $"/user/organizations/($provider)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization for the authenticated user
@@ -2113,13 +2187,14 @@ export def "user-organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<identifier: int, remoteIdentifier: string, name: string, avatar: string, created: string, provider: string, joinMode: string, type: string, joinStatus: string, singleProviderLogin: bool, hasDastAccess: bool, hasScaEnabled: bool, imageSbomEnabled: bool, hasAiInventoryEnabled: bool, hasFalsePositiveAccess: bool, hasSilentFalsePositiveDetection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/organizations/($provider)/($remoteOrganizationName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List emails for the authenticated user
@@ -2134,13 +2209,14 @@ export def "user-emails listUserEmails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<mainEmail: record<email: string, isPrivate: bool>, otherEmails: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an email from user account
@@ -2155,6 +2231,7 @@ export def "user-emails-remove removeUserEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2164,7 +2241,7 @@ export def "user-emails-remove removeUserEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve email notification settings
@@ -2179,13 +2256,14 @@ export def "user-emails-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<perCommit: bool, perPullRequest: bool, onlyMyActivity: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update email notification preferences
@@ -2200,6 +2278,7 @@ export def "user-emails-settings updateEmailSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --perCommit: oneof<nothing, bool> # Whether to receive notifications for each commit (e.g. false)
   --perPullRequest: oneof<nothing, bool> # Whether to receive notifications for pull requests (e.g. true)
   --onlyMyActivity: oneof<nothing, bool> # Whether to only receive notifications for your own activity (e.g. true)
@@ -2212,7 +2291,7 @@ export def "user-emails-settings updateEmailSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set an email as default
@@ -2227,6 +2306,7 @@ export def "user-emails-set-default setDefaultEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2236,7 +2316,7 @@ export def "user-emails-set-default setDefaultEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List integrations for the authenticated user
@@ -2251,6 +2331,7 @@ export def "user-integrations listUserIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<provider: string, host: string, lastAuthenticated: string>> {
@@ -2260,7 +2341,7 @@ export def "user-integrations listUserIntegrations" [
   let full_url = (build-url $base "/user/integrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an integration for the authenticated user
@@ -2276,13 +2357,14 @@ export def "user-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/integrations/($provider)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization
@@ -2299,13 +2381,14 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<organization: record<identifier: int, remoteIdentifier: string, name: string, avatar: string, created: string, provider: string, joinMode: string, type: string, joinStatus: string, singleProviderLogin: bool, hasDastAccess: bool, hasScaEnabled: bool, imageSbomEnabled: bool, hasAiInventoryEnabled: bool, hasFalsePositiveAccess: bool, hasSilentFalsePositiveDetection: bool>, membership: record<userRole: string>, billing: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool>, paywall: record<organizationDashboard: bool, securityDashboard: bool>, organizationPayWall: record<organizationDashboard: bool>, analysisConfigurationMinimumPermission: string, subscriptions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete organization
@@ -2324,6 +2407,7 @@ export def "organizations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   joinReason: record # shape: {title: string, notes: list}
   cancelReason: record # shape: {title: string, notes: list}
 ]: any -> any {
@@ -2335,7 +2419,7 @@ export def "organizations delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get organization by provider installation id
@@ -2352,13 +2436,14 @@ export def "organizations-installation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<identifier: int, remoteIdentifier: string, name: string, avatar: string, created: string, provider: string, joinMode: string, type: string, joinStatus: string, singleProviderLogin: bool, hasDastAccess: bool, hasScaEnabled: bool, imageSbomEnabled: bool, hasAiInventoryEnabled: bool, hasFalsePositiveAccess: bool, hasSilentFalsePositiveDetection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/installation/($installationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get detailed information about organization billing
@@ -2375,13 +2460,14 @@ export def "organizations-billing organizationDetailedBilling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<numberOfSeats: int, numberOfPurchasedSeats: int, paymentPlan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool>, plan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool, alternatePeriodCode: string>, paymentGateway: string, priceInCents: int, pricePerSeatInCents: int, nextPaymentDate: string, invoiceDetails: record<firstName: string, lastName: string, email: string, country: string, vat: string, address: string, zip: string, state: string>, taxes: list<record>, subscriptions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/billing")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the information about organization billing
@@ -2398,6 +2484,7 @@ export def "organizations-billing updateOrganizationDetailedBilling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   firstName: string
   lastName: string
   billingEmail: string
@@ -2415,7 +2502,7 @@ export def "organizations-billing updateOrganizationDetailedBilling" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get card information about organization billing
@@ -2432,13 +2519,14 @@ export def "organizations-billing-card organizationBillingCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<maskedNumber: string, last4: string, expiryMonth: int, expiryYear: int, holderName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/billing/card")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a card to the organization
@@ -2455,6 +2543,7 @@ export def "organizations-billing-card organizationBillingAddCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cardToken: string
 ]: any -> any {
   let input = $in
@@ -2465,7 +2554,7 @@ export def "organizations-billing-card organizationBillingAddCard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a billing estimation
@@ -2482,6 +2571,7 @@ export def "organizations-billing-estimation organizationBillingEstimation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --paymentPlanCode: string # Payment plan code (available codes can be retrieved using [listPaymentPlans](#listpaymentplans)) (e.g. standard-team)
   --promoCode: string # Optional promotional code to apply to the billing estimation.
 ]: nothing -> record<data: record<perSeatCents: int, seats: int, taxes: list<record>, discountCents: int, subTotalCents: int, totalCents: int, nextBilling: string, isMonthly: bool>> {
@@ -2491,7 +2581,7 @@ export def "organizations-billing-estimation organizationBillingEstimation" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/billing/estimation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change the plan of an organization
@@ -2508,6 +2598,7 @@ export def "organizations-billing-change-plan changeOrganizationPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string # The code that uniquely identifies the payment plan
   --promoCode: string
 ]: any -> any {
@@ -2519,7 +2610,7 @@ export def "organizations-billing-change-plan changeOrganizationPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sync the information about organization billing
@@ -2536,13 +2627,14 @@ export def "organizations-billing-sync syncMarketplaceBilling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/billing/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply default settings to all repositories
@@ -2559,13 +2651,14 @@ export def "organizations-integrations-provider-settings-apply applyProviderSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/providerSettings/apply")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Git provider settings
@@ -2582,13 +2675,14 @@ export def "organizations-integrations-provider-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commitStatus: bool, pullRequestComment: bool, pullRequestSummary: bool, coverageSummary: bool, suggestions: bool, aiEnhancedComments: bool, aiPullRequestReviewer: bool, aiPullRequestReviewerAutomatic: bool, pullRequestUnifiedSummary: bool, availableSettings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/providerSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update Git provider settings
@@ -2605,6 +2699,7 @@ export def "organizations-integrations-provider-settings updateProviderSettings"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --commitStatus: oneof<nothing, bool> # Toggle the feature "Status checks"
   --pullRequestComment: oneof<nothing, bool> # Toggle the feature "Issue annotations"
   --pullRequestSummary: oneof<nothing, bool> # Toggle the feature "Issue summaries"
@@ -2623,7 +2718,7 @@ export def "organizations-integrations-provider-settings updateProviderSettings"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Git provider integration settings for a repository
@@ -2641,13 +2736,14 @@ export def "organizations-repositories-integrations-provider-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<settings: record<commitStatus: bool, pullRequestComment: bool, pullRequestSummary: bool, coverageSummary: bool, suggestions: bool, aiEnhancedComments: bool, aiPullRequestReviewer: bool, aiPullRequestReviewerAutomatic: bool, pullRequestUnifiedSummary: bool, availableSettings: list<string>>, integratedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/integrations/providerSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Git provider integration settings for a repository
@@ -2665,6 +2761,7 @@ export def "organizations-repositories-integrations-provider-settings updateRepo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --commitStatus: oneof<nothing, bool> # Toggle the feature "Status checks"
   --pullRequestComment: oneof<nothing, bool> # Toggle the feature "Issue annotations"
   --pullRequestSummary: oneof<nothing, bool> # Toggle the feature "Issue summaries"
@@ -2683,7 +2780,7 @@ export def "organizations-repositories-integrations-provider-settings updateRepo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a [post-commit hook](https://docs.codacy.com/repositories-configure/integrations/post-commit-hooks/) for a repository
@@ -2701,13 +2798,14 @@ export def "organizations-repositories-integrations-post-commit-hook createPostC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/integrations/postCommitHook")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh the Git provider integration for a repository (GitLab and Bitbucket only)
@@ -2725,13 +2823,14 @@ export def "organizations-repositories-integrations-refresh-provider refreshProv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/integrations/refreshProvider")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization repositories for the authenticated user
@@ -2748,6 +2847,7 @@ export def "organizations-repositories listOrganizationRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -2761,7 +2861,7 @@ export def "organizations-repositories listOrganizationRepositories" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the onboarding progress of an organization
@@ -2778,13 +2878,14 @@ export def "onboarding-organizations-progress retrieveOrganizationOnboardingProg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<step: string, isCompleted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/onboarding/organizations/($provider)/($remoteOrganizationName)/progress")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List people of an organization
@@ -2801,6 +2902,7 @@ export def "organizations-people listPeopleFromOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -2812,7 +2914,7 @@ export def "organizations-people listPeopleFromOrganization" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/people" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add people to organization
@@ -2829,6 +2931,7 @@ export def "organizations-people addPeopleToOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2838,7 +2941,7 @@ export def "organizations-people addPeopleToOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a CSV file listing the people of an organization
@@ -2855,13 +2958,14 @@ export def "organizations-people-csv listPeopleFromOrganizationCsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/peopleCsv")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure what your organization members can do across the Codacy platform
@@ -2878,6 +2982,7 @@ export def "organizations-analysis-configuration-minimum-permission patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string@permission-completer
 ]: any -> any {
   let input = $in
@@ -2888,7 +2993,7 @@ export def "organizations-analysis-configuration-minimum-permission patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove people from an organization
@@ -2905,6 +3010,7 @@ export def "organizations-people-remove removePeopleFromOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emails: list # List of emails to add
 ]: any -> record<success: table<email: string, error: string>, failed: table<email: string, error: string>> {
   let input = $in
@@ -2915,7 +3021,7 @@ export def "organizations-people-remove removePeopleFromOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the status of Codacy Git provider app permissions for an organization
@@ -2932,13 +3038,14 @@ export def "organizations-git-provider-app-permissions gitProviderAppPermissions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contentPermission: bool, customPropertiesPermission: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gitProviderAppPermissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List people suggestions for an organization
@@ -2955,6 +3062,7 @@ export def "organizations-people-suggestions peopleSuggestionsForOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -2965,7 +3073,7 @@ export def "organizations-people-suggestions peopleSuggestionsForOrganization" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/people/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reanalyze a specific commit in a repository
@@ -2983,6 +3091,7 @@ export def "organizations-repositories-reanalyze-commit reanalyzeCommitById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   commitUuid: string # UUID or SHA string that identifies the commit
   --cleanCache: oneof<nothing, bool> # If true, the cache will be cleaned before the analysis (e.g. false)
 ]: any -> any {
@@ -2994,7 +3103,7 @@ export def "organizations-repositories-reanalyze-commit reanalyzeCommitById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch the specified repository
@@ -3012,13 +3121,14 @@ export def "organizations-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<repositoryId: int, provider: string, owner: string, name: string, fullPath: string, visibility: string, remoteIdentifier: string, lastUpdated: string, permission: string, problems: list<record>, languages: list<string>, defaultBranch: record<id: int, name: string, isDefault: bool, isEnabled: bool, lastUpdated: string, branchType: string, lastCommit: string>, badges: record<grade: string, coverage: string>, codingStandardId: int, codingStandardName: string, standards: list<record>, addedState: string, gatePolicyId: int, gatePolicyName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the specified repository
@@ -3036,13 +3146,14 @@ export def "organizations-repositories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List people suggestions for a repository
@@ -3060,6 +3171,7 @@ export def "organizations-repositories-people-suggestions peopleSuggestionsForRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -3070,7 +3182,7 @@ export def "organizations-repositories-people-suggestions peopleSuggestionsForRe
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/people/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List repository branches
@@ -3088,6 +3200,7 @@ export def "organizations-repositories-branches listRepositoryBranches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Filter by branch status. Set to `true` to return only enabled branches, or `false` to return only disabled branches
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
@@ -3101,7 +3214,7 @@ export def "organizations-repositories-branches listRepositoryBranches" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/branches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the settings for a repository branch
@@ -3120,6 +3233,7 @@ export def "organizations-repositories-branches updateRepositoryBranchConfigurat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isEnabled: oneof<nothing, bool> # True if Codacy should analyze the branch (e.g. true)
 ]: any -> any {
   let input = $in
@@ -3130,7 +3244,7 @@ export def "organizations-repositories-branches updateRepositoryBranchConfigurat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the join mode of an organization
@@ -3147,6 +3261,7 @@ export def "organizations-join-mode updateJoinMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   joinMode: string@joinMode-completer
 ]: any -> any {
   let input = $in
@@ -3157,7 +3272,7 @@ export def "organizations-join-mode updateJoinMode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set branch as default
@@ -3176,13 +3291,14 @@ export def "organizations-repositories-branches-set-default setRepositoryBranchA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/branches/($branchName)/setDefault")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get branch required status checks
@@ -3201,13 +3317,14 @@ export def "organizations-repositories-branches-required-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<quality: bool, diffCoverage: bool, coverageVariation: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/branches/($branchName)/required-checks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pull request adding the Codacy analysis badge to the repository
@@ -3224,13 +3341,14 @@ export def "organizations-gh-repositories-badge createBadgePullRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/gh/($remoteOrganizationName)/repositories/($repositoryName)/badge")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if the user can leave the organization
@@ -3247,13 +3365,14 @@ export def "organizations-people-leave-check checkIfUserCanLeave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<canLeave: bool, message: string, reason: record<actions: list<record>, code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/people/leave/check")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List requests to join an organization
@@ -3270,6 +3389,7 @@ export def "organizations-join listOrganizationJoinRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -3280,7 +3400,7 @@ export def "organizations-join listOrganizationJoinRequests" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/join" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Join an organization
@@ -3297,13 +3417,14 @@ export def "organizations-join joinOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<organizationIdentifier: int, joinStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/join")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Decline requests to join an organization
@@ -3320,6 +3441,7 @@ export def "organizations-join declineRequestsToJoinOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -3329,7 +3451,7 @@ export def "organizations-join declineRequestsToJoinOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a request to join an organization
@@ -3347,13 +3469,14 @@ export def "organizations-join delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/join/($accountIdentifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clean organization cache for the authenticated user
@@ -3370,13 +3493,14 @@ export def "organizations-cache-clean cleanCache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/cache/clean")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a repository to Codacy
@@ -3391,6 +3515,7 @@ export def "repositories addRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --caller: string # Optional identifier for the calling application or service.
   repositoryFullPath: string # Full path of the repository on the Git provider, starting at the organization. Separate each segment of the path with a slash (/). (e.g. codacy/codacy-analysis-cli)
   provider: string # Git provider hosting the repository (e.g. gh)
@@ -3405,7 +3530,7 @@ export def "repositories addRepository" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add an organization to Codacy
@@ -3420,6 +3545,7 @@ export def "organizations addOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   provider: string # Git provider hosting the repository (e.g. gh)
   remoteIdentifier: string
   name: string # e.g. FooOrganization
@@ -3434,7 +3560,7 @@ export def "organizations addOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Enterprise account token
@@ -3450,13 +3576,14 @@ export def "user-enterprise-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/enterprise/integrations/($provider)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clean enterprise cache for the authenticated user
@@ -3472,13 +3599,14 @@ export def "enterprises-cache-clean cleanEnterpriseCache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enterprises/($provider)/cache/clean")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user configured enterprise provider account tokens on Codacy's platform
@@ -3493,13 +3621,14 @@ export def "user-enterprise-integrations listUserEnterpriseProviderTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<provider: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/enterprise/integrations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an Enterprise account token
@@ -3514,6 +3643,7 @@ export def "user-enterprise-integrations addEnterpriseToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
   provider: string # Git provider hosting the repository (e.g. gh)
 ]: any -> any {
@@ -3525,7 +3655,7 @@ export def "user-enterprise-integrations addEnterpriseToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the [account API tokens](https://docs.codacy.com/codacy-api/api-tokens/) of the authenticated user
@@ -3540,6 +3670,7 @@ export def "user-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<id: int, token: string, expiresAt: string>> {
@@ -3549,7 +3680,7 @@ export def "user-tokens get" [
   let full_url = (build-url $base "/user/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new [account API token](https://docs.codacy.com/codacy-api/api-tokens/) for the authenticated user
@@ -3564,6 +3695,7 @@ export def "user-tokens createUserApiToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiresAt: string # format: date-time, e.g. 2019-05-07T14:29:13.43Z
 ]: any -> record<id: int, token: string, expiresAt: string> {
   let input = $in
@@ -3574,7 +3706,7 @@ export def "user-tokens createUserApiToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an [account API token](https://docs.codacy.com/codacy-api/api-tokens/) for the authenticated user by ID
@@ -3590,13 +3722,14 @@ export def "user-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/tokens/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete billing subscription for organization
@@ -3615,6 +3748,7 @@ export def "billing-subscription delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   joinReason: record # shape: {title: string, notes: list}
   cancelReason: record # shape: {title: string, notes: list}
 ]: any -> any {
@@ -3626,7 +3760,7 @@ export def "billing-subscription delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List configured login providers on Codacy's platform
@@ -3641,6 +3775,7 @@ export def "login-integrations listConfiguredLoginIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<provider: string, loginUrl: string>> {
@@ -3650,7 +3785,7 @@ export def "login-integrations listConfiguredLoginIntegrations" [
   let full_url = (build-url $base "/login/integrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List provider integrations existing on Codacy's platform
@@ -3665,6 +3800,7 @@ export def "provider-integrations listProviderIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<provider: string, redirectUrl: string>> {
@@ -3674,7 +3810,7 @@ export def "provider-integrations listProviderIntegrations" [
   let full_url = (build-url $base "/provider/integrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get configuration status
@@ -3689,13 +3825,14 @@ export def "configuration-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<statuses: list<string>, metadata: record<firstSignupDone: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Health check endpoint
@@ -3710,13 +3847,14 @@ export def "health health" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # (Codacy admins only) Search for an entity like Organization or Repository, supports ids and names
@@ -3731,6 +3869,7 @@ export def "admin adminSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
 ]: nothing -> record<data: table<slug: string, items: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -3739,7 +3878,7 @@ export def "admin adminSearch" [
   let full_url = (build-url $base "/admin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # (Codacy admins only) Returns the requested admin entity
@@ -3756,13 +3895,14 @@ export def "admin get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, groupSlug: string, displayName: string, details: record, relatedEntities: list<record>, availableResources: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/($adminEntityGroupSlug)/($adminEntityIdentifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # (Codacy admins only) Returns the requested resources of a given admin entity
@@ -3780,6 +3920,7 @@ export def "admin listAdminEntityResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<details: record, entityIdentification: record>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -3789,7 +3930,7 @@ export def "admin listAdminEntityResources" [
   let full_url = (build-url $base $"/admin/($adminEntityGroupSlug)/($adminEntityIdentifier)/($adminResourceSlug)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # (Codacy admins only) Generates a license for self-hosted instances of Codacy
@@ -3804,6 +3945,7 @@ export def "admin-license generateLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   numberOfSeats: int # format: int32, e.g. 100
   email: string # e.g. name@domain.com
   expirationDate: string # format: date-time, e.g. 2019-05-07T14:29:13.43Z
@@ -3819,7 +3961,7 @@ export def "admin-license generateLicense" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # (Codacy admins only) Delete Codacy users based on a CSV file exported by GitHub Enterprise
@@ -3834,6 +3976,7 @@ export def "admin-dormant-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<data: table<email: string>> {
   let input = $in
@@ -3843,7 +3986,7 @@ export def "admin-dormant-accounts delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Upload pen test reports for an organization (internal, Codacy admins only)
@@ -3858,6 +4001,7 @@ export def "admin-security-pen-test-reports uploadPenTestReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   csvdata: string # The pen test report in CSV format (format: binary)
   provider: string # Git provider hosting the organization's repositories
   organizationName: string # The name of the organization to which the results belong
@@ -3870,7 +4014,7 @@ export def "admin-security-pen-test-reports uploadPenTestReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Retrieve the list of languages supported by available tools
@@ -3885,13 +4029,14 @@ export def "languages-tools listLanguagesWithTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: string, fileExtensions: list, files: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages/tools")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the list of tools
@@ -3906,6 +4051,7 @@ export def "tools listTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<uuid: string, name: string, version: string, shortName: string, documentationUrl: string, sourceCodeUrl: string, prefix: string, needsCompilation: bool, configurationFilenames: list, description: string, dockerImage: string, languages: list, clientSide: bool, standalone: bool, enabledByDefault: bool, configurable: bool>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -3915,7 +4061,7 @@ export def "tools listTools" [
   let full_url = (build-url $base "/tools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the list of tool patterns
@@ -3931,6 +4077,7 @@ export def "tools-patterns listPatterns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --enabled: oneof<nothing, bool> # Filter by enabled status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns.
@@ -3941,7 +4088,7 @@ export def "tools-patterns listPatterns" [
   let full_url = (build-url $base $"/tools/($toolUuid)/patterns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add feedback relating to the tool pattern
@@ -3960,6 +4107,7 @@ export def "tools-patterns-organizations-feedback addPatternFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reactionFeedback: oneof<nothing, bool> # True if the enriched pattern in mention is considered good/relevant by the user
   --feedback: string # Feedback from the user to describe why enriched pattern is not considered good/relevant
 ]: any -> any {
@@ -3971,7 +4119,7 @@ export def "tools-patterns-organizations-feedback addPatternFeedback" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a tool pattern
@@ -3988,13 +4136,14 @@ export def "tools-patterns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, title: string, category: string, subCategory: string, level: string, severityLevel: string, description: string, explanation: string, enabled: bool, languages: list<string>, timeToFix: int, parameters: list<record>, rationale: string, solution: string, goodExamples: list<string>, badExamples: list<string>, tags: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tools/($toolUuid)/patterns/($patternId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the list of duplication tools
@@ -4009,13 +4158,14 @@ export def "duplication-tools listDuplicationTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<dockerImage: string, languages: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/duplicationTools")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the list of metrics tools
@@ -4030,13 +4180,14 @@ export def "metrics-tools listMetricsTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<dockerImage: string, languages: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metricsTools")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start collecting metrics for an organization
@@ -4053,6 +4204,7 @@ export def "organizations-metrics-start initiateMetricsForOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metrics: list
 ]: any -> any {
   let input = $in
@@ -4063,7 +4215,7 @@ export def "organizations-metrics-start initiateMetricsForOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metrics that are ready for an organization
@@ -4080,13 +4232,14 @@ export def "organizations-metrics-ready readyMetricsForOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<organizationId: int, provider: string, organizationName: string, readyMetrics: list<string>, startedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/metrics/ready")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the latest value of a metric
@@ -4106,6 +4259,7 @@ export def "organizations-metrics-latest retrieveLatestMetricValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entityFilter: record # shape: {repositories?: list, segmentIds?: list}
   --dimensionsFilter: list # item shape: {dimension: string, value: string}
 ]: any -> record<data: record<value: float, latestValue: float>> {
@@ -4117,7 +4271,7 @@ export def "organizations-metrics-latest retrieveLatestMetricValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the latest metric values grouped by dimension
@@ -4137,6 +4291,7 @@ export def "organizations-metrics-latest-grouped retrieveLatestMetricGroupedValu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {entityFilter: record, dimensionsFilter?: list}
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
 ]: any -> record<data: table<group: record, value: float, latestValue: float>> {
@@ -4148,7 +4303,7 @@ export def "organizations-metrics-latest-grouped retrieveLatestMetricGroupedValu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric value for a specific period
@@ -4167,6 +4322,7 @@ export def "organizations-metrics-period retrieveValueForPeriod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {entityFilter: record, dimensionsFilter?: list}
   date: string # format: date-time
   period: string@period-completer # e.g. week
@@ -4179,7 +4335,7 @@ export def "organizations-metrics-period retrieveValueForPeriod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric values for a specific period grouped by dimension
@@ -4199,6 +4355,7 @@ export def "organizations-metrics-period-grouped retrieveGroupedValuesForPeriod"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {entityFilter: record, dimensionsFilter?: list}
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
   date: string # format: date-time
@@ -4212,7 +4369,7 @@ export def "organizations-metrics-period-grouped retrieveGroupedValuesForPeriod"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric values for a time range
@@ -4232,6 +4389,7 @@ export def "organizations-metrics-timerange retrieveTimerangeMetricValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {entityFilter: record, dimensionsFilter?: list}
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
   --body-from: string # format: date-time
@@ -4246,7 +4404,7 @@ export def "organizations-metrics-timerange retrieveTimerangeMetricValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metrics that are ready for each organization in an enterprise
@@ -4263,13 +4421,14 @@ export def "enterprises-metrics-ready readyMetricsForEnterprise" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<organizationId: int, organizationName: string, readyMetrics: list, startedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enterprises/($provider)/($enterpriseName)/metrics/ready")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve latest metric values for all organizations in an enterprise
@@ -4288,6 +4447,7 @@ export def "enterprises-metrics-latest retrieveLatestMetricValueForEnterprise" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dimensionsFilter: list # item shape: {dimension: string, value: string}
 ]: any -> record<data: record<value: float, latestValue: float>> {
   let input = $in
@@ -4298,7 +4458,7 @@ export def "enterprises-metrics-latest retrieveLatestMetricValueForEnterprise" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve latest metric values grouped by dimension for all organizations in an enterprise
@@ -4318,6 +4478,7 @@ export def "enterprises-metrics-latest-grouped retrieveLatestMetricGroupedValues
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
   filter: record # shape: {dimensionsFilter?: list}
 ]: any -> record<data: table<group: record, value: float, latestValue: float>> {
@@ -4329,7 +4490,7 @@ export def "enterprises-metrics-latest-grouped retrieveLatestMetricGroupedValues
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric values for a specific period for all organizations in an enterprise
@@ -4348,6 +4509,7 @@ export def "enterprises-metrics-period retrieveValueForPeriodForEnterprise" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {dimensionsFilter?: list}
   date: string # format: date-time
   period: string@period-completer # e.g. week
@@ -4360,7 +4522,7 @@ export def "enterprises-metrics-period retrieveValueForPeriodForEnterprise" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric values grouped by dimension for a specific period for all organizations in an enterprise
@@ -4380,6 +4542,7 @@ export def "enterprises-metrics-period-grouped retrieveGroupedValuesForPeriodFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {dimensionsFilter?: list}
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
   date: string # format: date-time
@@ -4393,7 +4556,7 @@ export def "enterprises-metrics-period-grouped retrieveGroupedValuesForPeriodFor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve metric values for a time range for all organizations in an enterprise
@@ -4413,6 +4576,7 @@ export def "enterprises-metrics-timerange retrieveTimerangeMetricValuesForEnterp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filter: record # shape: {dimensionsFilter?: list}
   groupBy: record # shape: {groupBy: list, sortDirection?: string, limit?: int}
   --body-from: string # format: date-time
@@ -4427,7 +4591,7 @@ export def "enterprises-metrics-timerange retrieveTimerangeMetricValuesForEnterp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List files in a repository
@@ -4445,6 +4609,7 @@ export def "organizations-repositories-files listFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
   --search: string # Filter files that include this string anywhere in their relative path (e.g. file.js)
   --qp-sort: string # Field used to sort the list of files. Valid values are `filename`, `issues`, `grade`, `duplication`, `complexity`, and `coverage`. (e.g. category)
@@ -4458,7 +4623,7 @@ export def "organizations-repositories-files listFiles" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List ignored files in a repository
@@ -4476,6 +4641,7 @@ export def "organizations-repositories-ignored-files listIgnoredFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
   --search: string # Filter files that include this string anywhere in their relative path (e.g. file.js)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -4487,7 +4653,7 @@ export def "organizations-repositories-ignored-files listIgnoredFiles" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/ignored-files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analysis information and coverage metrics for a file in a repository
@@ -4506,13 +4672,14 @@ export def "organizations-repositories-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<file: record<branchId: int, commitId: int, commitSha: string, fileId: int, fileDataId: int, path: string, language: string, gitProviderUrl: string, ignored: bool>, coverage: record<coverage: float, coverableLines: int, coveredLines: int>, quality: record<totalIssues: int, complexity: int, grade: int, gradeLetter: string, duplication: int, duplicatedLinesOfCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files/($fileId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of duplicated code blocks for a file in a repository
@@ -4531,6 +4698,7 @@ export def "organizations-repositories-files-duplication get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: int, occurrences: list>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -4540,7 +4708,7 @@ export def "organizations-repositories-files-duplication get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files/($fileId)/duplication" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the issue list for a file in a repository
@@ -4559,6 +4727,7 @@ export def "organizations-repositories-files-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<issueId: string, resultDataId: int, filePath: string, fileId: int, patternInfo: record, toolInfo: record, lineNumber: int, message: string, suggestion: string, language: string, lineText: string, commitInfo: record, falsePositiveProbability: int, falsePositiveReason: string, falsePositiveThreshold: int>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -4568,7 +4737,7 @@ export def "organizations-repositories-files-issues get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files/($fileId)/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get AI Risk Checklist for an organization
@@ -4585,13 +4754,14 @@ export def "organizations-ai-risk-checklist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<key: string, check: bool, number: int, threshold: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/ai-risk-checklist")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the coding standards for an organization, including draft coding standards
@@ -4608,13 +4778,14 @@ export def "organizations-coding-standards listCodingStandards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: int, name: string, isDraft: bool, isDefault: bool, languages: list, meta: record, complianceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a draft coding standard for an organization
@@ -4631,6 +4802,7 @@ export def "organizations-coding-standards createCodingStandard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceRepository: string # Name of a repository in the same organization to use as a template when creating the new coding standard
   --sourceCodingStandard: int # Identifier of an existing coding standard to use as a template when creating a new coding standard, including the enabled repositories and default coding standard status  (format: int64, e.g. 1)
   name: string # Name of the new coding standard (e.g. Security best practices)
@@ -4645,7 +4817,7 @@ export def "organizations-coding-standards createCodingStandard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a compliance standard for an organization
@@ -4662,6 +4834,7 @@ export def "organizations-compliance-standards createComplianceStandard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the compliance standard (e.g. AI Usage Compliance)
   complianceType: string@complianceType-completer # The type of compliance standard (e.g. ai-risk)
 ]: any -> record<data: record<id: int, name: string, isDraft: bool, isDefault: bool, languages: list<string>, meta: record<enabledToolsCount: int, enabledPatternsCount: int, linkedRepositoriesCount: int>, complianceType: string>> {
@@ -4673,7 +4846,7 @@ export def "organizations-compliance-standards createComplianceStandard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a coding standard for an organization choosing from a series of presets.
@@ -4691,6 +4864,7 @@ export def "organizations-presets-standards createCodingStandardPreset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the new coding standard (e.g. Security best practices)
   --isDefault: oneof<nothing, bool> # If true, the new coding standard becomes the default coding standard for the organization
   presets: record # Settings to create a new coding standard from a series of presets — shape: {bugRisk: int, security: int, bestPractices: int, codeStyle: int, documentation: int}
@@ -4703,7 +4877,7 @@ export def "organizations-presets-standards createCodingStandardPreset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a coding standard
@@ -4721,13 +4895,14 @@ export def "organizations-coding-standards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, name: string, isDraft: bool, isDefault: bool, languages: list<string>, meta: record<enabledToolsCount: int, enabledPatternsCount: int, linkedRepositoriesCount: int>, complianceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a coding standard
@@ -4745,13 +4920,14 @@ export def "organizations-coding-standards delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Duplicate a coding standard
@@ -4769,13 +4945,14 @@ export def "organizations-coding-standards-duplicate duplicateCodingStandard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, name: string, isDraft: bool, isDefault: bool, languages: list<string>, meta: record<enabledToolsCount: int, enabledPatternsCount: int, linkedRepositoriesCount: int>, complianceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/duplicate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List tools in a coding standard
@@ -4793,13 +4970,14 @@ export def "organizations-coding-standards-tools listCodingStandardTools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<codingStandardId: int, uuid: string, isEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/tools")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the default coding standard for an organization
@@ -4817,6 +4995,7 @@ export def "organizations-coding-standards-set-default setDefaultCodingStandard"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isDefault: oneof<nothing, bool> # If true, sets the coding standard as the default coding standard for the organization
 ]: any -> any {
   let input = $in
@@ -4827,7 +5006,7 @@ export def "organizations-coding-standards-set-default setDefaultCodingStandard"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the code patterns configured for a tool in a coding standard
@@ -4846,6 +5025,7 @@ export def "organizations-coding-standards-tools-patterns listCodingStandardPatt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -4864,7 +5044,7 @@ export def "organizations-coding-standards-tools-patterns listCodingStandardPatt
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/tools/($toolUuid)/patterns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get patterns overview for a coding standard tool
@@ -4883,6 +5063,7 @@ export def "organizations-coding-standards-tools-patterns-overview codingStandar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -4897,7 +5078,7 @@ export def "organizations-coding-standards-tools-patterns-overview codingStandar
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/tools/($toolUuid)/patterns/overview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update the code patterns of a tool in a coding standard
@@ -4916,6 +5097,7 @@ export def "organizations-coding-standards-tools-patterns-update updateCodingSta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --languages: string # Comma-separated list of programming languages to filter results by (e.g. Scala,Java,Javascript)
   --categories: string # Filter by a comma-separated list of code pattern categories. Valid values are `Security`, `ErrorProne`, `CodeStyle`, `Compatibility`, `UnusedCode`, `Complexity`, `Comprehensibility`, `Documentation`, `BestPractice`, and `Performance`.  (e.g. Security,ErrorProne)
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
@@ -4933,7 +5115,7 @@ export def "organizations-coding-standards-tools-patterns-update updateCodingSta
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Configure a tool in a draft coding standard
@@ -4953,6 +5135,7 @@ export def "organizations-coding-standards-tools updateCodingStandardToolConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # True if the tool is enabled in the repository or coding standard (e.g. true)
   patterns: list # List of code pattern configurations — item shape: {id: string, enabled?: bool, parameters?: list}
 ]: any -> any {
@@ -4964,7 +5147,7 @@ export def "organizations-coding-standards-tools updateCodingStandardToolConfigu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the repositories that are using a coding standard
@@ -4982,6 +5165,7 @@ export def "organizations-coding-standards-repositories listCodingStandardReposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<repositoryId: int, name: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -4991,7 +5175,7 @@ export def "organizations-coding-standards-repositories listCodingStandardReposi
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply a coding standard to a list of repositories
@@ -5009,6 +5193,7 @@ export def "organizations-coding-standards-repositories applyCodingStandardToRep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   link: list # Names of the repositories to link to a coding standard
   unlink: list # Names of the repositories to unlink from a coding standard
 ]: any -> record<data: record<successful: list<string>, failed: list<string>>> {
@@ -5020,7 +5205,7 @@ export def "organizations-coding-standards-repositories applyCodingStandardToRep
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set the gate policy as the default for an organization
@@ -5038,13 +5223,14 @@ export def "organizations-gate-policies-set-default setDefaultGatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies/($gatePolicyId)/setDefault")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the built-in Codacy gate policy as the default for an organization
@@ -5061,13 +5247,14 @@ export def "organizations-gate-policies-set-codacy-default setCodacyDefault" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies/setCodacyDefault")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a gate policy
@@ -5085,13 +5272,14 @@ export def "organizations-gate-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, name: string, isDefault: bool, readOnly: bool, settings: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, meta: record<nrOfQualityGates: int, linkedRepositoriesCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies/($gatePolicyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a gate policy
@@ -5109,13 +5297,14 @@ export def "organizations-gate-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies/($gatePolicyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a gate policy
@@ -5134,6 +5323,7 @@ export def "organizations-gate-policies updateGatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gatePolicyName: string # Name of the gate policy
   --isDefault: oneof<nothing, bool> # True if the gate policy is the default for the organization
   --settings: record # shape: {issueThreshold?: record, securityIssueThreshold?: int, securityIssueMinimumSeverity?: "Info"|"Warning"|"High"|"Error", duplicationThreshold?: int, coverageThreshold?: int, coverageThresholdWithDecimals?: float, diffCoverageThreshold?: int, complexityThreshold?: int}
@@ -5146,7 +5336,7 @@ export def "organizations-gate-policies updateGatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the gate policies for an organization
@@ -5163,6 +5353,7 @@ export def "organizations-gate-policies listGatePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: int, name: string, isDefault: bool, readOnly: bool, meta: record>> {
@@ -5172,7 +5363,7 @@ export def "organizations-gate-policies listGatePolicies" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a gate policy
@@ -5190,6 +5381,7 @@ export def "organizations-gate-policies createGatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   gatePolicyName: string # Name of the gate policy (e.g. gate-policy-name)
   --isDefault: oneof<nothing, bool> # e.g. true
   --settings: record # shape: {issueThreshold?: record, securityIssueThreshold?: int, securityIssueMinimumSeverity?: "Info"|"Warning"|"High"|"Error", duplicationThreshold?: int, coverageThreshold?: int, coverageThresholdWithDecimals?: float, diffCoverageThreshold?: int, complexityThreshold?: int}
@@ -5202,7 +5394,7 @@ export def "organizations-gate-policies createGatePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Synchronize Codacy organization name with the Git provider
@@ -5219,13 +5411,14 @@ export def "organizations-settings-sync syncOrganizationName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/settings/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if the submodules option is enabled for the organization
@@ -5242,13 +5435,14 @@ export def "organizations-settings-submodules-check checkSubmodules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/settings/submodules/check")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all repositories following a gate policy
@@ -5266,6 +5460,7 @@ export def "organizations-gate-policies-repositories listRepositoriesFollowingGa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<repositoryId: int, name: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -5275,7 +5470,7 @@ export def "organizations-gate-policies-repositories listRepositoriesFollowingGa
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/gate-policies/($gatePolicyId)/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply a gate policy to a list of repositories
@@ -5293,6 +5488,7 @@ export def "organizations-gate-policies-repositories applyGatePolicyToRepositori
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   link: list # Names of the repositories to link to a gate policy
   unlink: list # Names of the repositories to unlink from a gate policy
 ]: any -> any {
@@ -5304,7 +5500,7 @@ export def "organizations-gate-policies-repositories applyGatePolicyToRepositori
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Promote a draft coding standard to an effective coding standard
@@ -5322,13 +5518,14 @@ export def "organizations-coding-standards-promote promoteDraftCodingStandard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<successful: list<string>, failed: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/coding-standards/($codingStandardId)/promote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the [repository API tokens](https://docs.codacy.com/codacy-api/api-tokens/)
@@ -5346,13 +5543,14 @@ export def "organizations-repositories-tokens listRepositoryApiTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<id: int, token: string, expiresAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tokens")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new [repository API token](https://docs.codacy.com/codacy-api/api-tokens/)
@@ -5370,13 +5568,14 @@ export def "organizations-repositories-tokens createRepositoryApiToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, token: string, expiresAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tokens")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a [repository API token](https://docs.codacy.com/codacy-api/api-tokens/) by ID
@@ -5395,13 +5594,14 @@ export def "organizations-repositories-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/tokens/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the most recent coverage reports and their status
@@ -5419,6 +5619,7 @@ export def "organizations-repositories-coverage-status listCoverageReports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: record<hasCoverageOverview: bool, lastReports: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -5427,7 +5628,7 @@ export def "organizations-repositories-coverage-status listCoverageReports" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/coverage/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List coverage reports for a commit
@@ -5446,6 +5647,7 @@ export def "organizations-repositories-commits-coverage-reports listCommitCovera
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<repositoryId: int, commitSha: string, reportId: string, language: string, isFinal: bool, processed: bool, createdAt: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -5455,7 +5657,7 @@ export def "organizations-repositories-commits-coverage-reports listCommitCovera
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/coverage/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a coverage report with its contents
@@ -5475,13 +5677,14 @@ export def "organizations-repositories-commits-coverage-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<repositoryId: int, commitSha: string, reportId: string, language: string, isFinal: bool, processed: bool, createdAt: string, content: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/coverage/reports/($reportUuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the content of the given file for a given commit reference. If the requested file is over 1MB, a 'PayloadTooLarge' error is returned.
@@ -5500,6 +5703,7 @@ export def "organizations-repositories-files-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startLine: int # Line number where the code block starts (format: int32, e.g. 1)
   --endLine: int # Line number where the code block ends (format: int32, e.g. 10)
   --commitRef: string # A reference to a commit (branch name, tag, or commit hash). Defaults to HEAD which represents the head of the default branch. (default: HEAD, e.g. main)
@@ -5510,7 +5714,7 @@ export def "organizations-repositories-files-content get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files/($filePath)/content" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get coverage information for a file in the head commit of a repository branch.
@@ -5529,13 +5733,14 @@ export def "organizations-repositories-files-coverage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<line: int, hits: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/files/($fileId)/coverage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ignore or unignore a file
@@ -5553,6 +5758,7 @@ export def "organizations-repositories-file updateFileState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ignored: oneof<nothing, bool> # True if the file is ignored (e.g. true)
   filepath: string # Relative path of the file in the repository (e.g. src/main/scala/main/Main.scala)
 ]: any -> any {
@@ -5564,7 +5770,7 @@ export def "organizations-repositories-file updateFileState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List security and risk management items for an organization
@@ -5584,6 +5790,7 @@ export def "organizations-security-items listSecurityItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --repositories: string # **Deprecated:** Use [searchOrganizationRepositoriesWithAnalysis](#searchorganizationrepositorieswithanalysis) instead. (DEPRECATED, e.g. codacy-eslint,codacy-pmd)
@@ -5598,7 +5805,7 @@ export def "organizations-security-items listSecurityItems" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ignore a single item with an optional comment
@@ -5616,6 +5823,7 @@ export def "organizations-security-items-ignore ignoreSecurityItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # The reason why we ignore an issue. Must be one of `AcceptedUse`, `FalsePositive`, `NotExploitable`, `TestCode`, `ExternalCode`
   --comment: string # Comment describing why we ignore an issue
 ]: any -> record<data: record<id: string, itemSource: string, itemSourceId: string, title: string, repository: string, openedAt: string, closedAt: string, dueAt: string, ignored: record<at: string, authorId: int, authorName: string, reason: string>, priority: string, status: string, htmlUrl: string, projectKey: string, securityCategory: string, scanType: string, summary: string, cvssScore: float, cvssVector: string, cwe: string, cve: string, affectedVersion: string, fixedVersion: list<string>, application: string, affectedTargets: string, additionalInfo: string, likelihood: string, effortToFix: string, remediation: string, dastTargetUrls: string, imageName: string, imageTag: string, dependencyChains: list<list>>> {
@@ -5627,7 +5835,7 @@ export def "organizations-security-items-ignore ignoreSecurityItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unignore a single item (only previously ignored items can be unignored)
@@ -5645,13 +5853,14 @@ export def "organizations-security-items-unignore unignoreSecurityItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, itemSource: string, itemSourceId: string, title: string, repository: string, openedAt: string, closedAt: string, dueAt: string, ignored: record<at: string, authorId: int, authorName: string, reason: string>, priority: string, status: string, htmlUrl: string, projectKey: string, securityCategory: string, scanType: string, summary: string, cvssScore: float, cvssVector: string, cwe: string, cve: string, affectedVersion: string, fixedVersion: list<string>, application: string, affectedTargets: string, additionalInfo: string, likelihood: string, effortToFix: string, remediation: string, dastTargetUrls: string, imageName: string, imageTag: string, dependencyChains: list<list>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/items/($srmItemId)/unignore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single security and risk management finding
@@ -5669,13 +5878,14 @@ export def "organizations-security-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, itemSource: string, itemSourceId: string, title: string, repository: string, openedAt: string, closedAt: string, dueAt: string, ignored: record<at: string, authorId: int, authorName: string, reason: string>, priority: string, status: string, htmlUrl: string, projectKey: string, securityCategory: string, scanType: string, summary: string, cvssScore: float, cvssVector: string, cwe: string, cve: string, affectedVersion: string, fixedVersion: list<string>, application: string, affectedTargets: string, additionalInfo: string, likelihood: string, effortToFix: string, remediation: string, dastTargetUrls: string, imageName: string, imageTag: string, dependencyChains: list<list>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/items/($srmItemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List security and risk management items for an organization
@@ -5693,6 +5903,7 @@ export def "organizations-security-items-search searchSecurityItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --qp-sort: string@sort-completer # Field to sort SRM items by (e.g. Status)
@@ -5716,7 +5927,7 @@ export def "organizations-security-items-search searchSecurityItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metrics for the security and risk management dashboard
@@ -5736,6 +5947,7 @@ export def "organizations-security-dashboard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: string # **Deprecated:** Use [searchOrganizationRepositoriesWithAnalysis](#searchorganizationrepositorieswithanalysis) instead. (DEPRECATED, e.g. codacy-eslint,codacy-pmd)
   --priority: list # Security issue priorities to filter by. See [SrmPriority](#tocssrmpriority) for valid values. (e.g. priority=Critical&priority=High)
   --category: list # Security categories to filter by. Use `_other_` to search for issues that don't have a security category. (e.g. category=Cryptography&category=OutdatedDependencies)
@@ -5747,7 +5959,7 @@ export def "organizations-security-dashboard get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/dashboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metrics for the security and risk management dashboard
@@ -5764,6 +5976,7 @@ export def "organizations-security-dashboard searchSecurityDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: list # Repository names to filter by.
   --priorities: list # Security issue priorities to filter by. See [SrmPriority](#tocssrmpriority) for valid values.
   --categories: list # Security categories to filter by. Use `_other_` to search for issues that don't have a security category.
@@ -5778,7 +5991,7 @@ export def "organizations-security-dashboard searchSecurityDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List repositories with security findings
@@ -5795,6 +6008,7 @@ export def "organizations-security-dashboard-repositories-search searchSecurityD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: list # Repository names to filter by.
   --segments: list # Segments ids to filter by. (e.g. [1, 2, 3])
 ]: any -> record<data: table<id: int, name: string, critical: int, high: int, medium: int, low: int>> {
@@ -5806,7 +6020,7 @@ export def "organizations-security-dashboard-repositories-search searchSecurityD
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the evolution of security findings over time
@@ -5823,6 +6037,7 @@ export def "organizations-security-dashboard-history-search searchSecurityDashbo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: list # Repository names to filter by.
   --segments: list # Segments ids to filter by. (e.g. [1, 2, 3])
 ]: any -> record<data: table<since: string, until: string, newCritical: int, newHigh: int, newMedium: int, newLow: int, fixedCritical: int, fixedHigh: int, fixedMedium: int, fixedLow: int, openCritical: int, openHigh: int, openMedium: int, openLow: int, ignoredCritical: int, ignoredHigh: int, ignoredMedium: int, ignoredLow: int, unignoredCritical: int, unignoredHigh: int, unignoredMedium: int, unignoredLow: int>> {
@@ -5834,7 +6049,7 @@ export def "organizations-security-dashboard-history-search searchSecurityDashbo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List security categories with findings
@@ -5851,6 +6066,7 @@ export def "organizations-security-dashboard-categories-search searchSecurityDas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: list # Repository names to filter by.
   --segments: list # Segments ids to filter by. (e.g. [1, 2, 3])
 ]: any -> record<data: table<name: string, total: int>> {
@@ -5862,7 +6078,7 @@ export def "organizations-security-dashboard-categories-search searchSecurityDas
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload dynamic application security testing (DAST) scan report generated by the specified tool in the specified format. For ZAP reports (see https://www.zaproxy.org/docs/desktop/addons/report-generation/report-traditional-json), please guarantee that `@generated` timestamps are in an English locale, using the format `EEE, d MMM yyyy HH:mm:ss`  (which is ZAP's default), otherwise the report won't be processed.
@@ -5880,6 +6096,7 @@ export def "organizations-security-tools-dast-reports uploadDASTReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The file containing DAST results (format: binary)
   reportFormat: string@reportFormat-completer # The format the report is provided in
 ]: any -> record<id: string> {
@@ -5891,7 +6108,7 @@ export def "organizations-security-tools-dast-reports uploadDASTReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List uploaded DAST scan reports and their state
@@ -5908,6 +6125,7 @@ export def "organizations-security-dast-reports listDastReports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: string, organizationId: int, createdAt: string, updatedAt: string, generatedAt: string, state: string, tool: string, failureReason: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -5917,7 +6135,7 @@ export def "organizations-security-dast-reports listDastReports" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/dast/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization admins and security managers
@@ -5934,6 +6152,7 @@ export def "organizations-security-managers listSecurityManagers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<userId: int, name: string, email: string, createdAt: string>> {
@@ -5943,7 +6162,7 @@ export def "organizations-security-managers listSecurityManagers" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/managers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign the Security Manager role to an organization member
@@ -5960,6 +6179,7 @@ export def "organizations-security-managers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userId: int # User ID of the organization member to be promoted to security manager. (format: int64, e.g. 867842577)
 ]: any -> any {
   let input = $in
@@ -5970,7 +6190,7 @@ export def "organizations-security-managers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke the Security Manager role from an organization member
@@ -5988,13 +6208,14 @@ export def "organizations-security-managers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/managers/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization repositories that have security issues
@@ -6011,6 +6232,7 @@ export def "organizations-security-repositories listSecurityRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --segments: string # Filter by a comma-separated list of segment identifiers (e.g. 1,2,3)
@@ -6021,7 +6243,7 @@ export def "organizations-security-repositories listSecurityRepositories" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List security subcategories that have security issues
@@ -6038,6 +6260,7 @@ export def "organizations-security-categories listSecurityCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: list<string>> {
@@ -6047,7 +6270,7 @@ export def "organizations-security-categories listSecurityCategories" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of SBOM dependencies, used across the organization.
@@ -6064,6 +6287,7 @@ export def "organizations-sbom-dependencies-search searchSbomDependencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --sortColumn: string@sortColumn-completer-1 # Field used to sort the results. The possible values are `severity` (default, to sort by the item's severity), or `order` (to sort by the OSSF order). (default: severity)
@@ -6083,7 +6307,7 @@ export def "organizations-sbom-dependencies-search searchSbomDependencies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a paginated list of repositories where a version of the specified SBOM dependency is used.
@@ -6100,6 +6324,7 @@ export def "organizations-sbom-dependencies-repositories-search searchRepositori
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   dependencyFullName: string # The full name of the dependency to search for.
@@ -6114,7 +6339,7 @@ export def "organizations-sbom-dependencies-repositories-search searchRepositori
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List repositories with SBOM dependency information
@@ -6131,6 +6356,7 @@ export def "organizations-sbom-repositories-search searchSbomRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --body: record
@@ -6143,7 +6369,7 @@ export def "organizations-sbom-repositories-search searchSbomRepositories" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a presigned URL for the latest SBOM of the repository
@@ -6161,13 +6387,14 @@ export def "organizations-projects-sbom get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/projects/($repositoryName)/sbom")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload an SBOM for a Docker image
@@ -6184,6 +6411,7 @@ export def "organizations-image-sboms uploadImageSbom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sbom: string # SBOM file (SPDX or CycloneDX format) (format: binary)
   imageName: string # Name of the Docker image
   tag: string # Tag of the Docker image
@@ -6198,7 +6426,7 @@ export def "organizations-image-sboms uploadImageSbom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete all SBOMs for a given image
@@ -6216,13 +6444,14 @@ export def "organizations-image-sboms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/image-sboms/($imageName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete SBOM for a given image/tag combination
@@ -6241,13 +6470,14 @@ export def "organizations-image-sboms-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/image-sboms/($imageName)/tags/($tag)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Docker images for an organization
@@ -6264,6 +6494,7 @@ export def "organizations-images listOrganizationImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<imageName: string, latestTag: string, lastSbomUploaded: string, lastSbomGenerated: string>> {
@@ -6273,7 +6504,7 @@ export def "organizations-images listOrganizationImages" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/images" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Docker image tags for an organization
@@ -6291,6 +6522,7 @@ export def "organizations-images-tags listImageTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<imageName: string, tag: string, environment: string, repositoryId: int, repositoryName: string, generatedAt: string, uploadedAt: string, scanStatus: string, lastAnalysedAt: string>> {
@@ -6300,7 +6532,7 @@ export def "organizations-images-tags listImageTags" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/images/($imageName)/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Jira ticket
@@ -6320,6 +6552,7 @@ export def "organizations-repositories-integrations-jira-tickets createJiraTicke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   elementType: string@elementType-completer
   elementIds: list
   jiraProjectId: int # format: int64
@@ -6336,7 +6569,7 @@ export def "organizations-repositories-integrations-jira-tickets createJiraTicke
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Jira tickets for a Codacy element
@@ -6353,6 +6586,7 @@ export def "organizations-integrations-jira-tickets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --elementType: string@elementType-completer # Type of Codacy element to filter by (e.g. issue)
   --elementId: string # Unique identifier of the Codacy element (e.g. 12345678)
 ]: nothing -> record<data: table<id: string, key: string, summary: string, assignee: string, link: string, status: record>> {
@@ -6362,7 +6596,7 @@ export def "organizations-integrations-jira-tickets get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira/tickets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Jira ticket
@@ -6380,6 +6614,7 @@ export def "organizations-integrations-jira-tickets createJiraTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   elementType: string@elementType-completer
   jiraProjectId: int # format: int64
   createJiraTicketElements: list # item shape: {elementId: string, repositoryName?: string}
@@ -6396,7 +6631,7 @@ export def "organizations-integrations-jira-tickets createJiraTicket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlink a Jira ticket from a repository
@@ -6414,6 +6649,7 @@ export def "organizations-integrations-jira-tickets unlinkRepositoryJiraTicket" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   elementType: string@elementType-completer
   elementId: string
 ]: any -> any {
@@ -6425,7 +6661,7 @@ export def "organizations-integrations-jira-tickets unlinkRepositoryJiraTicket" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the Jira integration of the organization
@@ -6442,13 +6678,14 @@ export def "organizations-integrations-jira get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<organization_id: int, instance_id: string, instance_name: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update the Jira integration of the organization
@@ -6465,6 +6702,7 @@ export def "organizations-integrations-jira createOrUpdateJiraIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oauthCode: string # The OAuth code to allow authentication as the user installing the Jira App. (e.g. 6nGtF5eij1YuEqQXr7L9OxA0RLHZ21tEQNZq1DZJzuY)
 ]: nothing -> record<data: record<organization_id: int, instance_id: string, instance_name: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -6473,7 +6711,7 @@ export def "organizations-integrations-jira createOrUpdateJiraIntegration" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the Jira integration of the organization and associated resources
@@ -6490,13 +6728,14 @@ export def "organizations-integrations-jira delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available Jira projects for the organization
@@ -6513,6 +6752,7 @@ export def "organizations-integrations-jira-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
@@ -6523,7 +6763,7 @@ export def "organizations-integrations-jira-projects get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available issue types for a Jira project
@@ -6541,6 +6781,7 @@ export def "organizations-integrations-jira-projects-issue-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: int, name: string, isSubtask: bool, iconUrl: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -6550,7 +6791,7 @@ export def "organizations-integrations-jira-projects-issue-types get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira/projects/($jiraProjectId)/issueTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available fields by issue type for a Jira project
@@ -6569,6 +6810,7 @@ export def "organizations-integrations-jira-projects-issue-types-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<fieldId: string, name: string, key: string, required: bool, hasDefaultValue: bool>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -6578,7 +6820,7 @@ export def "organizations-integrations-jira-projects-issue-types-fields get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/jira/projects/($jiraProjectId)/issueTypes/($jiraIssueTypeId)/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Slack integration of the organization
@@ -6595,13 +6837,14 @@ export def "organizations-integrations-slack get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<organization_id: int, webhook_url: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/slack")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update the Slack integration of the organization
@@ -6618,6 +6861,7 @@ export def "organizations-integrations-slack createOrUpdateSlackIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhook_url: string # Slack Incoming Webhook URL to post notifications to. (e.g. https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX)
 ]: any -> record<data: record<organization_id: int, webhook_url: string, created_at: string, updated_at: string>> {
   let input = $in
@@ -6628,7 +6872,7 @@ export def "organizations-integrations-slack createOrUpdateSlackIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the Slack integration of the organization and associated resources
@@ -6645,13 +6889,14 @@ export def "organizations-integrations-slack delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/integrations/slack")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the human-readable Git diff of a pull request
@@ -6670,13 +6915,14 @@ export def "organizations-repositories-pull-requests-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<diff: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/diff")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the human-readable Git diff of a pull request
@@ -6697,13 +6943,14 @@ export def "coverage-organizations-repositories-pull-requests-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<diff: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coverage/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/diff")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the human-readable Git diff of a commit
@@ -6722,13 +6969,14 @@ export def "organizations-repositories-commits-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<diff: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/commits/($commitUuid)/diff")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the human-readable Git diff between a head commit and a base commit
@@ -6748,13 +6996,14 @@ export def "organizations-repositories-base-head-diff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<diff: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/base/($baseCommitUuid)/head/($headCommitUuid)/diff")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a CSV file listing all security and risk management items for an organization.
@@ -6771,13 +7020,14 @@ export def "reports-organizations-security-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/reports/organizations/($provider)/($remoteOrganizationName)/security/items")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a filtered CSV export of security and risk management items
@@ -6794,6 +7044,7 @@ export def "reports-organizations-security-items-search searchReportSecurityItem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --repositories: list # Repository names to filter by
   --priorities: list # Security issue priorities to filter by. See [SrmPriority](#tocssrmpriority) for valid values.
   --statuses: list # Security issue status to filter by. See [SrmStatus](#tocssrmstatus) for valid values.
@@ -6810,7 +7061,7 @@ export def "reports-organizations-security-items-search searchReportSecurityItem
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search SBOM dependencies for the organization in CSV format
@@ -6827,6 +7078,7 @@ export def "reports-organizations-sbom-dependencies-search searchReportSbomDepen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Text search query. Matches against SBOM component fields (purl, full_name).
   --repositories: list # Repository names to filter by.
   --segments: list # Segments ids to filter by. (e.g. [1, 2, 3])
@@ -6841,7 +7093,7 @@ export def "reports-organizations-sbom-dependencies-search searchReportSbomDepen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get information about a commit
@@ -6861,13 +7113,14 @@ export def "organizations-commit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commit: record<sha: string, id: int, commitTimestamp: string, authorName: string, authorEmail: string, message: string, startedAnalysis: string, endedAnalysis: string, isMergeCommit: bool, gitHref: string, parents: list<string>>, repository: record<repositoryId: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/commit/($commitId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about a commit
@@ -6883,13 +7136,14 @@ export def "commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commit: record<sha: string, id: int, commitTimestamp: string, authorName: string, authorEmail: string, message: string, startedAnalysis: string, endedAnalysis: string, isMergeCommit: bool, gitHref: string, parents: list<string>>, repository: record<repositoryId: int, name: string, provider: string, organizationName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/commits/($commitId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a heartbeat to keep the session alive
@@ -6904,6 +7158,7 @@ export def "session-heartbeat heartbeat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --wasActive: oneof<nothing, bool> # True if the user was active in the last heartbeat interval. (e.g. true)
 ]: any -> record<lastActivity: string, idleExpiresIn: int, absoluteExpiresIn: int> {
   let input = $in
@@ -6914,7 +7169,7 @@ export def "session-heartbeat heartbeat" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check if the repository has quick fix suggestions for a branch
@@ -6932,6 +7187,7 @@ export def "analysis-organizations-repositories-issues-has-suggestions hasQuickf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> record<hasSuggestions: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -6940,7 +7196,7 @@ export def "analysis-organizations-repositories-issues-has-suggestions hasQuickf
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/issues/hasSuggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quickfixes for issues in patch format
@@ -6958,6 +7214,7 @@ export def "analysis-organizations-repositories-issues-patch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # Name of a [repository branch enabled on Codacy](https://docs.codacy.com/repositories-configure/managing-branches/), as returned by the endpoint [listRepositoryBranches](#listrepositorybranches). By default, uses the main branch defined on the Codacy repository settings.  (e.g. master)
 ]: nothing -> record<data: record<patch: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -6966,7 +7223,7 @@ export def "analysis-organizations-repositories-issues-patch get" [
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/issues/patch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get quickfixes for pull request issues in patch format
@@ -6985,13 +7242,14 @@ export def "analysis-organizations-repositories-pull-requests-issues-patch get" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<patch: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/pull-requests/($pullRequestNumber)/issues/patch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the audit logs for the organization
@@ -7008,6 +7266,7 @@ export def "organizations-audit listAuditLogsForOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: int # Starting timestamp of audit logs in unix epoch milliseconds. Defaults to the earliest available time if not provided. (format: int64, e.g. 1720446021296)
   --qp-to: int # Ending timestamp of audit logs in unix epoch milliseconds. Defaults to the current time if not provided. (format: int64, e.g. 1726233785428)
 ]: nothing -> table<actor: record<email: string, role: string>, action: string, result: string, timestamp: string, source: string, repositoryName: string, description: string, details: record, entityId: string> {
@@ -7017,7 +7276,7 @@ export def "organizations-audit listAuditLogsForOrganization" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/audit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the status of the segments synchronization
@@ -7034,13 +7293,14 @@ export def "organizations-segments-sync get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, error: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Synchronize the segments of the organization with the Git provider
@@ -7057,13 +7317,14 @@ export def "organizations-segments-sync syncSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the segment keys for the organization
@@ -7080,6 +7341,7 @@ export def "organizations-segments-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -7090,7 +7352,7 @@ export def "organizations-segments-keys get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the segment keys with IDs for the organization
@@ -7107,6 +7369,7 @@ export def "organizations-segments-keys-ids get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -7117,7 +7380,7 @@ export def "organizations-segments-keys-ids get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/keys/ids" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get segment values for a segment key
@@ -7137,6 +7400,7 @@ export def "organizations-segments-values get-by-provider-remoteOrganizationName
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
@@ -7147,7 +7411,7 @@ export def "organizations-segments-values get-by-provider-remoteOrganizationName
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/values/($segmentKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the segment values for the organization by segment key
@@ -7165,6 +7429,7 @@ export def "organizations-segments-values get-by-provider-remoteOrganizationName
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
@@ -7175,7 +7440,7 @@ export def "organizations-segments-values get-by-provider-remoteOrganizationName
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/segments/($segmentKey)/values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List configured DAST targets
@@ -7192,6 +7457,7 @@ export def "organizations-dast-targets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<id: int, url: string, status: list, targetType: string, apiDefinitionUrl: string, apiAuthHeaderNames: list>> {
@@ -7201,7 +7467,7 @@ export def "organizations-dast-targets get" [
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/dast/targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a DAST target
@@ -7218,6 +7484,7 @@ export def "organizations-dast-targets createDastTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # format: uri, e.g. https://api.domain.com/v1
   --targetType: string@targetType-completer # Dast target request type (default: webapp)
   --apiDefinitionUrl: string # e.g. https://api.domain.com/v1
@@ -7231,7 +7498,7 @@ export def "organizations-dast-targets createDastTarget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a DAST target
@@ -7249,13 +7516,14 @@ export def "organizations-dast-targets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/dast/targets/($dastTargetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enqueue a DAST analysis for the given target
@@ -7273,13 +7541,14 @@ export def "organizations-dast-targets-analyze analyzeDastTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<analysisId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/dast/targets/($dastTargetId)/analyze")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the SLA configuration for an organization
@@ -7296,13 +7565,14 @@ export def "organizations-security-sla get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<slaConfig: record<criticalSla: int, highSla: int, mediumSla: int, lowSla: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($provider)/($remoteOrganizationName)/security/sla")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the SLA configuration for an organization
@@ -7320,6 +7590,7 @@ export def "organizations-security-sla updateSLAConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slaConfig: record # SLA configuration of an organization. — shape: {criticalSla: int, highSla: int, mediumSla: int, lowSla: int}
 ]: any -> record<slaConfig: record<criticalSla: int, highSla: int, mediumSla: int, lowSla: int>> {
   let input = $in
@@ -7330,7 +7601,7 @@ export def "organizations-security-sla updateSLAConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the organizations of an enterprise
@@ -7347,6 +7618,7 @@ export def "enterprises-organizations listEnterpriseOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<pagination: record<cursor: string, limit: int, total: int>, data: table<id: int, remoteId: string, name: string, displayName: string, userRole: string, url: string, avatar: string>> {
@@ -7356,7 +7628,7 @@ export def "enterprises-organizations listEnterpriseOrganizations" [
   let full_url = (build-url $base $"/enterprises/($provider)/($enterpriseName)/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List user enterprises
@@ -7372,6 +7644,7 @@ export def "enterprises listEnterprises" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<name: string, displayName: string, userRole: string, url: string, avatarUrl: string, provider: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -7381,7 +7654,7 @@ export def "enterprises listEnterprises" [
   let full_url = (build-url $base $"/enterprises/($provider)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an enterprise
@@ -7398,13 +7671,14 @@ export def "enterprises get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<name: string, displayName: string, userRole: string, url: string, avatarUrl: string, provider: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enterprises/($provider)/($enterpriseName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get enterprise seats
@@ -7421,6 +7695,7 @@ export def "enterprises-seats listEnterpriseSeats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -7431,7 +7706,7 @@ export def "enterprises-seats listEnterpriseSeats" [
   let full_url = (build-url $base $"/enterprises/($provider)/($enterpriseName)/seats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get enterprise seats as a CSV file
@@ -7448,13 +7723,14 @@ export def "reports-enterprises-seats-csv listEnterpriseSeatsCsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/reports/enterprises/($provider)/($enterpriseName)/seats-csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available plans in Codacy
@@ -7469,13 +7745,14 @@ export def "plans listPaymentPlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<defaultYearlyPaidCode: string, defaultMonthlyPaidCode: string, trialCode: string, openSourceCode: string, defaultYearlyPaidPlan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool, alternatePeriodCode: string>, defaultMonthlyPaidPlan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool, alternatePeriodCode: string>, trialPlan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool, alternatePeriodCode: string>, openSourcePlan: record<isPremium: bool, model: string, code: string, monthly: bool, price: int, pricedPerUser: bool, alternatePeriodCode: string>, plans: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/plans")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the OSSF Scorecard for a repository
@@ -7490,6 +7767,7 @@ export def "security-dependencies-ossf-scorecard post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL of the repository to fetch OSSF Scorecard information for. (e.g. https://www.github.com/codacy/codacy)
   --purl: string # The PURL of the dependency to fetch OSSF Scorecard information for. (e.g. maven:ch.qos.logback:logback-classic:1.2.3)
 ]: any -> record<data: record<score: float, date: string, checks: list<record>, failingCheckCount: int, passingCheckCount: int>> {
@@ -7501,7 +7779,7 @@ export def "security-dependencies-ossf-scorecard post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI inventory provider summaries for an organization
@@ -7518,6 +7796,7 @@ export def "organizations-ai-inventory-providers-summaries-search searchAiInvent
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
@@ -7537,7 +7816,7 @@ export def "organizations-ai-inventory-providers-summaries-search searchAiInvent
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get AI inventory summary for a specific provider
@@ -7554,6 +7833,7 @@ export def "organizations-ai-inventory-providers-summary post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   aiProvider: string # AI provider name to return the summary for (e.g. Claude Code)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
   --segments: list # Segment IDs to filter by (e.g. [1, 2, 3])
@@ -7569,7 +7849,7 @@ export def "organizations-ai-inventory-providers-summary post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI inventory marker summaries for an organization
@@ -7586,6 +7866,7 @@ export def "organizations-ai-inventory-markers-summaries-search searchAiInventor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
@@ -7605,7 +7886,7 @@ export def "organizations-ai-inventory-markers-summaries-search searchAiInventor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List repositories that have AI inventory items
@@ -7622,6 +7903,7 @@ export def "organizations-ai-inventory-repositories-search searchAiInventoryRepo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
@@ -7641,7 +7923,7 @@ export def "organizations-ai-inventory-repositories-search searchAiInventoryRepo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI inventory repository summaries for an organization
@@ -7658,6 +7940,7 @@ export def "organizations-ai-inventory-repositories-summaries-search searchAiInv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
@@ -7677,7 +7960,7 @@ export def "organizations-ai-inventory-repositories-summaries-search searchAiInv
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI inventory location summaries for an organization
@@ -7694,6 +7977,7 @@ export def "organizations-ai-inventory-locations-summaries-search searchAiInvent
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
@@ -7713,7 +7997,7 @@ export def "organizations-ai-inventory-locations-summaries-search searchAiInvent
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List AI inventory categories grouped by category group
@@ -7730,6 +8014,7 @@ export def "organizations-ai-inventory-categories-search searchAiInventoryCatego
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inventoryItemTypes: list # Inventory item types to filter by (e.g. `tool`, `asset`) (e.g. [tool])
   --aiProvider: string # AI provider name to filter by (e.g. Claude Code)
   --segments: list # Segment IDs to filter by (e.g. [1, 2, 3])
@@ -7746,5 +8031,5 @@ export def "organizations-ai-inventory-categories-search searchAiInventoryCatego
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
